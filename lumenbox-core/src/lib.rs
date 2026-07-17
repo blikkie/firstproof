@@ -1,7 +1,10 @@
 uniffi::setup_scaffolding!();
 
+use std::path::Path;
+
 pub mod raw;
 pub mod xmp;
+pub mod takeout;
 
 #[derive(uniffi::Record, Clone, Copy, Debug)]
 pub struct EditSettings {
@@ -41,6 +44,16 @@ pub struct XmpDataRecord {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub edits: EditSettings,
+}
+
+#[derive(uniffi::Record)]
+pub struct TakeoutMetadataRecord {
+    pub title: String,
+    pub description: Option<String>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub altitude: Option<f64>,
+    pub taken_time: Option<i64>,
 }
 
 #[uniffi::export]
@@ -104,7 +117,7 @@ pub fn write_xmp(path: String, record: XmpDataRecord) -> bool {
         description: record.description,
         latitude: record.latitude,
         longitude: record.longitude,
-        edits: EditSettings {
+        edits: raw::EditSettings {
             exposure: record.edits.exposure,
             contrast: record.edits.contrast,
             temperature: record.edits.temperature,
@@ -117,6 +130,27 @@ pub fn write_xmp(path: String, record: XmpDataRecord) -> bool {
         },
     };
     xmp::write_xmp_file(&path, &data).is_ok()
+}
+
+#[uniffi::export]
+pub fn match_takeout_json(image_path: String) -> Option<String> {
+    takeout::match_takeout_json(Path::new(&image_path))
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+#[uniffi::export]
+pub fn parse_takeout_json(json_path: String) -> Option<TakeoutMetadataRecord> {
+    match takeout::parse_takeout_json(Path::new(&json_path)) {
+        Ok(t) => Some(TakeoutMetadataRecord {
+            title: t.title,
+            description: t.description,
+            latitude: t.latitude,
+            longitude: t.longitude,
+            altitude: t.altitude,
+            taken_time: t.taken_time,
+        }),
+        Err(_) => None,
+    }
 }
 
 #[uniffi::export]

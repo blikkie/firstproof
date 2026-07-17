@@ -1,0 +1,35 @@
+# LumenBox Execution Checklist
+
+- `[x]` 1. Documentation & Roadmap Setup
+    - `[x]` Create `docs/roadmap/backlog.md` with P1/P2 editing features and Google Photos sync notes
+    - `[x]` Create `docs/roadmap/architecture_notes.md` outlining the UniFFI bridge and Metal shader parameters
+- `[x]` 2. Rust Core (`lumenbox-core`) Initialization
+    - `[x]` Create Cargo workspace and `lumenbox-core` library target
+    - `[x]` Add dependencies (`uniffi`, `rawloader`, `kamadak-exif`, `rusqlite`, `serde_json`, `roxmltree`)
+    - `[x]` Configure basic scaffolding and `UniFFI` configuration
+- `[x]` 3. RAW & Preview Module
+    - `[x]` Implement metadata parser to extract EXIF data (camera, lens, ISO, shutter, aperture)
+    - `[x]` Implement fast-path embedded preview JPEG extraction (CR2, RW2, DNG)
+    - `[x]` Add unit tests for RAW/DNG preview extraction
+- `[x]` 4. XMP Sidecar Module
+    - `[x]` Implement reading/writing standard metadata (ratings, pick status, title, coordinates)
+    - `[x]` Implement reading/writing custom `pm:` adjustments (exposure, contrast, WB, crop)
+    - `[x]` Add integration tests for metadata serialization/deserialization
+- `[ ]` 5. Google Photos Takeout Parser
+    - `[ ]` Implement directory scanner and takeout JSON matcher
+    - `[ ]` Parse coordinates, descriptions, and creation dates
+    - `[ ]` Add unit tests validating matches on duplicate and long filename edge cases
+- `[ ]` 6. SQLite Database & Indexer
+    - `[ ]` Initialize SQLite database schema
+    - `[ ]` Implement folder scanning indexer (updating database records)
+    - `[ ]` Implement portable catalog creator (hidden `.lumenbox` directories on external drives)
+- `[ ]` 7. Lensfun Parser & Core Logic
+    - `[ ]` Implement XML parser for Lensfun database files
+    - `[ ]` Implement camera/lens metadata lookup and coefficient resolver
+- `[ ]` 8. UniFFI Swift Binding Compile
+    - `[ ]` Expose core Rust library endpoints via UniFFI (`LumenBoxCore` interface)
+    - `[ ]` Compile static library / `.xcframework` and generate Swift bindings
+- `[ ]` 9. SwiftUI macOS App Scaffolding
+    - `[ ]` Scaffolding Xcode project layout
+    - `[ ]` Link the generated `xcframework` and Swift bindings package
+    - `[ ]` Build split-view layout: Left folder library, Center Grid/MTKView canvas, Right sliders, Bottom filmstrip
