@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "lumenbox-core",
+]
+resolver = "2"

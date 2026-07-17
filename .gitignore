@@ -1,0 +1,15 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
