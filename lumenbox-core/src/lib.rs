@@ -56,6 +56,12 @@ pub struct TakeoutMetadataRecord {
     pub taken_time: Option<i64>,
 }
 
+#[derive(uniffi::Record)]
+pub struct TakeoutMatchRecord {
+    pub image_path: String,
+    pub json_path: String,
+}
+
 #[uniffi::export]
 pub fn extract_metadata(path: String) -> Option<ImageMetadata> {
     match raw::extract_metadata(&path) {
@@ -117,7 +123,7 @@ pub fn write_xmp(path: String, record: XmpDataRecord) -> bool {
         description: record.description,
         latitude: record.latitude,
         longitude: record.longitude,
-        edits: raw::EditSettings {
+        edits: EditSettings {
             exposure: record.edits.exposure,
             contrast: record.edits.contrast,
             temperature: record.edits.temperature,
@@ -151,6 +157,17 @@ pub fn parse_takeout_json(json_path: String) -> Option<TakeoutMetadataRecord> {
         }),
         Err(_) => None,
     }
+}
+
+#[uniffi::export]
+pub fn scan_directory_for_takeout(dir_path: String) -> Vec<TakeoutMatchRecord> {
+    takeout::scan_directory_for_takeout(Path::new(&dir_path))
+        .into_iter()
+        .map(|m| TakeoutMatchRecord {
+            image_path: m.image_path.to_string_lossy().into_owned(),
+            json_path: m.json_path.to_string_lossy().into_owned(),
+        })
+        .collect()
 }
 
 #[uniffi::export]
