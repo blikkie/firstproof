@@ -19,10 +19,10 @@
     - `[x]` Implement directory scanner and takeout JSON matcher
     - `[x]` Parse coordinates, descriptions, and creation dates
     - `[x]` Add unit tests validating matches on duplicate and long filename edge cases
-- `[ ]` 6. SQLite Database & Indexer
-    - `[ ]` Initialize SQLite database schema
-    - `[ ]` Implement folder scanning indexer (updating database records)
-    - `[ ]` Implement portable catalog creator (hidden `.lumenbox` directories on external drives)
+- `[x]` 6. SQLite Database & Indexer
+    - `[x]` Initialize SQLite database schema
+    - `[x]` Implement folder scanning indexer (updating database records)
+    - `[x]` Implement portable catalog creator (hidden `.lumenbox` directories on external drives)
 - `[ ]` 7. Lensfun Parser & Core Logic
     - `[ ]` Implement XML parser for Lensfun database files
     - `[ ]` Implement camera/lens metadata lookup and coefficient resolver
