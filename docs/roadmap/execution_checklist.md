@@ -23,9 +23,9 @@
     - `[x]` Initialize SQLite database schema
     - `[x]` Implement folder scanning indexer (updating database records)
     - `[x]` Implement portable catalog creator (hidden `.lumenbox` directories on external drives)
-- `[ ]` 7. Lensfun Parser & Core Logic
-    - `[ ]` Implement XML parser for Lensfun database files
-    - `[ ]` Implement camera/lens metadata lookup and coefficient resolver
+- `[x]` 7. Lensfun Parser & Core Logic
+    - `[x]` Implement XML parser for Lensfun database files
+    - `[x]` Implement camera/lens metadata lookup and coefficient resolver
 - `[ ]` 8. UniFFI Swift Binding Compile
     - `[ ]` Expose core Rust library endpoints via UniFFI (`LumenBoxCore` interface)
     - `[ ]` Compile static library / `.xcframework` and generate Swift bindings

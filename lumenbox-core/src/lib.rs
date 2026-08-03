@@ -6,6 +6,7 @@ pub mod raw;
 pub mod xmp;
 pub mod takeout;
 pub mod db;
+pub mod lensfun;
 
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct PhotoRecord {
@@ -273,6 +274,77 @@ pub fn resolve_catalog_path(folder_path: String, portable: bool) -> String {
     db::Database::resolve_catalog_path(folder_path, portable)
         .to_string_lossy()
         .into_owned()
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct LensCorrectionCoefficientsRecord {
+    pub distortion: Vec<f32>,
+    pub tca: Vec<f32>,
+    pub vignetting: Vec<f32>,
+    pub distortion_model: String,
+    pub has_distortion: bool,
+    pub has_tca: bool,
+    pub has_vignetting: bool,
+}
+
+impl From<lensfun::LensCorrectionCoefficients> for LensCorrectionCoefficientsRecord {
+    fn from(c: lensfun::LensCorrectionCoefficients) -> Self {
+        Self {
+            distortion: c.distortion.to_vec(),
+            tca: c.tca.to_vec(),
+            vignetting: c.vignetting.to_vec(),
+            distortion_model: c.distortion_model,
+            has_distortion: c.has_distortion,
+            has_tca: c.has_tca,
+            has_vignetting: c.has_vignetting,
+        }
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct LumenBoxLensfun {
+    inner: std::sync::Mutex<lensfun::LensfunDatabase>,
+}
+
+#[uniffi::export]
+impl LumenBoxLensfun {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            inner: std::sync::Mutex::new(lensfun::LensfunDatabase::new()),
+        })
+    }
+
+    pub fn load_directory(&self, dir_path: String) -> u32 {
+        self.inner
+            .lock()
+            .unwrap()
+            .load_directory(&dir_path)
+            .unwrap_or(0)
+    }
+
+    pub fn load_xml_string(&self, xml_content: String) -> bool {
+        self.inner
+            .lock()
+            .unwrap()
+            .load_xml_string(&xml_content)
+            .is_ok()
+    }
+
+    pub fn resolve_coefficients(
+        &self,
+        camera_make: String,
+        camera_model: String,
+        lens_model: String,
+        focal_length: f32,
+        aperture: Option<f32>,
+    ) -> LensCorrectionCoefficientsRecord {
+        self.inner
+            .lock()
+            .unwrap()
+            .resolve_coefficients(&camera_make, &camera_model, &lens_model, focal_length, aperture)
+            .into()
+    }
 }
 
 #[uniffi::export]
