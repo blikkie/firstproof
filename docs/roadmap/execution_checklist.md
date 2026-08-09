@@ -26,9 +26,9 @@
 - `[x]` 7. Lensfun Parser & Core Logic
     - `[x]` Implement XML parser for Lensfun database files
     - `[x]` Implement camera/lens metadata lookup and coefficient resolver
-- `[ ]` 8. UniFFI Swift Binding Compile
-    - `[ ]` Expose core Rust library endpoints via UniFFI (`LumenBoxCore` interface)
-    - `[ ]` Compile static library / `.xcframework` and generate Swift bindings
+- `[x]` 8. UniFFI Swift Binding Compile
+    - `[x]` Expose core Rust library endpoints via UniFFI (`LumenBoxCore` interface)
+    - `[x]` Compile static library / `.xcframework` and generate Swift bindings
 - `[ ]` 9. SwiftUI macOS App Scaffolding
     - `[ ]` Scaffolding Xcode project layout
     - `[ ]` Link the generated `xcframework` and Swift bindings package
