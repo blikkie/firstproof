@@ -1,4 +1,4 @@
-uniffi::setup_scaffolding!();
+uniffi::setup_scaffolding!("lumenbox_core");
 
 use std::path::Path;
 
@@ -229,6 +229,19 @@ pub fn scan_directory_for_takeout(dir_path: String) -> Vec<TakeoutMatchRecord> {
 
 use std::sync::Arc;
 
+#[derive(Debug, uniffi::Error)]
+pub enum LumenBoxError {
+    DatabaseError { reason: String },
+}
+
+impl std::fmt::Display for LumenBoxError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LumenBoxError::DatabaseError { reason } => write!(f, "Database error: {}", reason),
+        }
+    }
+}
+
 #[derive(uniffi::Object)]
 pub struct LumenBoxDatabase {
     inner: db::Database,
@@ -237,8 +250,12 @@ pub struct LumenBoxDatabase {
 #[uniffi::export]
 impl LumenBoxDatabase {
     #[uniffi::constructor]
-    pub fn open(db_path: String) -> Option<Arc<Self>> {
-        db::Database::open(db_path).ok().map(|inner| Arc::new(Self { inner }))
+    pub fn open(db_path: String) -> Result<Arc<Self>, LumenBoxError> {
+        db::Database::open(db_path)
+            .map(|inner| Arc::new(Self { inner }))
+            .map_err(|e| LumenBoxError::DatabaseError {
+                reason: e.to_string(),
+            })
     }
 
     pub fn index_folder(&self, folder_path: String) -> u32 {

@@ -1,0 +1,4 @@
+module lumenbox_coreFFI {
+    header "lumenbox_coreFFI.h"
+    export *
+}

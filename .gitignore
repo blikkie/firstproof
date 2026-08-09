@@ -5,6 +5,10 @@
 # macOS
 .DS_Store
 
+# Swift / Xcode
+.build/
+DerivedData/
+
 # IDEs
 .vscode/
 .idea/

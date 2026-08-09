@@ -3,3 +3,7 @@ members = [
     "lumenbox-core",
 ]
 resolver = "2"
+
+[patch.crates-io]
+rawloader = { path = "vendor/rawloader" }
+
