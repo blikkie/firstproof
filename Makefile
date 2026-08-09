@@ -17,6 +17,7 @@ build-bridge: build-core
 	mv LumenBoxBridge/Sources/LumenBoxBridge/lumenbox_coreFFI.h LumenBoxBridge/Sources/LumenBoxCoreFFI/include/
 	mv LumenBoxBridge/Sources/LumenBoxBridge/lumenbox_coreFFI.modulemap LumenBoxBridge/Sources/LumenBoxCoreFFI/include/module.modulemap
 	cp target/release/liblumenbox_core.a LumenBoxBridge/Sources/LumenBoxCoreFFI/include/
+	swift build --package-path LumenBoxBridge
 
 test:
 	cargo test
