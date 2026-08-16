@@ -19,7 +19,12 @@ let package = Package(
         .target(
             name: "LumenBoxCoreFFI",
             path: "Sources/LumenBoxCoreFFI",
-            publicHeadersPath: "include",
+            publicHeadersPath: "include"
+        ),
+        .target(
+            name: "LumenBoxBridge",
+            dependencies: ["LumenBoxCoreFFI"],
+            path: "Sources/LumenBoxBridge",
             linkerSettings: [
                 .unsafeFlags([
                     "-L\(packageDir)/Sources/LumenBoxCoreFFI/include",
@@ -28,11 +33,6 @@ let package = Package(
                 .linkedFramework("Security"),
                 .linkedFramework("CoreFoundation")
             ]
-        ),
-        .target(
-            name: "LumenBoxBridge",
-            dependencies: ["LumenBoxCoreFFI"],
-            path: "Sources/LumenBoxBridge"
         )
     ]
 )
