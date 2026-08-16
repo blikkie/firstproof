@@ -94,6 +94,21 @@ fn parse_gps_xmp(s: &str) -> Option<f64> {
     Some(val)
 }
 
+fn escape_xml(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// Generates XMP XML sidecar string.
 pub fn generate_xmp(data: &XmpData) -> String {
     let rating_attr = match data.rating {
@@ -113,7 +128,7 @@ pub fn generate_xmp(data: &XmpData) -> String {
     let title_block = match &data.title {
         Some(t) => format!(
             "   <dc:title>\n    <rdf:Alt>\n     <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n    </rdf:Alt>\n   </dc:title>\n",
-            t
+            escape_xml(t)
         ),
         None => "".to_string(),
     };
@@ -121,7 +136,7 @@ pub fn generate_xmp(data: &XmpData) -> String {
     let desc_block = match &data.description {
         Some(d) => format!(
             "   <dc:description>\n    <rdf:Alt>\n     <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n    </rdf:Alt>\n   </dc:description>\n",
-            d
+            escape_xml(d)
         ),
         None => "".to_string(),
     };

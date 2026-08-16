@@ -3,12 +3,12 @@
 all: build-bridge
 
 build-core:
-	cargo build --release -p lumenbox-core
+	GIT_CONFIG_GLOBAL=/dev/null cargo build --release -p lumenbox-core
 
 build-bridge: build-core
 	mkdir -p LumenBoxBridge/Sources/LumenBoxBridge
 	mkdir -p LumenBoxBridge/Sources/LumenBoxCoreFFI/include
-	cargo run --manifest-path lumenbox-core/Cargo.toml --features uniffi/cli --bin uniffi-bindgen -- generate \
+	GIT_CONFIG_GLOBAL=/dev/null cargo run --manifest-path lumenbox-core/Cargo.toml --features uniffi/cli --bin uniffi-bindgen -- generate \
 		--library target/release/liblumenbox_core.dylib \
 		--language swift \
 		--out-dir LumenBoxBridge/Sources/LumenBoxBridge/ \
@@ -19,8 +19,11 @@ build-bridge: build-core
 	cp target/release/liblumenbox_core.a LumenBoxBridge/Sources/LumenBoxCoreFFI/include/
 	swift build --package-path LumenBoxBridge
 
+build-app: build-bridge
+	swift build --package-path LumenBoxApp
+
 test:
-	cargo test
+	GIT_CONFIG_GLOBAL=/dev/null cargo test -p lumenbox-core
 
 clean:
 	cargo clean

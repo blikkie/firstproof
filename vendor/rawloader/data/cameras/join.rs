@@ -5,6 +5,7 @@ extern crate glob;
 use self::glob::glob;
   
 fn main() {
+  println!("cargo:rerun-if-changed=data/cameras");
   let mut out = File::create("./data/cameras/all.toml").unwrap();
 
   out.write_all("[cameras]\n".as_bytes()).unwrap();

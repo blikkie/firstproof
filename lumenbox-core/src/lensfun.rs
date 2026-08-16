@@ -224,7 +224,7 @@ impl LensfunDatabase {
                     (a.focal_length - focal_length)
                         .abs()
                         .partial_cmp(&(b.focal_length - focal_length).abs())
-                        .unwrap()
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 })
             {
                 res.distortion = dist.coefficients;
@@ -242,7 +242,7 @@ impl LensfunDatabase {
                     (a.focal_length - focal_length)
                         .abs()
                         .partial_cmp(&(b.focal_length - focal_length).abs())
-                        .unwrap()
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 })
             {
                 res.tca = tca.coefficients;
@@ -261,7 +261,9 @@ impl LensfunDatabase {
                         + (a.aperture - target_aperture).abs();
                     let diff_b = (b.focal_length - focal_length).abs() * 2.0
                         + (b.aperture - target_aperture).abs();
-                    diff_a.partial_cmp(&diff_b).unwrap()
+                    diff_a
+                        .partial_cmp(&diff_b)
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 })
             {
                 res.vignetting = vig.coefficients;

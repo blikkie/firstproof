@@ -29,7 +29,7 @@
 - `[x]` 8. UniFFI Swift Binding Compile
     - `[x]` Expose core Rust library endpoints via UniFFI (`LumenBoxCore` interface)
     - `[x]` Compile static library / `.xcframework` and generate Swift bindings
-- `[ ]` 9. SwiftUI macOS App Scaffolding
-    - `[ ]` Scaffolding Xcode project layout
-    - `[ ]` Link the generated `xcframework` and Swift bindings package
-    - `[ ]` Build split-view layout: Left folder library, Center Grid/MTKView canvas, Right sliders, Bottom filmstrip
+- `[x]` 9. SwiftUI macOS App Scaffolding
+    - `[x]` Scaffolding Xcode project layout
+    - `[x]` Link the generated `xcframework` and Swift bindings package
+    - `[x]` Build split-view layout: Left folder library, Center Grid/MTKView canvas, Right sliders, Bottom filmstrip
