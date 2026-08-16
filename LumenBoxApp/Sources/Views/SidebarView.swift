@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import LumenBoxBridge
 
 struct SidebarView: View {
     @Bindable var viewModel: AppViewModel

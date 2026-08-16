@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import LumenBoxBridge
 
 enum CanvasMode {
     case grid
@@ -118,17 +119,17 @@ struct GridThumbnailCell: View {
             ZStack(alignment: .bottomTrailing) {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(Color.secondary.opacity(0.2))
-                    .aspectRatio(4/3, contentMode: .fit)
-                    .overlay(
+                    .frame(height: 120)
+                    .overlay {
                         Image(systemName: "photo")
                             .foregroundColor(.secondary)
-                    )
+                    }
                 
-                if let status = photo.status, status == "pick" {
+                if photo.status == "pick" {
                     Image(systemName: "flag.fill")
                         .foregroundColor(.green)
                         .padding(6)
-                } else if let status = photo.status, status == "reject" {
+                } else if photo.status == "reject" {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.red)
                         .padding(6)

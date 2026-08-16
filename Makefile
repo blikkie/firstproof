@@ -22,6 +22,9 @@ build-bridge: build-core
 build-app: build-bridge
 	swift build --package-path LumenBoxApp
 
+run: build-bridge
+	swift run --package-path LumenBoxApp
+
 test:
 	GIT_CONFIG_GLOBAL=/dev/null cargo test -p lumenbox-core
 

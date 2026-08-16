@@ -3,7 +3,7 @@ import SwiftUI
 import AppKit
 import LumenBoxBridge
 
-enum EditSliderType {
+public enum EditSliderType {
     case exposure
     case contrast
     case temperature
