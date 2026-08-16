@@ -31,3 +31,4 @@ test:
 clean:
 	cargo clean
 	rm -rf LumenBoxBridge/Sources/
+	rm -rf LumenBoxApp/.build LumenBoxBridge/.build
