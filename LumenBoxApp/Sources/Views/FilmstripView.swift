@@ -73,14 +73,9 @@ struct FilmstripThumbnailCell: View {
     
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.secondary.opacity(0.2))
+            AsyncThumbnailView(filePath: photo.filePath)
                 .frame(width: 56, height: 56)
-                .overlay(
-                    Image(systemName: "photo")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                )
+                .clipShape(RoundedRectangle(cornerRadius: 4))
             
             if let rating = photo.rating, rating > 0 {
                 Text("\(rating)★")

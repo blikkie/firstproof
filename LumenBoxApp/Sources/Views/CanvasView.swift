@@ -117,13 +117,9 @@ struct GridThumbnailCell: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ZStack(alignment: .bottomTrailing) {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.secondary.opacity(0.2))
-                    .frame(height: 120)
-                    .overlay {
-                        Image(systemName: "photo")
-                            .foregroundColor(.secondary)
-                    }
+                AsyncThumbnailView(filePath: photo.filePath)
+                    .frame(height: 130)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 
                 if photo.status == "pick" {
                     Image(systemName: "flag.fill")

@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import ImageIO
 import LumenBoxBridge
 
 public enum EditSliderType {
@@ -85,7 +86,27 @@ public final class AppViewModel {
         // Extract embedded RAW preview JPEG in background
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self = self else { return }
-            let image = extractPreview(path: photo.filePath).flatMap { NSImage(data: $0) }
+            var image: NSImage? = nil
+            
+            // 1. Try Rust extractPreview (Embedded RAW JPEG)
+            if let data = extractPreview(path: photo.filePath) {
+                image = NSImage(data: data)
+            }
+            
+            // 2. High-res ImageIO fallback (native macOS Metal/CoreGraphics pipeline)
+            if image == nil {
+                let url = URL(fileURLWithPath: photo.filePath) as CFURL
+                if let src = CGImageSourceCreateWithURL(url, nil) {
+                    let options: [CFString: Any] = [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceCreateThumbnailWithTransform: true,
+                        kCGImageSourceThumbnailMaxPixelSize: 3840
+                    ]
+                    if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
+                        image = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
+                    }
+                }
+            }
             
             DispatchQueue.main.async {
                 // Prevent out-of-order async race condition: only update if photo is still selected!

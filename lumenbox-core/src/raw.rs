@@ -225,8 +225,17 @@ pub fn extract_preview_jpeg<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>>
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes)?;
     
-    let mut jpegs = Vec::new();
     let len = bytes.len();
+    if len < 4 {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "File too small"));
+    }
+    
+    // Fast path: If the entire file is a JPEG image
+    if bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF {
+        return Ok(bytes);
+    }
+    
+    let mut jpegs = Vec::new();
     let mut i = 0;
     
     // Scan for JPEG Start of Image (SOI) markers: 0xFFD8
@@ -237,14 +246,11 @@ pub fn extract_preview_jpeg<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>>
             let mut j = i + 2;
             let mut found_eoi = false;
             while j < len - 1 {
-                // To optimize scan speed, JPEGs normally have SOI and EOI.
-                // We search for the next 0xFFD9. To prevent false positives, we also check
-                // if it forms a reasonable size segment.
                 if bytes[j] == 0xFF && bytes[j + 1] == 0xD9 {
                     found_eoi = true;
                     let end = j + 2;
                     let size = end - start;
-                    if size > 50 * 1024 { // JPEG must be larger than 50KB to count as a preview
+                    if size > 10 * 1024 { // Minimum 10KB to qualify as an embedded thumbnail/preview
                         jpegs.push((start, end, size));
                     }
                     i = j; // skip forward
@@ -253,10 +259,8 @@ pub fn extract_preview_jpeg<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>>
                 j += 1;
             }
             if !found_eoi {
-                // If no EOI found, we might have hit end of file segment.
-                // Sometimes RAW embedded JPEGs are padded.
                 let size = len - start;
-                if size > 100 * 1024 {
+                if size > 10 * 1024 {
                     jpegs.push((start, len, size));
                 }
             }
