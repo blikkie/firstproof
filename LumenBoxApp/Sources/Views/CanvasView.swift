@@ -72,16 +72,13 @@ struct CanvasView: View {
                 }
                 .background(Color(NSColor.underPageBackgroundColor))
             } else {
-                // MARK: Detail View
+                // MARK: Detail View (Metal GPU Canvas)
                 ZStack {
                     Color(NSColor.underPageBackgroundColor)
                         .edgesIgnoringSafeArea(.all)
                     
-                    if let image = viewModel.previewImage {
-                        Image(nsImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .rotationEffect(.degrees(Double(viewModel.straightenAngle)))
+                    if viewModel.previewImage != nil {
+                        MetalCanvasView(viewModel: viewModel, isShowingOriginal: isShowingOriginal)
                             .padding(24)
                             .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
                             .overlay(
