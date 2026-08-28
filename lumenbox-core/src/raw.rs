@@ -218,8 +218,56 @@ pub fn extract_metadata<P: AsRef<Path>>(path: P) -> std::io::Result<ImageMetadat
     })
 }
 
-/// Scans the file bytes to extract the largest embedded JPEG image.
-/// This acts as a highly robust fallback and primary extractor for previews.
+/// Checks if a candidate JPEG stream contains a displayable RGB Start-of-Frame (SOF0/SOF1/SOF2)
+/// and is NOT a 14-bit Lossless Bayer RAW sensor stream (SOF3).
+fn is_displayable_rgb_jpeg(bytes: &[u8]) -> bool {
+    if bytes.len() < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8 {
+        return false;
+    }
+    
+    let mut pos = 2;
+    while pos + 3 < bytes.len() {
+        if bytes[pos] != 0xFF {
+            pos += 1;
+            continue;
+        }
+        let marker = bytes[pos + 1];
+        if marker == 0xFF || marker == 0x00 {
+            pos += 1;
+            continue;
+        }
+        // SOF0 (0xC0) = Baseline DCT (Standard displayable preview)
+        // SOF1 (0xC1) = Extended Sequential DCT
+        // SOF2 (0xC2) = Progressive DCT
+        if marker == 0xC0 || marker == 0xC1 || marker == 0xC2 {
+            return true;
+        }
+        // SOF3 (0xC3) = Lossless Huffman (Canon RAW sensor Bayer data) -> Reject
+        if marker == 0xC3 {
+            return false;
+        }
+        // Start of Scan (SOS): image scan begins, header markers ended
+        if marker == 0xDA {
+            break;
+        }
+        // Variable-length markers (APPn, DQT, DHT, DRI, COM)
+        if (0xE0..=0xEF).contains(&marker) || marker == 0xDB || marker == 0xC4 || marker == 0xDD || marker == 0xFE {
+            if pos + 3 >= bytes.len() {
+                break;
+            }
+            let len = ((bytes[pos + 2] as usize) << 8) | (bytes[pos + 3] as usize);
+            if len < 2 {
+                break;
+            }
+            pos += 2 + len;
+        } else {
+            pos += 2;
+        }
+    }
+    false
+}
+
+/// Scans the file bytes to extract the largest embedded RGB JPEG preview.
 pub fn extract_preview_jpeg<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>> {
     let mut file = File::open(path)?;
     let mut bytes = Vec::new();
@@ -230,8 +278,8 @@ pub fn extract_preview_jpeg<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>>
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "File too small"));
     }
     
-    // Fast path: If the entire file is a JPEG image
-    if bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF {
+    // Fast path: If the entire file is already an RGB JPEG image
+    if bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF && is_displayable_rgb_jpeg(&bytes) {
         return Ok(bytes);
     }
     
@@ -268,15 +316,19 @@ pub fn extract_preview_jpeg<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>>
         i += 1;
     }
     
-    if jpegs.is_empty() {
-        return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "No embedded JPEGs found in file"));
+    // Find the largest valid displayable RGB JPEG preview
+    let best = jpegs
+        .into_iter()
+        .filter(|&(start, end, _)| is_displayable_rgb_jpeg(&bytes[start..end]))
+        .max_by_key(|&(_, _, size)| size);
+        
+    match best {
+        Some((start, end, _)) => Ok(bytes[start..end].to_vec()),
+        None => Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "No displayable RGB preview found in file",
+        )),
     }
-    
-    // Find the largest JPEG detected
-    let best = jpegs.into_iter().max_by_key(|&(_, _, size)| size).unwrap();
-    let (start, end, _) = best;
-    
-    Ok(bytes[start..end].to_vec())
 }
 
 #[cfg(test)]
@@ -291,6 +343,12 @@ mod tests {
         let mut jpeg_bytes = vec![0x00; jpeg_size];
         jpeg_bytes[0] = 0xFF;
         jpeg_bytes[1] = 0xD8;
+        // Add SOF0 marker (Baseline RGB)
+        jpeg_bytes[2] = 0xFF;
+        jpeg_bytes[3] = 0xC0;
+        jpeg_bytes[4] = 0x00;
+        jpeg_bytes[5] = 0x11; // 17 bytes payload
+        
         jpeg_bytes[jpeg_size - 2] = 0xFF;
         jpeg_bytes[jpeg_size - 1] = 0xD9;
         
