@@ -12,6 +12,13 @@ Simple exposure sliders shift the entire luminance scale linearly. To recover hi
     \(L_{new} = L \cdot (1 + S_{Shadows} \cdot (1 - L)^2 - H_{Highlights} \cdot L^2)\)
 *   **Bilateral Filtering (Advanced)**: To prevent halos (where dark lines form around bright boundaries), we will implement a fast bilateral filter on the GPU. The bilateral filter splits the image into a **base layer** (low-frequency details, containing large lighting transitions) and a **detail layer** (high-frequency details, texture). Highlight/shadow adjustments are applied *only* to the base layer, and then the detail layer is multiplied back.
 
+### Auto-Crop & Inscribed Bounding Box on Straighten (P1)
+When rotating/straightening an image by angle \(\theta\), black triangular boundary wedges appear at the image borders.
+*   **Maximum Inscribed Aspect-Ratio Box**:
+    To eliminate black border wedges seamlessly like Lightroom, compute the minimum zoom scaling factor \(S(\theta)\) required to inscribe the aspect ratio \(R = W / H\) inside the rotated canvas:
+    \[S(\theta) = |\cos \theta| + |\sin \theta| \cdot \max(R, 1/R)\]
+*   **Implementation**: In `Shaders.metal`, multiply UV coordinates by \(S(\theta)\) around \((0.5, 0.5)\) so the canvas automatically zooms to fill the entire frame without any black bars.
+
 ### Saturation & Vibrance (P1)
 *   **Saturation**: Multiplies chrominance uniformly in HSL or CIELAB space.
 *   **Vibrance**: Boosts saturation selectively. It targets less-saturated colors while protecting highly-saturated colors and skin tones (typically yellow/red/orange bands).
