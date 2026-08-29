@@ -51,10 +51,15 @@ When rotating/straightening an image by angle \(\theta\), black triangular bound
 
 ---
 
-## 3. DNG Compression Conversion (Post-v1)
+---
 
-*   **Objective**: Convert uncompressed RAWs (like Canon `.CR2`) into Adobe compressed `.DNG` files directly inside LumenBox to save ~10% disk space.
-*   **Implementation Path**:
-    *   Wrap Adobe's DNG SDK or implement a DNG writer in Rust using the `tiff` crate.
-    *   Read bayer pixel data from the raw reader, compress the sensor data using lossless JPEG compression (the compression standard inside DNG/TIFF), copy the EXIF/IPTC metadata blocks, and write out a `.dng` file.
-    *   Delete the original `.CR2` once verification passes (comparing checksum of decoded bayer matrices).
+## 4. Native macOS Polish Pass (Desktop Experience)
+
+*   **Activation Policy & Process Lifecycle**:
+    Set `NSApplication.shared.setActivationPolicy(.regular)` on startup to guarantee standard macOS windowing behavior (`Cmd+Tab` app switcher, Dock tile icon, and native menu bar).
+*   **Session Persistence**:
+    Save and restore `lastOpenedDirectoryPath` in `UserDefaults` / `@AppStorage` so the app automatically re-opens the user's active library on launch.
+*   **Window State & Free Resizing**:
+    Enable `NSWindow` frame auto-saving (`window.setFrameAutosaveName`) and configure flexible min/max split pane constraints.
+*   **App Bundle Packaging (`LumenBox.app`)**:
+    Add `make bundle` target to package the Swift executable, `Info.plist`, Metal libraries, and `AppIcon.icns` into a distributable `LumenBox.app` bundle.

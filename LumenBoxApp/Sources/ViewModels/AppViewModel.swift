@@ -45,10 +45,17 @@ public final class AppViewModel {
     
     public init() {
         self.lensfun = LumenBoxLensfun()
+        
+        // Auto-restore previously opened folder on startup
+        if let lastPath = UserDefaults.standard.string(forKey: "lastOpenedDirectory"),
+           FileManager.default.fileExists(atPath: lastPath) {
+            openDirectory(at: lastPath)
+        }
     }
     
     // MARK: - Directory Indexing & Loading
     public func openDirectory(at folderPath: String) {
+        UserDefaults.standard.set(folderPath, forKey: "lastOpenedDirectory")
         self.currentFolderPath = folderPath
         self.isExternalVolume = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
         
