@@ -33,3 +33,7 @@
     - `[x]` Scaffolding Xcode project layout
     - `[x]` Link the generated `xcframework` and Swift bindings package
     - `[x]` Build split-view layout: Left folder library, Center Grid/MTKView canvas, Right sliders, Bottom filmstrip
+- `[x]` 10. Metal RAW GPU Render Pipeline & Shaders
+    - `[x]` Implement MSL shaders (Lens distortion, White Balance, Linear Exposure, Filmic Contrast)
+    - `[x]` Build `MetalRenderer` (`MTKViewDelegate`) and `MetalCanvasView` (`NSViewRepresentable`)
+    - `[x]` Live 60/120 FPS slider updates and press-and-hold original (`\`) toggle

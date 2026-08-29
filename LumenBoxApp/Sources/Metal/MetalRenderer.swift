@@ -118,6 +118,41 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         self.samplerState = device.makeSamplerState(descriptor: samplerDescriptor)
     }
     
+    // MARK: - Aspect-Fit Quad Update
+    private func updateQuad(viewSize: CGSize) {
+        guard let texture = currentTexture, viewSize.width > 0, viewSize.height > 0 else { return }
+        
+        let imageAspect = Float(texture.width) / Float(texture.height)
+        let viewAspect = Float(viewSize.width) / Float(viewSize.height)
+        
+        var quadW: Float = 1.0
+        var quadH: Float = 1.0
+        
+        if imageAspect > viewAspect {
+            // Image is wider than viewport: fit width, letterbox top/bottom
+            quadW = 1.0
+            quadH = viewAspect / imageAspect
+        } else {
+            // Image is taller than viewport: fit height, pillarbox left/right
+            quadW = imageAspect / viewAspect
+            quadH = 1.0
+        }
+        
+        let vertices: [Vertex] = [
+            Vertex(position: SIMD2<Float>(-quadW,  quadH), texCoord: SIMD2<Float>(0.0, 0.0)),
+            Vertex(position: SIMD2<Float>( quadW,  quadH), texCoord: SIMD2<Float>(1.0, 0.0)),
+            Vertex(position: SIMD2<Float>(-quadW, -quadH), texCoord: SIMD2<Float>(0.0, 1.0)),
+            Vertex(position: SIMD2<Float>( quadW, -quadH), texCoord: SIMD2<Float>(1.0, 1.0))
+        ]
+        
+        if let vertexBuffer = vertexBuffer {
+            let ptr = vertexBuffer.contents().bindMemory(to: Vertex.self, capacity: vertices.count)
+            for (idx, vertex) in vertices.enumerated() {
+                ptr[idx] = vertex
+            }
+        }
+    }
+    
     // MARK: - Texture Upload
     public func updateTexture(with image: NSImage) {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
@@ -140,7 +175,9 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     }
     
     // MARK: - MTKViewDelegate
-    public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+        updateQuad(viewSize: size)
+    }
     
     public func draw(in view: MTKView) {
         guard let drawable = view.currentDrawable,
@@ -151,6 +188,9 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
               let uniformsBuffer = uniformsBuffer else {
             return
         }
+        
+        // Dynamically adjust quad to preserve exact aspect ratio inside current viewport
+        updateQuad(viewSize: view.drawableSize)
         
         // Update uniforms buffer in RAM
         let contents = uniformsBuffer.contents().bindMemory(to: ShaderUniforms.self, capacity: 1)
@@ -223,6 +263,12 @@ vertex VertexOutput vertexShader(
         float cosA = cos(angle);
         float sinA = sin(angle);
         
+        float absSin = abs(sinA);
+        float absCos = abs(cosA);
+        float R = max(uniforms.aspectRatio, 0.01);
+        float maxR = max(R, 1.0 / R);
+        float zoom = max(absCos + absSin * maxR, 1.0);
+        
         float2 centered = uv - float2(0.5, 0.5);
         centered.x *= uniforms.aspectRatio;
         
@@ -232,7 +278,7 @@ vertex VertexOutput vertexShader(
         );
         rotated.x /= uniforms.aspectRatio;
         
-        out.texCoord = rotated + float2(0.5, 0.5);
+        out.texCoord = (rotated / zoom) + float2(0.5, 0.5);
     } else {
         out.texCoord = uv;
     }

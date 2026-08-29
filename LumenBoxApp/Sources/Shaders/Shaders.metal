@@ -39,11 +39,18 @@ vertex VertexOutput vertexShader(
     
     out.position = float4(pos, 0.0, 1.0);
     
-    // Straighten rotation around center (0.5, 0.5) with aspect ratio correction
+    // Straighten rotation around center (0.5, 0.5) with aspect ratio correction and auto-crop
     if (uniforms.straightenAngle != 0.0 && uniforms.isOriginal < 0.5) {
         float angle = uniforms.straightenAngle;
         float cosA = cos(angle);
         float sinA = sin(angle);
+        
+        // Compute auto-crop inscribed zoom factor S(theta)
+        float absSin = abs(sinA);
+        float absCos = abs(cosA);
+        float R = max(uniforms.aspectRatio, 0.01);
+        float maxR = max(R, 1.0 / R);
+        float zoom = max(absCos + absSin * maxR, 1.0);
         
         float2 centered = uv - float2(0.5, 0.5);
         centered.x *= uniforms.aspectRatio; // compensate aspect ratio
@@ -54,7 +61,8 @@ vertex VertexOutput vertexShader(
         );
         rotated.x /= uniforms.aspectRatio;
         
-        out.texCoord = rotated + float2(0.5, 0.5);
+        // Scale by 1.0 / zoom to eliminate black corner bars
+        out.texCoord = (rotated / zoom) + float2(0.5, 0.5);
     } else {
         out.texCoord = uv;
     }
