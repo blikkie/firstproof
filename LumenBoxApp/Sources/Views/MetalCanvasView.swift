@@ -52,7 +52,7 @@ public struct MetalCanvasView: NSViewRepresentable {
             context.coordinator.lastPreviewImage = image
         }
         
-        // 2. Transmit Slider Uniforms to GPU
+        // 2. Transmit Slider & Lensfun Uniforms to GPU
         renderer.uniforms.exposure = viewModel.exposure
         renderer.uniforms.temperature = viewModel.temperature
         renderer.uniforms.tint = viewModel.tint
@@ -60,6 +60,19 @@ public struct MetalCanvasView: NSViewRepresentable {
         renderer.uniforms.straightenAngle = viewModel.straightenAngle * (.pi / 180.0)
         renderer.uniforms.lensCorrectionEnabled = viewModel.lensCorrectionEnabled ? 1 : 0
         renderer.uniforms.isOriginal = isShowingOriginal ? 1.0 : 0.0
+        
+        if let coeff = viewModel.lensCoefficients, coeff.hasDistortion {
+            renderer.uniforms.distortionModel = (coeff.distortionModel == "ptlens") ? 1 : 0
+            renderer.uniforms.k1 = coeff.distortion.indices.contains(0) ? coeff.distortion[0] : 0.0
+            renderer.uniforms.k2 = coeff.distortion.indices.contains(1) ? coeff.distortion[1] : 0.0
+            renderer.uniforms.k3 = coeff.distortion.indices.contains(2) ? coeff.distortion[2] : 0.0
+            renderer.uniforms.k4 = coeff.distortion.indices.contains(3) ? coeff.distortion[3] : 0.0
+        } else {
+            renderer.uniforms.k1 = 0.0
+            renderer.uniforms.k2 = 0.0
+            renderer.uniforms.k3 = 0.0
+            renderer.uniforms.k4 = 0.0
+        }
         
         // Trigger live redraw on MTKView
         nsView.setNeedsDisplay(nsView.bounds)

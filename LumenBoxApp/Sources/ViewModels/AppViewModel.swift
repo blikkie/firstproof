@@ -38,6 +38,7 @@ public final class AppViewModel {
     
     // MARK: - Takeout & Metadata
     public var takeoutMatches: [TakeoutMatchRecord] = []
+    public var lensCoefficients: LensCorrectionCoefficientsRecord? = nil
     
     // MARK: - Rust Core Objects
     private var db: LumenBoxDatabase? = nil
@@ -70,13 +71,9 @@ public final class AppViewModel {
                 guard let self = self, let database = self.db else { return }
                 _ = database.indexFolder(folderPath: folderPath)
                 
-                let fetchedPhotos = database.getAllPhotos()
-                let takeoutList = scanDirectoryForTakeout(dirPath: folderPath)
-                
                 DispatchQueue.main.async {
-                    self.photos = fetchedPhotos
-                    self.takeoutMatches = takeoutList
-                    if let first = fetchedPhotos.first {
+                    self.photos = database.getAllPhotos()
+                    if let first = self.photos.first, self.selectedPhoto == nil {
                         self.selectPhoto(first)
                     }
                 }
@@ -89,6 +86,22 @@ public final class AppViewModel {
     // MARK: - Photo Selection & Preview
     public func selectPhoto(_ photo: PhotoRecord) {
         self.selectedPhoto = photo
+        
+        // Resolve Lensfun lens distortion coefficients
+        if let make = photo.cameraMake,
+           let model = photo.cameraModel,
+           let lens = photo.lensModel,
+           let focal = photo.focalLength {
+            self.lensCoefficients = self.lensfun?.resolveCoefficients(
+                cameraMake: make,
+                cameraModel: model,
+                lensModel: lens,
+                focalLength: focal,
+                aperture: photo.aperture
+            )
+        } else {
+            self.lensCoefficients = nil
+        }
         
         // Extract embedded RAW preview JPEG in background
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in

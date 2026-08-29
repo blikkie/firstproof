@@ -123,42 +123,49 @@ fragment float4 fragmentShader(
         return sampledColor;
     }
     
+    // Fast-path: When all edit sliders are at default neutral positions, return exact as-shot pixels
+    bool isNeutralEdits = (uniforms.exposure == 0.0) && 
+                          (abs(uniforms.temperature - 5500.0) < 1.0) && 
+                          (uniforms.tint == 0.0) && 
+                          (uniforms.contrast == 0.0);
+    
+    if (isNeutralEdits) {
+        return sampledColor;
+    }
+    
     // 2. Linear Space Conversion (sRGB/Gamma 2.2 -> Linear Light)
     float3 linearColor = pow(max(sampledColor.rgb, float3(0.0)), float3(2.2));
     
     // 3. White Balance & Temperature Adjustment
-    float tempNorm = clamp(uniforms.temperature / 5500.0, 0.25, 4.0);
-    // Planckian warmth curve
-    float rScale = pow(tempNorm, 0.75);
-    float bScale = pow(1.0 / tempNorm, 0.75);
-    
-    // Tint adjustment (green-magenta axis)
-    float tintFactor = uniforms.tint * 0.003;
-    float gScale = 1.0 - tintFactor;
-    rScale += tintFactor * 0.5;
-    bScale += tintFactor * 0.5;
-    
-    linearColor.r *= rScale;
-    linearColor.g *= gScale;
-    linearColor.b *= bScale;
+    if (abs(uniforms.temperature - 5500.0) >= 1.0 || uniforms.tint != 0.0) {
+        float tempNorm = clamp(uniforms.temperature / 5500.0, 0.25, 4.0);
+        float rScale = pow(tempNorm, 0.75);
+        float bScale = pow(1.0 / tempNorm, 0.75);
+        
+        float tintFactor = uniforms.tint * 0.003;
+        float gScale = 1.0 - tintFactor;
+        rScale += tintFactor * 0.5;
+        bScale += tintFactor * 0.5;
+        
+        linearColor.r *= rScale;
+        linearColor.g *= gScale;
+        linearColor.b *= bScale;
+    }
     
     // 4. Linear Exposure Multiplication (2^EV)
-    float exposureGain = pow(2.0, uniforms.exposure);
-    linearColor *= exposureGain;
+    if (uniforms.exposure != 0.0) {
+        linearColor *= pow(2.0, uniforms.exposure);
+    }
     
     // 5. Tone & Contrast S-Curve
-    float contrastGain = 1.0 + (uniforms.contrast / 100.0);
-    if (contrastGain != 1.0) {
-        // Mid-gray anchor (0.18)
+    if (uniforms.contrast != 0.0) {
+        float contrastGain = 1.0 + (uniforms.contrast / 100.0);
         float3 normalized = max(linearColor / 0.18, float3(0.0001));
         linearColor = 0.18 * pow(normalized, float3(contrastGain));
     }
     
-    // 6. Smooth Highlight Roll-off (Filmic Shoulder)
-    float3 tonemapped = 1.0 - exp(-linearColor * 1.2);
-    
-    // 7. Display OETF (Linear -> Display Gamma 2.2)
-    float3 finalColor = pow(clamp(tonemapped, float3(0.0), float3(1.0)), float3(1.0 / 2.2));
+    // 6. Display OETF (Linear -> Display Gamma 2.2)
+    float3 finalColor = pow(clamp(linearColor, float3(0.0), float3(1.0)), float3(1.0 / 2.2));
     
     return float4(finalColor, sampledColor.a);
 }

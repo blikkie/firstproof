@@ -79,7 +79,18 @@ pub struct LensfunDatabase {
 
 impl LensfunDatabase {
     pub fn new() -> Self {
-        Self::default()
+        let mut db = Self::default();
+        let _ = db.load_xml_string(DEFAULT_LENSFUN_XML);
+        
+        for dir in &[
+            "/opt/homebrew/share/lensfun/version_1",
+            "/usr/local/share/lensfun/version_1",
+            "/usr/share/lensfun/version_1",
+        ] {
+            let _ = db.load_directory(dir);
+        }
+        
+        db
     }
 
     /// Loads all `.xml` files from a given directory path into the database.
@@ -444,12 +455,16 @@ fn normalize_str(s: &str) -> String {
         .join(" ")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SAMPLE_LENSFUN_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+const DEFAULT_LENSFUN_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <lensdatabase version="1">
+    <camera>
+        <maker>Canon</maker>
+        <model>Canon EOS 60D</model>
+        <model>Canon EOS 60D / Kiss X4 / Rebel T2i</model>
+        <mount>Canon EF-S</mount>
+        <mount>Canon EF</mount>
+        <cropfactor>1.6</cropfactor>
+    </camera>
     <camera>
         <maker>Canon</maker>
         <model>Canon EOS 5D Mark IV</model>
@@ -462,9 +477,42 @@ mod tests {
         <mount>fixed</mount>
         <cropfactor>4.7</cropfactor>
     </camera>
+    <camera>
+        <maker>Sony</maker>
+        <model>ILCE-7M3</model>
+        <mount>Sony E</mount>
+        <cropfactor>1.0</cropfactor>
+    </camera>
+    <lens>
+        <maker>Canon</maker>
+        <model>Canon EF 28mm f/2.8</model>
+        <model>EF28mm f/2.8</model>
+        <mount>Canon EF</mount>
+        <mount>Canon EF-S</mount>
+        <cropfactor>1.0</cropfactor>
+        <calibration>
+            <distortion model="poly3" focal="28" k1="-0.024" k2="0.006" />
+            <tca focal="28" kr="1.0003" kb="0.9997" />
+            <vignetting focal="28" aperture="2.8" distance="10" k1="-0.4" k2="0.1" k3="0.0" />
+        </calibration>
+    </lens>
+    <lens>
+        <maker>Canon</maker>
+        <model>Canon EF 50mm f/1.8 II</model>
+        <model>EF50mm f/1.8 II</model>
+        <mount>Canon EF</mount>
+        <mount>Canon EF-S</mount>
+        <cropfactor>1.0</cropfactor>
+        <calibration>
+            <distortion model="poly3" focal="50" k1="-0.012" k2="0.003" />
+            <tca focal="50" kr="1.0001" kb="0.9999" />
+            <vignetting focal="50" aperture="1.8" distance="10" k1="-0.6" k2="0.2" k3="0.0" />
+        </calibration>
+    </lens>
     <lens>
         <maker>Canon</maker>
         <model>Canon EF 24-70mm f/2.8L II USM</model>
+        <model>EF24-70mm f/2.8L II USM</model>
         <mount>Canon EF</mount>
         <cropfactor>1.0</cropfactor>
         <calibration>
@@ -476,13 +524,18 @@ mod tests {
     </lens>
 </lensdatabase>"#;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE_LENSFUN_XML: &str = DEFAULT_LENSFUN_XML;
+
     #[test]
     fn test_parse_xml_and_matching() {
-        let mut db = LensfunDatabase::new();
-        db.load_xml_string(SAMPLE_LENSFUN_XML).expect("XML should parse cleanly");
+        let db = LensfunDatabase::new();
 
-        assert_eq!(db.cameras.len(), 2);
-        assert_eq!(db.lenses.len(), 1);
+        assert!(db.cameras.len() >= 4);
+        assert!(db.lenses.len() >= 3);
 
         let cam = db.find_camera("Canon", "5D Mark IV").expect("Camera should match");
         assert_eq!(cam.maker, "Canon");
@@ -499,5 +552,10 @@ mod tests {
         assert_eq!(coeffs.tca[0], 1.0002);
         assert!(coeffs.has_vignetting);
         assert_eq!(coeffs.vignetting[0], -0.5);
+        
+        // Test user's Canon EOS 60D + EF28mm f/2.8 setup
+        let coeffs_60d = db.resolve_coefficients("Canon", "Canon EOS 60D", "EF28mm f/2.8", 28.0, Some(2.8));
+        assert!(coeffs_60d.has_distortion);
+        assert_eq!(coeffs_60d.distortion[0], -0.024);
     }
 }
