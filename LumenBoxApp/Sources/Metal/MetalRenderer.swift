@@ -3,25 +3,25 @@ import Metal
 import MetalKit
 import AppKit
 
-struct Vertex {
-    var position: SIMD2<Float>
-    var texCoord: SIMD2<Float>
+public struct Vertex {
+    public var position: SIMD2<Float>
+    public var texCoord: SIMD2<Float>
 }
 
-struct ShaderUniforms {
-    var exposure: Float = 0.0
-    var temperature: Float = 5500.0
-    var tint: Float = 0.0
-    var contrast: Float = 0.0
-    var straightenAngle: Float = 0.0
-    var aspectRatio: Float = 1.5
-    var lensCorrectionEnabled: Int32 = 1
-    var distortionModel: Int32 = 0
-    var k1: Float = 0.0
-    var k2: Float = 0.0
-    var k3: Float = 0.0
-    var k4: Float = 0.0
-    var isOriginal: Float = 0.0
+public struct ShaderUniforms {
+    public var exposure: Float = 0.0
+    public var temperature: Float = 5500.0
+    public var tint: Float = 0.0
+    public var contrast: Float = 0.0
+    public var straightenAngle: Float = 0.0
+    public var aspectRatio: Float = 1.5
+    public var lensCorrectionEnabled: Int32 = 1
+    public var distortionModel: Int32 = 0
+    public var k1: Float = 0.0
+    public var k2: Float = 0.0
+    public var k3: Float = 0.0
+    public var k4: Float = 0.0
+    public var isOriginal: Float = 0.0
 }
 
 public final class MetalRenderer: NSObject, MTKViewDelegate {
