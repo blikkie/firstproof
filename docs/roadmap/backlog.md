@@ -25,6 +25,17 @@ When rotating/straightening an image by angle \(\theta\), black triangular bound
     *   *Implementation*: Convert RGB to HSV. Calculate saturation \(S\). Apply a boost multiplier \(M\) that decreases as \(S\) increases:
         \(S_{new} = S + M \cdot (1.0 - S) \cdot (1.0 - \text{is\_skin\_tone}(H))\)
 
+### Interactive RGB & Tone Curves (P1)
+Photographers rely on tone curves for surgical control over tonal contrast and stylized film grading:
+*   **The Concept**: A 2D transfer function where \(X = \text{Input Luminance } [0.0, 1.0]\) and \(Y = \text{Output Luminance } [0.0, 1.0]\).
+    *   **Diagonal (\(y = x\))**: Flat / neutral passthrough.
+    *   **The Classic S-Curve**: Boosting upper midtones and pulling down lower midtones increases punchy micro-contrast while protecting pure black and specular white points.
+    *   **The Matte / Film Fade**: Lifting the shadow black point from \((0, 0) \to (0, 0.1)\) turns harsh digital black into soft, vintage analogue shadows.
+    *   **Independent RGB Channels**: Toning individual Red, Green, or Blue curves enables cinematic split-toning (e.g., adding blue/teal in the shadows while keeping highlights warm).
+*   **Mathematical Implementation**:
+    *   Interpolate user control points using a **Monotone Cubic Spline** (Fritsch-Carlson algorithm) to prevent overshoot/ringing.
+    *   Bake the evaluated 256-sample curve into a 1D Metal texture (`MTLTextureType1D` with linear filtering) or evaluate directly in `Shaders.metal` with zero GPU latency.
+
 ### Eyedropper & Selection Tools (P2)
 *   **White Balance Picker**:
     1. The user clicks a point or small pixel region (e.g., 5x5 average) in the viewport.
