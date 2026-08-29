@@ -62,6 +62,19 @@ Photographers rely on tone curves for surgical control over tonal contrast and s
 
 ---
 
+## 3. Universal Non-Destructive Sidecar Architecture (JPEG, HEIC, PNG)
+
+*   **The Non-Destructive Principle**:
+    Standard photo viewers re-encode JPEGs on save, causing irreversible generation loss (JPEG compression artifacts, color quantization, and highlight/shadow clipping).
+*   **LumenBox Sidecar Architecture**:
+    *   Treat all source image formats (RAW, JPEG, HEIC, PNG, TIFF) as **immutable read-only master files**.
+    *   Store all user adjustments (Exposure, WB, Contrast, Tone Curves, Crop/Straighten, Ratings, Pick/Reject flags, and EXIF/Takeout titles) in adjacent `.xmp` sidecars (`image.jpg.xmp` or `image.xmp`).
+    *   **Benefits**:
+        1. **Zero Quality Loss**: The original JPEG is never recompressed or degraded.
+        2. **Infinite Undo & Repurposing**: Users can adjust edits years later or export in different aspect ratios, resolutions, or color grades on demand.
+        3. **Interoperability**: Sidecars are fully compatible with Darktable, Lightroom, Adobe Bridge, and external archival systems.
+        4. **Export Engine**: Generates a pristine, freshly rendered derivative image (JPEG, WebP, or 16-bit TIFF) only when exporting or sharing.
+
 ---
 
 ## 4. Native macOS Polish Pass (Desktop Experience)
