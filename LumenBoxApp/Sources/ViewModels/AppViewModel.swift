@@ -202,6 +202,10 @@ public final class AppViewModel {
         _ = writeXmp(path: xmpPath, record: record)
     }
     
+    // MARK: - As-Shot Baselines
+    public var asShotTemperature: Float = 5500.0
+    public var asShotTint: Float = 0.0
+    
     // MARK: - Slider Reset Helpers
     public func resetSlider(_ type: EditSliderType) {
         switch type {
@@ -210,9 +214,9 @@ public final class AppViewModel {
         case .contrast:
             contrast = 0.0
         case .temperature:
-            temperature = 5500.0
+            temperature = asShotTemperature
         case .tint:
-            tint = 0.0
+            tint = asShotTint
         case .straighten:
             straightenAngle = 0.0
         }
@@ -221,8 +225,8 @@ public final class AppViewModel {
     public func resetAllSliders() {
         exposure = 0.0
         contrast = 0.0
-        temperature = 5500.0
-        tint = 0.0
+        temperature = asShotTemperature
+        tint = asShotTint
         straightenAngle = 0.0
     }
     
