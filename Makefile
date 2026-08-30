@@ -35,6 +35,9 @@ run: build-bridge
 test:
 	GIT_CONFIG_GLOBAL=/dev/null cargo test --target $(RUST_TARGET) -p lumenbox-core
 
+test-calibration:
+	GIT_CONFIG_GLOBAL=/dev/null cargo run --manifest-path lumenbox-core/Cargo.toml --target $(RUST_TARGET) --bin calibrate
+
 clean:
 	cargo clean
 	rm -rf LumenBoxBridge/Sources/
