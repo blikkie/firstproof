@@ -84,27 +84,12 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
             }
             
             return Ok(demosaiced);
+        } else {
+            return Err("Unsupported RAW data format: sensor did not contain 16-bit integer CFA data".to_string());
         }
     }
     
-    // 2. Fallback: Try extracting embedded RGB preview JPEG from RAW
-    if let Ok(jpeg_bytes) = crate::raw::extract_preview_jpeg(path) {
-        if let Ok(dyn_img) = image::load_from_memory(&jpeg_bytes) {
-            let rgb = dyn_img.to_rgb8();
-            let width = rgb.width() as usize;
-            let height = rgb.height() as usize;
-            let mut demosaiced = DemosaicedImage::new(width, height);
-            for (i, pixel) in rgb.pixels().enumerate() {
-                let out_idx = i * 3;
-                demosaiced.data[out_idx] = ((pixel[0] as f32) / 255.0).powf(2.2);
-                demosaiced.data[out_idx + 1] = ((pixel[1] as f32) / 255.0).powf(2.2);
-                demosaiced.data[out_idx + 2] = ((pixel[2] as f32) / 255.0).powf(2.2);
-            }
-            return Ok(demosaiced);
-        }
-    }
-    
-    // 3. Fallback: Standard image decode (JPEG, PNG, TIFF master files)
+    // 2. Standard master image decode (JPEG, PNG, TIFF master files)
     let dyn_img = image::open(path).map_err(|e| format!("Failed to open image file: {}", e))?;
     let rgb = dyn_img.to_rgb8();
     let width = rgb.width() as usize;
