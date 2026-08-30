@@ -111,24 +111,10 @@ impl Database {
     }
 
     /// Helper to resolve the database path for a catalog.
-    /// If portable is true or if target folder is under /Volumes/, uses `<folder>/.lumenbox/catalog.db`.
-    pub fn resolve_catalog_path<P: AsRef<Path>>(folder_path: P, portable: bool) -> PathBuf {
+    /// Every session or library folder has its own isolated, self-contained database at `<folder>/.lumenbox/catalog.db`.
+    pub fn resolve_catalog_path<P: AsRef<Path>>(folder_path: P, _portable: bool) -> PathBuf {
         let folder = folder_path.as_ref();
-        let is_external = folder.starts_with("/Volumes") || portable;
-
-        if is_external {
-            folder.join(".lumenbox").join("catalog.db")
-        } else {
-            // Default macOS Application Support location
-            if let Some(home) = dirs_next_home() {
-                home.join("Library")
-                    .join("Application Support")
-                    .join("LumenBox")
-                    .join("catalog.db")
-            } else {
-                folder.join(".lumenbox").join("catalog.db")
-            }
-        }
+        folder.join(".lumenbox").join("catalog.db")
     }
 
     /// Indexes a folder recursively, inserting/updating records in SQLite with parallel CPU processing.
