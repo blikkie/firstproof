@@ -207,6 +207,50 @@ fn sample_bilinear(image: &DemosaicedImage, x: f32, y: f32) -> (f32, f32, f32) {
     (r, g, b)
 }
 
+/// Decodes a RAW image into an 8-bit RGBA preview buffer for live Metal rendering.
+pub fn decode_raw_preview_buffer<P: AsRef<Path>>(path: P, max_dimension: Option<u32>) -> Result<(u32, u32, Vec<u8>), String> {
+    let demosaiced = decode_image(path)?;
+    
+    let orig_w = demosaiced.width;
+    let orig_h = demosaiced.height;
+    
+    let (target_w, target_h) = if let Some(max_dim) = max_dimension {
+        let max_dim = max_dim as usize;
+        if max_dim > 0 && (orig_w > max_dim || orig_h > max_dim) {
+            if orig_w >= orig_h {
+                let scaled_h = ((orig_h as f32) * (max_dim as f32) / (orig_w as f32)).round() as usize;
+                (max_dim, scaled_h.max(1))
+            } else {
+                let scaled_w = ((orig_w as f32) * (max_dim as f32) / (orig_h as f32)).round() as usize;
+                (scaled_w.max(1), max_dim)
+            }
+        } else {
+            (orig_w, orig_h)
+        }
+    } else {
+        (orig_w, orig_h)
+    };
+    
+    let mut out_rgba = vec![0u8; target_w * target_h * 4];
+    
+    for ty in 0..target_h {
+        let sy = (ty as f32 + 0.5) * (orig_h as f32) / (target_h as f32);
+        for tx in 0..target_w {
+            let sx = (tx as f32 + 0.5) * (orig_w as f32) / (target_w as f32);
+            let (r, g, b) = sample_bilinear(&demosaiced, sx, sy);
+            
+            let out_idx = (ty * target_w + tx) * 4;
+            // Convert linear float to standard display gamma (pow 1/2.2)
+            out_rgba[out_idx] = ((r.clamp(0.0, 1.0).powf(1.0 / 2.2)) * 255.0).round() as u8;
+            out_rgba[out_idx + 1] = ((g.clamp(0.0, 1.0).powf(1.0 / 2.2)) * 255.0).round() as u8;
+            out_rgba[out_idx + 2] = ((b.clamp(0.0, 1.0).powf(1.0 / 2.2)) * 255.0).round() as u8;
+            out_rgba[out_idx + 3] = 255;
+        }
+    }
+    
+    Ok((target_w as u32, target_h as u32, out_rgba))
+}
+
 /// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing and Lensfun distortion correction.
 pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     input_path: P,

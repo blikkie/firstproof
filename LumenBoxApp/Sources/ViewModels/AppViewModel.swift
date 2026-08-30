@@ -104,17 +104,35 @@ public final class AppViewModel {
             self.lensCoefficients = nil
         }
         
-        // Extract embedded RAW preview JPEG in background
+        // Decode authentic 14-bit RAW sensor demosaic in background
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self = self else { return }
             var image: NSImage? = nil
             
-            // 1. Try Rust extractPreview (Embedded RAW JPEG)
-            if let data = extractPreview(path: photo.filePath) {
-                image = NSImage(data: data)
+            // 1. Authentic Rust Core 14-bit RAW demosaicing & calibrated sRGB pipeline
+            if let raw = decodeRawPreview(path: photo.filePath, maxDimension: 2560) {
+                let width = Int(raw.width)
+                let height = Int(raw.height)
+                let colorSpace = CGColorSpaceCreateDeviceRGB()
+                if let provider = CGDataProvider(data: raw.data as CFData),
+                   let cgImg = CGImage(
+                       width: width,
+                       height: height,
+                       bitsPerComponent: 8,
+                       bitsPerPixel: 32,
+                       bytesPerRow: width * 4,
+                       space: colorSpace,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider,
+                       decode: nil,
+                       shouldInterpolate: true,
+                       intent: .defaultIntent
+                   ) {
+                    image = NSImage(cgImage: cgImg, size: NSSize(width: width, height: height))
+                }
             }
             
-            // 2. High-res ImageIO fallback (native macOS Metal/CoreGraphics pipeline)
+            // 2. Fallback for non-RAW master images (PNG, TIFF, JPEG)
             if image == nil {
                 let url = URL(fileURLWithPath: photo.filePath) as CFURL
                 if let src = CGImageSourceCreateWithURL(url, nil) {

@@ -1472,6 +1472,80 @@ public func FfiConverterTypePhotoRecord_lower(_ value: PhotoRecord) -> RustBuffe
 }
 
 
+public struct RawPreviewRecord {
+    public var width: UInt32
+    public var height: UInt32
+    public var data: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(width: UInt32, height: UInt32, data: Data) {
+        self.width = width
+        self.height = height
+        self.data = data
+    }
+}
+
+
+
+extension RawPreviewRecord: Equatable, Hashable {
+    public static func ==(lhs: RawPreviewRecord, rhs: RawPreviewRecord) -> Bool {
+        if lhs.width != rhs.width {
+            return false
+        }
+        if lhs.height != rhs.height {
+            return false
+        }
+        if lhs.data != rhs.data {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(width)
+        hasher.combine(height)
+        hasher.combine(data)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRawPreviewRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RawPreviewRecord {
+        return
+            try RawPreviewRecord(
+                width: FfiConverterUInt32.read(from: &buf), 
+                height: FfiConverterUInt32.read(from: &buf), 
+                data: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RawPreviewRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.width, into: &buf)
+        FfiConverterUInt32.write(value.height, into: &buf)
+        FfiConverterData.write(value.data, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRawPreviewRecord_lift(_ buf: RustBuffer) throws -> RawPreviewRecord {
+    return try FfiConverterTypeRawPreviewRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRawPreviewRecord_lower(_ value: RawPreviewRecord) -> RustBuffer {
+    return FfiConverterTypeRawPreviewRecord.lower(value)
+}
+
+
 public struct TakeoutMatchRecord {
     public var imagePath: String
     public var jsonPath: String
@@ -2039,6 +2113,30 @@ fileprivate struct FfiConverterOptionTypePhotoRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeRawPreviewRecord: FfiConverterRustBuffer {
+    typealias SwiftType = RawPreviewRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeRawPreviewRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeRawPreviewRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeTakeoutMetadataRecord: FfiConverterRustBuffer {
     typealias SwiftType = TakeoutMetadataRecord?
 
@@ -2164,6 +2262,14 @@ public func checkConnection() -> String {
     )
 })
 }
+public func decodeRawPreview(path: String, maxDimension: UInt32?) -> RawPreviewRecord? {
+    return try!  FfiConverterOptionTypeRawPreviewRecord.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_decode_raw_preview(
+        FfiConverterString.lower(path),
+        FfiConverterOptionUInt32.lower(maxDimension),$0
+    )
+})
+}
 public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_export_photo(
@@ -2251,6 +2357,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.contractVersionMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_check_connection() != 58636) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_decode_raw_preview() != 62888) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_export_photo() != 3529) {

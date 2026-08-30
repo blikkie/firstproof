@@ -235,6 +235,28 @@ pub fn export_photo(
     }
 }
 
+#[derive(uniffi::Record)]
+pub struct RawPreviewRecord {
+    pub width: u32,
+    pub height: u32,
+    pub data: Vec<u8>,
+}
+
+#[uniffi::export]
+pub fn decode_raw_preview(path: String, max_dimension: Option<u32>) -> Option<RawPreviewRecord> {
+    match export::decode_raw_preview_buffer(&path, max_dimension) {
+        Ok((width, height, data)) => Some(RawPreviewRecord {
+            width,
+            height,
+            data,
+        }),
+        Err(e) => {
+            eprintln!("Failed to decode RAW preview for {}: {}", path, e);
+            None
+        }
+    }
+}
+
 #[uniffi::export]
 pub fn match_takeout_json(image_path: String) -> Option<String> {
     takeout::match_takeout_json(Path::new(&image_path))
