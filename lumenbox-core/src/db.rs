@@ -199,13 +199,22 @@ impl Database {
                 let mut longitude = raw_meta.as_ref().and_then(|m| m.longitude);
                 let mut description = raw_meta.as_ref().and_then(|m| m.description.clone());
 
-                // 2. XMP Sidecar Integration
-                let xmp_path = path.with_extension("xmp");
+                // 2. XMP Sidecar Integration (Support both Lightroom foo.jpg.xmp and standard foo.xmp)
+                let xmp_path1 = PathBuf::from(format!("{}.xmp", file_path_str));
+                let xmp_path2 = path.with_extension("xmp");
+                let target_xmp = if xmp_path1.exists() {
+                    Some(xmp_path1)
+                } else if xmp_path2.exists() {
+                    Some(xmp_path2)
+                } else {
+                    None
+                };
+
                 let mut has_xmp = false;
                 let mut rating = None;
                 let mut status = "None".to_string();
 
-                if xmp_path.exists() {
+                if let Some(xmp_path) = target_xmp {
                     if let Ok(xmp_data) = xmp::read_xmp_file(&xmp_path) {
                         has_xmp = true;
                         if xmp_data.rating.is_some() {

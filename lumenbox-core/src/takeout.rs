@@ -106,35 +106,6 @@ pub fn match_takeout_json<P: AsRef<Path>>(image_path: P) -> Option<PathBuf> {
         }
     }
     
-    // 4. Slow/Fuzzy Path: Scan directory to match original filename inside JSON "title" field.
-    if let Ok(entries) = fs::read_dir(parent) {
-        for entry in entries.filter_map(Result::ok) {
-            let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "json") {
-                if let Ok(mut file) = File::open(&path) {
-                    let mut buffer = [0u8; 4096];
-                    if let Ok(bytes_read) = file.read(&mut buffer) {
-                        let content = String::from_utf8_lossy(&buffer[..bytes_read]);
-                        
-                        let match_str = format!("\"title\": \"{}\"", filename);
-                        let match_str_escaped = format!("\"title\":\"{}\"", filename);
-                        let match_stripped = format!("\"title\": \"{}\"", stripped_filename);
-                        
-                        if content.contains(&match_str) || content.contains(&match_str_escaped) || content.contains(&match_stripped) {
-                            return Some(path);
-                        }
-
-                        if let Some(json_title) = extract_json_title(&content) {
-                            if json_title == filename || json_title == stripped_filename {
-                                return Some(path);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
     None
 }
 
