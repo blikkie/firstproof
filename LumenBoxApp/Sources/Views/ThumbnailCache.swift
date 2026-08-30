@@ -30,19 +30,18 @@ public struct AsyncThumbnailView: View {
     
     public var body: some View {
         ZStack {
+            Color.black.opacity(0.2) // Neutral letterbox/pillarbox background
+            
             if let image = image {
                 Image(nsImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
+                    .aspectRatio(contentMode: .fit)
             } else {
-                ZStack {
-                    Color(NSColor.controlBackgroundColor)
-                    ProgressView()
-                        .controlSize(.small)
-                }
+                ProgressView()
+                    .controlSize(.small)
             }
         }
+        .clipped()
         .onAppear {
             loadThumbnail()
         }

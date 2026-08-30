@@ -115,7 +115,8 @@ struct GridThumbnailCell: View {
         VStack(alignment: .leading, spacing: 4) {
             ZStack(alignment: .bottomTrailing) {
                 AsyncThumbnailView(filePath: photo.filePath)
-                    .frame(height: 130)
+                    .aspectRatio(3.0 / 2.0, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                 
                 if photo.status == "pick" {
@@ -150,6 +151,7 @@ struct GridThumbnailCell: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
         )
+        .contentShape(Rectangle())
         .onTapGesture(perform: action)
     }
 }
