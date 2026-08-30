@@ -203,10 +203,19 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
     let mut data = XmpData::default();
     
     // 1. Parse standard attributes
-    if let Some(r_str) = desc.attribute(( "http://ns.adobe.com/xap/1.0/", "Rating" )) {
-        data.rating = r_str.parse::<i32>().ok();
-    } else if let Some(r_str) = desc.attribute("Rating") { // fallback without namespace
-        data.rating = r_str.parse::<i32>().ok();
+    let raw_rating = desc.attribute(( "http://ns.adobe.com/xap/1.0/", "Rating" ))
+        .or_else(|| desc.attribute("Rating"))
+        .and_then(|r| r.parse::<i32>().ok());
+
+    if let Some(r) = raw_rating {
+        if r == -1 {
+            data.status = "reject".to_string();
+            data.rating = None;
+        } else if r == 0 {
+            data.rating = None;
+        } else {
+            data.rating = Some(r);
+        }
     }
     
     if let Some(lat_str) = desc.attribute(( "http://ns.adobe.com/exif/1.0/", "GPSLatitude" )) {
