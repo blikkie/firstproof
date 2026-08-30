@@ -132,3 +132,25 @@ Photographers often want the option to toggle between a pure neutral scientific 
         *   **"Camera Standard"** (Matches camera JPEG rendering)
         *   **"Camera Portrait / Landscape / Monochrome"**
         *   **"Custom 3D LUT (.cube)..."** (Cinema & artistic film emulation)
+
+---
+
+## 6. Parallel Multi-Core Bulk Export Engine (P1)
+
+Photographers regularly need to batch export dozens or hundreds of culled photos after a shoot with zero UI stalling:
+
+*   **Multi-Selection & Filtered Batch Export UI**:
+    *   Support `Cmd+A` (Select All in Grid), `Shift+Click` (Contiguous Range), and `Cmd+Click` (Discontiguous Selection).
+    *   Export Modal Sheet (`Cmd+Shift+E`): Option to export *Selected Photos*, *All Filtered Photos (e.g. 5-Star Picks)*, or the *Entire Catalog*.
+*   **Rayon Multi-Core Thread Pool (Rust Core)**:
+    *   Process exports in parallel across all Apple Silicon performance & efficiency cores using `rayon::par_iter`.
+    *   Each worker thread autonomously:
+        1. Reads the photo's individual `.xmp` sidecar for custom Exposure, WB, Contrast, Crop, and Lensfun parameters.
+        2. Demosaics the 14-bit Bayer sensor data.
+        3. Applies geometric resampling and encoding (JPEG / 16-bit TIFF).
+*   **Background Export Queue & Progress Tracking**:
+    *   Non-blocking background job with real-time SwiftUI progress bar (`Exporting 42 of 180 photos...`).
+    *   Native macOS Notification Center banner upon batch completion with a "Show in Finder" action.
+*   **Batch File Naming Templates**:
+    *   Support dynamic token patterns: `{original_name}_edited.{ext}`, `{seq_3}_{YYYYMMDD}_{title}.{ext}`, or custom prefix/suffix rules.
+    *   Target size presets: *Original Full-Resolution*, *Web 2048px*, *4K UHD 3840px*, or custom max dimension constraints.
