@@ -95,3 +95,27 @@ Google Pixel phones (Pixel 3 through Pixel 9 Pro) capture computational RAWs in 
     Enable `NSWindow` frame auto-saving (`window.setFrameAutosaveName`) and configure flexible min/max split pane constraints.
 *   **App Bundle Packaging (`LumenBox.app`)**:
     Add `make bundle` target to package the Swift executable, `Info.plist`, Metal libraries, and `AppIcon.icns` into a distributable `LumenBox.app` bundle.
+
+---
+
+## 5. Digital Camera Profiles (DCP), Camera Matching & 3D LUT Engine (P1)
+
+Photographers often want the option to toggle between a pure neutral scientific baseline and the camera manufacturer's signature color science (e.g., Canon Picture Styles, Sony Creative Looks, Fujifilm Film Simulations):
+
+*   **Adobe DCP (Digital Camera Profile) Architecture**:
+    *   **Dual-Illuminant Matrix Interpolation**:
+        DCP files store two separate color matrices calibrated under Standard Illuminant A ($2856\text{K}$ tungsten) and CIE Standard Illuminant D65 ($6504\text{K}$ daylight). During demosaicing, interpolate between both matrices based on the active Planckian white balance temperature ($1/T$).
+    *   **HueSatMap (3D Hue-Saturation-Value Tables)**:
+        Subtle 3D color remapping tables that selectively enhance memory colors (sky cyan-to-deep-blue shifts, warm portrait skin tone hue preservation, and foliage greens).
+    *   **Camera-Matching Tone Curves**:
+        Stores the manufacturer's exact non-linear S-curve to match the in-camera JPEG rendering with 100% fidelity.
+*   **3D LUT Acceleration in Metal**:
+    *   Parse standard `.cube` and `.dcp` 3D look-up tables (e.g. $33\times 33\times 33$ or $65\times 65\times 65$ lattices).
+    *   Upload to Metal as a 3D Texture (`MTLTextureType3D` with hardware trilinear filtering).
+    *   Sample in `Shaders.metal` with single-cycle trilinear texture sampling for real-time 120 FPS grading.
+*   **Inspector Profile Selector**:
+    *   Provide a dropdown in the Inspector under *Color & Tone*:
+        *   **"LumenBox Neutral"** (Linear filmic with maximum grading headroom)
+        *   **"Camera Standard"** (Matches camera JPEG rendering)
+        *   **"Camera Portrait / Landscape / Monochrome"**
+        *   **"Custom 3D LUT (.cube)..."** (Cinema & artistic film emulation)
