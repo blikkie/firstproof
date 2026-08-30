@@ -32,6 +32,14 @@ build-app: build-bridge
 run: build-bridge
 	swift run --package-path LumenBoxApp
 
+bundle: build-app
+	mkdir -p dist/LumenBox.app/Contents/MacOS
+	mkdir -p dist/LumenBox.app/Contents/Resources
+	cp LumenBoxApp/Resources/Info.plist dist/LumenBox.app/Contents/
+	cp LumenBoxApp/Resources/AppIcon.icns dist/LumenBox.app/Contents/Resources/
+	cp $(shell swift build --package-path LumenBoxApp --show-bin-path)/LumenBoxApp dist/LumenBox.app/Contents/MacOS/
+	@echo "✅ Standalone bundle created at dist/LumenBox.app"
+
 test:
 	GIT_CONFIG_GLOBAL=/dev/null cargo test --target $(RUST_TARGET) -p lumenbox-core
 
@@ -41,4 +49,4 @@ test-calibration:
 clean:
 	cargo clean
 	rm -rf LumenBoxBridge/Sources/
-	rm -rf LumenBoxApp/.build LumenBoxBridge/.build
+	rm -rf LumenBoxApp/.build LumenBoxBridge/.build dist/
