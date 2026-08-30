@@ -36,6 +36,19 @@ Photographers rely on tone curves for surgical control over tonal contrast and s
     *   Interpolate user control points using a **Monotone Cubic Spline** (Fritsch-Carlson algorithm) to prevent overshoot/ringing.
     *   Bake the evaluated 256-sample curve into a 1D Metal texture (`MTLTextureType1D` with linear filtering) or evaluate directly in `Shaders.metal` with zero GPU latency.
 
+### Sharpening, Detail Masking & Clarity Engine (P1)
+Camera optical low-pass filters (OLPF) and 2x2 Bayer demosaic reconstruction inherently introduce subtle high-frequency smoothing. Camera internal JPEGs counteract this by baking in aggressive edge sharpening:
+*   **Luminance Unsharp Masking (USM)**:
+    Apply high-pass edge enhancement strictly to the perceptual Luminance (\(Y\)) channel to avoid color noise amplification:
+    \[Y_{\text{sharp}} = Y + \text{Amount} \cdot (Y - \text{GaussianBlur}(Y, \sigma = \text{Radius}))\]
+*   **Edge Masking & Thresholding (Sobel Gradient)**:
+    To prevent sharpening background noise in flat skies or skin tones, calculate the local luminance gradient magnitude \(|\nabla Y| = \sqrt{G_x^2 + G_y^2}\). Sharpening gain is modulated by an edge weight:
+    \[W_{\text{edge}} = \text{smoothstep}(\text{Threshold}, \text{Threshold} + 0.1, |\nabla Y|)\]
+*   **Mid-tone Clarity (Local Contrast)**:
+    A wide-radius (\(\sigma \approx 20\text{--}50\text{px}\)) unsharp mask that increases midtone local contrast, adding punch, definition, and tactile texture without harsh halos.
+*   **Chrominance Denoising (Color Noise Reduction)**:
+    A fast bilateral or median filter on \(Cb / Cr\) chroma channels that eliminates speckled color noise at high ISO while leaving luminance edge sharpness intact.
+
 ### Eyedropper & Selection Tools (P2)
 *   **White Balance Picker**:
     1. The user clicks a point or small pixel region (e.g., 5x5 average) in the viewport.
