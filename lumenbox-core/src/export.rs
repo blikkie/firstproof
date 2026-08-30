@@ -51,9 +51,9 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                     let is_even_row = y % 2 == 0;
                     let is_even_col = x % 2 == 0;
                     
-                    let mut r: f32;
-                    let mut g: f32;
-                    let mut b: f32;
+                    let r: f32;
+                    let g: f32;
+                    let b: f32;
                     
                     let sample = (cfa[idx] as f32 - black_level).max(0.0) * scale;
                     

@@ -2140,6 +2140,17 @@ public func checkConnection() -> String {
     )
 })
 }
+public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, quality: UInt32, maxDimension: UInt32?) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_export_photo(
+        FfiConverterString.lower(inputPath),
+        FfiConverterString.lower(outputPath),
+        FfiConverterTypeEditSettings.lower(edits),
+        FfiConverterUInt32.lower(quality),
+        FfiConverterOptionUInt32.lower(maxDimension),$0
+    )
+})
+}
 public func extractMetadata(path: String) -> ImageMetadata? {
     return try!  FfiConverterOptionTypeImageMetadata.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_extract_metadata(
@@ -2215,6 +2226,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.contractVersionMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_check_connection() != 58636) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_export_photo() != 14496) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_extract_metadata() != 25472) {

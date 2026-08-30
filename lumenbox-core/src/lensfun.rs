@@ -528,8 +528,6 @@ const DEFAULT_LENSFUN_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 mod tests {
     use super::*;
 
-    const SAMPLE_LENSFUN_XML: &str = DEFAULT_LENSFUN_XML;
-
     #[test]
     fn test_parse_xml_and_matching() {
         let db = LensfunDatabase::new();

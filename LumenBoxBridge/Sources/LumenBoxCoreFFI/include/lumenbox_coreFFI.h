@@ -323,6 +323,11 @@ RustBuffer uniffi_lumenbox_core_fn_func_check_connection(RustCallStatus *_Nonnul
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
+int8_t uniffi_lumenbox_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, uint32_t quality, RustBuffer max_dimension, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXTRACT_METADATA
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXTRACT_METADATA
 RustBuffer uniffi_lumenbox_core_fn_func_extract_metadata(RustBuffer path, RustCallStatus *_Nonnull out_status
@@ -646,6 +651,12 @@ void ffi_lumenbox_core_rust_future_complete_void(uint64_t handle, RustCallStatus
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_CHECK_CONNECTION
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_CHECK_CONNECTION
 uint16_t uniffi_lumenbox_core_checksum_func_check_connection(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXPORT_PHOTO
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXPORT_PHOTO
+uint16_t uniffi_lumenbox_core_checksum_func_export_photo(void
     
 );
 #endif

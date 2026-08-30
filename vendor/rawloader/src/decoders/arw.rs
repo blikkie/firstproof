@@ -71,10 +71,8 @@ impl<'a> Decoder for ArwDecoder<'a> {
 }
 
 impl<'a> ArwDecoder<'a> {
-  fn decode_arw1(buf: &[u8], width: u32, height: u32) -> Vec<u16> {
-    let mut buffer: Vec<u16> = vec![0; (width*height) as usize];
-
-    buffer
+  fn decode_arw1(_buf: &[u8], width: u32, height: u32) -> Vec<u16> {
+    vec![0; (width*height) as usize]
   }
 
   fn decode_arw2(buf: &[u8], width: u32, height: u32) -> Vec<u16> {

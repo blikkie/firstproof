@@ -37,3 +37,7 @@
     - `[x]` Implement MSL shaders (Lens distortion, White Balance, Linear Exposure, Filmic Contrast)
     - `[x]` Build `MetalRenderer` (`MTKViewDelegate`) and `MetalCanvasView` (`NSViewRepresentable`)
     - `[x]` Live 60/120 FPS slider updates and press-and-hold original (`\`) toggle
+- `[x]` 11. 14-Bit RAW Bayer Demosaicing & High-Fidelity Export Engine
+    - `[x]` Rust 14-bit Bayer CFA demosaicing and 16-bit linear float pipeline (`export.rs`)
+    - `[x]` High-quality JPEG and 16-bit TIFF encoders
+    - `[x]` Interactive Export Modal Sheet in SwiftUI (`Cmd+E`) with custom sizing and quality controls
