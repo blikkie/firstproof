@@ -6,9 +6,16 @@ import LumenBoxBridge
 public final class ThumbnailCache {
     public static let shared = ThumbnailCache()
     private let cache = NSCache<NSString, NSImage>()
+    public let queue: OperationQueue
     
     private init() {
-        cache.countLimit = 500 // Cache up to 500 thumbnails in memory
+        cache.countLimit = 800
+        
+        let q = OperationQueue()
+        q.name = "com.lumenbox.thumbnailQueue"
+        q.maxConcurrentOperationCount = 4 // Limit concurrency to prevent CPU/memory thrashing
+        q.qualityOfService = .userInitiated
+        self.queue = q
     }
     
     public func image(for path: String) -> NSImage? {
@@ -53,22 +60,39 @@ public struct AsyncThumbnailView: View {
             return
         }
         
-        DispatchQueue.global(qos: .userInteractive).async {
-            var loaded: NSImage? = nil
-            
-            // 1. Try Rust extractPreview (Embedded RAW JPEG)
-            if let data = extractPreview(path: filePath), let img = NSImage(data: data) {
-                loaded = img
+        ThumbnailCache.shared.queue.addOperation {
+            // Check cache again in case it was populated while waiting in queue
+            if let cached = ThumbnailCache.shared.image(for: filePath) {
+                DispatchQueue.main.async {
+                    self.image = cached
+                }
+                return
             }
             
-            // 2. Hardware-accelerated Apple Silicon ImageIO Thumbnail fallback
-            if loaded == nil {
-                let url = URL(fileURLWithPath: filePath) as CFURL
-                if let src = CGImageSourceCreateWithURL(url, nil) {
+            var loaded: NSImage? = nil
+            
+            // Fast-path: Hardware-accelerated ImageIO downsampled decode (320px max dimension)
+            let url = URL(fileURLWithPath: filePath) as CFURL
+            if let src = CGImageSourceCreateWithURL(url, nil) {
+                let options: [CFString: Any] = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: 320,
+                    kCGImageSourceShouldCacheImmediately: true
+                ]
+                if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
+                    loaded = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
+                }
+            }
+            
+            // Fallback: Rust extractPreview downsampled via ImageIO
+            if loaded == nil, let data = extractPreview(path: filePath) {
+                if let src = CGImageSourceCreateWithData(data as CFData, nil) {
                     let options: [CFString: Any] = [
                         kCGImageSourceCreateThumbnailFromImageAlways: true,
                         kCGImageSourceCreateThumbnailWithTransform: true,
-                        kCGImageSourceThumbnailMaxPixelSize: 320
+                        kCGImageSourceThumbnailMaxPixelSize: 320,
+                        kCGImageSourceShouldCacheImmediately: true
                     ]
                     if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
                         loaded = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))

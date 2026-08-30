@@ -101,6 +101,7 @@ public final class AppViewModel {
         self.scanningStatusMessage = "Scanning \(URL(fileURLWithPath: folderPath).lastPathComponent)..."
         
         let catalogPath = resolveCatalogPath(folderPath: folderPath, portable: self.isExternalVolume)
+        let t0 = CFAbsoluteTimeGetCurrent()
         
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -110,6 +111,9 @@ public final class AppViewModel {
                 
                 // 1. Instant Async Initial Load: Read cached photos off main thread
                 let cachedPhotos = database.getAllPhotos()
+                let tCached = CFAbsoluteTimeGetCurrent()
+                print("⚡ [PERF] Cached photos loaded: \(cachedPhotos.count) photos in \(String(format: "%.1f", (tCached - t0) * 1000.0)) ms")
+                
                 if !cachedPhotos.isEmpty {
                     DispatchQueue.main.async {
                         self.photos = cachedPhotos
@@ -120,7 +124,9 @@ public final class AppViewModel {
                 }
                 
                 // 2. Background Batched Directory Indexer
-                _ = database.indexFolder(folderPath: folderPath)
+                let count = database.indexFolder(folderPath: folderPath)
+                let tIndexed = CFAbsoluteTimeGetCurrent()
+                print("📦 [PERF] Indexing complete: \(count) files in \(String(format: "%.1f", (tIndexed - tCached) * 1000.0)) ms")
                 
                 // 3. Publish Final Indexed Photos
                 let finalPhotos = database.getAllPhotos()
