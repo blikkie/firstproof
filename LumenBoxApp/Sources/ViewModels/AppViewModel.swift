@@ -100,28 +100,57 @@ public final class AppViewModel {
         self.isScanning = true
         self.scanningStatusMessage = "Scanning \(URL(fileURLWithPath: folderPath).lastPathComponent)..."
         
-        // Reset photo selection for the newly loaded folder
-        self.photos = []
-        self.selectedPhoto = nil
-        self.previewImage = nil
-        
         let catalogPath = resolveCatalogPath(folderPath: folderPath, portable: self.isExternalVolume)
         
+        // 1. Instant 0ms Initial Load: Display existing cached photos immediately
+        if let database = try? LumenBoxDatabase.open(dbPath: catalogPath) {
+            self.db = database
+            let existing = database.getAllPhotos()
+            if !existing.isEmpty {
+                self.photos = existing
+                if self.selectedPhoto == nil, let first = existing.first {
+                    self.selectPhoto(first)
+                }
+            }
+        }
+        
+        // 2. Background Streaming Indexer with progressive UI refresh
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             do {
                 let database = try LumenBoxDatabase.open(dbPath: catalogPath)
                 self.db = database
                 
-                // Index folder on background thread
+                // Progressive stream timer: Refreshes UI as new photos are indexed
+                var isDone = false
+                let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .default))
+                timer.schedule(deadline: .now() + 0.35, repeating: 0.35)
+                timer.setEventHandler { [weak self] in
+                    guard let self = self, !isDone, let db = self.db else { return }
+                    let currentPhotos = db.getAllPhotos()
+                    DispatchQueue.main.async {
+                        if currentPhotos.count != self.photos.count {
+                            self.photos = currentPhotos
+                            if self.selectedPhoto == nil, let first = currentPhotos.first {
+                                self.selectPhoto(first)
+                            }
+                        }
+                    }
+                }
+                timer.resume()
+                
+                // Run optimized Rust core batched folder indexer
                 _ = database.indexFolder(folderPath: folderPath)
-                let loadedPhotos = database.getAllPhotos()
+                
+                isDone = true
+                timer.cancel()
+                let finalPhotos = database.getAllPhotos()
                 
                 DispatchQueue.main.async {
-                    self.photos = loadedPhotos
+                    self.photos = finalPhotos
                     self.isScanning = false
                     self.scanningStatusMessage = nil
-                    if let first = loadedPhotos.first {
+                    if self.selectedPhoto == nil, let first = finalPhotos.first {
                         self.selectPhoto(first)
                     }
                 }

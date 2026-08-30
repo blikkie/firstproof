@@ -129,13 +129,18 @@ impl Database {
         }
     }
 
-    /// Indexes a folder recursively, inserting/updating records in SQLite.
+    /// Indexes a folder recursively, inserting/updating records in SQLite with transaction batching.
     pub fn index_folder<P: AsRef<Path>>(&self, folder_path: P) -> Result<u32> {
         let folder_path = folder_path.as_ref();
         let mut count = 0u32;
         let mut stack = vec![folder_path.to_path_buf()];
 
         let now = current_timestamp();
+        let mut batch: Vec<PhotoRecord> = Vec::with_capacity(250);
+
+        // Preload existing file metadata cache (path -> (modified_time, file_size)) for ultra-fast skip
+        let folder_prefix = folder_path.to_string_lossy().to_string();
+        let cache_map = self.preload_cache(&folder_prefix);
 
         while let Some(current_dir) = stack.pop() {
             let entries = match fs::read_dir(&current_dir) {
@@ -167,11 +172,6 @@ impl Database {
                         };
 
                         let file_path_str = path.to_string_lossy().to_string();
-                        let file_name = path
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .unwrap_or("")
-                            .to_string();
                         let file_size = metadata.len() as i64;
                         let modified_time = metadata
                             .modified()
@@ -179,6 +179,20 @@ impl Database {
                             .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(0);
+
+                        // Fast cache check: if file is unmodified since last index, skip heavy EXIF parsing
+                        if let Some(&(cached_mtime, cached_size)) = cache_map.get(&file_path_str) {
+                            if cached_mtime == modified_time && cached_size == file_size {
+                                count += 1;
+                                continue;
+                            }
+                        }
+
+                        let file_name = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("")
+                            .to_string();
 
                         // 1. RAW EXIF Extraction
                         let raw_meta = raw::extract_metadata(&file_path_str).ok();
@@ -240,8 +254,7 @@ impl Database {
                             }
                         }
 
-                        // Upsert into SQLite
-                        self.upsert_photo(&PhotoRecord {
+                        batch.push(PhotoRecord {
                             id: 0,
                             file_path: file_path_str,
                             file_name,
@@ -264,15 +277,109 @@ impl Database {
                             has_takeout,
                             created_at: now,
                             updated_at: now,
-                        })?;
+                        });
 
                         count += 1;
+
+                        // Flush batch transaction to SQLite
+                        if batch.len() >= 200 {
+                            self.flush_batch(&batch)?;
+                            batch.clear();
+                        }
                     }
                 }
             }
         }
 
+        if !batch.is_empty() {
+            self.flush_batch(&batch)?;
+        }
+
         Ok(count)
+    }
+
+    fn preload_cache(&self, folder_prefix: &str) -> std::collections::HashMap<String, (i64, i64)> {
+        let mut map = std::collections::HashMap::new();
+        let conn = self.conn.lock().unwrap();
+        let query = "SELECT file_path, modified_time, file_size FROM photos WHERE file_path LIKE ?1 || '%'";
+        if let Ok(mut stmt) = conn.prepare(query) {
+            let res = stmt.query_map([folder_prefix], |row| {
+                Ok((row.get::<_, String>(0)?, (row.get::<_, i64>(1)?, row.get::<_, i64>(2)?)))
+            });
+            if let Ok(rows) = res {
+                for r in rows.flatten() {
+                    map.insert(r.0, r.1);
+                }
+            }
+        }
+        map
+    }
+
+    fn flush_batch(&self, batch: &[PhotoRecord]) -> Result<()> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare_cached(
+                "INSERT INTO photos (
+                    file_path, file_name, file_size, modified_time,
+                    camera_make, camera_model, lens_model, iso, aperture, shutter_speed, focal_length,
+                    taken_time, latitude, longitude, description, rating, status,
+                    has_xmp, has_takeout, created_at, updated_at
+                ) VALUES (
+                    ?1, ?2, ?3, ?4,
+                    ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                    ?12, ?13, ?14, ?15, ?16, ?17,
+                    ?18, ?19, ?20, ?21
+                ) ON CONFLICT(file_path) DO UPDATE SET
+                    file_name = excluded.file_name,
+                    file_size = excluded.file_size,
+                    modified_time = excluded.modified_time,
+                    camera_make = excluded.camera_make,
+                    camera_model = excluded.camera_model,
+                    lens_model = excluded.lens_model,
+                    iso = excluded.iso,
+                    aperture = excluded.aperture,
+                    shutter_speed = excluded.shutter_speed,
+                    focal_length = excluded.focal_length,
+                    taken_time = excluded.taken_time,
+                    latitude = excluded.latitude,
+                    longitude = excluded.longitude,
+                    description = excluded.description,
+                    rating = excluded.rating,
+                    status = excluded.status,
+                    has_xmp = excluded.has_xmp,
+                    has_takeout = excluded.has_takeout,
+                    updated_at = excluded.updated_at;"
+            )?;
+
+            for p in batch {
+                stmt.execute(rusqlite::params![
+                    p.file_path,
+                    p.file_name,
+                    p.file_size,
+                    p.modified_time,
+                    p.camera_make,
+                    p.camera_model,
+                    p.lens_model,
+                    p.iso,
+                    p.aperture,
+                    p.shutter_speed,
+                    p.focal_length,
+                    p.taken_time,
+                    p.latitude,
+                    p.longitude,
+                    p.description,
+                    p.rating,
+                    p.status,
+                    p.has_xmp,
+                    p.has_takeout,
+                    p.created_at,
+                    p.updated_at,
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn upsert_photo(&self, photo: &PhotoRecord) -> Result<()> {
