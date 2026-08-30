@@ -322,7 +322,7 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     let mut rgb_img: RgbImage = ImageBuffer::new(target_w, target_h);
     
     let aspect_ratio = (orig_width as f32) / (orig_height as f32);
-    let angle_rad = -edits.crop_angle * std::f32::consts::PI / 180.0;
+    let angle_rad = edits.crop_angle * std::f32::consts::PI / 180.0;
     let cos_theta = angle_rad.cos();
     let sin_theta = angle_rad.sin();
     
