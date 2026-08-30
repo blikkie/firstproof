@@ -102,48 +102,27 @@ public final class AppViewModel {
         
         let catalogPath = resolveCatalogPath(folderPath: folderPath, portable: self.isExternalVolume)
         
-        // 1. Instant 0ms Initial Load: Display existing cached photos immediately
-        if let database = try? LumenBoxDatabase.open(dbPath: catalogPath) {
-            self.db = database
-            let existing = database.getAllPhotos()
-            if !existing.isEmpty {
-                self.photos = existing
-                if self.selectedPhoto == nil, let first = existing.first {
-                    self.selectPhoto(first)
-                }
-            }
-        }
-        
-        // 2. Background Streaming Indexer with progressive UI refresh
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             do {
                 let database = try LumenBoxDatabase.open(dbPath: catalogPath)
                 self.db = database
                 
-                // Progressive stream timer: Refreshes UI as new photos are indexed
-                var isDone = false
-                let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .default))
-                timer.schedule(deadline: .now() + 0.35, repeating: 0.35)
-                timer.setEventHandler { [weak self] in
-                    guard let self = self, !isDone, let db = self.db else { return }
-                    let currentPhotos = db.getAllPhotos()
+                // 1. Instant Async Initial Load: Read cached photos off main thread
+                let cachedPhotos = database.getAllPhotos()
+                if !cachedPhotos.isEmpty {
                     DispatchQueue.main.async {
-                        if currentPhotos.count != self.photos.count {
-                            self.photos = currentPhotos
-                            if self.selectedPhoto == nil, let first = currentPhotos.first {
-                                self.selectPhoto(first)
-                            }
+                        self.photos = cachedPhotos
+                        if self.selectedPhoto == nil, let first = cachedPhotos.first {
+                            self.selectPhoto(first)
                         }
                     }
                 }
-                timer.resume()
                 
-                // Run optimized Rust core batched folder indexer
+                // 2. Background Batched Directory Indexer
                 _ = database.indexFolder(folderPath: folderPath)
                 
-                isDone = true
-                timer.cancel()
+                // 3. Publish Final Indexed Photos
                 let finalPhotos = database.getAllPhotos()
                 
                 DispatchQueue.main.async {
