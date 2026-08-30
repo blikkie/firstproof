@@ -23,42 +23,6 @@ impl DemosaicedImage {
     }
 }
 
-fn invert_3x3(m: [[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
-    let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-
-    if det.abs() < 1e-6 {
-        return None;
-    }
-
-    let inv_det = 1.0 / det;
-
-    let r00 = (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * inv_det;
-    let r01 = (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inv_det;
-    let r02 = (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inv_det;
-
-    let r10 = (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inv_det;
-    let r11 = (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inv_det;
-    let r12 = (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * inv_det;
-
-    let r20 = (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * inv_det;
-    let r21 = (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * inv_det;
-    let r22 = (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * inv_det;
-
-    Some([[r00, r01, r02], [r10, r11, r12], [r20, r21, r22]])
-}
-
-fn mul_3x3(a: [[f32; 3]; 3], b: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
-    let mut out = [[0.0; 3]; 3];
-    for i in 0..3 {
-        for j in 0..3 {
-            out[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j];
-        }
-    }
-    out
-}
-
 /// Decodes a RAW CFA Bayer sensor image or master standard image into linear 3-channel float RGB.
 pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> {
     let path = path.as_ref();
@@ -66,60 +30,28 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
     // 1. Try decoding with rawloader (Bayer RAW sensors: CR2, NEF, ARW, DNG, RW2)
     if let Ok(raw) = rawloader::decode_file(path) {
         if let rawloader::RawImageData::Integer(ref cfa) = raw.data {
-            let width = raw.width;
-            let height = raw.height;
-            let mut demosaiced = DemosaicedImage::new(width, height);
+            let crop_top = (raw.crops[0] as usize) & !1;
+            let crop_right = (raw.crops[1] as usize) & !1;
+            let crop_bottom = (raw.crops[2] as usize) & !1;
+            let crop_left = (raw.crops[3] as usize) & !1;
+            
+            let active_w = (raw.width.saturating_sub(crop_left + crop_right)).max(2) & !1;
+            let active_h = (raw.height.saturating_sub(crop_top + crop_bottom)).max(2) & !1;
+            
+            let full_w = raw.width;
+            let mut demosaiced = DemosaicedImage::new(active_w, active_h);
             
             // Sensor black and white level normalization
             let black_level = (raw.blacklevels[0] as f32).max(0.0);
             let white_level = (raw.whitelevels[0] as f32).max(black_level + 1.0);
             let scale = 1.0 / (white_level - black_level);
             
-            // Fast Bilinear Bayer Demosaicing (RGGB, BGGR, GBRG, GRBG)
-            // Assumes standard 2x2 Bayer CFA cell
-            for y in 1..(height - 1) {
-                for x in 1..(width - 1) {
-                    let idx = y * width + x;
-                    let out_idx = idx * 3;
-                    
-                    let is_even_row = y % 2 == 0;
-                    let is_even_col = x % 2 == 0;
-                    
-                    let r: f32;
-                    let g: f32;
-                    let b: f32;
-                    
-                    let sample = (cfa[idx] as f32 - black_level).max(0.0) * scale;
-                    
-                    if is_even_row && is_even_col {
-                        // Red pixel in RGGB
-                        r = sample;
-                        g = (cfa[idx - 1] as f32 + cfa[idx + 1] as f32 + cfa[idx - width] as f32 + cfa[idx + width] as f32 - 4.0 * black_level).max(0.0) * (scale * 0.25);
-                        b = (cfa[idx - width - 1] as f32 + cfa[idx - width + 1] as f32 + cfa[idx + width - 1] as f32 + cfa[idx + width + 1] as f32 - 4.0 * black_level).max(0.0) * (scale * 0.25);
-                    } else if (!is_even_row && is_even_col) || (is_even_row && !is_even_col) {
-                        // Green pixel in RGGB
-                        g = sample;
-                        if is_even_row {
-                            r = (cfa[idx - 1] as f32 + cfa[idx + 1] as f32 - 2.0 * black_level).max(0.0) * (scale * 0.5);
-                            b = (cfa[idx - width] as f32 + cfa[idx + width] as f32 - 2.0 * black_level).max(0.0) * (scale * 0.5);
-                        } else {
-                            r = (cfa[idx - width] as f32 + cfa[idx + width] as f32 - 2.0 * black_level).max(0.0) * (scale * 0.5);
-                            b = (cfa[idx - 1] as f32 + cfa[idx + 1] as f32 - 2.0 * black_level).max(0.0) * (scale * 0.5);
-                        }
-                    } else {
-                        // Blue pixel in RGGB
-                        b = sample;
-                        g = (cfa[idx - 1] as f32 + cfa[idx + 1] as f32 + cfa[idx - width] as f32 + cfa[idx + width] as f32 - 4.0 * black_level).max(0.0) * (scale * 0.25);
-                        r = (cfa[idx - width - 1] as f32 + cfa[idx - width + 1] as f32 + cfa[idx + width - 1] as f32 + cfa[idx + width + 1] as f32 - 4.0 * black_level).max(0.0) * (scale * 0.25);
-                    }
-                    
-                    demosaiced.data[out_idx] = r.clamp(0.0, 1.0);
-                    demosaiced.data[out_idx + 1] = g.clamp(0.0, 1.0);
-                    demosaiced.data[out_idx + 2] = b.clamp(0.0, 1.0);
-                }
-            }
+            let p = |x: usize, y: usize| -> f32 {
+                let idx = y * full_w + x;
+                ((cfa[idx] as f32 - black_level) * scale).clamp(0.0, 1.0)
+            };
             
-            // 2. Apply Camera As-Shot White Balance Multipliers
+            // Camera As-Shot White Balance Multipliers
             let wb_r = if raw.wb_coeffs[0] > 0.0 && raw.wb_coeffs[1] > 0.0 {
                 raw.wb_coeffs[0] / raw.wb_coeffs[1]
             } else {
@@ -131,45 +63,45 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                 1.5
             };
             
-            // 3. Compute Camera RGB -> Linear sRGB Color Matrix
-            const XYZ_TO_SRGB: [[f32; 3]; 3] = [
-                [3.2404542, -1.5371385, -0.4985314],
-                [-0.9692660, 1.8760108, 0.0415560],
-                [0.0556434, -0.2040259, 1.0572252],
-            ];
-            
-            let xyz_to_cam_3x3: [[f32; 3]; 3] = [
-                raw.xyz_to_cam[0],
-                raw.xyz_to_cam[1],
-                raw.xyz_to_cam[2],
-            ];
-            let cam_to_xyz = invert_3x3(xyz_to_cam_3x3).unwrap_or([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
-            let mut cpm = mul_3x3(XYZ_TO_SRGB, cam_to_xyz);
-            
-            // Normalize rows so neutral tones maintain luminance
-            for i in 0..3 {
-                let row_sum = cpm[i][0] + cpm[i][1] + cpm[i][2];
-                if row_sum.abs() > 1e-4 {
-                    cpm[i][0] /= row_sum;
-                    cpm[i][1] /= row_sum;
-                    cpm[i][2] /= row_sum;
-                }
-            }
-            
-            for y in 0..height {
-                for x in 0..width {
-                    let idx = (y * width + x) * 3;
-                    let r_cam = demosaiced.data[idx] * wb_r;
-                    let g_cam = demosaiced.data[idx + 1];
-                    let b_cam = demosaiced.data[idx + 2] * wb_b;
+            // Fast Bilinear Bayer Demosaicing (RGGB active CFA)
+            for y in 0..active_h {
+                let full_y = (crop_top + y).min(raw.height - 2).max(1);
+                let is_even_row = full_y % 2 == 0;
+                
+                for x in 0..active_w {
+                    let full_x = (crop_left + x).min(raw.width - 2).max(1);
+                    let is_even_col = full_x % 2 == 0;
                     
-                    let r_srgb = cpm[0][0] * r_cam + cpm[0][1] * g_cam + cpm[0][2] * b_cam;
-                    let g_srgb = cpm[1][0] * r_cam + cpm[1][1] * g_cam + cpm[1][2] * b_cam;
-                    let b_srgb = cpm[2][0] * r_cam + cpm[2][1] * g_cam + cpm[2][2] * b_cam;
+                    let r: f32;
+                    let g: f32;
+                    let b: f32;
                     
-                    demosaiced.data[idx] = r_srgb.clamp(0.0, 1.0);
-                    demosaiced.data[idx + 1] = g_srgb.clamp(0.0, 1.0);
-                    demosaiced.data[idx + 2] = b_srgb.clamp(0.0, 1.0);
+                    if is_even_row && is_even_col {
+                        // Red photosite in RGGB
+                        r = p(full_x, full_y);
+                        g = 0.25 * (p(full_x - 1, full_y) + p(full_x + 1, full_y) + p(full_x, full_y - 1) + p(full_x, full_y + 1));
+                        b = 0.25 * (p(full_x - 1, full_y - 1) + p(full_x + 1, full_y - 1) + p(full_x - 1, full_y + 1) + p(full_x + 1, full_y + 1));
+                    } else if is_even_row && !is_even_col {
+                        // Green on Red row
+                        g = p(full_x, full_y);
+                        r = 0.5 * (p(full_x - 1, full_y) + p(full_x + 1, full_y));
+                        b = 0.5 * (p(full_x, full_y - 1) + p(full_x, full_y + 1));
+                    } else if !is_even_row && is_even_col {
+                        // Green on Blue row
+                        g = p(full_x, full_y);
+                        r = 0.5 * (p(full_x, full_y - 1) + p(full_x, full_y + 1));
+                        b = 0.5 * (p(full_x - 1, full_y) + p(full_x + 1, full_y));
+                    } else {
+                        // Blue photosite in RGGB
+                        b = p(full_x, full_y);
+                        g = 0.25 * (p(full_x - 1, full_y) + p(full_x + 1, full_y) + p(full_x, full_y - 1) + p(full_x, full_y + 1));
+                        r = 0.25 * (p(full_x - 1, full_y - 1) + p(full_x + 1, full_y - 1) + p(full_x - 1, full_y + 1) + p(full_x + 1, full_y + 1));
+                    }
+                    
+                    let out_idx = (y * active_w + x) * 3;
+                    demosaiced.data[out_idx] = (r * wb_r).clamp(0.0, 1.0);
+                    demosaiced.data[out_idx + 1] = g.clamp(0.0, 1.0);
+                    demosaiced.data[out_idx + 2] = (b * wb_b).clamp(0.0, 1.0);
                 }
             }
             
@@ -449,5 +381,28 @@ mod tests {
         
         let _ = std::fs::remove_file(tmp_in);
         let _ = std::fs::remove_file(tmp_out);
+    }
+
+    #[test]
+    fn test_debug_cr2() {
+        let path = "/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0328.CR2";
+        let out_path = "test_canon_cr2_out.jpg";
+        
+        let edits = EditSettings {
+            exposure: 0.0,
+            contrast: 0.0,
+            temperature: 5500.0,
+            tint: 0.0,
+            crop_left: 0.0,
+            crop_top: 0.0,
+            crop_right: 1.0,
+            crop_bottom: 1.0,
+            crop_angle: 0.0,
+        };
+        
+        let res = export_photo_file(path, out_path, &edits, None, 90, Some(500));
+        assert!(res.is_ok());
+        
+        let _ = std::fs::remove_file(out_path);
     }
 }
