@@ -152,11 +152,45 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
     }
 }
 
-/// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing.
+#[inline(always)]
+fn sample_bilinear(image: &DemosaicedImage, x: f32, y: f32) -> (f32, f32, f32) {
+    let w = image.width;
+    let h = image.height;
+    
+    let x_clamped = x.clamp(0.0, (w - 1) as f32);
+    let y_clamped = y.clamp(0.0, (h - 1) as f32);
+    
+    let x0 = x_clamped.floor() as usize;
+    let y0 = y_clamped.floor() as usize;
+    let x1 = (x0 + 1).min(w - 1);
+    let y1 = (y0 + 1).min(h - 1);
+    
+    let fx = x_clamped - (x0 as f32);
+    let fy = y_clamped - (y0 as f32);
+    
+    let idx00 = (y0 * w + x0) * 3;
+    let idx10 = (y0 * w + x1) * 3;
+    let idx01 = (y1 * w + x0) * 3;
+    let idx11 = (y1 * w + x1) * 3;
+    
+    let w00 = (1.0 - fx) * (1.0 - fy);
+    let w10 = fx * (1.0 - fy);
+    let w01 = (1.0 - fx) * fy;
+    let w11 = fx * fy;
+    
+    let r = image.data[idx00] * w00 + image.data[idx10] * w10 + image.data[idx01] * w01 + image.data[idx11] * w11;
+    let g = image.data[idx00 + 1] * w00 + image.data[idx10 + 1] * w10 + image.data[idx01 + 1] * w01 + image.data[idx11 + 1] * w11;
+    let b = image.data[idx00 + 2] * w00 + image.data[idx10 + 2] * w10 + image.data[idx01 + 2] * w01 + image.data[idx11 + 2] * w11;
+    
+    (r, g, b)
+}
+
+/// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing and Lensfun distortion correction.
 pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     input_path: P,
     output_path: Q,
     edits: &EditSettings,
+    lens_distortion: Option<(&[f32], &str)>,
     quality: u8,
     max_dimension: Option<u32>,
 ) -> Result<(), String> {
@@ -188,20 +222,74 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
         (orig_width, orig_height)
     };
     
-    // Build 8-bit RGB image buffer
+    // Build 8-bit RGB image buffer with geometric warp and bilinear filtering
     let mut rgb_img: RgbImage = ImageBuffer::new(target_w, target_h);
-    let scale_x = orig_width as f32 / target_w as f32;
-    let scale_y = orig_height as f32 / target_h as f32;
+    
+    let aspect_ratio = (orig_width as f32) / (orig_height as f32);
+    let angle_rad = -edits.crop_angle * std::f32::consts::PI / 180.0;
+    let cos_theta = angle_rad.cos();
+    let sin_theta = angle_rad.sin();
+    
+    let max_r = aspect_ratio.max(1.0 / aspect_ratio);
+    let auto_crop_scale = (cos_theta.abs() + sin_theta.abs() * max_r).max(1.0);
+    
+    let (has_dist, k1, k2, k3, is_ptlens) = if let Some((coeffs, model)) = lens_distortion {
+        if !coeffs.is_empty() {
+            let k1 = coeffs[0];
+            let k2 = if coeffs.len() > 1 { coeffs[1] } else { 0.0 };
+            let k3 = if coeffs.len() > 2 { coeffs[2] } else { 0.0 };
+            (true, k1, k2, k3, model == "ptlens")
+        } else {
+            (false, 0.0, 0.0, 0.0, false)
+        }
+    } else {
+        (false, 0.0, 0.0, 0.0, false)
+    };
     
     for ty in 0..target_h {
         for tx in 0..target_w {
-            let sx = ((tx as f32 * scale_x) as usize).min(image.width - 1);
-            let sy = ((ty as f32 * scale_y) as usize).min(image.height - 1);
-            let idx = (sy * image.width + sx) * 3;
+            let u = (tx as f32 + 0.5) / (target_w as f32);
+            let v = (ty as f32 + 0.5) / (target_h as f32);
             
-            let r = (image.data[idx] * 255.0).round().clamp(0.0, 255.0) as u8;
-            let g = (image.data[idx + 1] * 255.0).round().clamp(0.0, 255.0) as u8;
-            let b = (image.data[idx + 2] * 255.0).round().clamp(0.0, 255.0) as u8;
+            // 1. Straighten and auto-crop zoom
+            let dx = (u - 0.5) / auto_crop_scale;
+            let dy = (v - 0.5) / (auto_crop_scale * aspect_ratio);
+            
+            let mut rx = dx * cos_theta - dy * sin_theta;
+            let mut ry = dx * sin_theta + dy * cos_theta;
+            
+            // 2. Lensfun distortion model
+            if has_dist {
+                let r = (rx * rx + ry * ry).sqrt();
+                if r > 0.00001 {
+                    let rd = if is_ptlens {
+                        let a = k1;
+                        let b = k2;
+                        let c = k3;
+                        let d = 1.0 - (a + b + c);
+                        let r2 = r * r;
+                        let r3 = r2 * r;
+                        let r4 = r3 * r;
+                        a * r4 + b * r3 + c * r2 + d * r
+                    } else {
+                        // poly3 model
+                        let r2 = r * r;
+                        let r4 = r2 * r2;
+                        r * (1.0 + k1 * r2 + k2 * r4)
+                    };
+                    let scale_factor = rd / r;
+                    rx *= scale_factor;
+                    ry *= scale_factor;
+                }
+            }
+            
+            let sx = (rx + 0.5) * (orig_width as f32);
+            let sy = (ry * aspect_ratio + 0.5) * (orig_height as f32);
+            
+            let (r_val, g_val, b_val) = sample_bilinear(&image, sx, sy);
+            let r = (r_val * 255.0).round().clamp(0.0, 255.0) as u8;
+            let g = (g_val * 255.0).round().clamp(0.0, 255.0) as u8;
+            let b = (b_val * 255.0).round().clamp(0.0, 255.0) as u8;
             
             rgb_img.put_pixel(tx, ty, Rgb([r, g, b]));
         }
@@ -262,7 +350,7 @@ mod tests {
             crop_angle: 0.0,
         };
         
-        let res = export_photo_file(tmp_in, tmp_out, &edits, 90, Some(50));
+        let res = export_photo_file(tmp_in, tmp_out, &edits, None, 90, Some(50));
         assert!(res.is_ok());
         
         let exported = image::open(tmp_out).unwrap();

@@ -201,6 +201,7 @@ pub fn export_photo(
     input_path: String,
     output_path: String,
     edits: EditSettings,
+    lens_coeffs: Option<LensCorrectionCoefficientsRecord>,
     quality: u32,
     max_dimension: Option<u32>,
 ) -> bool {
@@ -216,10 +217,13 @@ pub fn export_photo(
         crop_angle: edits.crop_angle,
     };
     
+    let dist_tuple = lens_coeffs.as_ref().map(|c| (c.distortion.as_slice(), c.distortion_model.as_str()));
+    
     match export::export_photo_file(
         &input_path,
         &output_path,
         &internal_edits,
+        dist_tuple,
         quality as u8,
         max_dimension,
     ) {

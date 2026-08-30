@@ -325,7 +325,7 @@ RustBuffer uniffi_lumenbox_core_fn_func_check_connection(RustCallStatus *_Nonnul
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
-int8_t uniffi_lumenbox_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, uint32_t quality, RustBuffer max_dimension, RustCallStatus *_Nonnull out_status
+int8_t uniffi_lumenbox_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, RustBuffer lens_coeffs, uint32_t quality, RustBuffer max_dimension, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXTRACT_METADATA

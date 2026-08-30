@@ -1991,6 +1991,30 @@ fileprivate struct FfiConverterOptionTypeImageMetadata: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeLensCorrectionCoefficientsRecord: FfiConverterRustBuffer {
+    typealias SwiftType = LensCorrectionCoefficientsRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeLensCorrectionCoefficientsRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeLensCorrectionCoefficientsRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypePhotoRecord: FfiConverterRustBuffer {
     typealias SwiftType = PhotoRecord?
 
@@ -2140,12 +2164,13 @@ public func checkConnection() -> String {
     )
 })
 }
-public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, quality: UInt32, maxDimension: UInt32?) -> Bool {
+public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_export_photo(
         FfiConverterString.lower(inputPath),
         FfiConverterString.lower(outputPath),
         FfiConverterTypeEditSettings.lower(edits),
+        FfiConverterOptionTypeLensCorrectionCoefficientsRecord.lower(lensCoeffs),
         FfiConverterUInt32.lower(quality),
         FfiConverterOptionUInt32.lower(maxDimension),$0
     )
@@ -2228,7 +2253,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_lumenbox_core_checksum_func_check_connection() != 58636) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_lumenbox_core_checksum_func_export_photo() != 14496) {
+    if (uniffi_lumenbox_core_checksum_func_export_photo() != 3529) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_extract_metadata() != 25472) {

@@ -178,12 +178,14 @@ public struct ExportSheetView: View {
             cropBottom: 1.0,
             cropAngle: viewModel.straightenAngle
         )
+        let lensCoeffs = viewModel.lensCorrectionEnabled ? viewModel.lensCoefficients : nil
         
         DispatchQueue.global(qos: .userInitiated).async {
             let success = exportPhoto(
                 inputPath: photo.filePath,
                 outputPath: outputPath,
                 edits: edits,
+                lensCoeffs: lensCoeffs,
                 quality: UInt32(quality),
                 maxDimension: maxDim
             )
