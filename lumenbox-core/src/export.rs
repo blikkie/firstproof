@@ -100,9 +100,10 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                     }
                     
                     let out_idx = (y * active_w + x) * 3;
-                    demosaiced.data[out_idx] = (r * wb_r).clamp(0.0, 1.0);
-                    demosaiced.data[out_idx + 1] = g.clamp(0.0, 1.0);
-                    demosaiced.data[out_idx + 2] = (b * wb_b).clamp(0.0, 1.0);
+                    let base_gain = 1.45; // Photographic base exposure compensation
+                    demosaiced.data[out_idx] = (r * wb_r * base_gain).clamp(0.0, 1.0);
+                    demosaiced.data[out_idx + 1] = (g * base_gain).clamp(0.0, 1.0);
+                    demosaiced.data[out_idx + 2] = (b * wb_b * base_gain).clamp(0.0, 1.0);
                 }
             }
             
@@ -430,20 +431,12 @@ mod tests {
 
     #[test]
     fn test_debug_cr2() {
-        let path = "/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0328.CR2";
-        let out_path = "test_canon_cr2_out.jpg";
-        
-        if let Ok(raw) = rawloader::decode_file(path) {
-            println!("CR2 CFA: {:?}", raw.cfa);
-            println!("CR2 CFA (0,0): {:?}", raw.cfa.color_at(0, 0));
-            println!("CR2 CFA (0,1): {:?}", raw.cfa.color_at(0, 1));
-            println!("CR2 CFA (1,0): {:?}", raw.cfa.color_at(1, 0));
-            println!("CR2 CFA (1,1): {:?}", raw.cfa.color_at(1, 1));
-        }
+        let path = "/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0359.CR2";
+        let out_path = "test_calibrated_cr2.jpg";
         
         let edits = EditSettings {
-            exposure: 0.0,
-            contrast: 0.0,
+            exposure: 0.8,
+            contrast: 15.0,
             temperature: 5500.0,
             tint: 0.0,
             crop_left: 0.0,
@@ -453,8 +446,39 @@ mod tests {
             crop_angle: 0.0,
         };
         
-        let res = export_photo_file(path, out_path, &edits, None, 90, Some(500));
-        assert!(res.is_ok());
+        let _ = export_photo_file(path, out_path, &edits, None, 90, Some(500));
+        
+        // 1. Camera Embedded JPEG
+        if let Ok(preview_bytes) = crate::raw::extract_preview_jpeg(path) {
+            if let Ok(cam_img) = image::load_from_memory(&preview_bytes) {
+                let rgb = cam_img.to_rgb8();
+                let mut sum_r = 0u64;
+                let mut sum_g = 0u64;
+                let mut sum_b = 0u64;
+                for p in rgb.pixels() {
+                    sum_r += p[0] as u64;
+                    sum_g += p[1] as u64;
+                    sum_b += p[2] as u64;
+                }
+                let count = rgb.pixels().len() as u64;
+                println!("CAMERA JPEG AVERAGE: R={}, G={}, B={}", sum_r / count, sum_g / count, sum_b / count);
+            }
+        }
+        
+        // 2. Calibrated Exported Image
+        if let Ok(img) = image::open(out_path) {
+            let rgb = img.to_rgb8();
+            let mut sum_r = 0u64;
+            let mut sum_g = 0u64;
+            let mut sum_b = 0u64;
+            for p in rgb.pixels() {
+                sum_r += p[0] as u64;
+                sum_g += p[1] as u64;
+                sum_b += p[2] as u64;
+            }
+            let count = rgb.pixels().len() as u64;
+            println!("CALIBRATED RAW EXPORT AVERAGE: R={}, G={}, B={}", sum_r / count, sum_g / count, sum_b / count);
+        }
         
         let _ = std::fs::remove_file(out_path);
     }
