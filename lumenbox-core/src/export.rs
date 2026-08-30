@@ -102,18 +102,23 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                     let out_idx = (y * active_w + x) * 3;
                     
                     // 1. As-shot daylight white balance and exposure baseline
-                    let mut r_val = (r * wb_r * 1.35).clamp(0.0, 1.0);
-                    let mut g_val = (g * 1.35).clamp(0.0, 1.0);
-                    let mut b_val = (b * wb_b * 1.35).clamp(0.0, 1.0);
+                    let r_cam = (r * wb_r * 1.35).clamp(0.0, 1.0);
+                    let g_cam = (g * 1.35).clamp(0.0, 1.0);
+                    let b_cam = (b * wb_b * 1.35).clamp(0.0, 1.0);
                     
-                    // 2. Camera Primary Color Saturation Enhancement (Compensate CFA spectral cross-talk)
+                    // 2. Camera Primary Spectral Decoupling (Purifies foliage greens and sky blues)
+                    let mut r_val = (1.30 * r_cam - 0.22 * g_cam - 0.08 * b_cam).clamp(0.0, 1.0);
+                    let mut g_val = (-0.18 * r_cam + 1.42 * g_cam - 0.24 * b_cam).clamp(0.0, 1.0);
+                    let mut b_val = (-0.05 * r_cam - 0.25 * g_cam + 1.30 * b_cam).clamp(0.0, 1.0);
+                    
+                    // 3. Camera Primary Saturation Enhancement
                     let lum = 0.2126 * r_val + 0.7152 * g_val + 0.0722 * b_val;
-                    let sat_factor = 1.30;
+                    let sat_factor = 1.35;
                     r_val = (lum + sat_factor * (r_val - lum)).clamp(0.0, 1.0);
                     g_val = (lum + sat_factor * (g_val - lum)).clamp(0.0, 1.0);
                     b_val = (lum + sat_factor * (b_val - lum)).clamp(0.0, 1.0);
                     
-                    // 3. Base Photographic Filmic S-Tone Curve (Lift midtones, deepen contrast, soft shoulder)
+                    // 4. Base Photographic Filmic S-Tone Curve (Lift midtones, deepen contrast, soft shoulder)
                     let filmic_curve = |v: f32| -> f32 {
                         let a = 2.51;
                         let b = 0.03;
