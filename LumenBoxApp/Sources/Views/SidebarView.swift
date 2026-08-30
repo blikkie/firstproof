@@ -4,47 +4,97 @@ import LumenBoxBridge
 
 struct SidebarView: View {
     @Bindable var viewModel: AppViewModel
+    @State private var hoveredFolderPath: String? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // MARK: - Header & Open Folder Action
+            // MARK: - Projects & Folders Header
             VStack(alignment: .leading, spacing: 8) {
-                Text("LIBRARY")
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .foregroundColor(.secondary)
-                
-                Button(action: selectFolder) {
-                    HStack {
-                        Image(systemName: "folder.badge.plus")
-                        Text(viewModel.currentFolderPath == nil ? "Open Directory..." : "Change Directory...")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.accentColor)
-                
-                if let path = viewModel.currentFolderPath {
-                    HStack(spacing: 6) {
-                        Image(systemName: viewModel.isExternalVolume ? "externaldrive.fill" : "macbook")
-                            .foregroundColor(viewModel.isExternalVolume ? .orange : .blue)
-                        Text(URL(fileURLWithPath: path).lastPathComponent)
+                HStack {
+                    Text("PROJECTS & FOLDERS")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button(action: selectFolder) {
+                        Image(systemName: "plus.circle.fill")
                             .font(.subheadline)
-                            .fontWeight(.medium)
+                            .foregroundColor(.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Add Project Folder to Workspace")
+                }
+                
+                // Opened Folders List
+                if viewModel.openedFolders.isEmpty {
+                    Button(action: selectFolder) {
+                        HStack {
+                            Image(systemName: "folder.badge.plus")
+                            Text("Add Folder...")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.accentColor)
+                } else {
+                    VStack(spacing: 4) {
+                        ForEach(viewModel.openedFolders, id: \.self) { folderPath in
+                            let isSelected = viewModel.currentFolderPath == folderPath
+                            let isExt = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
+                            
+                            HStack(spacing: 6) {
+                                Image(systemName: isExt ? "externaldrive.fill" : "folder.fill")
+                                    .foregroundColor(isSelected ? .accentColor : (isExt ? .orange : .secondary))
+                                    .font(.caption)
+                                
+                                Text(URL(fileURLWithPath: folderPath).lastPathComponent)
+                                    .font(.subheadline)
+                                    .fontWeight(isSelected ? .semibold : .regular)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                
+                                Spacer()
+                                
+                                if hoveredFolderPath == folderPath || isSelected {
+                                    Button(action: {
+                                        viewModel.removeFolder(at: folderPath)
+                                    }) {
+                                        Image(systemName: "xmark")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Remove from Workspace")
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(isSelected ? Color.accentColor.opacity(0.18) : (hoveredFolderPath == folderPath ? Color.secondary.opacity(0.1) : Color.clear))
+                            .cornerRadius(6)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if viewModel.currentFolderPath != folderPath {
+                                    viewModel.openDirectory(at: folderPath)
+                                }
+                            }
+                            .onHover { isHovered in
+                                hoveredFolderPath = isHovered ? folderPath : nil
+                            }
+                        }
+                    }
+                }
+                
+                // Active Scanning Progress Indicator
+                if viewModel.isScanning {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(viewModel.scanningStatusMessage ?? "Scanning folder...")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
                     .padding(.top, 4)
-                    
-                    if viewModel.isExternalVolume {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                            Text("Portable Catalog (.lumenbox)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -159,7 +209,7 @@ struct SidebarView: View {
         panel.prompt = "Select Directory"
         
         if panel.runModal() == .OK, let url = panel.url {
-            viewModel.openDirectory(at: url.path)
+            viewModel.addFolder(at: url.path)
         }
     }
 }

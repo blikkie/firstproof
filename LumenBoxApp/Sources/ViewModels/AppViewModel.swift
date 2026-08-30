@@ -16,8 +16,11 @@ public enum EditSliderType {
 public final class AppViewModel {
     // MARK: - Navigation & Directory State
     public var currentFolderPath: String? = nil
+    public var openedFolders: [String] = []
     public var isExternalVolume: Bool = false
     public var isPortableCatalog: Bool = false
+    public var isScanning: Bool = false
+    public var scanningStatusMessage: String? = nil
     
     // MARK: - Photos & Selection
     public var photos: [PhotoRecord] = []
@@ -48,10 +51,44 @@ public final class AppViewModel {
     public init() {
         self.lensfun = LumenBoxLensfun()
         
-        // Auto-restore previously opened folder on startup
-        if let lastPath = UserDefaults.standard.string(forKey: "lastOpenedDirectory"),
-           FileManager.default.fileExists(atPath: lastPath) {
-            openDirectory(at: lastPath)
+        // Restore multi-project opened folder list
+        let savedFolders = UserDefaults.standard.stringArray(forKey: "openedFolders") ?? []
+        self.openedFolders = savedFolders.filter { FileManager.default.fileExists(atPath: $0) }
+        
+        let lastPath = UserDefaults.standard.string(forKey: "lastOpenedDirectory")
+        if let target = lastPath, FileManager.default.fileExists(atPath: target) {
+            if !self.openedFolders.contains(target) {
+                self.openedFolders.append(target)
+            }
+            openDirectory(at: target)
+        } else if let firstFolder = self.openedFolders.first {
+            openDirectory(at: firstFolder)
+        }
+    }
+    
+    // MARK: - Multi-Folder Workspace Management
+    public func addFolder(at folderPath: String) {
+        if !openedFolders.contains(folderPath) {
+            openedFolders.append(folderPath)
+            UserDefaults.standard.set(openedFolders, forKey: "openedFolders")
+        }
+        openDirectory(at: folderPath)
+    }
+    
+    public func removeFolder(at folderPath: String) {
+        openedFolders.removeAll { $0 == folderPath }
+        UserDefaults.standard.set(openedFolders, forKey: "openedFolders")
+        
+        if currentFolderPath == folderPath {
+            if let next = openedFolders.first {
+                openDirectory(at: next)
+            } else {
+                currentFolderPath = nil
+                photos = []
+                selectedPhoto = nil
+                previewImage = nil
+                UserDefaults.standard.removeObject(forKey: "lastOpenedDirectory")
+            }
         }
     }
     
@@ -60,27 +97,41 @@ public final class AppViewModel {
         UserDefaults.standard.set(folderPath, forKey: "lastOpenedDirectory")
         self.currentFolderPath = folderPath
         self.isExternalVolume = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
+        self.isScanning = true
+        self.scanningStatusMessage = "Scanning \(URL(fileURLWithPath: folderPath).lastPathComponent)..."
+        
+        // Reset photo selection for the newly loaded folder
+        self.photos = []
+        self.selectedPhoto = nil
+        self.previewImage = nil
         
         let catalogPath = resolveCatalogPath(folderPath: folderPath, portable: self.isExternalVolume)
         
-        do {
-            let database = try LumenBoxDatabase.open(dbPath: catalogPath)
-            self.db = database
-            
-            // Index directory asynchronously in background thread
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self = self, let database = self.db else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            do {
+                let database = try LumenBoxDatabase.open(dbPath: catalogPath)
+                self.db = database
+                
+                // Index folder on background thread
                 _ = database.indexFolder(folderPath: folderPath)
+                let loadedPhotos = database.getAllPhotos()
                 
                 DispatchQueue.main.async {
-                    self.photos = database.getAllPhotos()
-                    if let first = self.photos.first, self.selectedPhoto == nil {
+                    self.photos = loadedPhotos
+                    self.isScanning = false
+                    self.scanningStatusMessage = nil
+                    if let first = loadedPhotos.first {
                         self.selectPhoto(first)
                     }
                 }
+            } catch {
+                print("Failed to open database at \(catalogPath): \(error)")
+                DispatchQueue.main.async {
+                    self.isScanning = false
+                    self.scanningStatusMessage = nil
+                }
             }
-        } catch {
-            print("Failed to open database at \(catalogPath): \(error)")
         }
     }
     
