@@ -23,6 +23,7 @@ public final class AppViewModel {
     public var photos: [PhotoRecord] = []
     public var selectedPhoto: PhotoRecord? = nil
     public var previewImage: NSImage? = nil
+    public var isExportSheetPresented: Bool = false
     
     // MARK: - Filters
     public var ratingFilter: Int? = nil // nil = All, 1..5

@@ -7,6 +7,7 @@ pub mod xmp;
 pub mod takeout;
 pub mod db;
 pub mod lensfun;
+pub mod export;
 
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct PhotoRecord {
@@ -193,6 +194,35 @@ pub fn write_xmp(path: String, record: XmpDataRecord) -> bool {
         },
     };
     xmp::write_xmp_file(&path, &data).is_ok()
+}
+
+#[uniffi::export]
+pub fn export_photo(
+    input_path: String,
+    output_path: String,
+    edits: EditSettings,
+    quality: u32,
+    max_dimension: Option<u32>,
+) -> bool {
+    let internal_edits = EditSettings {
+        exposure: edits.exposure,
+        contrast: edits.contrast,
+        temperature: edits.temperature,
+        tint: edits.tint,
+        crop_left: edits.crop_left,
+        crop_top: edits.crop_top,
+        crop_right: edits.crop_right,
+        crop_bottom: edits.crop_bottom,
+        crop_angle: edits.crop_angle,
+    };
+    
+    export::export_photo_file(
+        &input_path,
+        &output_path,
+        &internal_edits,
+        quality as u8,
+        max_dimension,
+    ).is_ok()
 }
 
 #[uniffi::export]

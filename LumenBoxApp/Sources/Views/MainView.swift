@@ -21,5 +21,20 @@ struct MainView: View {
             FilmstripView(viewModel: viewModel)
         }
         .frame(minWidth: 900, minHeight: 600)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    viewModel.isExportSheetPresented = true
+                }) {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .keyboardShortcut("e", modifiers: .command)
+                .disabled(viewModel.selectedPhoto == nil)
+                .help("Export Photo (Cmd+E)")
+            }
+        }
+        .sheet(isPresented: $viewModel.isExportSheetPresented) {
+            ExportSheetView(viewModel: viewModel)
+        }
     }
 }
