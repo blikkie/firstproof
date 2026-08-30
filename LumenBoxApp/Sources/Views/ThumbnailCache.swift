@@ -9,11 +9,11 @@ public final class ThumbnailCache {
     public let queue: OperationQueue
     
     private init() {
-        cache.countLimit = 800
+        cache.countLimit = 1200
         
         let q = OperationQueue()
         q.name = "com.lumenbox.thumbnailQueue"
-        q.maxConcurrentOperationCount = 4 // Limit concurrency to prevent CPU/memory thrashing
+        q.maxConcurrentOperationCount = 6
         q.qualityOfService = .userInitiated
         self.queue = q
     }
@@ -30,6 +30,7 @@ public final class ThumbnailCache {
 public struct AsyncThumbnailView: View {
     let filePath: String
     @State private var image: NSImage? = nil
+    @State private var loadOperation: Operation? = nil
     
     public init(filePath: String) {
         self.filePath = filePath
@@ -52,6 +53,11 @@ public struct AsyncThumbnailView: View {
         .onAppear {
             loadThumbnail()
         }
+        .onDisappear {
+            // Cancel background decode if scrolled out of viewport
+            loadOperation?.cancel()
+            loadOperation = nil
+        }
     }
     
     private func loadThumbnail() {
@@ -60,8 +66,12 @@ public struct AsyncThumbnailView: View {
             return
         }
         
-        ThumbnailCache.shared.queue.addOperation {
-            // Check cache again in case it was populated while waiting in queue
+        let op = BlockOperation()
+        op.queuePriority = .veryHigh // Prioritize active viewport thumbnails
+        
+        op.addExecutionBlock { [weak op] in
+            guard let op = op, !op.isCancelled else { return }
+            
             if let cached = ThumbnailCache.shared.image(for: filePath) {
                 DispatchQueue.main.async {
                     self.image = cached
@@ -86,7 +96,7 @@ public struct AsyncThumbnailView: View {
             }
             
             // Fallback: Rust extractPreview downsampled via ImageIO
-            if loaded == nil, let data = extractPreview(path: filePath) {
+            if loaded == nil && !op.isCancelled, let data = extractPreview(path: filePath) {
                 if let src = CGImageSourceCreateWithData(data as CFData, nil) {
                     let options: [CFString: Any] = [
                         kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -100,12 +110,15 @@ public struct AsyncThumbnailView: View {
                 }
             }
             
-            if let img = loaded {
+            if let img = loaded, !op.isCancelled {
                 ThumbnailCache.shared.setImage(img, for: filePath)
                 DispatchQueue.main.async {
                     self.image = img
                 }
             }
         }
+        
+        self.loadOperation = op
+        ThumbnailCache.shared.queue.addOperation(op)
     }
 }

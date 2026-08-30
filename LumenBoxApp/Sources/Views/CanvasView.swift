@@ -58,58 +58,80 @@ struct CanvasView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(NSColor.underPageBackgroundColor))
-            } else if mode == .grid {
-                // MARK: Grid View
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 12)], spacing: 12) {
-                        ForEach(viewModel.filteredPhotos, id: \.filePath) { photo in
-                            GridThumbnailCell(photo: photo, isSelected: viewModel.selectedPhoto?.filePath == photo.filePath) {
-                                viewModel.selectPhoto(photo)
+            } else {
+                ZStack {
+                    // 1. Persistent Grid View (Maintains exact scroll position in memory)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 12)], spacing: 12) {
+                                ForEach(viewModel.filteredPhotos, id: \.filePath) { photo in
+                                    GridThumbnailCell(photo: photo, isSelected: viewModel.selectedPhoto?.filePath == photo.filePath) {
+                                        viewModel.selectPhoto(photo)
+                                    }
+                                    .id(photo.filePath)
+                                }
+                            }
+                            .padding(16)
+                        }
+                        .background(Color(NSColor.underPageBackgroundColor))
+                        .opacity(mode == .grid ? 1 : 0)
+                        .allowsHitTesting(mode == .grid)
+                        .onChange(of: mode) { _, newMode in
+                            if newMode == .grid, let selected = viewModel.selectedPhoto {
+                                proxy.scrollTo(selected.filePath, anchor: .center)
                             }
                         }
                     }
-                    .padding(16)
-                }
-                .background(Color(NSColor.underPageBackgroundColor))
-            } else {
-                // MARK: Detail View (Metal GPU Canvas)
-                ZStack {
-                    Color(NSColor.underPageBackgroundColor)
-                        .edgesIgnoringSafeArea(.all)
                     
-                    if viewModel.previewImage != nil {
-                        MetalCanvasView(viewModel: viewModel, isShowingOriginal: isShowingOriginal)
-                            .padding(24)
-                            .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
-                            .overlay(
-                                isShowingOriginal ?
-                                VStack {
-                                    Text("ORIGINAL RAW (AS SHOT)")
-                                        .font(.caption)
-                                        .fontWeight(.bold)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(Color.black.opacity(0.8))
-                                        .foregroundColor(.white)
-                                        .cornerRadius(4)
-                                    Spacer()
-                                }
-                                .padding(.top, 32) : nil
-                            )
-                    } else {
-                        ProgressView("Loading RAW Preview...")
+                    // 2. Detail View (Metal GPU Canvas)
+                    if mode == .detail {
+                        ZStack {
+                            Color(NSColor.underPageBackgroundColor)
+                                .edgesIgnoringSafeArea(.all)
+                            
+                            if viewModel.previewImage != nil {
+                                MetalCanvasView(viewModel: viewModel, isShowingOriginal: isShowingOriginal)
+                                    .padding(24)
+                                    .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
+                                    .overlay(
+                                        isShowingOriginal ?
+                                        VStack {
+                                            Text("ORIGINAL RAW (AS SHOT)")
+                                                .font(.caption)
+                                                .fontWeight(.bold)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(Color.black.opacity(0.8))
+                                                .foregroundColor(.white)
+                                                .cornerRadius(4)
+                                            Spacer()
+                                        }
+                                        .padding(.top, 32) : nil
+                                    )
+                            } else {
+                                ProgressView("Loading RAW Preview...")
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .transition(.opacity)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }
 }
 
-struct GridThumbnailCell: View {
+struct GridThumbnailCell: View, Equatable {
     let photo: PhotoRecord
     let isSelected: Bool
     let action: () -> Void
+    
+    static func == (lhs: GridThumbnailCell, rhs: GridThumbnailCell) -> Bool {
+        lhs.photo.filePath == rhs.photo.filePath &&
+        lhs.photo.rating == rhs.photo.rating &&
+        lhs.photo.status == rhs.photo.status &&
+        lhs.isSelected == rhs.isSelected
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {

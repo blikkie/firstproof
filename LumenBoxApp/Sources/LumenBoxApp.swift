@@ -47,7 +47,7 @@ struct LumenBoxApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     var body: some Scene {
-        WindowGroup(id: "mainWindow") {
+        WindowGroup {
             MainView()
                 .navigationTitle("LumenBox - RAW Photo Manager")
         }
