@@ -1,9 +1,8 @@
 import SwiftUI
 import AppKit
 
-@main
-struct LumenBoxApp: App {
-    init() {
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
         
@@ -20,8 +19,35 @@ struct LumenBoxApp: App {
         }
     }
     
+    // Automatically un-hide / recreate main window when user clicks Dock icon
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            for window in sender.windows where window.canBecomeKey {
+                window.makeKeyAndOrderFront(nil)
+                return true
+            }
+        }
+        return true
+    }
+    
+    // Automatically respawn main window when user Cmd+Tabs to LumenBox
+    func applicationDidBecomeActive(_ notification: Notification) {
+        let hasVisibleKeyWindow = NSApplication.shared.windows.contains(where: { $0.isVisible && $0.canBecomeKey })
+        if !hasVisibleKeyWindow {
+            for window in NSApplication.shared.windows where window.canBecomeKey {
+                window.makeKeyAndOrderFront(nil)
+                break
+            }
+        }
+    }
+}
+
+@main
+struct LumenBoxApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "mainWindow") {
             MainView()
                 .navigationTitle("LumenBox - RAW Photo Manager")
         }
@@ -40,4 +66,5 @@ struct LumenBoxApp: App {
         }
     }
 }
+
 
