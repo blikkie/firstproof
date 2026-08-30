@@ -216,13 +216,19 @@ pub fn export_photo(
         crop_angle: edits.crop_angle,
     };
     
-    export::export_photo_file(
+    match export::export_photo_file(
         &input_path,
         &output_path,
         &internal_edits,
         quality as u8,
         max_dimension,
-    ).is_ok()
+    ) {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("Export error for {}: {}", input_path, e);
+            false
+        }
+    }
 }
 
 #[uniffi::export]

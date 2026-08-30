@@ -28,12 +28,10 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
     let path = path.as_ref();
     
     // 1. Try decoding with rawloader (Bayer RAW sensors: CR2, NEF, ARW, DNG, RW2)
-    if let Ok(mut file) = File::open(path) {
-        let loader = rawloader::decoders::RawLoader::new();
-        if let Ok(raw) = loader.decode(&mut file) {
-            let width = raw.width as usize;
-            let height = raw.height as usize;
-            let cfa = raw.data;
+    if let Ok(raw) = rawloader::decode_file(path) {
+        if let rawloader::RawImageData::Integer(ref cfa) = raw.data {
+            let width = raw.width;
+            let height = raw.height;
             let mut demosaiced = DemosaicedImage::new(width, height);
             
             // Sensor black and white level normalization
@@ -89,7 +87,24 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
         }
     }
     
-    // 2. Fallback: Standard image decode (JPEG, PNG, TIFF master files)
+    // 2. Fallback: Try extracting embedded RGB preview JPEG from RAW
+    if let Ok(jpeg_bytes) = crate::raw::extract_preview_jpeg(path) {
+        if let Ok(dyn_img) = image::load_from_memory(&jpeg_bytes) {
+            let rgb = dyn_img.to_rgb8();
+            let width = rgb.width() as usize;
+            let height = rgb.height() as usize;
+            let mut demosaiced = DemosaicedImage::new(width, height);
+            for (i, pixel) in rgb.pixels().enumerate() {
+                let out_idx = i * 3;
+                demosaiced.data[out_idx] = ((pixel[0] as f32) / 255.0).powf(2.2);
+                demosaiced.data[out_idx + 1] = ((pixel[1] as f32) / 255.0).powf(2.2);
+                demosaiced.data[out_idx + 2] = ((pixel[2] as f32) / 255.0).powf(2.2);
+            }
+            return Ok(demosaiced);
+        }
+    }
+    
+    // 3. Fallback: Standard image decode (JPEG, PNG, TIFF master files)
     let dyn_img = image::open(path).map_err(|e| format!("Failed to open image file: {}", e))?;
     let rgb = dyn_img.to_rgb8();
     let width = rgb.width() as usize;
@@ -98,7 +113,6 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
     let mut demosaiced = DemosaicedImage::new(width, height);
     for (i, pixel) in rgb.pixels().enumerate() {
         let out_idx = i * 3;
-        // Linearize sRGB to float space
         demosaiced.data[out_idx] = ((pixel[0] as f32) / 255.0).powf(2.2);
         demosaiced.data[out_idx + 1] = ((pixel[1] as f32) / 255.0).powf(2.2);
         demosaiced.data[out_idx + 2] = ((pixel[2] as f32) / 255.0).powf(2.2);
