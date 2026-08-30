@@ -23,6 +23,42 @@ impl DemosaicedImage {
     }
 }
 
+fn invert_3x3(m: [[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
+    let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+
+    if det.abs() < 1e-6 {
+        return None;
+    }
+
+    let inv_det = 1.0 / det;
+
+    let r00 = (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * inv_det;
+    let r01 = (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inv_det;
+    let r02 = (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inv_det;
+
+    let r10 = (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inv_det;
+    let r11 = (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inv_det;
+    let r12 = (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * inv_det;
+
+    let r20 = (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * inv_det;
+    let r21 = (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * inv_det;
+    let r22 = (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * inv_det;
+
+    Some([[r00, r01, r02], [r10, r11, r12], [r20, r21, r22]])
+}
+
+fn mul_3x3(a: [[f32; 3]; 3], b: [[f32; 3]; 3]) -> [[f32; 3]; 3] {
+    let mut out = [[0.0; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            out[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j];
+        }
+    }
+    out
+}
+
 /// Decodes a RAW CFA Bayer sensor image or master standard image into linear 3-channel float RGB.
 pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> {
     let path = path.as_ref();
@@ -80,6 +116,60 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                     demosaiced.data[out_idx] = r.clamp(0.0, 1.0);
                     demosaiced.data[out_idx + 1] = g.clamp(0.0, 1.0);
                     demosaiced.data[out_idx + 2] = b.clamp(0.0, 1.0);
+                }
+            }
+            
+            // 2. Apply Camera As-Shot White Balance Multipliers
+            let wb_r = if raw.wb_coeffs[0] > 0.0 && raw.wb_coeffs[1] > 0.0 {
+                raw.wb_coeffs[0] / raw.wb_coeffs[1]
+            } else {
+                2.0
+            };
+            let wb_b = if raw.wb_coeffs[2] > 0.0 && raw.wb_coeffs[1] > 0.0 {
+                raw.wb_coeffs[2] / raw.wb_coeffs[1]
+            } else {
+                1.5
+            };
+            
+            // 3. Compute Camera RGB -> Linear sRGB Color Matrix
+            const XYZ_TO_SRGB: [[f32; 3]; 3] = [
+                [3.2404542, -1.5371385, -0.4985314],
+                [-0.9692660, 1.8760108, 0.0415560],
+                [0.0556434, -0.2040259, 1.0572252],
+            ];
+            
+            let xyz_to_cam_3x3: [[f32; 3]; 3] = [
+                raw.xyz_to_cam[0],
+                raw.xyz_to_cam[1],
+                raw.xyz_to_cam[2],
+            ];
+            let cam_to_xyz = invert_3x3(xyz_to_cam_3x3).unwrap_or([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
+            let mut cpm = mul_3x3(XYZ_TO_SRGB, cam_to_xyz);
+            
+            // Normalize rows so neutral tones maintain luminance
+            for i in 0..3 {
+                let row_sum = cpm[i][0] + cpm[i][1] + cpm[i][2];
+                if row_sum.abs() > 1e-4 {
+                    cpm[i][0] /= row_sum;
+                    cpm[i][1] /= row_sum;
+                    cpm[i][2] /= row_sum;
+                }
+            }
+            
+            for y in 0..height {
+                for x in 0..width {
+                    let idx = (y * width + x) * 3;
+                    let r_cam = demosaiced.data[idx] * wb_r;
+                    let g_cam = demosaiced.data[idx + 1];
+                    let b_cam = demosaiced.data[idx + 2] * wb_b;
+                    
+                    let r_srgb = cpm[0][0] * r_cam + cpm[0][1] * g_cam + cpm[0][2] * b_cam;
+                    let g_srgb = cpm[1][0] * r_cam + cpm[1][1] * g_cam + cpm[1][2] * b_cam;
+                    let b_srgb = cpm[2][0] * r_cam + cpm[2][1] * g_cam + cpm[2][2] * b_cam;
+                    
+                    demosaiced.data[idx] = r_srgb.clamp(0.0, 1.0);
+                    demosaiced.data[idx + 1] = g_srgb.clamp(0.0, 1.0);
+                    demosaiced.data[idx + 2] = b_srgb.clamp(0.0, 1.0);
                 }
             }
             
