@@ -12,15 +12,29 @@ public enum EditSliderType {
     case straighten
 }
 
+public enum LibraryScope: Hashable, Equatable {
+    case masterLibrary
+    case session(folderPath: String)
+}
+
 @Observable
 public final class AppViewModel {
     // MARK: - Navigation & Directory State
+    public var currentScope: LibraryScope = .masterLibrary
     public var currentFolderPath: String? = nil
     public var openedFolders: [String] = []
     public var isExternalVolume: Bool = false
     public var isPortableCatalog: Bool = false
     public var isScanning: Bool = false
     public var scanningStatusMessage: String? = nil
+    
+    // Master Library Path (~/Pictures/LumenBox Library)
+    public var masterLibraryPath: String {
+        let pictures = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Pictures")
+        let lumenBoxLib = pictures.appendingPathComponent("LumenBox Library")
+        try? FileManager.default.createDirectory(at: lumenBoxLib, withIntermediateDirectories: true)
+        return lumenBoxLib.path
+    }
     
     // MARK: - Photos & Selection
     public var photos: [PhotoRecord] = []
@@ -60,9 +74,22 @@ public final class AppViewModel {
             if !self.openedFolders.contains(target) {
                 self.openedFolders.append(target)
             }
-            openDirectory(at: target)
+            selectScope(.session(folderPath: target))
         } else if let firstFolder = self.openedFolders.first {
-            openDirectory(at: firstFolder)
+            selectScope(.session(folderPath: firstFolder))
+        } else {
+            selectScope(.masterLibrary)
+        }
+    }
+    
+    // MARK: - Scope Switching
+    public func selectScope(_ scope: LibraryScope) {
+        self.currentScope = scope
+        switch scope {
+        case .masterLibrary:
+            openDirectory(at: masterLibraryPath, isMaster: true)
+        case .session(let folderPath):
+            openDirectory(at: folderPath, isMaster: false)
         }
     }
     
@@ -72,33 +99,36 @@ public final class AppViewModel {
             openedFolders.append(folderPath)
             UserDefaults.standard.set(openedFolders, forKey: "openedFolders")
         }
-        openDirectory(at: folderPath)
+        selectScope(.session(folderPath: folderPath))
     }
     
     public func removeFolder(at folderPath: String) {
         openedFolders.removeAll { $0 == folderPath }
         UserDefaults.standard.set(openedFolders, forKey: "openedFolders")
         
-        if currentFolderPath == folderPath {
+        if case .session(let path) = currentScope, path == folderPath {
             if let next = openedFolders.first {
-                openDirectory(at: next)
+                selectScope(.session(folderPath: next))
             } else {
-                currentFolderPath = nil
-                photos = []
-                selectedPhoto = nil
-                previewImage = nil
-                UserDefaults.standard.removeObject(forKey: "lastOpenedDirectory")
+                selectScope(.masterLibrary)
             }
         }
     }
     
     // MARK: - Directory Indexing & Loading
-    public func openDirectory(at folderPath: String) {
-        UserDefaults.standard.set(folderPath, forKey: "lastOpenedDirectory")
+    public func openDirectory(at folderPath: String, isMaster: Bool = false) {
+        if !isMaster {
+            UserDefaults.standard.set(folderPath, forKey: "lastOpenedDirectory")
+        }
         self.currentFolderPath = folderPath
         self.isExternalVolume = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
         self.isScanning = true
-        self.scanningStatusMessage = "Scanning \(URL(fileURLWithPath: folderPath).lastPathComponent)..."
+        self.scanningStatusMessage = "Scanning \(isMaster ? "Master Library" : URL(fileURLWithPath: folderPath).lastPathComponent)..."
+        
+        // Reset state for new scope
+        self.photos = []
+        self.selectedPhoto = nil
+        self.previewImage = nil
         
         let catalogPath = resolveCatalogPath(folderPath: folderPath, portable: self.isExternalVolume)
         let t0 = CFAbsoluteTimeGetCurrent()

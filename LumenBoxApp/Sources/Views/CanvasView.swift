@@ -15,13 +15,39 @@ struct CanvasView: View {
     var body: some View {
         VStack(spacing: 0) {
             // MARK: - Toolbar Header
-            HStack {
+            HStack(spacing: 12) {
+                // View Mode Picker (Grid / Detail)
                 Picker("View Mode", selection: $mode) {
                     Label("Grid", systemImage: "square.grid.3x3.fill").tag(CanvasMode.grid)
                     Label("Detail", systemImage: "photo.fill").tag(CanvasMode.detail)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 160)
+                .frame(width: 150)
+                
+                // Active Scope Title & Photo Count
+                HStack(spacing: 6) {
+                    switch viewModel.currentScope {
+                    case .masterLibrary:
+                        Image(systemName: "photo.stack.fill")
+                            .foregroundColor(.accentColor)
+                            .font(.caption)
+                        Text("Master Library")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    case .session(let folderPath):
+                        let isExt = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
+                        Image(systemName: isExt ? "externaldrive.fill" : "folder.fill")
+                            .foregroundColor(isExt ? .orange : .accentColor)
+                            .font(.caption)
+                        Text(URL(fileURLWithPath: folderPath).lastPathComponent)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    
+                    Text("(\(viewModel.filteredPhotos.count))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 
                 Spacer()
                 

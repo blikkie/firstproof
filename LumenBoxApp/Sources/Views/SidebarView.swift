@@ -7,12 +7,57 @@ struct SidebarView: View {
     @State private var hoveredFolderPath: String? = nil
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // MARK: - Projects & Folders Header
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 14) {
+            // MARK: - 1. Master Library Section
+            VStack(alignment: .leading, spacing: 6) {
+                Text("MASTER LIBRARY")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                
+                let isMasterSelected = viewModel.currentScope == .masterLibrary
+                
+                Button(action: {
+                    viewModel.ratingFilter = nil
+                    viewModel.statusFilter = nil
+                    viewModel.selectScope(.masterLibrary)
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "photo.stack.fill")
+                            .foregroundColor(isMasterSelected ? .accentColor : .secondary)
+                            .font(.subheadline)
+                        
+                        Text("All Photos")
+                            .font(.subheadline)
+                            .fontWeight(isMasterSelected && viewModel.ratingFilter == nil && viewModel.statusFilter == nil ? .semibold : .regular)
+                        
+                        Spacer()
+                        
+                        if isMasterSelected {
+                            Text("\(viewModel.photos.count)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(isMasterSelected && viewModel.ratingFilter == nil && viewModel.statusFilter == nil ? Color.accentColor.opacity(0.18) : Color.clear)
+                    .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 4)
+            }
+            .padding(.top, 10)
+            
+            Divider()
+                .padding(.horizontal, 8)
+            
+            // MARK: - 2. Project Sessions Section
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("PROJECTS & FOLDERS")
-                        .font(.caption)
+                    Text("PROJECT SESSIONS")
+                        .font(.caption2)
                         .fontWeight(.bold)
                         .foregroundColor(.secondary)
                     Spacer()
@@ -22,111 +67,103 @@ struct SidebarView: View {
                             .foregroundColor(.accentColor)
                     }
                     .buttonStyle(.plain)
-                    .help("Add Project Folder to Workspace")
+                    .help("Open Project Folder as Portable Session")
                 }
+                .padding(.horizontal, 12)
                 
-                // Opened Folders List
                 if viewModel.openedFolders.isEmpty {
                     Button(action: selectFolder) {
-                        HStack {
+                        HStack(spacing: 6) {
                             Image(systemName: "folder.badge.plus")
-                            Text("Add Folder...")
+                            Text("Open Session...")
                         }
+                        .font(.caption)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.accentColor)
+                    .buttonStyle(.bordered)
+                    .padding(.horizontal, 8)
                 } else {
-                    VStack(spacing: 4) {
-                        ForEach(viewModel.openedFolders, id: \.self) { folderPath in
-                            let isSelected = viewModel.currentFolderPath == folderPath
-                            let isExt = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
-                            
-                            HStack(spacing: 6) {
-                                Image(systemName: isExt ? "externaldrive.fill" : "folder.fill")
-                                    .foregroundColor(isSelected ? .accentColor : (isExt ? .orange : .secondary))
-                                    .font(.caption)
+                    ScrollView {
+                        VStack(spacing: 2) {
+                            ForEach(viewModel.openedFolders, id: \.self) { folderPath in
+                                let isSelected = viewModel.currentScope == .session(folderPath: folderPath)
+                                let isExt = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
                                 
-                                Text(URL(fileURLWithPath: folderPath).lastPathComponent)
-                                    .font(.subheadline)
-                                    .fontWeight(isSelected ? .semibold : .regular)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                
-                                Spacer()
-                                
-                                if hoveredFolderPath == folderPath || isSelected {
-                                    Button(action: {
-                                        viewModel.removeFolder(at: folderPath)
-                                    }) {
-                                        Image(systemName: "xmark")
+                                HStack(spacing: 8) {
+                                    Image(systemName: isExt ? "externaldrive.fill" : "folder.fill")
+                                        .foregroundColor(isSelected ? .accentColor : (isExt ? .orange : .secondary))
+                                        .font(.caption)
+                                    
+                                    Text(URL(fileURLWithPath: folderPath).lastPathComponent)
+                                        .font(.subheadline)
+                                        .fontWeight(isSelected ? .semibold : .regular)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                    
+                                    Spacer()
+                                    
+                                    if isSelected {
+                                        Text("\(viewModel.photos.count)")
                                             .font(.caption2)
                                             .foregroundColor(.secondary)
                                     }
-                                    .buttonStyle(.plain)
-                                    .help("Remove from Workspace")
+                                    
+                                    if hoveredFolderPath == folderPath || isSelected {
+                                        Button(action: {
+                                            viewModel.removeFolder(at: folderPath)
+                                        }) {
+                                            Image(systemName: "xmark")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Close Session")
+                                    }
                                 }
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .background(isSelected ? Color.accentColor.opacity(0.18) : (hoveredFolderPath == folderPath ? Color.secondary.opacity(0.1) : Color.clear))
-                            .cornerRadius(6)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if viewModel.currentFolderPath != folderPath {
-                                    viewModel.openDirectory(at: folderPath)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(isSelected ? Color.accentColor.opacity(0.18) : (hoveredFolderPath == folderPath ? Color.secondary.opacity(0.1) : Color.clear))
+                                .cornerRadius(6)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    if !isSelected {
+                                        viewModel.selectScope(.session(folderPath: folderPath))
+                                    }
                                 }
-                            }
-                            .onHover { isHovered in
-                                hoveredFolderPath = isHovered ? folderPath : nil
+                                .onHover { isHovered in
+                                    hoveredFolderPath = isHovered ? folderPath : nil
+                                }
+                                .contextMenu {
+                                    Button("Reveal in Finder") {
+                                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderPath)
+                                    }
+                                    Divider()
+                                    Button("Close Session") {
+                                        viewModel.removeFolder(at: folderPath)
+                                    }
+                                }
                             }
                         }
                     }
-                }
-                
-                // Active Scanning Progress Indicator
-                if viewModel.isScanning {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text(viewModel.scanningStatusMessage ?? "Scanning folder...")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
-                    .padding(.top, 4)
+                    .frame(maxHeight: 180)
+                    .padding(.horizontal, 4)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
             
             Divider()
+                .padding(.horizontal, 8)
             
-            // MARK: - Rating Filters
-            VStack(alignment: .leading, spacing: 8) {
+            // MARK: - 3. Scoped Rating & Status Filters
+            VStack(alignment: .leading, spacing: 6) {
                 Text("FILTERS")
-                    .font(.caption)
+                    .font(.caption2)
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 12)
                 
-                Button(action: { viewModel.ratingFilter = nil }) {
-                    HStack {
-                        Image(systemName: "photo.stack")
-                        Text("All Photos")
-                        Spacer()
-                        Text("\(viewModel.photos.count)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(viewModel.ratingFilter == nil && viewModel.statusFilter == nil ? Color.accentColor.opacity(0.15) : Color.clear)
-                    .cornerRadius(6)
-                }
-                .buttonStyle(.plain)
-                
-                // Star ratings
+                // 1..5 Star Ratings
                 ForEach(1...5, id: \.self) { star in
                     Button(action: {
                         viewModel.ratingFilter = (viewModel.ratingFilter == star) ? nil : star
@@ -142,15 +179,16 @@ struct SidebarView: View {
                             Spacer()
                             let count = viewModel.photos.filter { $0.rating == Int32(star) }.count
                             Text("\(count)")
-                                .font(.caption)
+                                .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .background(viewModel.ratingFilter == star ? Color.yellow.opacity(0.15) : Color.clear)
                         .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
+                    .padding(.horizontal, 4)
                 }
                 
                 // Pick / Reject Flags
@@ -160,19 +198,22 @@ struct SidebarView: View {
                     HStack {
                         Image(systemName: "flag.fill")
                             .foregroundColor(.green)
+                            .font(.caption)
                         Text("Picks")
+                            .font(.subheadline)
                         Spacer()
                         let count = viewModel.photos.filter { $0.status == "pick" }.count
                         Text("\(count)")
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundColor(.secondary)
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background(viewModel.statusFilter == "pick" ? Color.green.opacity(0.15) : Color.clear)
                     .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
+                .padding(.horizontal, 4)
                 
                 Button(action: {
                     viewModel.statusFilter = (viewModel.statusFilter == "reject") ? nil : "reject"
@@ -180,22 +221,39 @@ struct SidebarView: View {
                     HStack {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.red)
+                            .font(.caption)
                         Text("Rejects")
+                            .font(.subheadline)
                         Spacer()
                         let count = viewModel.photos.filter { $0.status == "reject" }.count
                         Text("\(count)")
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundColor(.secondary)
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background(viewModel.statusFilter == "reject" ? Color.red.opacity(0.15) : Color.clear)
                     .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
+                .padding(.horizontal, 4)
             }
             
             Spacer()
+            
+            // MARK: - Footer Scanning Indicator
+            if viewModel.isScanning {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(viewModel.scanningStatusMessage ?? "Scanning...")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
         }
         .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
         .background(Color(NSColor.controlBackgroundColor))
@@ -206,7 +264,7 @@ struct SidebarView: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
-        panel.prompt = "Select Directory"
+        panel.prompt = "Open Session"
         
         if panel.runModal() == .OK, let url = panel.url {
             viewModel.addFolder(at: url.path)
