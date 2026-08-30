@@ -27,11 +27,11 @@ struct CanvasView: View {
                 // Active Scope Title & Photo Count
                 HStack(spacing: 6) {
                     switch viewModel.currentScope {
-                    case .masterLibrary:
+                    case .mainLibrary:
                         Image(systemName: "photo.stack.fill")
                             .foregroundColor(.accentColor)
                             .font(.caption)
-                        Text("Master Library")
+                        Text("Main Library")
                             .font(.subheadline)
                             .fontWeight(.semibold)
                     case .session(let folderPath):

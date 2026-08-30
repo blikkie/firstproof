@@ -13,14 +13,14 @@ public enum EditSliderType {
 }
 
 public enum LibraryScope: Hashable, Equatable {
-    case masterLibrary
+    case mainLibrary
     case session(folderPath: String)
 }
 
 @Observable
 public final class AppViewModel {
     // MARK: - Navigation & Directory State
-    public var currentScope: LibraryScope = .masterLibrary
+    public var currentScope: LibraryScope = .mainLibrary
     public var currentFolderPath: String? = nil
     public var openedFolders: [String] = []
     public var isExternalVolume: Bool = false
@@ -28,8 +28,8 @@ public final class AppViewModel {
     public var isScanning: Bool = false
     public var scanningStatusMessage: String? = nil
     
-    // Master Library Path (~/Pictures/LumenBox Library)
-    public var masterLibraryPath: String {
+    // Main Library Path (~/Pictures/LumenBox Library)
+    public var mainLibraryPath: String {
         let pictures = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Pictures")
         let lumenBoxLib = pictures.appendingPathComponent("LumenBox Library")
         try? FileManager.default.createDirectory(at: lumenBoxLib, withIntermediateDirectories: true)
@@ -78,7 +78,7 @@ public final class AppViewModel {
         } else if let firstFolder = self.openedFolders.first {
             selectScope(.session(folderPath: firstFolder))
         } else {
-            selectScope(.masterLibrary)
+            selectScope(.mainLibrary)
         }
     }
     
@@ -86,10 +86,10 @@ public final class AppViewModel {
     public func selectScope(_ scope: LibraryScope) {
         self.currentScope = scope
         switch scope {
-        case .masterLibrary:
-            openDirectory(at: masterLibraryPath, isMaster: true)
+        case .mainLibrary:
+            openDirectory(at: mainLibraryPath, isMain: true)
         case .session(let folderPath):
-            openDirectory(at: folderPath, isMaster: false)
+            openDirectory(at: folderPath, isMain: false)
         }
     }
     
@@ -110,20 +110,20 @@ public final class AppViewModel {
             if let next = openedFolders.first {
                 selectScope(.session(folderPath: next))
             } else {
-                selectScope(.masterLibrary)
+                selectScope(.mainLibrary)
             }
         }
     }
     
     // MARK: - Directory Indexing & Loading
-    public func openDirectory(at folderPath: String, isMaster: Bool = false) {
-        if !isMaster {
+    public func openDirectory(at folderPath: String, isMain: Bool = false) {
+        if !isMain {
             UserDefaults.standard.set(folderPath, forKey: "lastOpenedDirectory")
         }
         self.currentFolderPath = folderPath
         self.isExternalVolume = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
         self.isScanning = true
-        self.scanningStatusMessage = "Scanning \(isMaster ? "Master Library" : URL(fileURLWithPath: folderPath).lastPathComponent)..."
+        self.scanningStatusMessage = "Scanning \(isMain ? "Main Library" : URL(fileURLWithPath: folderPath).lastPathComponent)..."
         
         // Reset state for new scope
         self.photos = []

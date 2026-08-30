@@ -8,33 +8,33 @@ struct SidebarView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // MARK: - 1. Master Library Section
+            // MARK: - 1. Main Library Section
             VStack(alignment: .leading, spacing: 6) {
-                Text("MASTER LIBRARY")
+                Text("MAIN LIBRARY")
                     .font(.caption2)
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 12)
                 
-                let isMasterSelected = viewModel.currentScope == .masterLibrary
+                let isMainSelected = viewModel.currentScope == .mainLibrary
                 
                 Button(action: {
                     viewModel.ratingFilter = nil
                     viewModel.statusFilter = nil
-                    viewModel.selectScope(.masterLibrary)
+                    viewModel.selectScope(.mainLibrary)
                 }) {
                     HStack(spacing: 8) {
                         Image(systemName: "photo.stack.fill")
-                            .foregroundColor(isMasterSelected ? .accentColor : .secondary)
+                            .foregroundColor(isMainSelected ? .accentColor : .secondary)
                             .font(.subheadline)
                         
                         Text("All Photos")
                             .font(.subheadline)
-                            .fontWeight(isMasterSelected && viewModel.ratingFilter == nil && viewModel.statusFilter == nil ? .semibold : .regular)
+                            .fontWeight(isMainSelected && viewModel.ratingFilter == nil && viewModel.statusFilter == nil ? .semibold : .regular)
                         
                         Spacer()
                         
-                        if isMasterSelected {
+                        if isMainSelected {
                             Text("\(viewModel.photos.count)")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
@@ -42,7 +42,7 @@ struct SidebarView: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(isMasterSelected && viewModel.ratingFilter == nil && viewModel.statusFilter == nil ? Color.accentColor.opacity(0.18) : Color.clear)
+                    .background(isMainSelected && viewModel.ratingFilter == nil && viewModel.statusFilter == nil ? Color.accentColor.opacity(0.18) : Color.clear)
                     .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
