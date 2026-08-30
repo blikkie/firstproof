@@ -63,39 +63,40 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                 1.5
             };
             
-            // Fast Bilinear Bayer Demosaicing (RGGB active CFA)
+            // Dynamic CFA Bayer Demosaicing (Supports RGGB, BGGR, GBRG, GRBG)
             for y in 0..active_h {
                 let full_y = (crop_top + y).min(raw.height - 2).max(1);
-                let is_even_row = full_y % 2 == 0;
                 
                 for x in 0..active_w {
                     let full_x = (crop_left + x).min(raw.width - 2).max(1);
-                    let is_even_col = full_x % 2 == 0;
+                    
+                    let color = raw.cfa.color_at(full_y, full_x);
                     
                     let r: f32;
                     let g: f32;
                     let b: f32;
                     
-                    if is_even_row && is_even_col {
-                        // Red photosite in RGGB
+                    if color == 0 {
+                        // Red photosite
                         r = p(full_x, full_y);
                         g = 0.25 * (p(full_x - 1, full_y) + p(full_x + 1, full_y) + p(full_x, full_y - 1) + p(full_x, full_y + 1));
                         b = 0.25 * (p(full_x - 1, full_y - 1) + p(full_x + 1, full_y - 1) + p(full_x - 1, full_y + 1) + p(full_x + 1, full_y + 1));
-                    } else if is_even_row && !is_even_col {
-                        // Green on Red row
-                        g = p(full_x, full_y);
-                        r = 0.5 * (p(full_x - 1, full_y) + p(full_x + 1, full_y));
-                        b = 0.5 * (p(full_x, full_y - 1) + p(full_x, full_y + 1));
-                    } else if !is_even_row && is_even_col {
-                        // Green on Blue row
-                        g = p(full_x, full_y);
-                        r = 0.5 * (p(full_x, full_y - 1) + p(full_x, full_y + 1));
-                        b = 0.5 * (p(full_x - 1, full_y) + p(full_x + 1, full_y));
-                    } else {
-                        // Blue photosite in RGGB
+                    } else if color == 2 {
+                        // Blue photosite
                         b = p(full_x, full_y);
                         g = 0.25 * (p(full_x - 1, full_y) + p(full_x + 1, full_y) + p(full_x, full_y - 1) + p(full_x, full_y + 1));
                         r = 0.25 * (p(full_x - 1, full_y - 1) + p(full_x + 1, full_y - 1) + p(full_x - 1, full_y + 1) + p(full_x + 1, full_y + 1));
+                    } else {
+                        // Green photosite
+                        g = p(full_x, full_y);
+                        // Check if Red is horizontal or vertical neighbor
+                        if raw.cfa.color_at(full_y, full_x - 1) == 0 || raw.cfa.color_at(full_y, full_x + 1) == 0 {
+                            r = 0.5 * (p(full_x - 1, full_y) + p(full_x + 1, full_y));
+                            b = 0.5 * (p(full_x, full_y - 1) + p(full_x, full_y + 1));
+                        } else {
+                            r = 0.5 * (p(full_x, full_y - 1) + p(full_x, full_y + 1));
+                            b = 0.5 * (p(full_x - 1, full_y) + p(full_x + 1, full_y));
+                        }
                     }
                     
                     let out_idx = (y * active_w + x) * 3;
@@ -431,6 +432,14 @@ mod tests {
     fn test_debug_cr2() {
         let path = "/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0328.CR2";
         let out_path = "test_canon_cr2_out.jpg";
+        
+        if let Ok(raw) = rawloader::decode_file(path) {
+            println!("CR2 CFA: {:?}", raw.cfa);
+            println!("CR2 CFA (0,0): {:?}", raw.cfa.color_at(0, 0));
+            println!("CR2 CFA (0,1): {:?}", raw.cfa.color_at(0, 1));
+            println!("CR2 CFA (1,0): {:?}", raw.cfa.color_at(1, 0));
+            println!("CR2 CFA (1,1): {:?}", raw.cfa.color_at(1, 1));
+        }
         
         let edits = EditSettings {
             exposure: 0.0,
