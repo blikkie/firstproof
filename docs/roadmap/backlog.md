@@ -50,6 +50,14 @@ Photographers rely on tone curves for surgical control over tonal contrast and s
 
 ## 2. Google Photos Sync & Sharing (Post-v1)
 
+### Google Pixel Computational DNG Ingestion
+Google Pixel phones (Pixel 3 through Pixel 9 Pro) capture computational RAWs in Adobe DNG format (`PXL_YYYYMMDD_HHMMSS.dng` alongside `PXL_YYYYMMDD_HHMMSS.jpg`):
+*   **Computational Linear DNG Format**:
+    Pixel DNGs contain multi-frame HDR+ merged sensor data (9 to 15 burst frames combined in 16-bit linear space) with embedded lens shading gain maps and color calibration matrices.
+*   **Takeout & Sync Ingestion**:
+    *   **Google Takeout**: Takeout archives contain both `PXL_...dng` and `PXL_...jpg`, each with its paired `.json` sidecar. Our scanner automatically indexes the `.dng` file and links GPS, captions, and creation timestamps from the JSON metadata.
+    *   **Google Photos API**: In API sync queries, identify `mimeType == "image/x-adobe-dng"` and download the uncompressed master DNG via `${baseUrl}=d` to preserve full computational sensor headroom.
+
 ### Syncing Phone Library to LumenBox
 1.  **OAuth2 Authentication**: Integrate macOS authentication loop (ASWebAuthenticationSession) to obtain a Google Photos API token.
 2.  **Background Sync Service**:
