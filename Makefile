@@ -38,6 +38,7 @@ bundle: build-app
 	cp LumenBoxApp/Resources/Info.plist dist/LumenBox.app/Contents/
 	cp LumenBoxApp/Resources/AppIcon.icns dist/LumenBox.app/Contents/Resources/
 	cp $(shell swift build --package-path LumenBoxApp --show-bin-path)/LumenBoxApp dist/LumenBox.app/Contents/MacOS/
+	codesign --force --deep --sign - dist/LumenBox.app
 	@echo "✅ Standalone bundle created at dist/LumenBox.app"
 
 test:

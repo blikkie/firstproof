@@ -1,8 +1,10 @@
+use rayon::prelude::*;
 use rusqlite::{params, Connection, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::SystemTime;
+use walkdir::WalkDir;
 
 use crate::raw;
 use crate::takeout;
@@ -129,173 +131,166 @@ impl Database {
         }
     }
 
-    /// Indexes a folder recursively, inserting/updating records in SQLite with transaction batching.
+    /// Indexes a folder recursively, inserting/updating records in SQLite with parallel CPU processing.
     pub fn index_folder<P: AsRef<Path>>(&self, folder_path: P) -> Result<u32> {
         let folder_path = folder_path.as_ref();
-        let mut count = 0u32;
-        let mut stack = vec![folder_path.to_path_buf()];
-
-        let now = current_timestamp();
-        let mut batch: Vec<PhotoRecord> = Vec::with_capacity(250);
-
-        // Preload existing file metadata cache (path -> (modified_time, file_size)) for ultra-fast skip
         let folder_prefix = folder_path.to_string_lossy().to_string();
         let cache_map = self.preload_cache(&folder_prefix);
 
-        while let Some(current_dir) = stack.pop() {
-            let entries = match fs::read_dir(&current_dir) {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-
-            for entry in entries.filter_map(std::result::Result::ok) {
-                let path = entry.path();
-                if path.is_dir() {
-                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        if !name.starts_with('.') {
-                            stack.push(path);
-                        }
-                    }
-                } else if path.is_file() {
-                    let ext = match path.extension().and_then(|e| e.to_str()) {
-                        Some(e) => e.to_lowercase(),
-                        None => continue,
-                    };
-
+        // 1. Fast directory walk: collect all RAW and image file paths
+        let mut candidates = Vec::new();
+        for entry in WalkDir::new(folder_path)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(std::result::Result::ok)
+        {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    let ext_lower = ext.to_lowercase();
                     if matches!(
-                        ext.as_str(),
+                        ext_lower.as_str(),
                         "cr2" | "rw2" | "dng" | "jpg" | "jpeg" | "png" | "heic" | "arw" | "nef" | "tiff" | "tif"
                     ) {
-                        let metadata = match fs::metadata(&path) {
-                            Ok(m) => m,
-                            Err(_) => continue,
-                        };
-
-                        let file_path_str = path.to_string_lossy().to_string();
-                        let file_size = metadata.len() as i64;
-                        let modified_time = metadata
-                            .modified()
-                            .ok()
-                            .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(0);
-
-                        // Fast cache check: if file is unmodified since last index, skip heavy EXIF parsing
-                        if let Some(&(cached_mtime, cached_size)) = cache_map.get(&file_path_str) {
-                            if cached_mtime == modified_time && cached_size == file_size {
-                                count += 1;
-                                continue;
-                            }
-                        }
-
-                        let file_name = path
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .unwrap_or("")
-                            .to_string();
-
-                        // 1. RAW EXIF Extraction
-                        let raw_meta = raw::extract_metadata(&file_path_str).ok();
-
-                        let camera_make = raw_meta.as_ref().and_then(|m| m.camera_make.clone());
-                        let camera_model = raw_meta.as_ref().and_then(|m| m.camera_model.clone());
-                        let lens_model = raw_meta.as_ref().and_then(|m| m.lens_model.clone());
-                        let iso = raw_meta.as_ref().and_then(|m| m.iso);
-                        let aperture = raw_meta.as_ref().and_then(|m| m.aperture);
-                        let shutter_speed = raw_meta.as_ref().and_then(|m| m.shutter_speed.clone());
-                        let focal_length = raw_meta.as_ref().and_then(|m| m.focal_length);
-                        let mut taken_time = raw_meta.as_ref().and_then(|m| m.taken_time);
-                        let mut latitude = raw_meta.as_ref().and_then(|m| m.latitude);
-                        let mut longitude = raw_meta.as_ref().and_then(|m| m.longitude);
-                        let mut description = raw_meta.as_ref().and_then(|m| m.description.clone());
-
-                        // 2. XMP Sidecar Integration
-                        let xmp_path = path.with_extension("xmp");
-                        let mut has_xmp = false;
-                        let mut rating = None;
-                        let mut status = "None".to_string();
-
-                        if xmp_path.exists() {
-                            if let Ok(xmp_data) = xmp::read_xmp_file(&xmp_path) {
-                                has_xmp = true;
-                                if xmp_data.rating.is_some() {
-                                    rating = xmp_data.rating;
-                                }
-                                status = xmp_data.status;
-                                if xmp_data.latitude.is_some() {
-                                    latitude = xmp_data.latitude;
-                                }
-                                if xmp_data.longitude.is_some() {
-                                    longitude = xmp_data.longitude;
-                                }
-                                if xmp_data.description.is_some() {
-                                    description = xmp_data.description;
-                                }
-                            }
-                        }
-
-                        // 3. Google Takeout JSON Sidecar Integration
-                        let mut has_takeout = false;
-                        if let Some(json_path) = takeout::match_takeout_json(&path) {
-                            if let Ok(takeout_meta) = takeout::parse_takeout_json(&json_path) {
-                                has_takeout = true;
-                                if latitude.is_none() {
-                                    latitude = takeout_meta.latitude;
-                                }
-                                if longitude.is_none() {
-                                    longitude = takeout_meta.longitude;
-                                }
-                                if taken_time.is_none() {
-                                    taken_time = takeout_meta.taken_time;
-                                }
-                                if description.is_none() {
-                                    description = takeout_meta.description;
-                                }
-                            }
-                        }
-
-                        batch.push(PhotoRecord {
-                            id: 0,
-                            file_path: file_path_str,
-                            file_name,
-                            file_size,
-                            modified_time,
-                            camera_make,
-                            camera_model,
-                            lens_model,
-                            iso,
-                            aperture,
-                            shutter_speed,
-                            focal_length,
-                            taken_time,
-                            latitude,
-                            longitude,
-                            description,
-                            rating,
-                            status,
-                            has_xmp,
-                            has_takeout,
-                            created_at: now,
-                            updated_at: now,
-                        });
-
-                        count += 1;
-
-                        // Flush batch transaction to SQLite
-                        if batch.len() >= 200 {
-                            self.flush_batch(&batch)?;
-                            batch.clear();
-                        }
+                        candidates.push(path.to_path_buf());
                     }
                 }
             }
         }
 
-        if !batch.is_empty() {
-            self.flush_batch(&batch)?;
+        let total_candidates = candidates.len() as u32;
+        let now = current_timestamp();
+
+        // 2. Filter out already-cached unmodified files
+        let files_to_process: Vec<(PathBuf, i64, i64)> = candidates
+            .into_iter()
+            .filter_map(|path| {
+                let metadata = fs::metadata(&path).ok()?;
+                let file_path_str = path.to_string_lossy().to_string();
+                let file_size = metadata.len() as i64;
+                let modified_time = metadata
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+
+                if let Some(&(cached_mtime, cached_size)) = cache_map.get(&file_path_str) {
+                    if cached_mtime == modified_time && cached_size == file_size {
+                        return None; // Unmodified, skip!
+                    }
+                }
+                Some((path, file_size, modified_time))
+            })
+            .collect();
+
+        if files_to_process.is_empty() {
+            return Ok(total_candidates);
         }
 
-        Ok(count)
+        // 3. Parallel metadata extraction across all CPU cores with Rayon
+        let records: Vec<PhotoRecord> = files_to_process
+            .into_par_iter()
+            .map(|(path, file_size, modified_time)| {
+                let file_path_str = path.to_string_lossy().to_string();
+                let file_name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                // 1. RAW EXIF Extraction
+                let raw_meta = raw::extract_metadata(&file_path_str).ok();
+                let camera_make = raw_meta.as_ref().and_then(|m| m.camera_make.clone());
+                let camera_model = raw_meta.as_ref().and_then(|m| m.camera_model.clone());
+                let lens_model = raw_meta.as_ref().and_then(|m| m.lens_model.clone());
+                let iso = raw_meta.as_ref().and_then(|m| m.iso);
+                let aperture = raw_meta.as_ref().and_then(|m| m.aperture);
+                let shutter_speed = raw_meta.as_ref().and_then(|m| m.shutter_speed.clone());
+                let focal_length = raw_meta.as_ref().and_then(|m| m.focal_length);
+                let mut taken_time = raw_meta.as_ref().and_then(|m| m.taken_time);
+                let mut latitude = raw_meta.as_ref().and_then(|m| m.latitude);
+                let mut longitude = raw_meta.as_ref().and_then(|m| m.longitude);
+                let mut description = raw_meta.as_ref().and_then(|m| m.description.clone());
+
+                // 2. XMP Sidecar Integration
+                let xmp_path = path.with_extension("xmp");
+                let mut has_xmp = false;
+                let mut rating = None;
+                let mut status = "None".to_string();
+
+                if xmp_path.exists() {
+                    if let Ok(xmp_data) = xmp::read_xmp_file(&xmp_path) {
+                        has_xmp = true;
+                        if xmp_data.rating.is_some() {
+                            rating = xmp_data.rating;
+                        }
+                        status = xmp_data.status;
+                        if xmp_data.latitude.is_some() {
+                            latitude = xmp_data.latitude;
+                        }
+                        if xmp_data.longitude.is_some() {
+                            longitude = xmp_data.longitude;
+                        }
+                        if xmp_data.description.is_some() {
+                            description = xmp_data.description;
+                        }
+                    }
+                }
+
+                // 3. Google Takeout JSON Sidecar Integration
+                let mut has_takeout = false;
+                if let Some(json_path) = takeout::match_takeout_json(&path) {
+                    if let Ok(takeout_meta) = takeout::parse_takeout_json(&json_path) {
+                        has_takeout = true;
+                        if latitude.is_none() {
+                            latitude = takeout_meta.latitude;
+                        }
+                        if longitude.is_none() {
+                            longitude = takeout_meta.longitude;
+                        }
+                        if taken_time.is_none() {
+                            taken_time = takeout_meta.taken_time;
+                        }
+                        if description.is_none() {
+                            description = takeout_meta.description;
+                        }
+                    }
+                }
+
+                PhotoRecord {
+                    id: 0,
+                    file_path: file_path_str,
+                    file_name,
+                    file_size,
+                    modified_time,
+                    camera_make,
+                    camera_model,
+                    lens_model,
+                    iso,
+                    aperture,
+                    shutter_speed,
+                    focal_length,
+                    taken_time,
+                    latitude,
+                    longitude,
+                    description,
+                    rating,
+                    status,
+                    has_xmp,
+                    has_takeout,
+                    created_at: now,
+                    updated_at: now,
+                }
+            })
+            .collect();
+
+        // 4. Batched SQLite insert
+        for chunk in records.chunks(300) {
+            self.flush_batch(chunk)?;
+        }
+
+        Ok(total_candidates)
     }
 
     fn preload_cache(&self, folder_prefix: &str) -> std::collections::HashMap<String, (i64, i64)> {
