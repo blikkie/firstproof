@@ -50,5 +50,26 @@ struct MainView: View {
         .sheet(isPresented: $viewModel.isExportPackageSheetPresented) {
             ExportPackageSheetView(viewModel: viewModel)
         }
+        .background(
+            Group {
+                Button("") { viewModel.setRating(1) }.keyboardShortcut("1", modifiers: [])
+                Button("") { viewModel.setRating(2) }.keyboardShortcut("2", modifiers: [])
+                Button("") { viewModel.setRating(3) }.keyboardShortcut("3", modifiers: [])
+                Button("") { viewModel.setRating(4) }.keyboardShortcut("4", modifiers: [])
+                Button("") { viewModel.setRating(5) }.keyboardShortcut("5", modifiers: [])
+                Button("") { viewModel.setRating(nil) }.keyboardShortcut("0", modifiers: [])
+                Button("") { viewModel.setStatus("pick") }.keyboardShortcut("p", modifiers: [])
+                Button("") { viewModel.setStatus("reject") }.keyboardShortcut("x", modifiers: [])
+                Button("") { viewModel.setStatus("none") }.keyboardShortcut("u", modifiers: [])
+                Button("") {
+                    viewModel.canvasMode = (viewModel.canvasMode == .grid) ? .detail : .grid
+                }.keyboardShortcut(.space, modifiers: [])
+                Button("") {
+                    viewModel.selectAllPhotos()
+                }.keyboardShortcut("a", modifiers: .command)
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
+        )
     }
 }

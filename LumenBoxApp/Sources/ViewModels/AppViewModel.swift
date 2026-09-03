@@ -12,6 +12,11 @@ public enum EditSliderType {
     case straighten
 }
 
+public enum CanvasMode: Hashable {
+    case grid
+    case detail
+}
+
 public enum LibraryScope: Hashable, Equatable {
     case mainLibrary
     case session(folderPath: String)
@@ -21,6 +26,7 @@ public enum LibraryScope: Hashable, Equatable {
 public final class AppViewModel {
     // MARK: - Navigation & Directory State
     public var currentScope: LibraryScope = .mainLibrary
+    public var canvasMode: CanvasMode = .grid
     public var currentFolderPath: String? = nil
     public var openedFolders: [String] = []
     public var isExternalVolume: Bool = false
@@ -374,46 +380,100 @@ public final class AppViewModel {
         }
     }
     
-    // MARK: - Rating & Pick Status
+    // MARK: - Rating & Pick Status (Single & Bulk)
     public func setRating(_ rating: Int32?) {
-        guard let current = selectedPhoto, let db = db else { return }
-        let newRating = (current.rating == rating) ? nil : rating
-        let success = db.updateRatingStatus(filePath: current.filePath, rating: newRating, status: current.status)
-        if success {
-            if let index = photos.firstIndex(where: { $0.filePath == current.filePath }) {
-                photos[index].rating = newRating
-                selectedPhoto = photos[index]
+        guard let db = db else { return }
+        var targets = Array(selectedPhotoPaths)
+        if targets.isEmpty, let single = selectedPhoto?.filePath {
+            targets = [single]
+        }
+        guard !targets.isEmpty else { return }
+        
+        // Determine new rating: if all selected photos currently have this rating, toggle off to nil; otherwise apply rating
+        let targetPhotos = photos.filter { targets.contains($0.filePath) }
+        let allMatch = targetPhotos.allSatisfy { $0.rating == rating }
+        let newRating: Int32? = allMatch ? nil : rating
+        
+        // 1. Transactional SQLite batch update
+        _ = db.updateRatingStatusBatch(filePaths: targets, rating: newRating, updateRating: true, status: nil)
+        
+        // 2. In-Memory State Updates
+        let targetSet = Set(targets)
+        for i in photos.indices {
+            if targetSet.contains(photos[i].filePath) {
+                photos[i].rating = newRating
             }
-            syncXmpForCurrentPhoto()
+        }
+        if let current = selectedPhoto, targetSet.contains(current.filePath) {
+            selectedPhoto?.rating = newRating
+        }
+        
+        // 3. Asynchronous XMP Sidecar Sync
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            for path in targets {
+                self.syncXmp(for: path, rating: newRating, status: nil)
+            }
         }
     }
     
     public func setStatus(_ status: String) {
-        guard let current = selectedPhoto, let db = db else { return }
-        let newStatus = (current.status == status) ? "none" : status
-        let success = db.updateRatingStatus(filePath: current.filePath, rating: current.rating, status: newStatus)
-        if success {
-            if let index = photos.firstIndex(where: { $0.filePath == current.filePath }) {
-                photos[index].status = newStatus
-                selectedPhoto = photos[index]
+        guard let db = db else { return }
+        var targets = Array(selectedPhotoPaths)
+        if targets.isEmpty, let single = selectedPhoto?.filePath {
+            targets = [single]
+        }
+        guard !targets.isEmpty else { return }
+        
+        // Determine new status: if all selected photos have this status, toggle to "none"; otherwise apply status
+        let targetPhotos = photos.filter { targets.contains($0.filePath) }
+        let allMatch = targetPhotos.allSatisfy { $0.status == status }
+        let newStatus = allMatch ? "none" : status
+        
+        // 1. Transactional SQLite batch update
+        _ = db.updateRatingStatusBatch(filePaths: targets, rating: nil, updateRating: false, status: newStatus)
+        
+        // 2. In-Memory State Updates
+        let targetSet = Set(targets)
+        for i in photos.indices {
+            if targetSet.contains(photos[i].filePath) {
+                photos[i].status = newStatus
             }
-            syncXmpForCurrentPhoto()
+        }
+        if let current = selectedPhoto, targetSet.contains(current.filePath) {
+            selectedPhoto?.status = newStatus
+        }
+        
+        // 3. Asynchronous XMP Sidecar Sync
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            for path in targets {
+                self.syncXmp(for: path, rating: nil, status: newStatus)
+            }
         }
     }
     
-    private func syncXmpForCurrentPhoto() {
-        guard let current = selectedPhoto else { return }
-        let xmpPath = URL(fileURLWithPath: current.filePath).deletingPathExtension().appendingPathExtension("xmp").path
-        let existingXmp = readXmp(path: current.filePath)
+    private func syncXmp(for filePath: String, rating: Int32??, status: String?) {
+        let xmpPath = URL(fileURLWithPath: filePath).deletingPathExtension().appendingPathExtension("xmp").path
+        let existingXmp = readXmp(path: filePath)
+        
+        let currentPhoto = photos.first(where: { $0.filePath == filePath })
+        let finalRating: Int32?
+        if let r = rating {
+            finalRating = r
+        } else {
+            finalRating = currentPhoto?.rating
+        }
+        let finalStatus = status ?? currentPhoto?.status ?? "none"
         
         let record = XmpDataRecord(
-            rating: current.rating,
-            status: current.status,
+            rating: finalRating,
+            status: finalStatus,
             title: existingXmp?.title,
             description: existingXmp?.description,
-            latitude: current.latitude,
-            longitude: current.longitude,
-            edits: EditSettings(
+            latitude: currentPhoto?.latitude,
+            longitude: currentPhoto?.longitude,
+            edits: existingXmp?.edits ?? EditSettings(
                 exposure: self.exposure,
                 contrast: self.contrast,
                 temperature: self.temperature,

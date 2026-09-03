@@ -574,6 +574,8 @@ public protocol LumenBoxDatabaseProtocol : AnyObject {
     
     func updateRatingStatus(filePath: String, rating: Int32?, status: String)  -> Bool
     
+    func updateRatingStatusBatch(filePaths: [String], rating: Int32?, updateRating: Bool, status: String?)  -> UInt32
+    
 }
 
 open class LumenBoxDatabase:
@@ -673,6 +675,17 @@ open func updateRatingStatus(filePath: String, rating: Int32?, status: String) -
         FfiConverterString.lower(filePath),
         FfiConverterOptionInt32.lower(rating),
         FfiConverterString.lower(status),$0
+    )
+})
+}
+    
+open func updateRatingStatusBatch(filePaths: [String], rating: Int32?, updateRating: Bool, status: String?) -> UInt32 {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_method_lumenboxdatabase_update_rating_status_batch(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(filePaths),
+        FfiConverterOptionInt32.lower(rating),
+        FfiConverterBool.lower(updateRating),
+        FfiConverterOptionString.lower(status),$0
     )
 })
 }
@@ -2541,6 +2554,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_method_lumenboxdatabase_update_rating_status() != 14433) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_method_lumenboxdatabase_update_rating_status_batch() != 39162) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_method_lumenboxlensfun_load_directory() != 57534) {

@@ -347,6 +347,18 @@ impl LumenBoxDatabase {
             .unwrap_or(false)
     }
 
+    pub fn update_rating_status_batch(
+        &self,
+        file_paths: Vec<String>,
+        rating: Option<i32>,
+        update_rating: bool,
+        status: Option<String>,
+    ) -> u32 {
+        self.inner
+            .update_rating_status_batch(&file_paths, rating, update_rating, status.as_deref())
+            .unwrap_or(0)
+    }
+
     pub fn export_portable_package(
         &self,
         source_photo_paths: Vec<String>,

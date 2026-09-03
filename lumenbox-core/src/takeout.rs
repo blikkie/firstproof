@@ -106,6 +106,33 @@ pub fn match_takeout_json<P: AsRef<Path>>(image_path: P) -> Option<PathBuf> {
         }
     }
     
+    // 4. Truncation Fast Path: Google Takeout truncates filenames so total JSON filename is 45-52 chars
+    for total_len in 45..=52 {
+        let base_len = total_len - 5; // length before ".json"
+        if filename.len() > base_len {
+            if filename.is_char_boundary(base_len) {
+                let candidate = parent.join(format!("{}.json", &filename[..base_len]));
+                if candidate.exists() {
+                    return Some(candidate);
+                }
+            }
+            if let Some(stem) = image_path.file_stem().and_then(|s| s.to_str()) {
+                if let Some(pos) = stem.rfind('(') {
+                    let copy_suffix = &filename[pos..]; // e.g. "(1).jpg"
+                    if base_len > copy_suffix.len() {
+                        let p_len = base_len - copy_suffix.len();
+                        if p_len <= pos && stem.is_char_boundary(p_len) {
+                            let candidate = parent.join(format!("{}{}.json", &stem[..p_len], copy_suffix));
+                            if candidate.exists() {
+                                return Some(candidate);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     None
 }
 

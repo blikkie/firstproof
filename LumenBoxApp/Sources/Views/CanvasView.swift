@@ -2,14 +2,8 @@ import SwiftUI
 import AppKit
 import LumenBoxBridge
 
-enum CanvasMode {
-    case grid
-    case detail
-}
-
 struct CanvasView: View {
     @Bindable var viewModel: AppViewModel
-    @State private var mode: CanvasMode = .grid
     @State private var isShowingOriginal: Bool = false
     
     var body: some View {
@@ -17,7 +11,7 @@ struct CanvasView: View {
             // MARK: - Toolbar Header
             HStack(spacing: 12) {
                 // View Mode Picker (Grid / Detail)
-                Picker("View Mode", selection: $mode) {
+                Picker("View Mode", selection: $viewModel.canvasMode) {
                     Label("Grid", systemImage: "square.grid.3x3.fill").tag(CanvasMode.grid)
                     Label("Detail", systemImage: "photo.fill").tag(CanvasMode.detail)
                 }
@@ -68,7 +62,7 @@ struct CanvasView: View {
                     .help("Export Selection as Portable Library (Cmd+Shift+E)")
                 }
                 
-                if mode == .detail && viewModel.selectedPhoto != nil {
+                if viewModel.canvasMode == .detail && viewModel.selectedPhoto != nil {
                     Button(action: {}) {
                         Label("Hold for Original (\\)", systemImage: "eye.fill")
                     }
@@ -148,9 +142,9 @@ struct CanvasView: View {
                             .padding(16)
                         }
                         .background(Color(NSColor.underPageBackgroundColor))
-                        .opacity(mode == .grid ? 1 : 0)
-                        .allowsHitTesting(mode == .grid)
-                        .onChange(of: mode) { _, newMode in
+                        .opacity(viewModel.canvasMode == .grid ? 1 : 0)
+                        .allowsHitTesting(viewModel.canvasMode == .grid)
+                        .onChange(of: viewModel.canvasMode) { _, newMode in
                             if newMode == .grid, let selected = viewModel.selectedPhoto {
                                 proxy.scrollTo(selected.filePath, anchor: .center)
                             }
@@ -158,7 +152,7 @@ struct CanvasView: View {
                     }
                     
                     // 2. Detail View (Metal GPU Canvas)
-                    if mode == .detail {
+                    if viewModel.canvasMode == .detail {
                         ZStack {
                             Color(NSColor.underPageBackgroundColor)
                                 .edgesIgnoringSafeArea(.all)
