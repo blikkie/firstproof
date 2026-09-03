@@ -9,67 +9,43 @@ struct FilmstripView: View {
         VStack(spacing: 0) {
             Divider()
             
-            HStack(spacing: 12) {
-                // MARK: Keybinding Quick Rating Toolbar
-                HStack(spacing: 8) {
-                    Text("Rating:")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    
-                    ForEach(1...5, id: \.self) { star in
-                        Button("\(star)") {
-                            viewModel.setRating(Int32(star))
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                    
-                    Divider().frame(height: 16)
-                    
-                    Button("Pick (P)") {
-                        viewModel.setStatus("pick")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.green)
-                    .controlSize(.small)
-                    
-                    Button("Reject (X)") {
-                        viewModel.setStatus("reject")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
-                    .controlSize(.small)
-                }
-                .padding(.leading, 12)
-                
-                Spacer()
-                
-                // MARK: Filmstrip Thumbnail Carousel
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: 8) {
-                            ForEach(viewModel.filteredPhotos, id: \.filePath) { photo in
-                                FilmstripThumbnailCell(
-                                    photo: photo,
-                                    isSelected: viewModel.selectedPhoto?.filePath == photo.filePath
-                                ) {
-                                    viewModel.selectPhoto(photo)
-                                }
-                                .id(photo.filePath)
+            // MARK: Filmstrip Thumbnail Carousel
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 8) {
+                        ForEach(viewModel.filteredPhotos, id: \.filePath) { photo in
+                            let isSelected = viewModel.selectedPhotoPaths.contains(photo.filePath) || viewModel.selectedPhoto?.filePath == photo.filePath
+                            FilmstripThumbnailCell(
+                                photo: photo,
+                                isSelected: isSelected
+                            ) {
+                                handleCellClick(for: photo)
                             }
+                            .id(photo.filePath)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
                     }
-                    .onChange(of: viewModel.selectedPhoto?.filePath) { _, newPath in
-                        if let target = newPath {
-                            proxy.scrollTo(target, anchor: .center)
-                        }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                .onChange(of: viewModel.selectedPhoto?.filePath) { _, newPath in
+                    if let target = newPath {
+                        proxy.scrollTo(target, anchor: .center)
                     }
                 }
             }
             .frame(height: 72)
             .background(Color(NSColor.windowBackgroundColor))
+        }
+    }
+    
+    private func handleCellClick(for photo: PhotoRecord) {
+        let flags = NSEvent.modifierFlags
+        if flags.contains(.command) {
+            viewModel.togglePhotoSelection(photo)
+        } else if flags.contains(.shift) {
+            viewModel.selectPhotoRange(to: photo)
+        } else {
+            viewModel.selectPhoto(photo)
         }
     }
 }
