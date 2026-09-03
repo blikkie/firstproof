@@ -39,8 +39,10 @@ public final class AppViewModel {
     // MARK: - Photos & Selection
     public var photos: [PhotoRecord] = []
     public var selectedPhoto: PhotoRecord? = nil
+    public var selectedPhotoPaths: Set<String> = []
     public var previewImage: NSImage? = nil
     public var isExportSheetPresented: Bool = false
+    public var isExportPackageSheetPresented: Bool = false
     
     // MARK: - Filters
     public var ratingFilter: Int? = nil // nil = All, 1..5
@@ -182,7 +184,63 @@ public final class AppViewModel {
     // MARK: - Photo Selection & Preview
     public func selectPhoto(_ photo: PhotoRecord) {
         self.selectedPhoto = photo
+        self.selectedPhotoPaths = [photo.filePath]
+        loadPreview(for: photo)
+    }
+    
+    public func togglePhotoSelection(_ photo: PhotoRecord) {
+        if selectedPhotoPaths.contains(photo.filePath) {
+            selectedPhotoPaths.remove(photo.filePath)
+            if selectedPhoto?.filePath == photo.filePath {
+                if let next = photos.first(where: { selectedPhotoPaths.contains($0.filePath) }) {
+                    self.selectedPhoto = next
+                    loadPreview(for: next)
+                } else {
+                    self.selectedPhoto = nil
+                    self.previewImage = nil
+                }
+            }
+        } else {
+            selectedPhotoPaths.insert(photo.filePath)
+            self.selectedPhoto = photo
+            loadPreview(for: photo)
+        }
+    }
+    
+    public func selectPhotoRange(to photo: PhotoRecord) {
+        let currentList = filteredPhotos
+        guard let targetIndex = currentList.firstIndex(where: { $0.filePath == photo.filePath }) else { return }
+        let anchorIndex: Int
+        if let anchor = selectedPhoto, let idx = currentList.firstIndex(where: { $0.filePath == anchor.filePath }) {
+            anchorIndex = idx
+        } else {
+            anchorIndex = 0
+        }
         
+        let start = min(anchorIndex, targetIndex)
+        let end = max(anchorIndex, targetIndex)
+        
+        for i in start...end {
+            selectedPhotoPaths.insert(currentList[i].filePath)
+        }
+        self.selectedPhoto = photo
+        loadPreview(for: photo)
+    }
+    
+    public func selectAllPhotos() {
+        let currentList = filteredPhotos
+        self.selectedPhotoPaths = Set(currentList.map { $0.filePath })
+        if selectedPhoto == nil, let first = currentList.first {
+            self.selectedPhoto = first
+            loadPreview(for: first)
+        }
+    }
+    
+    public func clearSelection() {
+        self.selectedPhotoPaths.removeAll()
+    }
+    
+    public func loadPreview(for photo: PhotoRecord) {
         // Resolve Lensfun lens distortion coefficients
         if let make = photo.cameraMake,
            let model = photo.cameraModel,
@@ -243,7 +301,6 @@ public final class AppViewModel {
             }
             
             DispatchQueue.main.async {
-                // Prevent out-of-order async race condition: only update if photo is still selected!
                 if self.selectedPhoto?.filePath == photo.filePath {
                     self.previewImage = image
                 }
@@ -259,6 +316,61 @@ public final class AppViewModel {
             self.straightenAngle = xmp.edits.cropAngle
         } else {
             resetAllSliders()
+        }
+    }
+    
+    // MARK: - Portable Package Export
+    public func exportSelectedAsPackage(
+        destinationFolder: String,
+        moveFiles: Bool,
+        openAfter: Bool,
+        completion: @escaping (ExportPackageReport?) -> Void
+    ) {
+        var targets = Array(selectedPhotoPaths)
+        if targets.isEmpty, let single = selectedPhoto?.filePath {
+            targets = [single]
+        }
+        guard !targets.isEmpty else {
+            completion(nil)
+            return
+        }
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            do {
+                let report = try exportPortablePackage(
+                    sourcePhotoPaths: targets,
+                    destinationFolder: destinationFolder,
+                    moveFiles: moveFiles
+                )
+                
+                DispatchQueue.main.async {
+                    if moveFiles {
+                        let movedSet = Set(targets)
+                        self.photos.removeAll { movedSet.contains($0.filePath) }
+                        self.selectedPhotoPaths.subtract(movedSet)
+                        if let current = self.selectedPhoto, movedSet.contains(current.filePath) {
+                            self.selectedPhoto = self.photos.first
+                            if let first = self.photos.first {
+                                self.loadPreview(for: first)
+                            } else {
+                                self.previewImage = nil
+                            }
+                        }
+                    }
+                    
+                    if openAfter {
+                        self.addFolder(at: destinationFolder)
+                    }
+                    
+                    completion(report)
+                }
+            } catch {
+                print("Failed to export portable package: \(error)")
+                DispatchQueue.main.async {
+                    completion(nil)
+                }
+            }
         }
     }
     

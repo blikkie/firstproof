@@ -534,6 +534,130 @@ impl Database {
         )?;
         Ok(updated > 0)
     }
+
+    pub fn delete_photo(&self, file_path: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let deleted = conn.execute("DELETE FROM photos WHERE file_path = ?1", params![file_path])?;
+        Ok(deleted > 0)
+    }
+
+    /// Exports a selection of photos to an isolated portable project package.
+    /// Copies/moves RAW images, XMP sidecars, and Takeout JSON files, and builds a dedicated .lumenbox/catalog.db.
+    pub fn export_portable_package<P: AsRef<Path>>(
+        &self,
+        source_photo_paths: &[String],
+        destination_folder: P,
+        move_files: bool,
+    ) -> std::result::Result<ExportPackageStats, String> {
+        let dest_folder = destination_folder.as_ref();
+        fs::create_dir_all(dest_folder).map_err(|e| e.to_string())?;
+
+        let dest_catalog_path = Self::resolve_catalog_path(dest_folder, true);
+        let dest_db = Self::open(&dest_catalog_path).map_err(|e| e.to_string())?;
+
+        let mut exported_count = 0u32;
+        let mut error_count = 0u32;
+        let mut error_messages = Vec::new();
+
+        for src_path_str in source_photo_paths {
+            let src_path = Path::new(src_path_str);
+            if !src_path.exists() {
+                error_count += 1;
+                error_messages.push(format!("Source file not found: {}", src_path_str));
+                continue;
+            }
+
+            let file_name = match src_path.file_name() {
+                Some(n) => n,
+                None => {
+                    error_count += 1;
+                    error_messages.push(format!("Invalid file name for: {}", src_path_str));
+                    continue;
+                }
+            };
+
+            let dest_file_path = dest_folder.join(file_name);
+
+            // 1. Transfer master image file
+            if let Err(e) = transfer_file(src_path, &dest_file_path, move_files) {
+                error_count += 1;
+                error_messages.push(format!("Failed to transfer {}: {}", src_path_str, e));
+                continue;
+            }
+
+            // 2. Transfer accompanying sidecars (XMP and Takeout)
+            let sidecar_candidates = [
+                // standard stem.xmp
+                (src_path.with_extension("xmp"), dest_folder.join(format!("{}.xmp", src_path.file_stem().unwrap_or_default().to_string_lossy()))),
+                // Lightroom filename.ext.xmp
+                (PathBuf::from(format!("{}.xmp", src_path_str)), dest_folder.join(format!("{}.xmp", file_name.to_string_lossy()))),
+            ];
+
+            for (src_sidecar, dst_sidecar) in sidecar_candidates {
+                if src_sidecar.exists() && src_sidecar != src_path {
+                    let _ = transfer_file(&src_sidecar, &dst_sidecar, move_files);
+                }
+            }
+
+            // Google Takeout sidecar
+            if let Some(src_json) = crate::takeout::match_takeout_json(src_path) {
+                if let Some(json_name) = src_json.file_name() {
+                    let dst_json = dest_folder.join(json_name);
+                    let _ = transfer_file(&src_json, &dst_json, move_files);
+                }
+            }
+
+            // 3. Populate metadata in destination catalog
+            if let Ok(Some(mut record)) = self.get_photo(src_path_str) {
+                record.file_path = dest_file_path.to_string_lossy().to_string();
+                record.file_name = file_name.to_string_lossy().to_string();
+                record.updated_at = current_timestamp();
+                let _ = dest_db.upsert_photo(&record);
+            } else {
+                // If not in current DB, index the new file directly
+                let _ = dest_db.index_folder(dest_folder);
+            }
+
+            // 4. Remove from source DB if move_files requested
+            if move_files {
+                let _ = self.delete_photo(src_path_str);
+            }
+
+            exported_count += 1;
+        }
+
+        Ok(ExportPackageStats {
+            total_requested: source_photo_paths.len() as u32,
+            exported_count,
+            error_count,
+            destination_catalog_path: dest_catalog_path.to_string_lossy().to_string(),
+            error_messages,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ExportPackageStats {
+    pub total_requested: u32,
+    pub exported_count: u32,
+    pub error_count: u32,
+    pub destination_catalog_path: String,
+    pub error_messages: Vec<String>,
+}
+
+fn transfer_file<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q, move_file: bool) -> std::io::Result<()> {
+    let src = src.as_ref();
+    let dst = dst.as_ref();
+    if move_file {
+        if fs::rename(src, dst).is_err() {
+            // Cross-device move fallback
+            fs::copy(src, dst)?;
+            fs::remove_file(src)?;
+        }
+    } else {
+        fs::copy(src, dst)?;
+    }
+    Ok(())
 }
 
 fn current_timestamp() -> i64 {
@@ -654,5 +778,64 @@ mod tests {
         assert!(photo.has_takeout);
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_export_portable_package() {
+        let src_dir = std::env::temp_dir().join("lumenbox_test_src_export");
+        let dst_dir = std::env::temp_dir().join("lumenbox_test_dst_export");
+        let _ = fs::remove_dir_all(&src_dir);
+        let _ = fs::remove_dir_all(&dst_dir);
+        let _ = fs::create_dir_all(&src_dir);
+
+        let img_path = src_dir.join("photo1.jpg");
+        let xmp_path = src_dir.join("photo1.jpg.xmp");
+        let _ = fs::write(&img_path, b"dummy img data");
+        let _ = fs::write(&xmp_path, b"<x:xmpmeta></x:xmpmeta>");
+
+        let src_catalog = Database::resolve_catalog_path(&src_dir, true);
+        let src_db = Database::open(&src_catalog).unwrap();
+        src_db.index_folder(&src_dir).unwrap();
+        assert_eq!(src_db.get_all_photos().unwrap().len(), 1);
+
+        // Test Copy Mode
+        let paths = vec![img_path.to_string_lossy().to_string()];
+        let report = src_db.export_portable_package(&paths, &dst_dir, false).unwrap();
+        assert_eq!(report.exported_count, 1);
+        assert_eq!(report.error_count, 0);
+
+        // Verify destination has photo, xmp sidecar, and catalog
+        assert!(dst_dir.join("photo1.jpg").exists());
+        assert!(dst_dir.join("photo1.jpg.xmp").exists());
+        let dst_catalog = dst_dir.join(".lumenbox").join("catalog.db");
+        assert!(dst_catalog.exists());
+
+        let dst_db = Database::open(&dst_catalog).unwrap();
+        let dst_photos = dst_db.get_all_photos().unwrap();
+        assert_eq!(dst_photos.len(), 1);
+        assert_eq!(dst_photos[0].file_name, "photo1.jpg");
+
+        // Verify source is still intact (Copy mode)
+        assert!(img_path.exists());
+        assert!(xmp_path.exists());
+        assert_eq!(src_db.get_all_photos().unwrap().len(), 1);
+
+        // Test Move Mode on a second image
+        let img2_path = src_dir.join("photo2.jpg");
+        let _ = fs::write(&img2_path, b"dummy img data 2");
+        src_db.index_folder(&src_dir).unwrap();
+        assert_eq!(src_db.get_all_photos().unwrap().len(), 2);
+
+        let paths2 = vec![img2_path.to_string_lossy().to_string()];
+        let report2 = src_db.export_portable_package(&paths2, &dst_dir, true).unwrap();
+        assert_eq!(report2.exported_count, 1);
+
+        // Verify photo2 is now in destination and REMOVED from source
+        assert!(dst_dir.join("photo2.jpg").exists());
+        assert!(!img2_path.exists());
+        assert_eq!(src_db.get_all_photos().unwrap().len(), 1);
+
+        let _ = fs::remove_dir_all(&src_dir);
+        let _ = fs::remove_dir_all(&dst_dir);
     }
 }

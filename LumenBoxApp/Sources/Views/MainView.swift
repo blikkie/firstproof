@@ -24,17 +24,31 @@ struct MainView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: {
+                    viewModel.isExportPackageSheetPresented = true
+                }) {
+                    Label("Package", systemImage: "shippingbox.fill")
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
+                .help("Export Selection as Portable Library (Cmd+Shift+E)")
+            }
+            
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
                     viewModel.isExportSheetPresented = true
                 }) {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
                 .keyboardShortcut("e", modifiers: .command)
                 .disabled(viewModel.selectedPhoto == nil)
-                .help("Export Photo (Cmd+E)")
+                .help("Export Rendered Photo (Cmd+E)")
             }
         }
         .sheet(isPresented: $viewModel.isExportSheetPresented) {
             ExportSheetView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $viewModel.isExportPackageSheetPresented) {
+            ExportPackageSheetView(viewModel: viewModel)
         }
     }
 }

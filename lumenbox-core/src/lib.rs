@@ -346,6 +346,64 @@ impl LumenBoxDatabase {
             .update_rating_status(&file_path, rating, &status)
             .unwrap_or(false)
     }
+
+    pub fn export_portable_package(
+        &self,
+        source_photo_paths: Vec<String>,
+        destination_folder: String,
+        move_files: bool,
+    ) -> Result<ExportPackageReport, LumenBoxError> {
+        self.inner
+            .export_portable_package(&source_photo_paths, &destination_folder, move_files)
+            .map(Into::into)
+            .map_err(|e| LumenBoxError::DatabaseError { reason: e })
+    }
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct ExportPackageReport {
+    pub total_requested: u32,
+    pub exported_count: u32,
+    pub error_count: u32,
+    pub destination_catalog_path: String,
+    pub error_messages: Vec<String>,
+}
+
+impl From<db::ExportPackageStats> for ExportPackageReport {
+    fn from(s: db::ExportPackageStats) -> Self {
+        Self {
+            total_requested: s.total_requested,
+            exported_count: s.exported_count,
+            error_count: s.error_count,
+            destination_catalog_path: s.destination_catalog_path,
+            error_messages: s.error_messages,
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn export_portable_package(
+    source_photo_paths: Vec<String>,
+    destination_folder: String,
+    move_files: bool,
+) -> Result<ExportPackageReport, LumenBoxError> {
+    if let Some(first_path) = source_photo_paths.first() {
+        if let Some(parent) = Path::new(first_path).parent() {
+            let cat_path = db::Database::resolve_catalog_path(parent, true);
+            if let Ok(db) = db::Database::open(&cat_path) {
+                return db
+                    .export_portable_package(&source_photo_paths, &destination_folder, move_files)
+                    .map(Into::into)
+                    .map_err(|e| LumenBoxError::DatabaseError { reason: e });
+            }
+        }
+    }
+    let temp_db = db::Database::open_in_memory()
+        .map_err(|e| LumenBoxError::DatabaseError { reason: e.to_string() })?;
+    temp_db
+        .export_portable_package(&source_photo_paths, &destination_folder, move_files)
+        .map(Into::into)
+        .map_err(|e| LumenBoxError::DatabaseError { reason: e })
 }
 
 #[uniffi::export]

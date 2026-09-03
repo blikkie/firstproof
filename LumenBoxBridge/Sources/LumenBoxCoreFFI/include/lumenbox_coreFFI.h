@@ -266,6 +266,11 @@ void uniffi_lumenbox_core_fn_free_lumenboxdatabase(void*_Nonnull ptr, RustCallSt
 void*_Nonnull uniffi_lumenbox_core_fn_constructor_lumenboxdatabase_open(RustBuffer db_path, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_METHOD_LUMENBOXDATABASE_EXPORT_PORTABLE_PACKAGE
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_METHOD_LUMENBOXDATABASE_EXPORT_PORTABLE_PACKAGE
+RustBuffer uniffi_lumenbox_core_fn_method_lumenboxdatabase_export_portable_package(void*_Nonnull ptr, RustBuffer source_photo_paths, RustBuffer destination_folder, int8_t move_files, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_METHOD_LUMENBOXDATABASE_GET_ALL_PHOTOS
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_METHOD_LUMENBOXDATABASE_GET_ALL_PHOTOS
 RustBuffer uniffi_lumenbox_core_fn_method_lumenboxdatabase_get_all_photos(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -331,6 +336,11 @@ RustBuffer uniffi_lumenbox_core_fn_func_decode_raw_preview(RustBuffer path, Rust
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
 int8_t uniffi_lumenbox_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, RustBuffer lens_coeffs, uint32_t quality, RustBuffer max_dimension, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PORTABLE_PACKAGE
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PORTABLE_PACKAGE
+RustBuffer uniffi_lumenbox_core_fn_func_export_portable_package(RustBuffer source_photo_paths, RustBuffer destination_folder, int8_t move_files, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXTRACT_METADATA
@@ -671,6 +681,12 @@ uint16_t uniffi_lumenbox_core_checksum_func_export_photo(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXPORT_PORTABLE_PACKAGE
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXPORT_PORTABLE_PACKAGE
+uint16_t uniffi_lumenbox_core_checksum_func_export_portable_package(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXTRACT_METADATA
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXTRACT_METADATA
 uint16_t uniffi_lumenbox_core_checksum_func_extract_metadata(void
@@ -716,6 +732,12 @@ uint16_t uniffi_lumenbox_core_checksum_func_scan_directory_for_takeout(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_WRITE_XMP
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_WRITE_XMP
 uint16_t uniffi_lumenbox_core_checksum_func_write_xmp(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_METHOD_LUMENBOXDATABASE_EXPORT_PORTABLE_PACKAGE
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_METHOD_LUMENBOXDATABASE_EXPORT_PORTABLE_PACKAGE
+uint16_t uniffi_lumenbox_core_checksum_method_lumenboxdatabase_export_portable_package(void
     
 );
 #endif

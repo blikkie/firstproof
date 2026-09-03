@@ -564,6 +564,8 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 public protocol LumenBoxDatabaseProtocol : AnyObject {
     
+    func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool) throws  -> ExportPackageReport
+    
     func getAllPhotos()  -> [PhotoRecord]
     
     func getPhoto(filePath: String)  -> PhotoRecord?
@@ -631,6 +633,16 @@ public static func `open`(dbPath: String)throws  -> LumenBoxDatabase {
 }
     
 
+    
+open func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool)throws  -> ExportPackageReport {
+    return try  FfiConverterTypeExportPackageReport.lift(try rustCallWithError(FfiConverterTypeLumenBoxError.lift) {
+    uniffi_lumenbox_core_fn_method_lumenboxdatabase_export_portable_package(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(sourcePhotoPaths),
+        FfiConverterString.lower(destinationFolder),
+        FfiConverterBool.lower(moveFiles),$0
+    )
+})
+}
     
 open func getAllPhotos() -> [PhotoRecord] {
     return try!  FfiConverterSequenceTypePhotoRecord.lift(try! rustCall() {
@@ -991,6 +1003,96 @@ public func FfiConverterTypeEditSettings_lift(_ buf: RustBuffer) throws -> EditS
 #endif
 public func FfiConverterTypeEditSettings_lower(_ value: EditSettings) -> RustBuffer {
     return FfiConverterTypeEditSettings.lower(value)
+}
+
+
+public struct ExportPackageReport {
+    public var totalRequested: UInt32
+    public var exportedCount: UInt32
+    public var errorCount: UInt32
+    public var destinationCatalogPath: String
+    public var errorMessages: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(totalRequested: UInt32, exportedCount: UInt32, errorCount: UInt32, destinationCatalogPath: String, errorMessages: [String]) {
+        self.totalRequested = totalRequested
+        self.exportedCount = exportedCount
+        self.errorCount = errorCount
+        self.destinationCatalogPath = destinationCatalogPath
+        self.errorMessages = errorMessages
+    }
+}
+
+
+
+extension ExportPackageReport: Equatable, Hashable {
+    public static func ==(lhs: ExportPackageReport, rhs: ExportPackageReport) -> Bool {
+        if lhs.totalRequested != rhs.totalRequested {
+            return false
+        }
+        if lhs.exportedCount != rhs.exportedCount {
+            return false
+        }
+        if lhs.errorCount != rhs.errorCount {
+            return false
+        }
+        if lhs.destinationCatalogPath != rhs.destinationCatalogPath {
+            return false
+        }
+        if lhs.errorMessages != rhs.errorMessages {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(totalRequested)
+        hasher.combine(exportedCount)
+        hasher.combine(errorCount)
+        hasher.combine(destinationCatalogPath)
+        hasher.combine(errorMessages)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExportPackageReport: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExportPackageReport {
+        return
+            try ExportPackageReport(
+                totalRequested: FfiConverterUInt32.read(from: &buf), 
+                exportedCount: FfiConverterUInt32.read(from: &buf), 
+                errorCount: FfiConverterUInt32.read(from: &buf), 
+                destinationCatalogPath: FfiConverterString.read(from: &buf), 
+                errorMessages: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExportPackageReport, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.totalRequested, into: &buf)
+        FfiConverterUInt32.write(value.exportedCount, into: &buf)
+        FfiConverterUInt32.write(value.errorCount, into: &buf)
+        FfiConverterString.write(value.destinationCatalogPath, into: &buf)
+        FfiConverterSequenceString.write(value.errorMessages, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExportPackageReport_lift(_ buf: RustBuffer) throws -> ExportPackageReport {
+    return try FfiConverterTypeExportPackageReport.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExportPackageReport_lower(_ value: ExportPackageReport) -> RustBuffer {
+    return FfiConverterTypeExportPackageReport.lower(value)
 }
 
 
@@ -2210,6 +2312,31 @@ fileprivate struct FfiConverterSequenceFloat: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypePhotoRecord: FfiConverterRustBuffer {
     typealias SwiftType = [PhotoRecord]
 
@@ -2279,6 +2406,15 @@ public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettin
         FfiConverterOptionTypeLensCorrectionCoefficientsRecord.lower(lensCoeffs),
         FfiConverterUInt32.lower(quality),
         FfiConverterOptionUInt32.lower(maxDimension),$0
+    )
+})
+}
+public func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool)throws  -> ExportPackageReport {
+    return try  FfiConverterTypeExportPackageReport.lift(try rustCallWithError(FfiConverterTypeLumenBoxError.lift) {
+    uniffi_lumenbox_core_fn_func_export_portable_package(
+        FfiConverterSequenceString.lower(sourcePhotoPaths),
+        FfiConverterString.lower(destinationFolder),
+        FfiConverterBool.lower(moveFiles),$0
     )
 })
 }
@@ -2365,6 +2501,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_lumenbox_core_checksum_func_export_photo() != 3529) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_lumenbox_core_checksum_func_export_portable_package() != 6715) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_lumenbox_core_checksum_func_extract_metadata() != 25472) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2387,6 +2526,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_write_xmp() != 36268) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_method_lumenboxdatabase_export_portable_package() != 25616) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_method_lumenboxdatabase_get_all_photos() != 15311) {

@@ -44,12 +44,29 @@ struct CanvasView: View {
                             .fontWeight(.semibold)
                     }
                     
-                    Text("(\(viewModel.filteredPhotos.count))")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if viewModel.selectedPhotoPaths.count > 1 {
+                        Text("(\(viewModel.filteredPhotos.count) • \(viewModel.selectedPhotoPaths.count) Selected)")
+                            .font(.caption)
+                            .foregroundColor(.accentColor)
+                            .fontWeight(.medium)
+                    } else {
+                        Text("(\(viewModel.filteredPhotos.count))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
                 Spacer()
+                
+                if viewModel.selectedPhotoPaths.count > 1 || viewModel.selectedPhoto != nil {
+                    Button(action: {
+                        viewModel.isExportPackageSheetPresented = true
+                    }) {
+                        Label(viewModel.selectedPhotoPaths.count > 1 ? "Package (\(viewModel.selectedPhotoPaths.count))" : "Package", systemImage: "shippingbox.fill")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Export Selection as Portable Library (Cmd+Shift+E)")
+                }
                 
                 if mode == .detail && viewModel.selectedPhoto != nil {
                     Button(action: {}) {
@@ -91,10 +108,41 @@ struct CanvasView: View {
                         ScrollView {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 12)], spacing: 12) {
                                 ForEach(viewModel.filteredPhotos, id: \.filePath) { photo in
-                                    GridThumbnailCell(photo: photo, isSelected: viewModel.selectedPhoto?.filePath == photo.filePath) {
-                                        viewModel.selectPhoto(photo)
+                                    let isSelected = viewModel.selectedPhotoPaths.contains(photo.filePath) || (viewModel.selectedPhotoPaths.isEmpty && viewModel.selectedPhoto?.filePath == photo.filePath)
+                                    GridThumbnailCell(
+                                        photo: photo,
+                                        isSelected: isSelected,
+                                        isMultiSelectActive: viewModel.selectedPhotoPaths.count > 1
+                                    ) {
+                                        handleCellClick(for: photo)
                                     }
                                     .id(photo.filePath)
+                                    .contextMenu {
+                                        Button("Export Selection as Portable Library...") {
+                                            if !viewModel.selectedPhotoPaths.contains(photo.filePath) {
+                                                viewModel.selectPhoto(photo)
+                                            }
+                                            viewModel.isExportPackageSheetPresented = true
+                                        }
+                                        Button("Export Rendered JPEG/TIFF...") {
+                                            viewModel.selectPhoto(photo)
+                                            viewModel.isExportSheetPresented = true
+                                        }
+                                        Divider()
+                                        Button("Mark as Pick (P)") {
+                                            viewModel.setStatus("pick")
+                                        }
+                                        Button("Mark as Reject (X)") {
+                                            viewModel.setStatus("reject")
+                                        }
+                                        Button("Clear Flag") {
+                                            viewModel.setStatus("none")
+                                        }
+                                        Divider()
+                                        Button("Reveal in Finder") {
+                                            NSWorkspace.shared.selectFile(photo.filePath, inFileViewerRootedAtPath: "")
+                                        }
+                                    }
                                 }
                             }
                             .padding(16)
@@ -145,36 +193,61 @@ struct CanvasView: View {
             }
         }
     }
+    
+    private func handleCellClick(for photo: PhotoRecord) {
+        let flags = NSEvent.modifierFlags
+        if flags.contains(.command) {
+            viewModel.togglePhotoSelection(photo)
+        } else if flags.contains(.shift) {
+            viewModel.selectPhotoRange(to: photo)
+        } else {
+            viewModel.selectPhoto(photo)
+        }
+    }
 }
 
 struct GridThumbnailCell: View, Equatable {
     let photo: PhotoRecord
     let isSelected: Bool
+    let isMultiSelectActive: Bool
     let action: () -> Void
     
     static func == (lhs: GridThumbnailCell, rhs: GridThumbnailCell) -> Bool {
         lhs.photo.filePath == rhs.photo.filePath &&
         lhs.photo.rating == rhs.photo.rating &&
         lhs.photo.status == rhs.photo.status &&
-        lhs.isSelected == rhs.isSelected
+        lhs.isSelected == rhs.isSelected &&
+        lhs.isMultiSelectActive == rhs.isMultiSelectActive
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ZStack(alignment: .bottomTrailing) {
-                AsyncThumbnailView(filePath: photo.filePath)
-                    .aspectRatio(3.0 / 2.0, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            ZStack(alignment: .topLeading) {
+                ZStack(alignment: .bottomTrailing) {
+                    AsyncThumbnailView(filePath: photo.filePath)
+                        .aspectRatio(3.0 / 2.0, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    
+                    if photo.status == "pick" {
+                        Image(systemName: "flag.fill")
+                            .foregroundColor(.green)
+                            .padding(6)
+                    } else if photo.status == "reject" {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.red)
+                            .padding(6)
+                    }
+                }
                 
-                if photo.status == "pick" {
-                    Image(systemName: "flag.fill")
-                        .foregroundColor(.green)
+                // Multi-select or selected badge
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.accentColor)
+                        .background(Circle().fill(Color.white).padding(2))
+                        .font(.system(size: 16))
                         .padding(6)
-                } else if photo.status == "reject" {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.red)
-                        .padding(6)
+                        .shadow(radius: 2)
                 }
             }
             
