@@ -26,8 +26,6 @@ struct MainView: View {
             }
         }
         .frame(minWidth: 900, minHeight: 600)
-        .navigationTitle(viewModel.selectedPhoto != nil ? URL(fileURLWithPath: viewModel.selectedPhoto!.filePath).lastPathComponent : "LumenBox")
-        .navigationSubtitle(viewModel.canvasMode == .detail ? (viewModel.selectedPhoto?.cameraModel ?? "Detail View") : "Grid View (\(viewModel.filteredPhotos.count) photos)")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: {
