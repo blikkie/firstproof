@@ -101,7 +101,10 @@ struct CanvasView: View {
                     GeometryReader { geo in
                         ScrollViewReader { proxy in
                             ScrollView {
-                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 12)], spacing: 12) {
+                                LazyVGrid(
+                                    columns: Array(repeating: GridItem(.flexible(minimum: 140, maximum: 240), spacing: 12), count: max(1, viewModel.gridColumnCount)),
+                                    spacing: 12
+                                ) {
                                     ForEach(viewModel.filteredPhotos, id: \.filePath) { photo in
                                         let isChecked = viewModel.selectedPhotoPaths.contains(photo.filePath)
                                         let isFocused = viewModel.selectedPhoto?.filePath == photo.filePath
@@ -211,7 +214,10 @@ struct CanvasView: View {
     }
     
     private func updateColumns(width: CGFloat) {
-        let cols = max(1, Int((width - 32) / 190))
+        let availableWidth = max(0, width - 32)
+        let itemWidth: CGFloat = 180
+        let spacing: CGFloat = 12
+        let cols = max(1, Int((availableWidth + spacing) / (itemWidth + spacing)))
         if viewModel.gridColumnCount != cols {
             viewModel.gridColumnCount = cols
         }
