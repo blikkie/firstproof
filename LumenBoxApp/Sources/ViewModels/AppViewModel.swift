@@ -311,22 +311,6 @@ public final class AppViewModel {
         self.canvasMode = .grid
     }
     
-    public func toggleSpaceSelection() {
-        guard let current = selectedPhoto else {
-            if let first = filteredPhotos.first {
-                selectPhoto(first)
-                selectedPhotoPaths.insert(first.filePath)
-            }
-            return
-        }
-        
-        if selectedPhotoPaths.contains(current.filePath) {
-            selectedPhotoPaths.remove(current.filePath)
-        } else {
-            selectedPhotoPaths.insert(current.filePath)
-        }
-    }
-    
     public func selectNextPhoto() {
         let list = filteredPhotos
         guard !list.isEmpty else { return }

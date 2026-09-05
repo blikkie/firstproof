@@ -117,11 +117,8 @@ struct MainView: View {
                     viewModel.clearSelection()
                     return nil
                 }
-            case 49: // Spacebar: toggle selection in Grid mode
-                if viewModel.canvasMode == .grid {
-                    viewModel.toggleSpaceSelection()
-                    return nil
-                }
+            case 49: // Spacebar: disabled (consumed to prevent unwanted view dismissals or control activations)
+                return nil
             case 123: // Left Arrow
                 if viewModel.canvasMode == .detail {
                     viewModel.selectPreviousPhoto()
