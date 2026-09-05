@@ -52,16 +52,6 @@ struct CanvasView: View {
                 
                 Spacer()
                 
-                if viewModel.selectedPhotoPaths.count > 1 || viewModel.selectedPhoto != nil {
-                    Button(action: {
-                        viewModel.isExportPackageSheetPresented = true
-                    }) {
-                        Label(viewModel.selectedPhotoPaths.count > 1 ? "Package (\(viewModel.selectedPhotoPaths.count))" : "Package", systemImage: "shippingbox.fill")
-                    }
-                    .buttonStyle(.bordered)
-                    .help("Export Selection as Portable Library (Cmd+Shift+E)")
-                }
-                
                 if viewModel.canvasMode == .detail && viewModel.selectedPhoto != nil {
                     Button(action: {}) {
                         Label("Hold for Original (\\)", systemImage: "eye.fill")

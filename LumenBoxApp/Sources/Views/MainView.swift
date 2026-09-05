@@ -28,25 +28,28 @@ struct MainView: View {
         .frame(minWidth: 900, minHeight: 600)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(action: {
-                    viewModel.isExportPackageSheetPresented = true
-                }) {
-                    Label("Package", systemImage: "shippingbox.fill")
-                }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
-                .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
-                .help("Export Selection as Portable Library (Cmd+Shift+E)")
-            }
-            
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: {
-                    viewModel.isExportSheetPresented = true
-                }) {
+                Menu {
+                    Button(action: {
+                        viewModel.isExportSheetPresented = true
+                    }) {
+                        Label("Export Rendered Photo...", systemImage: "photo")
+                    }
+                    .keyboardShortcut("e", modifiers: .command)
+                    .disabled(viewModel.selectedPhoto == nil)
+                    
+                    Button(action: {
+                        viewModel.isExportPackageSheetPresented = true
+                    }) {
+                        let count = viewModel.selectedPhotoPaths.count
+                        Label(count > 1 ? "Export as Portable Package (\(count))..." : "Export as Portable Package...", systemImage: "shippingbox.fill")
+                    }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
+                } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
-                .keyboardShortcut("e", modifiers: .command)
-                .disabled(viewModel.selectedPhoto == nil)
-                .help("Export Rendered Photo (Cmd+E)")
+                .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
+                .help("Export Rendered Photo (Cmd+E) or Portable Package (Cmd+Shift+E)")
             }
         }
         .sheet(isPresented: $viewModel.isExportSheetPresented) {
@@ -67,6 +70,16 @@ struct MainView: View {
         .background(
             Group {
                 Button("") { viewModel.selectAllPhotos() }.keyboardShortcut("a", modifiers: .command)
+                Button("") {
+                    if viewModel.selectedPhoto != nil {
+                        viewModel.isExportSheetPresented = true
+                    }
+                }.keyboardShortcut("e", modifiers: .command)
+                Button("") {
+                    if viewModel.selectedPhoto != nil || !viewModel.selectedPhotoPaths.isEmpty {
+                        viewModel.isExportPackageSheetPresented = true
+                    }
+                }.keyboardShortcut("e", modifiers: [.command, .shift])
                 WindowAccessor { window in
                     window.setFrameAutosaveName("LumenBoxMainWindow")
                 }

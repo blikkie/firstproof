@@ -90,18 +90,9 @@ struct InspectorView: View {
                     .font(.subheadline)
                     .foregroundColor(.accentColor)
                 
-                Text("Ratings and flags apply to all \(selectedCount) selected photos across SQLite and XMP sidecars.")
+                Text("Ratings and flags apply to all \(selectedCount) selected photos across SQLite and XMP sidecars. Use the Export button in the toolbar to package.")
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                
-                Button(action: {
-                    viewModel.isExportPackageSheetPresented = true
-                }) {
-                    Label("Export Package (\(selectedCount))...", systemImage: "shippingbox.fill")
-                        .font(.caption)
-                }
-                .buttonStyle(.borderedProminent)
-                .padding(.top, 4)
             }
             .padding(10)
             .background(Color.accentColor.opacity(0.08))
