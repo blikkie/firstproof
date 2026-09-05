@@ -88,23 +88,38 @@ struct SidebarView: View {
                     ScrollView {
                         VStack(spacing: 2) {
                             ForEach(viewModel.openedFolders, id: \.self) { folderPath in
+                                let isAvailable = FileManager.default.fileExists(atPath: folderPath)
                                 let isSelected = viewModel.currentScope == .session(folderPath: folderPath)
                                 let isExt = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
                                 
                                 HStack(spacing: 8) {
-                                    Image(systemName: isExt ? "externaldrive.fill" : "folder.fill")
-                                        .foregroundColor(isSelected ? .accentColor : (isExt ? .orange : .secondary))
-                                        .font(.caption)
+                                    if !isAvailable {
+                                        Image(systemName: "externaldrive.badge.xmark")
+                                            .foregroundColor(.orange)
+                                            .font(.caption)
+                                    } else {
+                                        Image(systemName: isExt ? "externaldrive.fill" : "folder.fill")
+                                            .foregroundColor(isSelected ? .accentColor : (isExt ? .orange : .secondary))
+                                            .font(.caption)
+                                    }
                                     
-                                    Text(URL(fileURLWithPath: folderPath).lastPathComponent)
-                                        .font(.subheadline)
-                                        .fontWeight(isSelected ? .semibold : .regular)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(URL(fileURLWithPath: folderPath).lastPathComponent)
+                                            .font(.subheadline)
+                                            .fontWeight(isSelected ? .semibold : .regular)
+                                            .foregroundColor(isAvailable ? .primary : .secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                        if !isAvailable {
+                                            Text("(Offline)")
+                                                .font(.system(size: 9))
+                                                .foregroundColor(.orange)
+                                        }
+                                    }
                                     
                                     Spacer()
                                     
-                                    if isSelected {
+                                    if isSelected && isAvailable {
                                         Text("\(viewModel.photos.count)")
                                             .font(.caption2)
                                             .foregroundColor(.secondary)

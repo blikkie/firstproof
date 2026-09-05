@@ -73,9 +73,8 @@ public final class AppViewModel {
     public init() {
         self.lensfun = LumenBoxLensfun()
         
-        // Restore multi-project opened folder list
-        let savedFolders = UserDefaults.standard.stringArray(forKey: "openedFolders") ?? []
-        self.openedFolders = savedFolders.filter { FileManager.default.fileExists(atPath: $0) }
+        // Restore multi-project opened folder list (preserves disconnected external drive sessions)
+        self.openedFolders = UserDefaults.standard.stringArray(forKey: "openedFolders") ?? []
         
         let lastPath = UserDefaults.standard.string(forKey: "lastOpenedDirectory")
         if let target = lastPath, FileManager.default.fileExists(atPath: target) {
@@ -83,8 +82,8 @@ public final class AppViewModel {
                 self.openedFolders.append(target)
             }
             selectScope(.session(folderPath: target))
-        } else if let firstFolder = self.openedFolders.first {
-            selectScope(.session(folderPath: firstFolder))
+        } else if let firstAvailable = self.openedFolders.first(where: { FileManager.default.fileExists(atPath: $0) }) {
+            selectScope(.session(folderPath: firstAvailable))
         } else {
             selectScope(.mainLibrary)
         }
@@ -115,11 +114,34 @@ public final class AppViewModel {
         UserDefaults.standard.set(openedFolders, forKey: "openedFolders")
         
         if case .session(let path) = currentScope, path == folderPath {
-            if let next = openedFolders.first {
+            if let next = openedFolders.first(where: { FileManager.default.fileExists(atPath: $0) }) {
                 selectScope(.session(folderPath: next))
             } else {
                 selectScope(.mainLibrary)
             }
+        }
+    }
+    
+    // MARK: - Last Active Image Tracking Per Library
+    public func saveLastActivePhoto(for scope: LibraryScope, path: String) {
+        let key = scopeKey(for: scope)
+        var map = UserDefaults.standard.dictionary(forKey: "lastActivePhotoPerScope") as? [String: String] ?? [:]
+        map[key] = path
+        UserDefaults.standard.set(map, forKey: "lastActivePhotoPerScope")
+    }
+    
+    public func lastActivePhoto(for scope: LibraryScope) -> String? {
+        let key = scopeKey(for: scope)
+        let map = UserDefaults.standard.dictionary(forKey: "lastActivePhotoPerScope") as? [String: String] ?? [:]
+        return map[key]
+    }
+    
+    private func scopeKey(for scope: LibraryScope) -> String {
+        switch scope {
+        case .mainLibrary:
+            return "main_library"
+        case .session(let folderPath):
+            return folderPath
         }
     }
     
@@ -130,6 +152,17 @@ public final class AppViewModel {
         }
         self.currentFolderPath = folderPath
         self.isExternalVolume = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
+        
+        // Graceful handling of disconnected/unmounted external drives:
+        guard FileManager.default.fileExists(atPath: folderPath) else {
+            self.photos = []
+            self.selectedPhoto = nil
+            self.previewImage = nil
+            self.isScanning = false
+            self.scanningStatusMessage = "Storage device is not mounted"
+            return
+        }
+        
         self.isScanning = true
         self.scanningStatusMessage = "Scanning \(isMain ? "Main Library" : URL(fileURLWithPath: folderPath).lastPathComponent)..."
         
@@ -155,8 +188,13 @@ public final class AppViewModel {
                 if !cachedPhotos.isEmpty {
                     DispatchQueue.main.async {
                         self.photos = cachedPhotos
-                        if self.selectedPhoto == nil, let first = cachedPhotos.first {
-                            self.selectPhoto(first)
+                        if self.selectedPhoto == nil {
+                            if let savedPath = self.lastActivePhoto(for: self.currentScope),
+                               let saved = cachedPhotos.first(where: { $0.filePath == savedPath }) {
+                                self.selectPhoto(saved)
+                            } else if let first = cachedPhotos.first {
+                                self.selectPhoto(first)
+                            }
                         }
                     }
                 }
@@ -173,8 +211,13 @@ public final class AppViewModel {
                     self.photos = finalPhotos
                     self.isScanning = false
                     self.scanningStatusMessage = nil
-                    if self.selectedPhoto == nil, let first = finalPhotos.first {
-                        self.selectPhoto(first)
+                    if self.selectedPhoto == nil || !finalPhotos.contains(where: { $0.filePath == self.selectedPhoto?.filePath }) {
+                        if let savedPath = self.lastActivePhoto(for: self.currentScope),
+                           let saved = finalPhotos.first(where: { $0.filePath == savedPath }) {
+                            self.selectPhoto(saved)
+                        } else if let first = finalPhotos.first {
+                            self.selectPhoto(first)
+                        }
                     }
                 }
             } catch {
@@ -191,6 +234,7 @@ public final class AppViewModel {
     public func selectPhoto(_ photo: PhotoRecord) {
         self.selectedPhoto = photo
         self.selectedPhotoPaths = [photo.filePath]
+        saveLastActivePhoto(for: currentScope, path: photo.filePath)
         loadPreview(for: photo)
     }
     
@@ -315,6 +359,7 @@ public final class AppViewModel {
         if selectedPhotoPaths.isEmpty {
             self.selectedPhotoPaths = [target.filePath]
         }
+        saveLastActivePhoto(for: currentScope, path: target.filePath)
         loadPreview(for: target)
     }
     

@@ -67,6 +67,9 @@ struct MainView: View {
         .background(
             Group {
                 Button("") { viewModel.selectAllPhotos() }.keyboardShortcut("a", modifiers: .command)
+                WindowAccessor { window in
+                    window.setFrameAutosaveName("LumenBoxMainWindow")
+                }
             }
             .opacity(0)
             .allowsHitTesting(false)
@@ -174,4 +177,20 @@ struct MainView: View {
             return event
         }
     }
+}
+
+struct WindowAccessor: NSViewRepresentable {
+    let callback: (NSWindow) -> Void
+    
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                callback(window)
+            }
+        }
+        return view
+    }
+    
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
