@@ -41,14 +41,13 @@ public struct MetalCanvasView: NSViewRepresentable {
     public func updateNSView(_ nsView: MTKView, context: Context) {
         guard let renderer = context.coordinator.renderer else { return }
         
-        // 1. Update Texture if photo selection changed
-        if context.coordinator.lastPhotoPath != viewModel.selectedPhoto?.filePath,
-           let image = viewModel.previewImage {
+        // 1. Update Texture if photo selection or preview image changed
+        let photoChanged = context.coordinator.lastPhotoPath != viewModel.selectedPhoto?.filePath
+        let imageChanged = context.coordinator.lastPreviewImage !== viewModel.previewImage
+        
+        if (photoChanged || imageChanged), let image = viewModel.previewImage {
             renderer.updateTexture(with: image)
             context.coordinator.lastPhotoPath = viewModel.selectedPhoto?.filePath
-        } else if context.coordinator.lastPreviewImage !== viewModel.previewImage,
-                  let image = viewModel.previewImage {
-            renderer.updateTexture(with: image)
             context.coordinator.lastPreviewImage = image
         }
         

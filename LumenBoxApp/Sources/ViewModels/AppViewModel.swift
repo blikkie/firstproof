@@ -47,8 +47,16 @@ public final class AppViewModel {
     public var selectedPhoto: PhotoRecord? = nil
     public var selectedPhotoPaths: Set<String> = []
     public var previewImage: NSImage? = nil
+    public var isDemosaicing: Bool = false
+    @ObservationIgnored private var activeDecodeToken: UUID = UUID()
     public var isExportSheetPresented: Bool = false
     public var isExportPackageSheetPresented: Bool = false
+    
+    public var selectedPhotoIsRaw: Bool {
+        guard let path = selectedPhoto?.filePath else { return false }
+        let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
+        return ["cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "raf", "pef", "raw"].contains(ext)
+    }
     
     // MARK: - Filters
     public var ratingFilter: Int? = nil // nil = All, 1..5
@@ -356,7 +364,7 @@ public final class AppViewModel {
     private func navigateToPhoto(at index: Int, in list: [PhotoRecord]) {
         let target = list[index]
         self.selectedPhoto = target
-        if selectedPhotoPaths.isEmpty {
+        if selectedPhotoPaths.count <= 1 {
             self.selectedPhotoPaths = [target.filePath]
         }
         saveLastActivePhoto(for: currentScope, path: target.filePath)
@@ -380,12 +388,51 @@ public final class AppViewModel {
             self.lensCoefficients = nil
         }
         
-        // Decode authentic 14-bit RAW sensor demosaic in background
+        let token = UUID()
+        self.activeDecodeToken = token
+        self.isDemosaicing = true
+        
+        // Fast switch: immediately present the cached thumbnail (or nil) so the previous photo never lingers
+        if let cached = ThumbnailCache.shared.image(for: photo.filePath) {
+            self.previewImage = cached
+        } else {
+            self.previewImage = nil
+        }
+        
+        // Decode in background: 1) Fast JPEG preview, 2) Authentic 14-bit RAW demosaic
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self = self else { return }
+            guard self.activeDecodeToken == token else { return }
+            
+            // 1. Fast Embedded Preview JPEG (<15ms)
+            if let previewData = extractPreview(path: photo.filePath) {
+                if let src = CGImageSourceCreateWithData(previewData as CFData, nil) {
+                    let options: [CFString: Any] = [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceCreateThumbnailWithTransform: true,
+                        kCGImageSourceThumbnailMaxPixelSize: 2560,
+                        kCGImageSourceShouldCacheImmediately: true
+                    ]
+                    if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
+                        let jpegPreview = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
+                        if ThumbnailCache.shared.image(for: photo.filePath) == nil {
+                            ThumbnailCache.shared.setImage(jpegPreview, for: photo.filePath)
+                        }
+                        DispatchQueue.main.async {
+                            if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
+                                self.previewImage = jpegPreview
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Check cancellation token before expensive 14-bit Bayer demosaicing
+            guard self.activeDecodeToken == token else { return }
+            
             var image: NSImage? = nil
             
-            // 1. Authentic Rust Core 14-bit RAW demosaicing & calibrated sRGB pipeline
+            // 2. Authentic Rust Core 14-bit RAW demosaicing & calibrated sRGB pipeline
             if let raw = decodeRawPreview(path: photo.filePath, maxDimension: 2560) {
                 let width = Int(raw.width)
                 let height = Int(raw.height)
@@ -408,7 +455,7 @@ public final class AppViewModel {
                 }
             }
             
-            // 2. Fallback for non-RAW master images (PNG, TIFF, JPEG)
+            // 3. Fallback for non-RAW master images (PNG, TIFF, JPEG)
             if image == nil {
                 let url = URL(fileURLWithPath: photo.filePath) as CFURL
                 if let src = CGImageSourceCreateWithURL(url, nil) {
@@ -424,8 +471,11 @@ public final class AppViewModel {
             }
             
             DispatchQueue.main.async {
-                if self.selectedPhoto?.filePath == photo.filePath {
-                    self.previewImage = image
+                if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
+                    if let finalImage = image {
+                        self.previewImage = finalImage
+                    }
+                    self.isDemosaicing = false
                 }
             }
         }

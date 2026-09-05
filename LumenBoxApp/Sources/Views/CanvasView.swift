@@ -201,8 +201,37 @@ struct CanvasView: View {
                                         }
                                         .padding(.top, 32) : nil
                                     )
+                                    .overlay(alignment: .bottomTrailing) {
+                                        if viewModel.isDemosaicing {
+                                            HStack(spacing: 8) {
+                                                ProgressView()
+                                                    .controlSize(.small)
+                                                Text(viewModel.selectedPhotoIsRaw ? "Developing 14-bit RAW..." : "Loading...")
+                                                    .font(.system(size: 11, weight: .semibold))
+                                                    .foregroundColor(.white)
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 6)
+                                            .background(.ultraThinMaterial)
+                                            .background(Color.black.opacity(0.65))
+                                            .cornerRadius(14)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 14)
+                                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                            )
+                                            .shadow(color: .black.opacity(0.4), radius: 6, x: 0, y: 2)
+                                            .padding(32)
+                                            .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+                                        }
+                                    }
                             } else {
-                                ProgressView("Loading RAW Preview...")
+                                VStack(spacing: 12) {
+                                    ProgressView()
+                                        .controlSize(.regular)
+                                    Text(viewModel.selectedPhotoIsRaw ? "Developing 14-bit RAW..." : "Loading Preview...")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
