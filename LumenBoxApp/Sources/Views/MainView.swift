@@ -109,16 +109,24 @@ struct MainView: View {
                     viewModel.enterDetailMode()
                     return nil
                 }
-            case 53: // Escape: return to Grid mode or clear selection
+            case 53: // Escape: return to Grid mode or exit bulk selection mode
                 if viewModel.canvasMode == .detail {
                     viewModel.enterGridMode()
+                    return nil
+                } else if viewModel.isBulkSelectionMode {
+                    viewModel.exitBulkSelectionMode()
                     return nil
                 } else if !viewModel.selectedPhotoPaths.isEmpty {
                     viewModel.clearSelection()
                     return nil
                 }
-            case 49: // Spacebar: disabled (consumed to prevent unwanted view dismissals or control activations)
-                return nil
+            case 49: // Spacebar: toggle bulk selection in Grid mode, inert in Detail mode
+                if viewModel.canvasMode == .grid {
+                    viewModel.handleSpacebarInGrid()
+                    return nil
+                } else {
+                    return nil
+                }
             case 123: // Left Arrow
                 if viewModel.canvasMode == .detail {
                     viewModel.selectPreviousPhoto()

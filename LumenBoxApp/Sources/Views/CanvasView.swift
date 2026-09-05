@@ -97,19 +97,22 @@ struct CanvasView: View {
                                 ) {
                                     ForEach(viewModel.filteredPhotos, id: \.filePath) { photo in
                                         let isChecked = viewModel.selectedPhotoPaths.contains(photo.filePath)
-                                        let isFocused = viewModel.selectedPhoto?.filePath == photo.filePath
-                                        let isSelected = isChecked || (viewModel.selectedPhotoPaths.isEmpty && isFocused)
+                                        let isActive = viewModel.selectedPhoto?.filePath == photo.filePath
+                                        let isSelected = viewModel.isBulkSelectionMode ? isChecked : (isActive || isChecked)
                                         
                                         GridThumbnailCell(
                                             photo: photo,
                                             isSelected: isSelected,
-                                            isFocused: isFocused,
-                                            isMultiSelectActive: viewModel.selectedPhotoPaths.count > 1,
+                                            isActive: isActive,
+                                            isBulkMode: viewModel.isBulkSelectionMode,
                                             action: {
                                                 handleCellClick(for: photo)
                                             },
+                                            toggleAction: {
+                                                viewModel.toggleBulkSelection(for: photo)
+                                            },
                                             doubleClickAction: {
-                                                viewModel.selectPhoto(photo)
+                                                viewModel.setActivePhoto(photo)
                                                 viewModel.enterDetailMode()
                                             }
                                         )
@@ -148,17 +151,31 @@ struct CanvasView: View {
                             .opacity(viewModel.canvasMode == .grid ? 1 : 0)
                             .allowsHitTesting(viewModel.canvasMode == .grid)
                             .onChange(of: viewModel.canvasMode) { _, newMode in
-                                if newMode == .grid, let selected = viewModel.selectedPhoto {
-                                    proxy.scrollTo(selected.filePath, anchor: .center)
+                                if newMode == .grid {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                        scrollToFocused(proxy: proxy, animated: true)
+                                    }
                                 }
                             }
                             .onChange(of: viewModel.selectedPhoto?.filePath) { _, newPath in
-                                if let target = newPath {
-                                    proxy.scrollTo(target, anchor: .center)
+                                if viewModel.canvasMode == .grid && newPath != nil {
+                                    scrollToFocused(proxy: proxy, animated: true)
+                                }
+                            }
+                            .onChange(of: viewModel.photos.count) { _, count in
+                                if count > 0 && viewModel.canvasMode == .grid {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        scrollToFocused(proxy: proxy, animated: false)
+                                    }
                                 }
                             }
                             .onAppear {
                                 updateColumns(width: geo.size.width)
+                                if viewModel.canvasMode == .grid {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                        scrollToFocused(proxy: proxy, animated: false)
+                                    }
+                                }
                             }
                             .onChange(of: geo.size.width) { _, newWidth in
                                 updateColumns(width: newWidth)
@@ -227,7 +244,61 @@ struct CanvasView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .transition(.opacity)
                     }
+                    
+                    // 3. Floating Bulk Selection Status HUD
+                    if viewModel.isBulkSelectionMode && viewModel.canvasMode == .grid {
+                        VStack {
+                            Spacer()
+                            HStack(spacing: 10) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.accentColor)
+                                    .font(.system(size: 13))
+                                Text("\(viewModel.selectedPhotoPaths.count) Selected")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.white)
+                                
+                                Divider()
+                                    .frame(height: 12)
+                                
+                                Text("Space: toggle • Return: detail • Esc: exit")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.white.opacity(0.7))
+                                
+                                Button("Done") {
+                                    viewModel.exitBulkSelectionMode()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.mini)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(.ultraThinMaterial)
+                            .background(Color.black.opacity(0.65))
+                            .cornerRadius(20)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                            .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 2)
+                            .padding(.bottom, 20)
+                            .transition(.opacity.animation(.easeInOut(duration: 0.15)))
+                        }
+                        .allowsHitTesting(true)
+                    }
                 }
+            }
+        }
+    }
+    
+    private func scrollToFocused(proxy: ScrollViewProxy, animated: Bool = true) {
+        guard let target = viewModel.selectedPhoto?.filePath else { return }
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(target, anchor: .center)
+                }
+            } else {
+                proxy.scrollTo(target, anchor: .center)
             }
         }
     }
@@ -249,7 +320,11 @@ struct CanvasView: View {
         } else if flags.contains(.shift) {
             viewModel.selectPhotoRange(to: photo)
         } else {
-            viewModel.selectPhoto(photo)
+            if viewModel.isBulkSelectionMode {
+                viewModel.setActivePhoto(photo)
+            } else {
+                viewModel.selectPhoto(photo)
+            }
         }
     }
 }
@@ -257,9 +332,10 @@ struct CanvasView: View {
 struct GridThumbnailCell: View, Equatable {
     let photo: PhotoRecord
     let isSelected: Bool
-    let isFocused: Bool
-    let isMultiSelectActive: Bool
+    let isActive: Bool
+    let isBulkMode: Bool
     let action: () -> Void
+    let toggleAction: () -> Void
     let doubleClickAction: () -> Void
     
     static func == (lhs: GridThumbnailCell, rhs: GridThumbnailCell) -> Bool {
@@ -267,8 +343,8 @@ struct GridThumbnailCell: View, Equatable {
         lhs.photo.rating == rhs.photo.rating &&
         lhs.photo.status == rhs.photo.status &&
         lhs.isSelected == rhs.isSelected &&
-        lhs.isFocused == rhs.isFocused &&
-        lhs.isMultiSelectActive == rhs.isMultiSelectActive
+        lhs.isActive == rhs.isActive &&
+        lhs.isBulkMode == rhs.isBulkMode
     }
     
     var body: some View {
@@ -291,7 +367,7 @@ struct GridThumbnailCell: View, Equatable {
                     }
                 }
                 
-                // Multi-select or selected badge
+                // Selection indicator badge
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.accentColor)
@@ -299,6 +375,18 @@ struct GridThumbnailCell: View, Equatable {
                         .font(.system(size: 16))
                         .padding(6)
                         .shadow(radius: 2)
+                        .onTapGesture {
+                            toggleAction()
+                        }
+                } else if isBulkMode {
+                    Image(systemName: "circle")
+                        .foregroundColor(.white.opacity(0.7))
+                        .background(Circle().fill(Color.black.opacity(0.35)).padding(1))
+                        .font(.system(size: 16))
+                        .padding(6)
+                        .onTapGesture {
+                            toggleAction()
+                        }
                 }
             }
             
@@ -317,11 +405,14 @@ struct GridThumbnailCell: View, Equatable {
             }
         }
         .padding(8)
-        .background(isSelected ? Color.accentColor.opacity(0.25) : Color(NSColor.controlBackgroundColor))
+        .background(isSelected ? Color.accentColor.opacity(0.22) : Color(NSColor.controlBackgroundColor))
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isFocused ? Color.accentColor : (isSelected ? Color.accentColor.opacity(0.6) : Color.clear), lineWidth: isFocused ? 2.5 : 1.5)
+                .stroke(
+                    isActive ? (isBulkMode && !isSelected ? Color.white.opacity(0.9) : Color.accentColor) : (isSelected ? Color.accentColor.opacity(0.6) : Color.clear),
+                    lineWidth: isActive ? 2.5 : 1.5
+                )
         )
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {

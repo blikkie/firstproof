@@ -46,6 +46,7 @@ public final class AppViewModel {
     public var photos: [PhotoRecord] = []
     public var selectedPhoto: PhotoRecord? = nil
     public var selectedPhotoPaths: Set<String> = []
+    public var isBulkSelectionMode: Bool = false
     public var previewImage: NSImage? = nil
     public var isDemosaicing: Bool = false
     @ObservationIgnored private var activeDecodeToken: UUID = UUID()
@@ -241,7 +242,62 @@ public final class AppViewModel {
     // MARK: - Photo Selection & Preview
     public func selectPhoto(_ photo: PhotoRecord) {
         self.selectedPhoto = photo
-        self.selectedPhotoPaths = [photo.filePath]
+        if !isBulkSelectionMode {
+            self.selectedPhotoPaths = [photo.filePath]
+        }
+        saveLastActivePhoto(for: currentScope, path: photo.filePath)
+        loadPreview(for: photo)
+    }
+    
+    public func setActivePhoto(_ photo: PhotoRecord) {
+        self.selectedPhoto = photo
+        saveLastActivePhoto(for: currentScope, path: photo.filePath)
+        loadPreview(for: photo)
+    }
+    
+    public func handleSpacebarInGrid() {
+        guard !filteredPhotos.isEmpty else { return }
+        
+        if !isBulkSelectionMode {
+            // Disassociate active cursor from bulk selection set
+            self.isBulkSelectionMode = true
+            if let current = selectedPhoto {
+                self.selectedPhotoPaths = [current.filePath]
+            } else if let first = filteredPhotos.first {
+                self.selectedPhoto = first
+                self.selectedPhotoPaths = [first.filePath]
+                loadPreview(for: first)
+            }
+        } else {
+            // Toggle active photo in/out of bulk selection set
+            guard let current = selectedPhoto else { return }
+            if selectedPhotoPaths.contains(current.filePath) {
+                selectedPhotoPaths.remove(current.filePath)
+            } else {
+                selectedPhotoPaths.insert(current.filePath)
+            }
+        }
+    }
+    
+    public func exitBulkSelectionMode() {
+        self.isBulkSelectionMode = false
+        if let current = selectedPhoto {
+            self.selectedPhotoPaths = [current.filePath]
+        } else if let firstSelected = filteredPhotos.first(where: { selectedPhotoPaths.contains($0.filePath) }) {
+            self.selectedPhoto = firstSelected
+            self.selectedPhotoPaths = [firstSelected.filePath]
+            loadPreview(for: firstSelected)
+        }
+    }
+    
+    public func toggleBulkSelection(for photo: PhotoRecord) {
+        self.isBulkSelectionMode = true
+        self.selectedPhoto = photo
+        if selectedPhotoPaths.contains(photo.filePath) {
+            selectedPhotoPaths.remove(photo.filePath)
+        } else {
+            selectedPhotoPaths.insert(photo.filePath)
+        }
         saveLastActivePhoto(for: currentScope, path: photo.filePath)
         loadPreview(for: photo)
     }
@@ -295,7 +351,12 @@ public final class AppViewModel {
     }
     
     public func clearSelection() {
-        self.selectedPhotoPaths.removeAll()
+        self.isBulkSelectionMode = false
+        if let current = selectedPhoto {
+            self.selectedPhotoPaths = [current.filePath]
+        } else {
+            self.selectedPhotoPaths.removeAll()
+        }
     }
     
     public var gridColumnCount: Int = 4
@@ -348,7 +409,7 @@ public final class AppViewModel {
     private func navigateToPhoto(at index: Int, in list: [PhotoRecord]) {
         let target = list[index]
         self.selectedPhoto = target
-        if selectedPhotoPaths.count <= 1 {
+        if !isBulkSelectionMode {
             self.selectedPhotoPaths = [target.filePath]
         }
         saveLastActivePhoto(for: currentScope, path: target.filePath)
