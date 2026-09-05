@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{BufReader, Read};
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use serde::Deserialize;
 

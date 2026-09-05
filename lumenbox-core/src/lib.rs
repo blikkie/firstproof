@@ -3,6 +3,7 @@ uniffi::setup_scaffolding!("lumenbox_core");
 use std::path::Path;
 
 pub mod raw;
+pub mod raw_decoder;
 pub mod xmp;
 pub mod takeout;
 pub mod db;

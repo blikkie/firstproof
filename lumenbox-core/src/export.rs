@@ -27,91 +27,61 @@ impl DemosaicedImage {
 pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> {
     let path = path.as_ref();
     
-    // 1. Try decoding with rawloader (Bayer RAW sensors: CR2, NEF, ARW, DNG, RW2)
-    if let Ok(raw) = rawloader::decode_file(path) {
-        if let rawloader::RawImageData::Integer(ref cfa) = raw.data {
-            let crop_top = (raw.crops[0] as usize) & !1;
-            let crop_right = (raw.crops[1] as usize) & !1;
-            let crop_bottom = (raw.crops[2] as usize) & !1;
-            let crop_left = (raw.crops[3] as usize) & !1;
+    // 1. Try decoding with library-agnostic RawDecoder (backed by RawlerDecoder)
+    let decoder = crate::raw_decoder::RawlerDecoder;
+    if let Ok(frame) = crate::raw_decoder::RawDecoder::decode(&decoder, path) {
+        let active_w = frame.active_width;
+        let active_h = frame.active_height;
+        let mut demosaiced = DemosaicedImage::new(active_w, active_h);
+        
+        let (wb_r, wb_b) = frame.as_shot_wb();
+        
+        // Dynamic CFA Bayer Demosaicing (Supports RGGB, BGGR, GBRG, GRBG)
+        for y in 0..active_h {
+            let full_y = (frame.active_y + y).min(frame.full_height - 2).max(1);
             
-            let active_w = (raw.width.saturating_sub(crop_left + crop_right)).max(2) & !1;
-            let active_h = (raw.height.saturating_sub(crop_top + crop_bottom)).max(2) & !1;
-            
-            let full_w = raw.width;
-            let mut demosaiced = DemosaicedImage::new(active_w, active_h);
-            
-            // Sensor black and white level normalization
-            let black_level = (raw.blacklevels[0] as f32).max(0.0);
-            let white_level = (raw.whitelevels[0] as f32).max(black_level + 1.0);
-            let scale = 1.0 / (white_level - black_level);
-            
-            let p = |x: usize, y: usize| -> f32 {
-                let idx = y * full_w + x;
-                ((cfa[idx] as f32 - black_level) * scale).clamp(0.0, 1.0)
-            };
-            
-            // Camera As-Shot White Balance Multipliers
-            let wb_r = if raw.wb_coeffs[0] > 0.0 && raw.wb_coeffs[1] > 0.0 {
-                raw.wb_coeffs[0] / raw.wb_coeffs[1]
-            } else {
-                2.0
-            };
-            let wb_b = if raw.wb_coeffs[2] > 0.0 && raw.wb_coeffs[1] > 0.0 {
-                raw.wb_coeffs[2] / raw.wb_coeffs[1]
-            } else {
-                1.5
-            };
-            
-            // Dynamic CFA Bayer Demosaicing (Supports RGGB, BGGR, GBRG, GRBG)
-            for y in 0..active_h {
-                let full_y = (crop_top + y).min(raw.height - 2).max(1);
+            for x in 0..active_w {
+                let full_x = (frame.active_x + x).min(frame.full_width - 2).max(1);
                 
-                for x in 0..active_w {
-                    let full_x = (crop_left + x).min(raw.width - 2).max(1);
-                    
-                    let color = raw.cfa.color_at(full_y, full_x);
-                    
-                    let r: f32;
-                    let g: f32;
-                    let b: f32;
-                    
-                    if color == 0 {
-                        // Red photosite
-                        r = p(full_x, full_y);
-                        g = 0.25 * (p(full_x - 1, full_y) + p(full_x + 1, full_y) + p(full_x, full_y - 1) + p(full_x, full_y + 1));
-                        b = 0.25 * (p(full_x - 1, full_y - 1) + p(full_x + 1, full_y - 1) + p(full_x - 1, full_y + 1) + p(full_x + 1, full_y + 1));
-                    } else if color == 2 {
-                        // Blue photosite
-                        b = p(full_x, full_y);
-                        g = 0.25 * (p(full_x - 1, full_y) + p(full_x + 1, full_y) + p(full_x, full_y - 1) + p(full_x, full_y + 1));
-                        r = 0.25 * (p(full_x - 1, full_y - 1) + p(full_x + 1, full_y - 1) + p(full_x - 1, full_y + 1) + p(full_x + 1, full_y + 1));
+                let color = frame.color_at(full_y, full_x);
+                
+                let r: f32;
+                let g: f32;
+                let b: f32;
+                
+                if color == crate::raw_decoder::CFA_COLOR_RED {
+                    // Red photosite
+                    r = frame.sample_normalized(full_x, full_y);
+                    g = 0.25 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y) + frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
+                    b = 0.25 * (frame.sample_normalized(full_x - 1, full_y - 1) + frame.sample_normalized(full_x + 1, full_y - 1) + frame.sample_normalized(full_x - 1, full_y + 1) + frame.sample_normalized(full_x + 1, full_y + 1));
+                } else if color == crate::raw_decoder::CFA_COLOR_BLUE {
+                    // Blue photosite
+                    b = frame.sample_normalized(full_x, full_y);
+                    g = 0.25 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y) + frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
+                    r = 0.25 * (frame.sample_normalized(full_x - 1, full_y - 1) + frame.sample_normalized(full_x + 1, full_y - 1) + frame.sample_normalized(full_x - 1, full_y + 1) + frame.sample_normalized(full_x + 1, full_y + 1));
+                } else {
+                    // Green photosite
+                    g = frame.sample_normalized(full_x, full_y);
+                    // Check if Red is horizontal or vertical neighbor
+                    if frame.color_at(full_y, full_x - 1) == crate::raw_decoder::CFA_COLOR_RED || frame.color_at(full_y, full_x + 1) == crate::raw_decoder::CFA_COLOR_RED {
+                        r = 0.5 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y));
+                        b = 0.5 * (frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
                     } else {
-                        // Green photosite
-                        g = p(full_x, full_y);
-                        // Check if Red is horizontal or vertical neighbor
-                        if raw.cfa.color_at(full_y, full_x - 1) == 0 || raw.cfa.color_at(full_y, full_x + 1) == 0 {
-                            r = 0.5 * (p(full_x - 1, full_y) + p(full_x + 1, full_y));
-                            b = 0.5 * (p(full_x, full_y - 1) + p(full_x, full_y + 1));
-                        } else {
-                            r = 0.5 * (p(full_x, full_y - 1) + p(full_x, full_y + 1));
-                            b = 0.5 * (p(full_x - 1, full_y) + p(full_x + 1, full_y));
-                        }
+                        r = 0.5 * (frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
+                        b = 0.5 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y));
                     }
-                    
-                    let out_idx = (y * active_w + x) * 3;
-                    
-                    // Standard neutral daylight white balance baseline (zero color distortion)
-                    demosaiced.data[out_idx] = (r * wb_r).clamp(0.0, 1.0);
-                    demosaiced.data[out_idx + 1] = g.clamp(0.0, 1.0);
-                    demosaiced.data[out_idx + 2] = (b * wb_b).clamp(0.0, 1.0);
                 }
+                
+                let out_idx = (y * active_w + x) * 3;
+                
+                // Standard neutral daylight white balance baseline (zero color distortion)
+                demosaiced.data[out_idx] = (r * wb_r).clamp(0.0, 1.0);
+                demosaiced.data[out_idx + 1] = g.clamp(0.0, 1.0);
+                demosaiced.data[out_idx + 2] = (b * wb_b).clamp(0.0, 1.0);
             }
-            
-            return Ok(demosaiced);
-        } else {
-            return Err("Unsupported RAW data format: sensor did not contain 16-bit integer CFA data".to_string());
         }
+        
+        return Ok(demosaiced);
     }
     
     // 2. Standard master image decode (JPEG, PNG, TIFF master files)

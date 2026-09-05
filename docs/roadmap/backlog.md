@@ -111,27 +111,94 @@ Google Pixel phones (Pixel 3 through Pixel 9 Pro) capture computational RAWs in 
 
 ---
 
-## 5. Digital Camera Profiles (DCP), Camera Matching & 3D LUT Engine (P1)
+## 5. Unified Color Science & Camera Profiles Pipeline (P1)
 
-Photographers often want the option to toggle between a pure neutral scientific baseline and the camera manufacturer's signature color science (e.g., Canon Picture Styles, Sony Creative Looks, Fujifilm Film Simulations):
+Photographers demand both **scientific fidelity** (emulating camera manufacturer color profiles like Canon Picture Styles, Sony Creative Looks, and Nikon Picture Controls) and **analog filmic rendering** (natural highlight roll-off without digital clipping artifacts).
 
-*   **Adobe DCP (Digital Camera Profile) Architecture**:
-    *   **Dual-Illuminant Matrix Interpolation**:
-        DCP files store two separate color matrices calibrated under Standard Illuminant A ($2856\text{K}$ tungsten) and CIE Standard Illuminant D65 ($6504\text{K}$ daylight). During demosaicing, interpolate between both matrices based on the active Planckian white balance temperature ($1/T$).
-    *   **HueSatMap (3D Hue-Saturation-Value Tables)**:
-        Subtle 3D color remapping tables that selectively enhance memory colors (sky cyan-to-deep-blue shifts, warm portrait skin tone hue preservation, and foliage greens).
-    *   **Camera-Matching Tone Curves**:
-        Stores the manufacturer's exact non-linear S-curve to match the in-camera JPEG rendering with 100% fidelity.
-*   **3D LUT Acceleration in Metal**:
-    *   Parse standard `.cube` and `.dcp` 3D look-up tables (e.g. $33\times 33\times 33$ or $65\times 65\times 65$ lattices).
-    *   Upload to Metal as a 3D Texture (`MTLTextureType3D` with hardware trilinear filtering).
-    *   Sample in `Shaders.metal` with single-cycle trilinear texture sampling for real-time 120 FPS grading.
-*   **Inspector Profile Selector**:
-    *   Provide a dropdown in the Inspector under *Color & Tone*:
-        *   **"LumenBox Neutral"** (Linear filmic with maximum grading headroom)
-        *   **"Camera Standard"** (Matches camera JPEG rendering)
-        *   **"Camera Portrait / Landscape / Monochrome"**
-        *   **"Custom 3D LUT (.cube)..."** (Cinema & artistic film emulation)
+To prevent tone-curve collisions (double tone-mapping) and dynamic range clipping, we decouple camera sensor calibration from display-rendering transforms into a modular, **5-stage scene-referred color pipeline**:
+
+```
+                          [ RAW Sensor Linear ]
+                                    │
+                                    ▼
+       [ 1. Dual-Illuminant DCP Calibration Matrix ] (Illuminant A / D65)
+                                    │
+                                    ▼
+       [ 2. Wide-Gamut Linear Working Space ] (Linear Rec.2020 / ACEScg)
+                                    │
+                                    ▼
+         [ 3. Scene-Referred Adjustments ] (Exposure EV, WB, Contrast)
+                                    │
+                  ┌─────────────────┴─────────────────┐
+                  ▼                                   ▼
+      [ Mode A: AgX Filmic (Default) ]    [ Mode B: Camera Matching ]
+      • AgX Inset Matrix                  • DCP HueSatMap
+      • Highlight Filmic Desaturation     • DCP Manufacturer Tone Curve
+      • AgX Sigmoid Curve (Scene -> SDR)  • Camera Matrix to Display
+                  │                                   │
+                  └─────────────────┬─────────────────┘
+                                    │
+                                    ▼
+            [ 4. Optional Post-Tone 3D LUT (.cube) ] (Display-Referred Creative Looks)
+                                    │
+                                    ▼
+       [ 5. Display / EDR Target ] (Display P3, sRGB, or Ultra HDR Gain Map)
+```
+
+---
+
+### Story 5.1: Linear Wide-Gamut Working Space & Pipeline Foundation
+*   **The Foundation**: Prior to applying filmic tone mapping or DCP profiles, sensor data must transition through a standardized, wide-gamut scene-referred working space rather than ad-hoc sRGB clipping.
+*   **Implementation**:
+    *   Standardize on **Linear Rec.2020** (or ACEScg) with a D65 white point in both `lumenbox-core` (Rust) and `Shaders.metal` (Metal).
+    *   Implement baseline matrix conversions: $\text{RAW Sensor} \to \text{CIE XYZ D50} \to \text{Linear Rec.2020}$.
+    *   Execute Exposure (EV), White Balance, and linear Contrast adjustments strictly in this wide-gamut space before any display mapping.
+
+---
+
+### Story 5.2: AgX Filmic Tone Mapping Engine & Parity Guard
+*   **The Problem: Digital Clipping & The Abney Effect**:
+    *   When bright skin tones approach high luminance in naive digital pipelines, the red channel clips first to $1.0$. As green and blue rise, $(R, G, B)$ shifts toward yellow, creating unnatural "salmon" skin tones and plastic highlight clipping.
+*   **The Solution: AgX Color Science**:
+    *   **Purity / Inset Matrix**: Compresses wide-gamut linear colors into an inset working color space with a protective guard against negative and out-of-gamut values.
+    *   **Hue Preservation & Filmic Desaturation**: As exposure reaches the shoulder, color vectors blend smoothly toward the achromatic luminance axis, producing clean, organic highlight roll-off.
+    *   **Sigmoidal Tone Curve**: Smooth analog contrast without harsh digital knee boundaries.
+*   **Strict CPU (Rust) & GPU (Metal) Parity**:
+    *   **Live Viewport (Metal)**: Real-time 120 FPS evaluation in `Shaders.metal`.
+    *   **Headless Export (Rust)**: High-quality evaluation in `lumenbox-core/src/export.rs` for batch exports.
+    *   **Parity Test Guard**: An automated integration test in `lumenbox-core/tests/agx_shader_parity.rs` verifies shader constants and polynomial curves against the Rust CPU model to $\epsilon < 10^{-6}$.
+
+---
+
+### Story 5.3: Adobe DCP Ingestion & Dual-Illuminant Camera Calibration
+*   **Camera-Specific Colorimetry**: Replace generic D65 matrices with exact camera sensor calibration extracted from Adobe `.dcp` profiles.
+*   **Implementation**:
+    *   **Rust DCP Parser**: Parse TIFF/DNG IFD structures in `lumenbox-core/src/dcp.rs` to extract `ColorMatrix1/2`, `ForwardMatrix1/2`, and `CalibrationIlluminant1/2`.
+    *   **Dual-Illuminant Planckian Interpolation**: Dynamically interpolate between Standard Illuminant A ($2856\text{K}$ tungsten) and CIE Illuminant D65 ($6504\text{K}$ daylight) using reciprocal temperature ($1/T$) derived from the active White Balance slider.
+    *   **Pipeline Integration**: Feed this dynamic calibration matrix directly into Story 5.1's scene-referred conversion stage, providing AgX (Story 5.2) with true camera-calibrated sensor data.
+
+---
+
+### Story 5.4: Camera-Matching Tone Profiles & DCP HueSatMap Engine
+*   **The Feature**: Give photographers 1:1 parity with in-camera JPEGs (e.g. Canon Picture Styles, Sony Creative Looks, Nikon Picture Controls) alongside AgX Filmic.
+*   **Modular Branching Transform**:
+    *   **DCP HueSatMap**: 3D HSV delta tables that selectively enhance memory colors (sky blues, skin tones, foliage).
+    *   **Camera-Matching Tone Curves**: Non-linear S-curves matching camera manufacturer rendering.
+    *   **Inspector Profile Selector**:
+        *   **"LumenBox Neutral (AgX Filmic)"** [Default]: Uses DCP sensor calibration $\to$ AgX Inset $\to$ AgX Highlight Desaturation & Sigmoidal curve. Bypasses the DCP `ToneCurve` to prevent double tone-mapping.
+        *   **"Camera Standard"**: Uses DCP sensor calibration $\to$ DCP HueSatMap $\to$ DCP Manufacturer Tone Curve $\to$ Output sRGB.
+        *   **"Camera Portrait / Landscape / Vivid"**: Swappable DCP profiles for alternate manufacturer looks.
+
+---
+
+### Story 5.5: 3D LUT Engine (.cube) & Headless SIMD Tetrahedral Interpolator
+*   **Creative Film Simulation**: Support industry-standard `.cube` look-up tables (e.g., $17\times 17\times 17$, $33\times 33\times 33$, $65\times 65\times 65$) for cinema grading and artistic film emulation.
+*   **Architectural Placement**:
+    *   Evaluated in the **display-referred stage (post-tone-mapping)** with an opacity/mix slider ($0\%\text{--}100\%$). Applying LUTs post-tone-mapping ensures $[0, 1]$ creative LUTs do not hard-clamp high dynamic range sensor highlights.
+*   **Metal & Rust Parity**:
+    *   **Metal GPU**: Uploaded as a 3D texture (`MTLTextureType3D`) with single-cycle hardware trilinear texture filtering.
+    *   **Rust CPU**: Implemented in `lumenbox-core/src/export.rs` with SIMD-accelerated tetrahedral or trilinear interpolation for deterministic headless batch exports.
+*   **UI Integration**: Custom `.cube` file picker and blend slider in the Inspector under *Color & Tone*.
 
 ---
 
@@ -147,7 +214,8 @@ Photographers regularly need to batch export dozens or hundreds of culled photos
     *   Each worker thread autonomously:
         1. Reads the photo's individual `.xmp` sidecar for custom Exposure, WB, Contrast, Crop, and Lensfun parameters.
         2. Demosaics the 14-bit Bayer sensor data.
-        3. Applies geometric resampling and encoding (JPEG / 16-bit TIFF).
+        3. Applies the configured color pipeline (AgX Filmic, Camera Matching DCP, or 3D LUT).
+        4. Applies geometric resampling and encoding (JPEG / 16-bit TIFF).
 *   **Background Export Queue & Progress Tracking**:
     *   Non-blocking background job with real-time SwiftUI progress bar (`Exporting 42 of 180 photos...`).
     *   Native macOS Notification Center banner upon batch completion with a "Show in Finder" action.
@@ -176,3 +244,5 @@ HDR photos are now the standard on the web, Google Photos, Instagram, and modern
     *   Rust export engine generates the SDR baseline, computes the downsampled gain map, and embeds the ISO 21496-1 metadata tag.
 *   **Google Photos Takeout & Ingestion**:
     *   Detect incoming Google Pixel & Google Photos Ultra HDR JPEGs and extract their gain map channels for instant high-dynamic-range playback.
+
+

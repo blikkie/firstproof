@@ -41,3 +41,10 @@
     - `[x]` Rust 14-bit Bayer CFA demosaicing and 16-bit linear float pipeline (`export.rs`)
     - `[x]` High-quality JPEG and 16-bit TIFF encoders
     - `[x]` Interactive Export Modal Sheet in SwiftUI (`Cmd+E`) with custom sizing and quality controls
+- `[ ]` 12. Unified Color Science & Camera Profiles Pipeline (P1)
+    - `[ ]` 12.1 Story 5.1: Linear Wide-Gamut Working Space (Linear Rec.2020 & matrix conversions)
+    - `[ ]` 12.2 Story 5.2: AgX Filmic Tone Mapping Engine & Metal/Rust CPU parity test guard (`agx_shader_parity.rs`)
+    - `[ ]` 12.3 Story 5.3: Adobe DCP Ingestion (`dcp.rs`) & Dual-Illuminant Planckian WB interpolation
+    - `[ ]` 12.4 Story 5.4: Camera-Matching Tone Profiles, DCP `HueSatMap` engine, and Inspector profile selector
+    - `[ ]` 12.5 Story 5.5: 3D LUT Engine (.cube), Metal 3D texture sampler, and Rust SIMD tetrahedral interpolator
+
