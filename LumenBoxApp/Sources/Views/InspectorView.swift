@@ -158,55 +158,45 @@ struct InspectorView: View {
         let ext = URL(fileURLWithPath: photo.filePath).pathExtension.uppercased()
         
         return VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: viewModel.selectedPhotoIsRaw ? "camera.metering.matrix" : "photo.fill")
-                    .foregroundColor(.accentColor)
-                    .font(.title3)
-                    .padding(.top, 2)
-                
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(filename)
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                        .help(photo.filePath)
-                        .contextMenu {
-                            Button("Copy Filename") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(filename, forType: .string)
-                            }
-                            Button("Copy Full Path") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(photo.filePath, forType: .string)
-                            }
-                            Button("Reveal in Finder") {
-                                NSWorkspace.shared.selectFile(photo.filePath, inFileViewerRootedAtPath: "")
-                            }
-                        }
-                    
-                    HStack(spacing: 6) {
-                        Text(ext)
-                            .font(.system(size: 9, weight: .bold))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Color.accentColor.opacity(0.18))
-                            .foregroundColor(.accentColor)
-                            .cornerRadius(3)
-                        
-                        let cameraMake = photo.cameraMake ?? ""
-                        let cameraModel = photo.cameraModel ?? ""
-                        let fullCamera = "\(cameraMake) \(cameraModel)".trimmingCharacters(in: .whitespaces)
-                        if !fullCamera.isEmpty {
-                            Text(fullCamera)
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                        }
+            Text(filename)
+                .font(.headline)
+                .fontWeight(.bold)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .allowsTightening(true)
+                .help(photo.filePath)
+                .contextMenu {
+                    Button("Copy Filename") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(filename, forType: .string)
+                    }
+                    Button("Copy Full Path") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(photo.filePath, forType: .string)
+                    }
+                    Button("Reveal in Finder") {
+                        NSWorkspace.shared.selectFile(photo.filePath, inFileViewerRootedAtPath: "")
                     }
                 }
+            
+            HStack(spacing: 6) {
+                Text(ext)
+                    .font(.system(size: 9, weight: .bold))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.accentColor.opacity(0.18))
+                    .foregroundColor(.accentColor)
+                    .cornerRadius(3)
                 
-                Spacer()
+                let cameraMake = photo.cameraMake ?? ""
+                let cameraModel = photo.cameraModel ?? ""
+                let fullCamera = "\(cameraMake) \(cameraModel)".trimmingCharacters(in: .whitespaces)
+                if !fullCamera.isEmpty {
+                    Text(fullCamera)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
             }
         }
         .padding(10)
