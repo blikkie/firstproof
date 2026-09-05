@@ -246,6 +246,78 @@ public final class AppViewModel {
         self.selectedPhotoPaths.removeAll()
     }
     
+    public var gridColumnCount: Int = 4
+    
+    public func enterDetailMode() {
+        if selectedPhoto == nil, let first = filteredPhotos.first {
+            selectPhoto(first)
+        }
+        self.canvasMode = .detail
+    }
+    
+    public func enterGridMode() {
+        self.canvasMode = .grid
+    }
+    
+    public func toggleSpaceSelection() {
+        guard let current = selectedPhoto else {
+            if let first = filteredPhotos.first {
+                selectPhoto(first)
+                selectedPhotoPaths.insert(first.filePath)
+            }
+            return
+        }
+        
+        if selectedPhotoPaths.contains(current.filePath) {
+            selectedPhotoPaths.remove(current.filePath)
+        } else {
+            selectedPhotoPaths.insert(current.filePath)
+        }
+    }
+    
+    public func selectNextPhoto() {
+        let list = filteredPhotos
+        guard !list.isEmpty else { return }
+        guard let current = selectedPhoto, let idx = list.firstIndex(where: { $0.filePath == current.filePath }) else {
+            selectPhoto(list[0])
+            return
+        }
+        let nextIdx = min(idx + 1, list.count - 1)
+        navigateToPhoto(at: nextIdx, in: list)
+    }
+    
+    public func selectPreviousPhoto() {
+        let list = filteredPhotos
+        guard !list.isEmpty else { return }
+        guard let current = selectedPhoto, let idx = list.firstIndex(where: { $0.filePath == current.filePath }) else {
+            selectPhoto(list[0])
+            return
+        }
+        let prevIdx = max(idx - 1, 0)
+        navigateToPhoto(at: prevIdx, in: list)
+    }
+    
+    public func moveGridSelection(deltaX: Int, deltaY: Int) {
+        let list = filteredPhotos
+        guard !list.isEmpty else { return }
+        guard let current = selectedPhoto, let idx = list.firstIndex(where: { $0.filePath == current.filePath }) else {
+            selectPhoto(list[0])
+            return
+        }
+        let cols = max(1, gridColumnCount)
+        let targetIdx = max(0, min(list.count - 1, idx + deltaX + (deltaY * cols)))
+        navigateToPhoto(at: targetIdx, in: list)
+    }
+    
+    private func navigateToPhoto(at index: Int, in list: [PhotoRecord]) {
+        let target = list[index]
+        self.selectedPhoto = target
+        if selectedPhotoPaths.isEmpty {
+            self.selectedPhotoPaths = [target.filePath]
+        }
+        loadPreview(for: target)
+    }
+    
     public func loadPreview(for photo: PhotoRecord) {
         // Resolve Lensfun lens distortion coefficients
         if let make = photo.cameraMake,

@@ -98,55 +98,77 @@ struct CanvasView: View {
             } else {
                 ZStack {
                     // 1. Persistent Grid View (Maintains exact scroll position in memory)
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 12)], spacing: 12) {
-                                ForEach(viewModel.filteredPhotos, id: \.filePath) { photo in
-                                    let isSelected = viewModel.selectedPhotoPaths.contains(photo.filePath) || (viewModel.selectedPhotoPaths.isEmpty && viewModel.selectedPhoto?.filePath == photo.filePath)
-                                    GridThumbnailCell(
-                                        photo: photo,
-                                        isSelected: isSelected,
-                                        isMultiSelectActive: viewModel.selectedPhotoPaths.count > 1
-                                    ) {
-                                        handleCellClick(for: photo)
-                                    }
-                                    .id(photo.filePath)
-                                    .contextMenu {
-                                        Button("Export Selection as Portable Library...") {
-                                            if !viewModel.selectedPhotoPaths.contains(photo.filePath) {
+                    GeometryReader { geo in
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 12)], spacing: 12) {
+                                    ForEach(viewModel.filteredPhotos, id: \.filePath) { photo in
+                                        let isChecked = viewModel.selectedPhotoPaths.contains(photo.filePath)
+                                        let isFocused = viewModel.selectedPhoto?.filePath == photo.filePath
+                                        let isSelected = isChecked || (viewModel.selectedPhotoPaths.isEmpty && isFocused)
+                                        
+                                        GridThumbnailCell(
+                                            photo: photo,
+                                            isSelected: isSelected,
+                                            isFocused: isFocused,
+                                            isMultiSelectActive: viewModel.selectedPhotoPaths.count > 1,
+                                            action: {
+                                                handleCellClick(for: photo)
+                                            },
+                                            doubleClickAction: {
                                                 viewModel.selectPhoto(photo)
+                                                viewModel.enterDetailMode()
                                             }
-                                            viewModel.isExportPackageSheetPresented = true
-                                        }
-                                        Button("Export Rendered JPEG/TIFF...") {
-                                            viewModel.selectPhoto(photo)
-                                            viewModel.isExportSheetPresented = true
-                                        }
-                                        Divider()
-                                        Button("Mark as Pick (P)") {
-                                            viewModel.setStatus("pick")
-                                        }
-                                        Button("Mark as Reject (X)") {
-                                            viewModel.setStatus("reject")
-                                        }
-                                        Button("Clear Flag") {
-                                            viewModel.setStatus("none")
-                                        }
-                                        Divider()
-                                        Button("Reveal in Finder") {
-                                            NSWorkspace.shared.selectFile(photo.filePath, inFileViewerRootedAtPath: "")
+                                        )
+                                        .id(photo.filePath)
+                                        .contextMenu {
+                                            Button("Export Selection as Portable Library...") {
+                                                if !viewModel.selectedPhotoPaths.contains(photo.filePath) {
+                                                    viewModel.selectPhoto(photo)
+                                                }
+                                                viewModel.isExportPackageSheetPresented = true
+                                            }
+                                            Button("Export Rendered JPEG/TIFF...") {
+                                                viewModel.selectPhoto(photo)
+                                                viewModel.isExportSheetPresented = true
+                                            }
+                                            Divider()
+                                            Button("Mark as Pick (P)") {
+                                                viewModel.setStatus("pick")
+                                            }
+                                            Button("Mark as Reject (X)") {
+                                                viewModel.setStatus("reject")
+                                            }
+                                            Button("Clear Flag") {
+                                                viewModel.setStatus("none")
+                                            }
+                                            Divider()
+                                            Button("Reveal in Finder") {
+                                                NSWorkspace.shared.selectFile(photo.filePath, inFileViewerRootedAtPath: "")
+                                            }
                                         }
                                     }
                                 }
+                                .padding(16)
                             }
-                            .padding(16)
-                        }
-                        .background(Color(NSColor.underPageBackgroundColor))
-                        .opacity(viewModel.canvasMode == .grid ? 1 : 0)
-                        .allowsHitTesting(viewModel.canvasMode == .grid)
-                        .onChange(of: viewModel.canvasMode) { _, newMode in
-                            if newMode == .grid, let selected = viewModel.selectedPhoto {
-                                proxy.scrollTo(selected.filePath, anchor: .center)
+                            .background(Color(NSColor.underPageBackgroundColor))
+                            .opacity(viewModel.canvasMode == .grid ? 1 : 0)
+                            .allowsHitTesting(viewModel.canvasMode == .grid)
+                            .onChange(of: viewModel.canvasMode) { _, newMode in
+                                if newMode == .grid, let selected = viewModel.selectedPhoto {
+                                    proxy.scrollTo(selected.filePath, anchor: .center)
+                                }
+                            }
+                            .onChange(of: viewModel.selectedPhoto?.filePath) { _, newPath in
+                                if let target = newPath {
+                                    proxy.scrollTo(target, anchor: .center)
+                                }
+                            }
+                            .onAppear {
+                                updateColumns(width: geo.size.width)
+                            }
+                            .onChange(of: geo.size.width) { _, newWidth in
+                                updateColumns(width: newWidth)
                             }
                         }
                     }
@@ -188,6 +210,13 @@ struct CanvasView: View {
         }
     }
     
+    private func updateColumns(width: CGFloat) {
+        let cols = max(1, Int((width - 32) / 190))
+        if viewModel.gridColumnCount != cols {
+            viewModel.gridColumnCount = cols
+        }
+    }
+    
     private func handleCellClick(for photo: PhotoRecord) {
         let flags = NSEvent.modifierFlags
         if flags.contains(.command) {
@@ -203,14 +232,17 @@ struct CanvasView: View {
 struct GridThumbnailCell: View, Equatable {
     let photo: PhotoRecord
     let isSelected: Bool
+    let isFocused: Bool
     let isMultiSelectActive: Bool
     let action: () -> Void
+    let doubleClickAction: () -> Void
     
     static func == (lhs: GridThumbnailCell, rhs: GridThumbnailCell) -> Bool {
         lhs.photo.filePath == rhs.photo.filePath &&
         lhs.photo.rating == rhs.photo.rating &&
         lhs.photo.status == rhs.photo.status &&
         lhs.isSelected == rhs.isSelected &&
+        lhs.isFocused == rhs.isFocused &&
         lhs.isMultiSelectActive == rhs.isMultiSelectActive
     }
     
@@ -264,9 +296,16 @@ struct GridThumbnailCell: View, Equatable {
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                .stroke(isFocused ? Color.accentColor : (isSelected ? Color.accentColor.opacity(0.6) : Color.clear), lineWidth: isFocused ? 2.5 : 1.5)
         )
         .contentShape(Rectangle())
-        .onTapGesture(perform: action)
+        .onTapGesture(count: 2) {
+            doubleClickAction()
+        }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                action()
+            }
+        )
     }
 }
