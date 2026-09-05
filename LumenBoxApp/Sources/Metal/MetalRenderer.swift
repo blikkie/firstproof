@@ -168,18 +168,54 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     public func updateTexture(with image: NSImage) {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         
-        let options: [MTKTextureLoader.Option: Any] = [
-            .SRGB: false,
-            .generateMipmaps: false
-        ]
+        let width = cgImage.width
+        let height = cgImage.height
+        guard width > 0, height > 0 else { return }
         
-        do {
-            self.currentTexture = try textureLoader.newTexture(cgImage: cgImage, options: options)
-            let width = Float(cgImage.width)
-            let height = Float(cgImage.height)
-            if height > 0 {
-                self.uniforms.aspectRatio = width / height
+        // Standardize into guaranteed 32-bit RGBA (Big Endian) bitmap to eliminate channel swapping
+        let bytesPerRow = width * 4
+        let totalBytes = bytesPerRow * height
+        guard let pixelBuffer = malloc(totalBytes) else { return }
+        defer { free(pixelBuffer) }
+        
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
+        
+        if let ctx = CGContext(
+            data: pixelBuffer,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue
+        ) {
+            ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            
+            let texDesc = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .rgba8Unorm,
+                width: width,
+                height: height,
+                mipmapped: false
+            )
+            texDesc.usage = [.shaderRead]
+            if let texture = device.makeTexture(descriptor: texDesc) {
+                texture.replace(
+                    region: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0,
+                    withBytes: pixelBuffer,
+                    bytesPerRow: bytesPerRow
+                )
+                self.currentTexture = texture
+                self.uniforms.aspectRatio = Float(width) / Float(height)
+                return
             }
+        }
+        
+        // Fallback to MTKTextureLoader if context fails
+        do {
+            self.currentTexture = try textureLoader.newTexture(cgImage: cgImage, options: [.SRGB: false])
+            self.uniforms.aspectRatio = Float(width) / Float(height)
         } catch {
             print("Failed to load Metal texture: \(error)")
         }
