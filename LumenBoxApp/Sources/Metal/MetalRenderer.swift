@@ -122,7 +122,18 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     private func updateQuad(viewSize: CGSize) {
         guard let texture = currentTexture, viewSize.width > 0, viewSize.height > 0 else { return }
         
-        let imageAspect = Float(texture.width) / Float(texture.height)
+        var imageAspect = Float(texture.width) / Float(texture.height)
+        
+        // Stabilize minor aspect jitter across thumbnail / preview JPEG / raw demosaic
+        // by snapping to standard photographic sensor ratios if within 1.5% tolerance
+        let standardRatios: [Float] = [3.0 / 2.0, 2.0 / 3.0, 4.0 / 3.0, 3.0 / 4.0, 16.0 / 9.0, 9.0 / 16.0, 1.0]
+        for ratio in standardRatios {
+            if abs(imageAspect - ratio) < 0.015 {
+                imageAspect = ratio
+                break
+            }
+        }
+        
         let viewAspect = Float(viewSize.width) / Float(viewSize.height)
         
         var quadW: Float = 1.0

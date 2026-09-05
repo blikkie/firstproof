@@ -201,6 +201,36 @@ struct CanvasView: View {
                                         }
                                         .padding(.top, 32) : nil
                                     )
+                                    .overlay(alignment: .topLeading) {
+                                        if let photo = viewModel.selectedPhoto {
+                                            HStack(spacing: 8) {
+                                                Image(systemName: viewModel.selectedPhotoIsRaw ? "camera.metering.matrix" : "photo")
+                                                    .font(.caption2)
+                                                Text(URL(fileURLWithPath: photo.filePath).lastPathComponent)
+                                                    .font(.system(size: 11, weight: .semibold))
+                                                let ext = URL(fileURLWithPath: photo.filePath).pathExtension.uppercased()
+                                                Text(ext)
+                                                    .font(.system(size: 9, weight: .bold))
+                                                    .padding(.horizontal, 5)
+                                                    .padding(.vertical, 2)
+                                                    .background(Color.white.opacity(0.2))
+                                                    .cornerRadius(3)
+                                            }
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 5)
+                                            .background(.ultraThinMaterial)
+                                            .background(Color.black.opacity(0.55))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                                            )
+                                            .shadow(color: .black.opacity(0.35), radius: 5, x: 0, y: 2)
+                                            .padding(32)
+                                            .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+                                        }
+                                    }
                                     .overlay(alignment: .bottomTrailing) {
                                         if viewModel.isDemosaicing {
                                             HStack(spacing: 8) {
