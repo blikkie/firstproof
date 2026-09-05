@@ -391,16 +391,48 @@ public final class AppViewModel {
         let token = UUID()
         self.activeDecodeToken = token
         self.isDemosaicing = true
-        self.previewImage = nil
         
-        // Decode in background directly to authentic calibrated image
+        // Fast switch: immediately present cached thumbnail so user can scrub instantly
+        if let cached = ThumbnailCache.shared.image(for: photo.filePath) {
+            self.previewImage = cached
+        } else {
+            self.previewImage = nil
+        }
+        
+        // Decode in background: 1) Fast JPEG preview (<15ms), 2) Authentic 14-bit RAW demosaic
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self = self else { return }
             guard self.activeDecodeToken == token else { return }
             
+            // 1. Fast Embedded Preview JPEG (<15ms)
+            if let previewData = extractPreview(path: photo.filePath) {
+                if let src = CGImageSourceCreateWithData(previewData as CFData, nil) {
+                    let options: [CFString: Any] = [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceCreateThumbnailWithTransform: true,
+                        kCGImageSourceThumbnailMaxPixelSize: 2560,
+                        kCGImageSourceShouldCacheImmediately: true
+                    ]
+                    if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
+                        let jpegPreview = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
+                        if ThumbnailCache.shared.image(for: photo.filePath) == nil {
+                            ThumbnailCache.shared.setImage(jpegPreview, for: photo.filePath)
+                        }
+                        DispatchQueue.main.async {
+                            if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
+                                self.previewImage = jpegPreview
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Check cancellation token before expensive 14-bit Bayer demosaicing
+            guard self.activeDecodeToken == token else { return }
+            
             var image: NSImage? = nil
             
-            // 1. Authentic Rust Core 14-bit RAW demosaicing & calibrated sRGB pipeline
+            // 2. Authentic Rust Core 14-bit RAW demosaicing & calibrated sRGB pipeline
             if let raw = decodeRawPreview(path: photo.filePath, maxDimension: 2560) {
                 let width = Int(raw.width)
                 let height = Int(raw.height)

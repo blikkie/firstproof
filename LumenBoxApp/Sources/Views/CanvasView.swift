@@ -172,7 +172,7 @@ struct CanvasView: View {
                             Color(NSColor.underPageBackgroundColor)
                                 .edgesIgnoringSafeArea(.all)
                             
-                            if viewModel.previewImage != nil && !viewModel.isDemosaicing {
+                            if viewModel.previewImage != nil {
                                 MetalCanvasView(viewModel: viewModel, isShowingOriginal: isShowingOriginal)
                                     .padding(24)
                                     .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
@@ -191,6 +191,29 @@ struct CanvasView: View {
                                         }
                                         .padding(.top, 32) : nil
                                     )
+                                    .overlay(alignment: .bottom) {
+                                        if viewModel.isDemosaicing {
+                                            HStack(spacing: 8) {
+                                                ProgressView()
+                                                    .controlSize(.small)
+                                                Text(viewModel.selectedPhotoIsRaw ? "Developing 14-bit RAW..." : "Loading...")
+                                                    .font(.system(size: 11, weight: .semibold))
+                                                    .foregroundColor(.white)
+                                            }
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 8)
+                                            .background(.ultraThinMaterial)
+                                            .background(Color.black.opacity(0.65))
+                                            .cornerRadius(20)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 20)
+                                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                            )
+                                            .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 2)
+                                            .padding(.bottom, 24)
+                                            .transition(.opacity.animation(.easeInOut(duration: 0.15)))
+                                        }
+                                    }
                             } else {
                                 VStack(spacing: 12) {
                                     ProgressView()
