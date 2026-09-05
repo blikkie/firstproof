@@ -81,23 +81,25 @@ public struct AsyncThumbnailView: View {
             
             var loaded: NSImage? = nil
             
-            // Fast-path: Hardware-accelerated ImageIO downsampled decode (320px max dimension)
-            let url = URL(fileURLWithPath: filePath) as CFURL
-            if let src = CGImageSourceCreateWithURL(url, nil) {
-                let options: [CFString: Any] = [
-                    kCGImageSourceCreateThumbnailFromImageAlways: true,
-                    kCGImageSourceCreateThumbnailWithTransform: true,
-                    kCGImageSourceThumbnailMaxPixelSize: 320,
-                    kCGImageSourceShouldCacheImmediately: true
-                ]
-                if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
-                    loaded = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
+            // Fast-path: Extract embedded camera JPEG preview (exact camera color profile, zero raw distortion)
+            if let data = extractPreview(path: filePath) {
+                if let src = CGImageSourceCreateWithData(data as CFData, nil) {
+                    let options: [CFString: Any] = [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceCreateThumbnailWithTransform: true,
+                        kCGImageSourceThumbnailMaxPixelSize: 320,
+                        kCGImageSourceShouldCacheImmediately: true
+                    ]
+                    if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
+                        loaded = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
+                    }
                 }
             }
             
-            // Fallback: Rust extractPreview downsampled via ImageIO
-            if loaded == nil && !op.isCancelled, let data = extractPreview(path: filePath) {
-                if let src = CGImageSourceCreateWithData(data as CFData, nil) {
+            // Fallback for non-RAW images (JPEGs, PNGs)
+            if loaded == nil && !op.isCancelled {
+                let url = URL(fileURLWithPath: filePath) as CFURL
+                if let src = CGImageSourceCreateWithURL(url, nil) {
                     let options: [CFString: Any] = [
                         kCGImageSourceCreateThumbnailFromImageAlways: true,
                         kCGImageSourceCreateThumbnailWithTransform: true,

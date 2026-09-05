@@ -399,12 +399,14 @@ public final class AppViewModel {
             self.previewImage = nil
         }
         
-        // Decode in background: 1) Fast JPEG preview (<15ms), 2) Authentic 14-bit RAW demosaic
+        // Decode in background: extract clean lower-res camera JPEG preview (neutral colors, zero tricks)
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self = self else { return }
             guard self.activeDecodeToken == token else { return }
             
-            // 1. Fast Embedded Preview JPEG (<15ms)
+            var preview: NSImage? = nil
+            
+            // 1. Fast Embedded Camera JPEG Preview (<15ms, exact camera color profile)
             if let previewData = extractPreview(path: photo.filePath) {
                 if let src = CGImageSourceCreateWithData(previewData as CFData, nil) {
                     let options: [CFString: Any] = [
@@ -414,49 +416,13 @@ public final class AppViewModel {
                         kCGImageSourceShouldCacheImmediately: true
                     ]
                     if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
-                        let jpegPreview = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
-                        if ThumbnailCache.shared.image(for: photo.filePath) == nil {
-                            ThumbnailCache.shared.setImage(jpegPreview, for: photo.filePath)
-                        }
-                        DispatchQueue.main.async {
-                            if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
-                                self.previewImage = jpegPreview
-                            }
-                        }
+                        preview = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
                     }
                 }
             }
             
-            // Check cancellation token before expensive 14-bit Bayer demosaicing
-            guard self.activeDecodeToken == token else { return }
-            
-            var image: NSImage? = nil
-            
-            // 2. Authentic Rust Core 14-bit RAW demosaicing & calibrated sRGB pipeline
-            if let raw = decodeRawPreview(path: photo.filePath, maxDimension: 2560) {
-                let width = Int(raw.width)
-                let height = Int(raw.height)
-                let colorSpace = CGColorSpaceCreateDeviceRGB()
-                if let provider = CGDataProvider(data: raw.data as CFData),
-                   let cgImg = CGImage(
-                       width: width,
-                       height: height,
-                       bitsPerComponent: 8,
-                       bitsPerPixel: 32,
-                       bytesPerRow: width * 4,
-                       space: colorSpace,
-                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                       provider: provider,
-                       decode: nil,
-                       shouldInterpolate: true,
-                       intent: .defaultIntent
-                   ) {
-                    image = NSImage(cgImage: cgImg, size: NSSize(width: width, height: height))
-                }
-            }
-            
-            // 3. Fallback for non-RAW master images (PNG, TIFF, JPEG)
-            if image == nil {
+            // 2. Fallback for non-RAW master images (PNG, TIFF, JPEG)
+            if preview == nil && !self.selectedPhotoIsRaw {
                 let url = URL(fileURLWithPath: photo.filePath) as CFURL
                 if let src = CGImageSourceCreateWithURL(url, nil) {
                     let options: [CFString: Any] = [
@@ -465,15 +431,16 @@ public final class AppViewModel {
                         kCGImageSourceThumbnailMaxPixelSize: 3840
                     ]
                     if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
-                        image = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
+                        preview = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
                     }
                 }
             }
             
             DispatchQueue.main.async {
                 if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
-                    if let finalImage = image {
+                    if let finalImage = preview {
                         self.previewImage = finalImage
+                        ThumbnailCache.shared.setImage(finalImage, for: photo.filePath)
                     }
                     self.isDemosaicing = false
                 }

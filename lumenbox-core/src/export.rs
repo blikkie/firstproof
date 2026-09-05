@@ -101,37 +101,10 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                     
                     let out_idx = (y * active_w + x) * 3;
                     
-                    // 1. As-shot daylight white balance and exposure baseline
-                    let base_gain = 1.55;
-                    let r_cam = (r * wb_r * base_gain).clamp(0.0, 1.0);
-                    let g_cam = (g * base_gain).clamp(0.0, 1.0);
-                    let b_cam = (b * wb_b * base_gain).clamp(0.0, 1.0);
-                    
-                    // 2. Camera Primary Spectral Decoupling (Purifies foliage greens and sky blues)
-                    let mut r_val = (1.28 * r_cam - 0.20 * g_cam - 0.08 * b_cam).clamp(0.0, 1.0);
-                    let mut g_val = (-0.16 * r_cam + 1.40 * g_cam - 0.24 * b_cam).clamp(0.0, 1.0);
-                    let mut b_val = (-0.05 * r_cam - 0.25 * g_cam + 1.30 * b_cam).clamp(0.0, 1.0);
-                    
-                    // 3. Camera Primary Saturation Enhancement
-                    let lum = 0.2126 * r_val + 0.7152 * g_val + 0.0722 * b_val;
-                    let sat_factor = 1.32;
-                    r_val = (lum + sat_factor * (r_val - lum)).clamp(0.0, 1.0);
-                    g_val = (lum + sat_factor * (g_val - lum)).clamp(0.0, 1.0);
-                    b_val = (lum + sat_factor * (b_val - lum)).clamp(0.0, 1.0);
-                    
-                    // 4. Base Photographic Filmic S-Tone Curve (Lift midtones, deepen contrast, soft shoulder)
-                    let filmic_curve = |v: f32| -> f32 {
-                        let a = 2.51;
-                        let b = 0.04;
-                        let c = 2.43;
-                        let d = 0.58;
-                        let e = 0.13;
-                        ((v * (a * v + b)) / (v * (c * v + d) + e)).clamp(0.0, 1.0)
-                    };
-                    
-                    demosaiced.data[out_idx] = filmic_curve(r_val);
-                    demosaiced.data[out_idx + 1] = filmic_curve(g_val);
-                    demosaiced.data[out_idx + 2] = filmic_curve(b_val);
+                    // Standard neutral daylight white balance baseline (zero color distortion)
+                    demosaiced.data[out_idx] = (r * wb_r).clamp(0.0, 1.0);
+                    demosaiced.data[out_idx + 1] = g.clamp(0.0, 1.0);
+                    demosaiced.data[out_idx + 2] = (b * wb_b).clamp(0.0, 1.0);
                 }
             }
             
