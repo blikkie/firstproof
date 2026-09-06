@@ -45,10 +45,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct LumenBoxApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @State private var viewModel = AppViewModel()
     
     var body: some Scene {
         WindowGroup {
-            MainView()
+            MainView(viewModel: viewModel)
                 .navigationTitle("LumenBox - RAW Photo Manager")
         }
         .windowStyle(.titleBar)

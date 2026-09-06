@@ -966,11 +966,11 @@ public func FfiConverterTypeAutoAdjustments_lower(_ value: AutoAdjustments) -> R
 public struct CubeLutRecord {
     public var title: String
     public var size: UInt32
-    public var dataRgba32f: [Float]
+    public var dataRgba32f: Data
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(title: String, size: UInt32, dataRgba32f: [Float]) {
+    public init(title: String, size: UInt32, dataRgba32f: Data) {
         self.title = title
         self.size = size
         self.dataRgba32f = dataRgba32f
@@ -1010,14 +1010,14 @@ public struct FfiConverterTypeCubeLutRecord: FfiConverterRustBuffer {
             try CubeLutRecord(
                 title: FfiConverterString.read(from: &buf), 
                 size: FfiConverterUInt32.read(from: &buf), 
-                dataRgba32f: FfiConverterSequenceFloat.read(from: &buf)
+                dataRgba32f: FfiConverterData.read(from: &buf)
         )
     }
 
     public static func write(_ value: CubeLutRecord, into buf: inout [UInt8]) {
         FfiConverterString.write(value.title, into: &buf)
         FfiConverterUInt32.write(value.size, into: &buf)
-        FfiConverterSequenceFloat.write(value.dataRgba32f, into: &buf)
+        FfiConverterData.write(value.dataRgba32f, into: &buf)
     }
 }
 
@@ -2662,31 +2662,6 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeCubeLutRecord: FfiConverterRustBuffer {
-    typealias SwiftType = [CubeLutRecord]
-
-    public static func write(_ value: [CubeLutRecord], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeCubeLutRecord.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CubeLutRecord] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [CubeLutRecord]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeCubeLutRecord.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypePhotoRecord: FfiConverterRustBuffer {
     typealias SwiftType = [PhotoRecord]
 
@@ -2798,10 +2773,17 @@ public func extractPreview(path: String) -> Data? {
     )
 })
 }
-public func getBuiltinCubeLuts(size: UInt32) -> [CubeLutRecord] {
-    return try!  FfiConverterSequenceTypeCubeLutRecord.lift(try! rustCall() {
-    uniffi_lumenbox_core_fn_func_get_builtin_cube_luts(
+public func getBuiltinCubeLut(title: String, size: UInt32) -> CubeLutRecord? {
+    return try!  FfiConverterOptionTypeCubeLutRecord.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_get_builtin_cube_lut(
+        FfiConverterString.lower(title),
         FfiConverterUInt32.lower(size),$0
+    )
+})
+}
+public func getBuiltinCubeLutTitles() -> [String] {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_get_builtin_cube_lut_titles($0
     )
 })
 }
@@ -2896,7 +2878,10 @@ private var initializationResult: InitializationResult = {
     if (uniffi_lumenbox_core_checksum_func_extract_preview() != 59048) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_lumenbox_core_checksum_func_get_builtin_cube_luts() != 43979) {
+    if (uniffi_lumenbox_core_checksum_func_get_builtin_cube_lut() != 28917) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_get_builtin_cube_lut_titles() != 54667) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_load_cube_lut() != 49573) {

@@ -13,8 +13,8 @@ public final class ThumbnailCache {
         
         let q = OperationQueue()
         q.name = "com.lumenbox.thumbnailQueue"
-        q.maxConcurrentOperationCount = 6
-        q.qualityOfService = .userInitiated
+        q.maxConcurrentOperationCount = 3
+        q.qualityOfService = .utility
         self.queue = q
     }
     
@@ -112,10 +112,13 @@ public struct AsyncThumbnailView: View {
                 }
             }
             
-            if let img = loaded, !op.isCancelled {
-                ThumbnailCache.shared.setImage(img, for: filePath)
-                DispatchQueue.main.async {
-                    self.image = img
+            if !op.isCancelled {
+                let finalImg = loaded ?? NSImage(size: NSSize(width: 1, height: 1))
+                ThumbnailCache.shared.setImage(finalImg, for: filePath)
+                if let validImg = loaded {
+                    DispatchQueue.main.async {
+                        self.image = validImg
+                    }
                 }
             }
         }

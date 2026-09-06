@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 struct MainView: View {
-    @State private var viewModel = AppViewModel()
+    @Bindable var viewModel: AppViewModel
     
     @State private var keyMonitor: Any? = nil
     

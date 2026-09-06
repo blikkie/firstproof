@@ -491,8 +491,8 @@ struct InspectorView: View {
                             
                             Divider()
                             
-                            ForEach(viewModel.availableLuts, id: \.title) { lut in
-                                Text(lut.title).tag(lut.title)
+                            ForEach(viewModel.allLutTitles, id: \.self) { title in
+                                Text(title).tag(title)
                             }
                         }
                         .labelsHidden()

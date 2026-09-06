@@ -46,7 +46,7 @@ public struct MetalCanvasView: NSViewRepresentable {
             }
             
             if let lutName = viewModel.selectedLutName {
-                let lutRecord = viewModel.availableLuts.first(where: { $0.title == lutName })
+                let lutRecord = viewModel.resolveLutRecord(for: lutName)
                 renderer.updateLutTexture(with: lutRecord)
                 context.coordinator.lastLutName = lutName
             }
@@ -125,7 +125,7 @@ public struct MetalCanvasView: NSViewRepresentable {
         if lutChanged {
             context.coordinator.lastLutName = viewModel.selectedLutName
             if let lutName = viewModel.selectedLutName {
-                let lutRecord = viewModel.availableLuts.first(where: { $0.title == lutName })
+                let lutRecord = viewModel.resolveLutRecord(for: lutName)
                 renderer.updateLutTexture(with: lutRecord)
             } else {
                 renderer.updateLutTexture(with: nil)

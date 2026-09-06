@@ -63,6 +63,19 @@ impl CubeLut {
         out
     }
 
+    /// Generates tightly-packed raw little-endian bytes for Metal 3D textures (`MTLTextureType3D`).
+    /// Returns a byte vector of length `size * size * size * 4 * 4`.
+    pub fn to_rgba32f_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(self.data.len() * 16);
+        for s in &self.data {
+            out.extend_from_slice(&s[0].to_le_bytes());
+            out.extend_from_slice(&s[1].to_le_bytes());
+            out.extend_from_slice(&s[2].to_le_bytes());
+            out.extend_from_slice(&1.0f32.to_le_bytes());
+        }
+        out
+    }
+
     /// Trilinear 3D interpolation.
     /// Input `rgb` is normalized to `[0.0, 1.0]`.
     pub fn interpolate_trilinear(&self, rgb: [f32; 3]) -> [f32; 3] {
@@ -557,6 +570,29 @@ impl FilmSimulationGenerator {
             Self::tri_x_bw(size),
             Self::vintage_fade(size),
         ]
+    }
+
+    /// Returns the titles of all 5 built-in film simulations without generating LUT data.
+    pub fn builtin_titles() -> Vec<String> {
+        vec![
+            "Film - Classic Chrome".to_string(),
+            "Film - Warm Portra".to_string(),
+            "Film - Cine Teal & Orange".to_string(),
+            "Film - B&W High Contrast (Tri-X)".to_string(),
+            "Film - Vintage Fade".to_string(),
+        ]
+    }
+
+    /// Generates a single built-in simulation by title.
+    pub fn generate_by_title(title: &str, size: usize) -> Option<CubeLut> {
+        match title {
+            "Film - Classic Chrome" => Some(Self::classic_chrome(size)),
+            "Film - Warm Portra" => Some(Self::warm_portra(size)),
+            "Film - Cine Teal & Orange" => Some(Self::cine_teal_orange(size)),
+            "Film - B&W High Contrast (Tri-X)" => Some(Self::tri_x_bw(size)),
+            "Film - Vintage Fade" => Some(Self::vintage_fade(size)),
+            _ => None,
+        }
     }
 }
 

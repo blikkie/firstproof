@@ -33,7 +33,7 @@ impl Default for ColorProfileMode {
 pub struct CubeLutRecord {
     pub title: String,
     pub size: u32,
-    pub data_rgba32f: Vec<f32>,
+    pub data_rgba32f: Vec<u8>,
 }
 
 #[derive(uniffi::Record, Clone, Debug, PartialEq)]
@@ -537,25 +537,27 @@ pub fn check_connection() -> String {
 }
 
 #[uniffi::export]
-pub fn get_builtin_cube_luts(size: u32) -> Vec<CubeLutRecord> {
+pub fn get_builtin_cube_lut_titles() -> Vec<String> {
+    lut::FilmSimulationGenerator::builtin_titles()
+}
+
+#[uniffi::export]
+pub fn get_builtin_cube_lut(title: String, size: u32) -> Option<CubeLutRecord> {
     let s = (size as usize).clamp(17, 65);
-    lut::FilmSimulationGenerator::all_builtin(s)
-        .into_iter()
-        .map(|l| {
-            let data_rgba32f = l.to_rgba32f();
-            CubeLutRecord {
-                title: l.title,
-                size: l.size as u32,
-                data_rgba32f,
-            }
-        })
-        .collect()
+    lut::FilmSimulationGenerator::generate_by_title(&title, s).map(|l| {
+        let data_rgba32f = l.to_rgba32f_bytes();
+        CubeLutRecord {
+            title: l.title,
+            size: l.size as u32,
+            data_rgba32f,
+        }
+    })
 }
 
 #[uniffi::export]
 pub fn load_cube_lut(path: String) -> Option<CubeLutRecord> {
     lut::load_cube_lut_file(&path).ok().map(|l| {
-        let data_rgba32f = l.to_rgba32f();
+        let data_rgba32f = l.to_rgba32f_bytes();
         CubeLutRecord {
             title: l.title,
             size: l.size as u32,

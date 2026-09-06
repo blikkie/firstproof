@@ -75,7 +75,20 @@ public final class AppViewModel {
     public var toneProfile: ColorProfileMode = .agxVivid
     public var selectedLutName: String? = nil
     public var lutIntensity: Float = 1.0
-    public var availableLuts: [CubeLutRecord] = []
+    public var availableLutTitles: [String] = []
+    public var customLuts: [CubeLutRecord] = []
+    
+    public var allLutTitles: [String] {
+        availableLutTitles + customLuts.map(\.title)
+    }
+    
+    public func resolveLutRecord(for title: String?) -> CubeLutRecord? {
+        guard let title = title, !title.isEmpty else { return nil }
+        if let custom = customLuts.first(where: { $0.title == title }) {
+            return custom
+        }
+        return getBuiltinCubeLut(title: title, size: 33)
+    }
     
     // MARK: - Takeout & Metadata
     public var takeoutMatches: [TakeoutMatchRecord] = []
@@ -87,7 +100,7 @@ public final class AppViewModel {
     
     public init() {
         self.lensfun = LumenBoxLensfun()
-        self.availableLuts = getBuiltinCubeLuts(size: 33)
+        self.availableLutTitles = getBuiltinCubeLutTitles()
         
         // Restore multi-project opened folder list (preserves disconnected external drive sessions)
         self.openedFolders = UserDefaults.standard.stringArray(forKey: "openedFolders") ?? []
@@ -843,8 +856,8 @@ public final class AppViewModel {
         
         if panel.runModal() == .OK, let url = panel.url {
             if let customLut = loadCubeLut(path: url.path) {
-                if !self.availableLuts.contains(where: { $0.title == customLut.title }) {
-                    self.availableLuts.append(customLut)
+                if !self.customLuts.contains(where: { $0.title == customLut.title }) {
+                    self.customLuts.append(customLut)
                 }
                 self.selectedLutName = customLut.title
                 self.lutIntensity = 1.0
