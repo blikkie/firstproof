@@ -222,7 +222,13 @@ pub fn export_photo(
     quality: u32,
     max_dimension: Option<u32>,
 ) -> bool {
-    let dist_tuple = lens_coeffs.as_ref().map(|c| (c.distortion.as_slice(), c.distortion_model.as_str()));
+    let dist_tuple = lens_coeffs.as_ref().and_then(|c| {
+        if c.has_distortion {
+            Some((c.distortion.as_slice(), c.distortion_model.as_str()))
+        } else {
+            None
+        }
+    });
     
     match export::export_photo_file(
         &input_path,

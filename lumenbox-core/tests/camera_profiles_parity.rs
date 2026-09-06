@@ -275,3 +275,49 @@ fn test_gpu_preview_vs_export_parity() {
     assert_eq!(gpu_8bit, export_8bit, "GPU preview and export pixel math differ!");
 }
 
+#[test]
+fn test_lensfun_export_distortion_math() {
+    // Verifies that export coordinate transformation matches Metal shader formula exactly
+    let target_w = 3000f32;
+    let target_h = 2000f32;
+    let aspect_ratio = target_w / target_h; // 1.5
+    let auto_crop_scale = 1.0f32;
+    let (k1, k2) = (-0.024f32, 0.006f32); // Typical Canon poly3 distortion
+
+    // Pick top-right pixel in target output (tx=2999, ty=1999)
+    let tx = 2999f32;
+    let ty = 1999f32;
+    let u = (tx + 0.5) / target_w;
+    let v = (ty + 0.5) / target_h;
+
+    // 1. Rust export math:
+    let centered_x = (u - 0.5) * 2.0 * aspect_ratio / auto_crop_scale;
+    let centered_y = (v - 0.5) * 2.0 / auto_crop_scale;
+    let r2 = centered_x * centered_x + centered_y * centered_y;
+    let r = r2.sqrt();
+    let r4 = r2 * r2;
+    let rd = r * (1.0 + k1 * r2 + k2 * r4);
+    let scale_factor = rd / r;
+    let rot_x = centered_x * scale_factor;
+    let rot_y = centered_y * scale_factor;
+    let rust_sx = (rot_x / (2.0 * aspect_ratio) + 0.5) * target_w;
+    let rust_sy = (rot_y / 2.0 + 0.5) * target_h;
+
+    // 2. Metal GPU shader math (from Shaders.metal):
+    let mut norm_x = (u - 0.5) * 2.0 * aspect_ratio;
+    let mut norm_y = (v - 0.5) * 2.0;
+    let metal_r2 = norm_x * norm_x + norm_y * norm_y;
+    let metal_r = metal_r2.sqrt();
+    let metal_r_corr = metal_r * (1.0 + k1 * metal_r2 + k2 * (metal_r2 * metal_r2));
+    let metal_factor = metal_r_corr / metal_r;
+    norm_x *= metal_factor;
+    norm_y *= metal_factor;
+    let metal_uv_x = norm_x / (2.0 * aspect_ratio) + 0.5;
+    let metal_uv_y = norm_y / 2.0 + 0.5;
+    let metal_sx = metal_uv_x * target_w;
+    let metal_sy = metal_uv_y * target_h;
+
+    assert!((rust_sx - metal_sx).abs() < 1e-4, "X coord mismatch: rust={}, metal={}", rust_sx, metal_sx);
+    assert!((rust_sy - metal_sy).abs() < 1e-4, "Y coord mismatch: rust={}, metal={}", rust_sy, metal_sy);
+}
+

@@ -408,40 +408,40 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             let u = (tx as f32 + 0.5) / (target_w as f32);
             let v = (ty as f32 + 0.5) / (target_h as f32);
             
-            // 1. Straighten and auto-crop zoom
-            let dx = (u - 0.5) / auto_crop_scale;
-            let dy = (v - 0.5) / (auto_crop_scale * aspect_ratio);
+            // 1. Straighten and auto-crop zoom (normalized to Lensfun standard coordinates)
+            // Lensfun defines r=1.0 at half height (v=1.0), and norm.x = aspect_ratio at half width (u=1.0)
+            let centered_x = (u - 0.5) * 2.0 * aspect_ratio / auto_crop_scale;
+            let centered_y = (v - 0.5) * 2.0 / auto_crop_scale;
             
-            let mut rx = dx * cos_theta - dy * sin_theta;
-            let mut ry = dx * sin_theta + dy * cos_theta;
+            let mut rot_x = centered_x * cos_theta - centered_y * sin_theta;
+            let mut rot_y = centered_x * sin_theta + centered_y * cos_theta;
             
             // 2. Lensfun distortion model
             if has_dist {
-                let r = (rx * rx + ry * ry).sqrt();
-                if r > 0.00001 {
+                let r2 = rot_x * rot_x + rot_y * rot_y;
+                let r = r2.sqrt();
+                if r > 0.0001 {
                     let rd = if is_ptlens {
                         let a = k1;
                         let b = k2;
                         let c = k3;
                         let d = 1.0 - (a + b + c);
-                        let r2 = r * r;
                         let r3 = r2 * r;
-                        let r4 = r3 * r;
+                        let r4 = r2 * r2;
                         a * r4 + b * r3 + c * r2 + d * r
                     } else {
-                        // poly3 model
-                        let r2 = r * r;
+                        // poly3 model: r_d = r * (1 + k1*r^2 + k2*r^4)
                         let r4 = r2 * r2;
                         r * (1.0 + k1 * r2 + k2 * r4)
                     };
                     let scale_factor = rd / r;
-                    rx *= scale_factor;
-                    ry *= scale_factor;
+                    rot_x *= scale_factor;
+                    rot_y *= scale_factor;
                 }
             }
             
-            let sx = (rx + 0.5) * (orig_width as f32);
-            let sy = (ry * aspect_ratio + 0.5) * (orig_height as f32);
+            let sx = (rot_x / (2.0 * aspect_ratio) + 0.5) * (orig_width as f32);
+            let sy = (rot_y / 2.0 + 0.5) * (orig_height as f32);
             
             let (r_val, g_val, b_val) = sample_bilinear(&image, sx, sy);
             let srgb8 = if edits.tone_profile == crate::ColorProfileMode::AgxVivid
