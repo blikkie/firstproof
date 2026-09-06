@@ -365,6 +365,23 @@ struct InspectorView: View {
     private var collapsibleLightSection: some View {
         DisclosureGroup(isExpanded: $isLightExpanded) {
             VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Auto Tone")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button(action: {
+                        viewModel.applyAutoAdjustments()
+                    }) {
+                        Label("Auto", systemImage: "wand.and.stars")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Automatically calculate conservative exposure and contrast (Cmd+U)")
+                }
+                .padding(.bottom, 2)
+                
                 SliderRow(
                     label: "Exposure",
                     value: $viewModel.exposure,
@@ -400,6 +417,24 @@ struct InspectorView: View {
     private var collapsibleToneSection: some View {
         DisclosureGroup(isExpanded: $isToneExpanded) {
             VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Profile")
+                        .font(.subheadline)
+                    Picker("", selection: $viewModel.toneProfile) {
+                        Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
+                        Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
+                        Text("Camera Standard").tag(ColorProfileMode.cameraStandard)
+                        Text("Camera Portrait").tag(ColorProfileMode.cameraPortrait)
+                        Text("Camera Landscape").tag(ColorProfileMode.cameraLandscape)
+                        Text("Camera Vivid").tag(ColorProfileMode.cameraVivid)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .onChange(of: viewModel.toneProfile) {
+                        viewModel.saveCurrentEdits()
+                    }
+                }
+                
                 SliderRow(
                     label: "Contrast",
                     value: $viewModel.contrast,

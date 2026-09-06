@@ -10,6 +10,7 @@ pub mod db;
 pub mod lensfun;
 pub mod export;
 pub mod color;
+pub mod auto;
 
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct PhotoRecord {
@@ -66,7 +67,23 @@ impl From<db::PhotoRecord> for PhotoRecord {
     }
 }
 
-#[derive(uniffi::Record, Clone, Copy, Debug)]
+#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorProfileMode {
+    AgxVivid,
+    AgxFilmic,
+    CameraStandard,
+    CameraPortrait,
+    CameraLandscape,
+    CameraVivid,
+}
+
+impl Default for ColorProfileMode {
+    fn default() -> Self {
+        Self::AgxVivid
+    }
+}
+
+#[derive(uniffi::Record, Clone, Copy, Debug, PartialEq)]
 pub struct EditSettings {
     pub exposure: f32,
     pub contrast: f32,
@@ -77,6 +94,24 @@ pub struct EditSettings {
     pub crop_right: f32,
     pub crop_bottom: f32,
     pub crop_angle: f32,
+    pub tone_profile: ColorProfileMode,
+}
+
+impl Default for EditSettings {
+    fn default() -> Self {
+        Self {
+            exposure: 0.0,
+            contrast: 0.0,
+            temperature: 5000.0,
+            tint: 0.0,
+            crop_left: 0.0,
+            crop_top: 0.0,
+            crop_right: 1.0,
+            crop_bottom: 1.0,
+            crop_angle: 0.0,
+            tone_profile: ColorProfileMode::AgxVivid,
+        }
+    }
 }
 
 #[derive(uniffi::Record)]
@@ -158,17 +193,7 @@ pub fn read_xmp(path: String) -> Option<XmpDataRecord> {
             description: x.description,
             latitude: x.latitude,
             longitude: x.longitude,
-            edits: EditSettings {
-                exposure: x.edits.exposure,
-                contrast: x.edits.contrast,
-                temperature: x.edits.temperature,
-                tint: x.edits.tint,
-                crop_left: x.edits.crop_left,
-                crop_top: x.edits.crop_top,
-                crop_right: x.edits.crop_right,
-                crop_bottom: x.edits.crop_bottom,
-                crop_angle: x.edits.crop_angle,
-            },
+            edits: x.edits,
         }),
         Err(_) => None,
     }
@@ -183,17 +208,7 @@ pub fn write_xmp(path: String, record: XmpDataRecord) -> bool {
         description: record.description,
         latitude: record.latitude,
         longitude: record.longitude,
-        edits: EditSettings {
-            exposure: record.edits.exposure,
-            contrast: record.edits.contrast,
-            temperature: record.edits.temperature,
-            tint: record.edits.tint,
-            crop_left: record.edits.crop_left,
-            crop_top: record.edits.crop_top,
-            crop_right: record.edits.crop_right,
-            crop_bottom: record.edits.crop_bottom,
-            crop_angle: record.edits.crop_angle,
-        },
+        edits: record.edits,
     };
     xmp::write_xmp_file(&path, &data).is_ok()
 }
@@ -207,24 +222,12 @@ pub fn export_photo(
     quality: u32,
     max_dimension: Option<u32>,
 ) -> bool {
-    let internal_edits = EditSettings {
-        exposure: edits.exposure,
-        contrast: edits.contrast,
-        temperature: edits.temperature,
-        tint: edits.tint,
-        crop_left: edits.crop_left,
-        crop_top: edits.crop_top,
-        crop_right: edits.crop_right,
-        crop_bottom: edits.crop_bottom,
-        crop_angle: edits.crop_angle,
-    };
-    
     let dist_tuple = lens_coeffs.as_ref().map(|c| (c.distortion.as_slice(), c.distortion_model.as_str()));
     
     match export::export_photo_file(
         &input_path,
         &output_path,
-        &internal_edits,
+        &edits,
         dist_tuple,
         quality as u8,
         max_dimension,
@@ -259,6 +262,16 @@ pub fn decode_raw_preview(path: String, max_dimension: Option<u32>) -> Option<Ra
             None
         }
     }
+}
+
+#[uniffi::export]
+pub fn compute_auto_adjustments(path: String) -> Option<auto::AutoAdjustments> {
+    auto::compute_auto_adjustments_from_path(&path)
+}
+
+#[uniffi::export]
+pub fn compute_auto_adjustments_from_buffer(width: u32, height: u32, data: Vec<u8>) -> Option<auto::AutoAdjustments> {
+    Some(auto::compute_auto_adjustments_from_f16_buffer(width, height, &data))
 }
 
 #[uniffi::export]

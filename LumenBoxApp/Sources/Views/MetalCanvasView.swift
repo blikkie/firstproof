@@ -86,6 +86,21 @@ public struct MetalCanvasView: NSViewRepresentable {
         renderer.uniforms.lensCorrectionEnabled = viewModel.lensCorrectionEnabled ? 1 : 0
         renderer.uniforms.isOriginal = isShowingOriginal ? 1.0 : 0.0
         
+        switch viewModel.toneProfile {
+        case .agxVivid:
+            renderer.uniforms.toneProfileMode = 0
+        case .agxFilmic:
+            renderer.uniforms.toneProfileMode = 1
+        case .cameraStandard:
+            renderer.uniforms.toneProfileMode = 2
+        case .cameraPortrait:
+            renderer.uniforms.toneProfileMode = 3
+        case .cameraLandscape:
+            renderer.uniforms.toneProfileMode = 4
+        case .cameraVivid:
+            renderer.uniforms.toneProfileMode = 5
+        }
+        
         if let coeff = viewModel.lensCoefficients, coeff.hasDistortion {
             renderer.uniforms.distortionModel = (coeff.distortionModel == "ptlens") ? 1 : 0
             renderer.uniforms.k1 = coeff.distortion.indices.contains(0) ? coeff.distortion[0] : 0.0

@@ -23,6 +23,8 @@ public struct ShaderUniforms {
     public var k4: Float = 0.0
     public var isOriginal: Float = 0.0
     public var isLinearRaw: Int32 = 0
+    public var toneProfileMode: Int32 = 0
+    public var _padding: Int32 = 0
 }
 
 public final class MetalRenderer: NSObject, MTKViewDelegate {
@@ -63,9 +65,18 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         if metalLibrary == nil {
             if let shaderURL = Bundle.main.url(forResource: "Shaders", withExtension: "metal"),
                let shaderSource = try? String(contentsOf: shaderURL) {
-                metalLibrary = try? device.makeLibrary(source: shaderSource, options: nil)
-            } else {
-                metalLibrary = try? device.makeLibrary(source: embeddedShaderSource, options: nil)
+                do {
+                    metalLibrary = try device.makeLibrary(source: shaderSource, options: nil)
+                } catch {
+                    print("⚠️ Warning: Failed to compile Shaders.metal from bundle: \(error)")
+                }
+            }
+            if metalLibrary == nil {
+                do {
+                    metalLibrary = try device.makeLibrary(source: embeddedShaderSource, options: nil)
+                } catch {
+                    print("❌ Error: Failed to compile embeddedShaderSource: \(error)")
+                }
             }
         }
         
@@ -324,6 +335,8 @@ struct ShaderUniforms {
     float k4;
     float isOriginal;        // 1.0 = Bypass edits
     int isLinearRaw;         // 1 = Texture contains Wide-Gamut Linear Rec.2020 half-floats
+    int toneProfileMode;     // 0 = AgX Vivid, 1 = AgX Neutral, 2 = Standard, 3 = Portrait, 4 = Landscape, 5 = Vivid
+    int _padding;
 };
 
 // MARK: - Scene-Referred Rec.2020 Color Transfer Functions & Matrices (File Scope)
@@ -347,6 +360,84 @@ inline float3 linearToSrgbGamma3(float3 c) {
     return float3(linearToSrgbGamma(c.r), linearToSrgbGamma(c.g), linearToSrgbGamma(c.b));
 }
 
+// MARK: - RGB <-> HSV Color Transform Helpers
+
+inline float3 rgb2hsv(float3 c) {
+    float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    float4 p = mix(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+    float4 q = mix(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)) * 360.0, d / (q.x + e), q.x);
+}
+
+inline float3 hsv2rgb(float3 c) {
+    float h = c.x / 60.0;
+    float s = c.y;
+    float v = c.z;
+    float C = v * s;
+    float X = C * (1.0 - abs(fmod(h, 2.0) - 1.0));
+    float m = v - C;
+    float3 rgb;
+    if (h < 1.0) rgb = float3(C, X, 0.0);
+    else if (h < 2.0) rgb = float3(X, C, 0.0);
+    else if (h < 3.0) rgb = float3(0.0, C, X);
+    else if (h < 4.0) rgb = float3(0.0, X, C);
+    else if (h < 5.0) rgb = float3(X, 0.0, C);
+    else rgb = float3(C, 0.0, X);
+    return rgb + float3(m);
+}
+
+// Camera manufacturer S-curve:
+inline float applyCameraToneCurve(float x, int mode) {
+    x = clamp(x, 0.0, 1.0);
+    float mid = (mode == 2) ? 0.185 : ((mode == 3) ? 0.200 : ((mode == 4) ? 0.210 : 0.190));
+    if (x <= 0.18) {
+        float t = x / 0.18;
+        return mix(0.0, mid, t * t * (3.0 - 2.0 * t));
+    } else {
+        float t = (x - 0.18) / 0.82;
+        return mix(mid, 1.0, t * (2.0 - t));
+    }
+}
+
+// Camera HueSatMap Memory Color Adjustments:
+inline float3 applyCameraHueSat(float3 hsv, int mode) {
+    float h = hsv.x;
+    float s = hsv.y;
+    float v = hsv.z;
+    
+    // Blue skies from silicon Bayer filters peak around 235 deg (violet-blue).
+    // Camera profiles rotate blue towards cyan/azure (215-220 deg)
+    // and gently compress saturation to eliminate harsh purple casts.
+    float skyWeight = clamp(1.0 - abs(h - 235.0) / 35.0, 0.0, 1.0);
+    float greenWeight = clamp(1.0 - abs(h - 120.0) / 35.0, 0.0, 1.0);
+    float skinWeight = clamp(1.0 - abs(h - 30.0) / 20.0, 0.0, 1.0);
+    
+    // Shift raw sensor blue towards natural sky azure
+    h -= 18.0 * skyWeight;
+    if (h < 0.0) { h += 360.0; }
+    
+    if (mode == 1) {
+        // Camera Standard: natural azure sky, vivid foliage, healthy skin
+        s *= (1.0 - 0.20 * skyWeight + 0.10 * greenWeight + 0.05 * skinWeight);
+        v *= (1.0 - 0.03 * skyWeight + 0.03 * skinWeight);
+    } else if (mode == 2) {
+        // Camera Portrait: gentle skin smoothing, calm skies
+        s *= (1.0 - 0.05 * skinWeight - 0.22 * skyWeight);
+        v *= (1.0 + 0.04 * skinWeight);
+    } else if (mode == 3) {
+        // Camera Landscape: punchy azure sky & greens
+        s *= (1.0 - 0.12 * skyWeight + 0.20 * greenWeight);
+        v *= (1.0 - 0.05 * skyWeight - 0.04 * greenWeight);
+    } else if (mode == 4) {
+        // Camera Vivid
+        s *= (1.20 - 0.15 * skyWeight);
+    }
+    return float3(h, clamp(s, 0.0, 1.0), clamp(v, 0.0, 1.0));
+}
+
 // Linear sRGB -> Linear Rec.2020 Matrix (columns in Metal MSL)
 constant float3x3 LINEAR_SRGB_TO_REC2020 = float3x3(
     float3(0.6274041, 0.0690972, 0.0163914),
@@ -360,6 +451,90 @@ constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
     float3(-0.5876411,  1.1328999, -0.1005789),
     float3(-0.0728499, -0.0083494,  1.1187297)
 );
+
+// MARK: - AgX Filmic Tone Mapping Engine Constants & Operators
+// AgX Inset Matrix (Linear Rec.2020 -> AgX Inset) - columns in Metal MSL
+constant float3x3 AGX_INSET_MATRIX = float3x3(
+    float3( 1.4096986,   0.13136263,  0.16151477),
+    float3(-0.4004796,   0.77151406, -0.06034984),
+    float3(-0.009218898, 0.09712328,  0.89883506)
+);
+
+// AgX Outset Matrix (AgX Curved -> Display sRGB) - columns in Metal MSL
+constant float3x3 AGX_OUTSET_MATRIX = float3x3(
+    float3( 1.1271005, -0.1413298, -0.1413298),
+    float3(-0.1106066,  1.1578237, -0.1106066),
+    float3(-0.0164939, -0.0164939,  1.2519364)
+);
+
+constant float AGX_MIN_EV = -15.2;
+constant float AGX_MAX_EV = 5.0;
+constant float AGX_EV_RANGE = 20.2;
+constant float AGX_GAMMA = 2.4;
+constant float AGX_MID_GRAY_NORM = 0.75247525;
+
+inline float agxSigmoid(float x, float power) {
+    return x / pow(1.0 + pow(x, power), 1.0 / power);
+}
+
+inline float agxScaledSigmoid(float x, float scale, float slope, float power, float tx, float ty) {
+    return scale * agxSigmoid(slope * (x - tx) / scale, power) + ty;
+}
+
+inline float agxApplyCurveChannel(float x) {
+    if (x < 0.6060606) {
+        return clamp(agxScaledSigmoid(x, -1.0359, 2.3843, 1.5, 0.6060606, 0.43446), 0.0, 1.0);
+    } else {
+        return clamp(agxScaledSigmoid(x, 1.3475, 2.3843, 1.5, 0.6060606, 0.43446), 0.0, 1.0);
+    }
+}
+
+inline float3 agxToneMap(float3 rec2020Color, float contrastGain) {
+    // 1. Gamut compression (prevents negative values)
+    float minC = min(rec2020Color.r, min(rec2020Color.g, rec2020Color.b));
+    float3 cComp = (minC < 0.0) ? (rec2020Color - minC) : rec2020Color;
+
+    // 2. Inset Gamut Transform (Rec.2020 -> AgX Inset)
+    float3 inset = AGX_INSET_MATRIX * cComp;
+    
+    // 3. Middle-gray (0.18) relative log2 normalization & Sigmoidal Transfer
+    float3 xRel = max(inset / 0.18, float3(1e-6));
+    float3 logEncoded = (log2(xRel) - float3(AGX_MIN_EV)) / AGX_EV_RANGE;
+    float3 norm = clamp(logEncoded, 0.0, 1.0);
+    
+    if (abs(contrastGain - 1.0) > 0.001) {
+        norm = clamp(float3(AGX_MID_GRAY_NORM) + (norm - float3(AGX_MID_GRAY_NORM)) * contrastGain, 0.0, 1.0);
+    }
+    
+    float3 curved;
+    curved.r = agxApplyCurveChannel(norm.r);
+    curved.g = agxApplyCurveChannel(norm.g);
+    curved.b = agxApplyCurveChannel(norm.b);
+    
+    float3 linearized = pow(max(curved, float3(0.0)), float3(AGX_GAMMA));
+    return max(AGX_OUTSET_MATRIX * linearized, float3(0.0));
+}
+
+inline float3 agxToneMapVivid(float3 rec2020Color, float contrastGain) {
+    float3 base = agxToneMap(rec2020Color, contrastGain * 1.15);
+    float3 hsv = rgb2hsv(base);
+    
+    // Skin tone protection (15..45 deg, centered around 25 deg)
+    float skinWeight = clamp(1.0 - abs(hsv.x - 25.0) / 20.0, 0.0, 1.0);
+    // Sky blue covers 200..270 deg, centered around 235 deg
+    float skyWeight = clamp(1.0 - abs(hsv.x - 235.0) / 35.0, 0.0, 1.0);
+    
+    // Azure sky shift
+    hsv.x -= 18.0 * skyWeight;
+    // Gentle peach alignment for skin (-3 deg away from yellow towards healthy rose)
+    hsv.x -= 3.0 * skinWeight;
+    if (hsv.x < 0.0) { hsv.x += 360.0; }
+    if (hsv.x >= 360.0) { hsv.x -= 360.0; }
+    
+    // Vibrant midtone chroma with sky saturation normalized and delicate skin tones protected
+    hsv.y = clamp(hsv.y * (1.18 - 0.20 * skinWeight - 0.15 * skyWeight), 0.0, 1.0);
+    return clamp(hsv2rgb(hsv), 0.0, 1.0);
+}
 
 // MARK: - Vertex Shader
 vertex VertexOutput vertexShader(
@@ -503,24 +678,53 @@ fragment float4 fragmentShader(
     
     // 4. Linear Exposure Multiplication (2^EV) in Wide-Gamut Space
     float totalExposure = editExposure;
-    if (uniforms.isLinearRaw == 1) {
-        totalExposure += 0.65; // Baseline photographic exposure gain for RAW sensor midtone anchoring
-    }
     if (totalExposure != 0.0) {
         rec2020Color *= pow(2.0, totalExposure);
     }
     
-    // 5. Tone & Contrast S-Curve in Wide-Gamut Space
-    if (uniforms.isLinearRaw == 1 || editContrast != 0.0) {
+    // 5. AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles
+    float3 srgbLinearOut;
+    if (uniforms.toneProfileMode == 0) {
+        // Mode 0: AgX Vivid (Filmic Punchy) - DEFAULT
         float contrastGain = 1.0 + (editContrast / 100.0);
-        float3 norm = max(rec2020Color / 0.18, float3(0.0001));
-        float3 curved = 0.18 * pow(norm, float3(1.15 * contrastGain));
-        rec2020Color = curved / (float3(1.0) + curved * 0.35);
+        srgbLinearOut = agxToneMapVivid(rec2020Color, contrastGain);
+    } else if (uniforms.toneProfileMode == 1) {
+        // Mode 1: AgX Neutral (Filmic Base)
+        if (uniforms.isLinearRaw == 1 || editContrast != 0.0) {
+            float contrastGain = 1.0 + (editContrast / 100.0);
+            srgbLinearOut = agxToneMap(rec2020Color, contrastGain);
+        } else {
+            srgbLinearOut = max(REC2020_TO_LINEAR_SRGB * rec2020Color, float3(0.0));
+        }
+    } else {
+        // Modes 2..5: Camera Matching (Standard, Portrait, Landscape, Vivid)
+        int camMode = uniforms.toneProfileMode - 1; // 2->1 (Standard), 3->2 (Portrait), 4->3 (Landscape), 5->4 (Vivid)
+        float3 c_srgb = max(REC2020_TO_LINEAR_SRGB * rec2020Color, float3(0.0));
+        float3 hsv = rgb2hsv(c_srgb);
+        float3 hsvAdjusted = applyCameraHueSat(hsv, camMode);
+        float3 rgbAdjusted = hsv2rgb(hsvAdjusted);
+        
+        // Luminance-scaled tone curve: evaluates tone curve on luminance axis Y,
+        // preserving chromaticity ratios (R/Y, G/Y, B/Y) without hue twisting.
+        float lum = dot(rgbAdjusted, float3(0.2126, 0.7152, 0.0722));
+        float lumCurved = applyCameraToneCurve(lum, camMode);
+        float contrastGain = 1.0 + (editContrast / 100.0);
+        float lumAdj = clamp((lumCurved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
+        float gain = lumAdj / max(lum, 1e-6);
+        
+        srgbLinearOut = clamp(rgbAdjusted * gain, 0.0, 1.0);
     }
     
-    // 6. Display Target Transform: Linear Rec.2020 -> Linear sRGB -> Standard Display Gamma
-    float3 srgbLinearOut = max(REC2020_TO_LINEAR_SRGB * rec2020Color, float3(0.0));
-    float3 finalColor = linearToSrgbGamma3(srgbLinearOut);
+    // 6. Display Target Transform:
+    // AgX Filmic tone mapping (modes 0 and 1) directly produces display-referred sRGB values (with AgX 2.4 gamma applied).
+    // Applying linearToSrgbGamma3 to AgX output cancels the 2.4 power curve ((x^2.4)^(1/2.2) ~= x),
+    // blowing out midtones and highlights. Camera-matching DCP profiles output linear sRGB and require gamma encoding.
+    float3 finalColor;
+    if (uniforms.toneProfileMode <= 1) {
+        finalColor = clamp(srgbLinearOut, 0.0, 1.0);
+    } else {
+        finalColor = linearToSrgbGamma3(srgbLinearOut);
+    }
     
     return float4(finalColor, sampledColor.a);
 }

@@ -7,9 +7,8 @@ use image::codecs::tiff::TiffEncoder;
 
 use crate::EditSettings;
 use crate::color::{
-    Color3, Matrix3x3, BRADFORD_D50_TO_D65, CANON_EOS_SENSOR_TO_XYZ_D50,
-    LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB, XYZ_D65_TO_REC2020,
-    REC2020_TO_XYZ_D65, linear_rgb_to_srgb8, srgb_gamma_to_linear,
+    Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB,
+    linear_rgb_to_srgb8, srgb_gamma_to_linear,
 };
 
 pub struct DemosaicedImage {
@@ -42,27 +41,9 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
         let mut demosaiced = DemosaicedImage::new(active_w, active_h, true);
         let (wb_r, wb_b) = frame.as_shot_wb();
         
-        // Derive exact Camera -> Linear Rec.2020 matrix using standard RAW colorimetric derivation:
-        // rec2cam = normalize(xyz2cam * rec2020_to_xyz)
-        // sensor_to_rec2020 = (rec2cam)^-1
-        let sensor_to_rec2020 = if let Some(m) = frame.color_matrix {
-            let xyz2cam = Matrix3x3(m);
-            let rec2cam_raw = xyz2cam.multiply_matrix(&REC2020_TO_XYZ_D65);
-            // Normalize rows so neutral [1, 1, 1] in Rec.2020 maps to [1, 1, 1] in camera sensor space
-            let norm_r = rec2cam_raw.0[0][0] + rec2cam_raw.0[0][1] + rec2cam_raw.0[0][2];
-            let norm_g = rec2cam_raw.0[1][0] + rec2cam_raw.0[1][1] + rec2cam_raw.0[1][2];
-            let norm_b = rec2cam_raw.0[2][0] + rec2cam_raw.0[2][1] + rec2cam_raw.0[2][2];
-            let rec2cam = Matrix3x3([
-                [rec2cam_raw.0[0][0] / norm_r, rec2cam_raw.0[0][1] / norm_r, rec2cam_raw.0[0][2] / norm_r],
-                [rec2cam_raw.0[1][0] / norm_g, rec2cam_raw.0[1][1] / norm_g, rec2cam_raw.0[1][2] / norm_g],
-                [rec2cam_raw.0[2][0] / norm_b, rec2cam_raw.0[2][1] / norm_b, rec2cam_raw.0[2][2] / norm_b],
-            ]);
-            rec2cam.inverse().unwrap_or(rec2cam)
-        } else {
-            XYZ_D65_TO_REC2020
-                .multiply_matrix(&BRADFORD_D50_TO_D65)
-                .multiply_matrix(&CANON_EOS_SENSOR_TO_XYZ_D50)
-        };
+        // Derive Camera -> Linear Rec.2020 matrix dynamically interpolated
+        // along the Planckian blackbody locus for the photo's as-shot / default daylight temperature (5500K).
+        let sensor_to_rec2020 = frame.sensor_to_rec2020_at(5500.0);
         for y in 0..active_h {
             let full_y = (frame.active_y + y).min(frame.full_height - 2).max(1);
             
@@ -138,7 +119,7 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
 
 /// Applies user edits (Exposure, White Balance, Contrast, Display gamma) in 16-bit linear space.
 pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
-    let total_exposure = if image.is_raw { edits.exposure + 0.65 } else { edits.exposure };
+    let total_exposure = edits.exposure;
     let exposure_gain = 2.0f32.powf(total_exposure);
     let contrast_gain = 1.0 + (edits.contrast / 100.0);
     
@@ -169,23 +150,62 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
         g *= exposure_gain;
         b *= exposure_gain;
         
-        // 3. Baseline Filmic Tone Curve (Mid-Gray Sigmoid S-Curve)
-        // Shapes linear sensor photons into photographic contrast:
-        // anchors deep shadows, expands midtone contrast, and smoothly compresses highlights.
-        if image.is_raw || edits.contrast != 0.0 {
-            let shape_channel = |c: f32| -> f32 {
-                let x = c.max(0.0);
-                // Filmic rational polynomial tone mapper: x * (1 + 0.5 * x) / (1 + x * (1 + 0.25 * x))
-                let mid_scale = 0.18f32;
-                let norm = x / mid_scale;
-                let curved = mid_scale * (norm.powf(1.15 * contrast_gain));
-                // Highlight compression shoulder
-                curved / (1.0 + curved * 0.35)
-            };
-            
-            r = shape_channel(r);
-            g = shape_channel(g);
-            b = shape_channel(b);
+        // 3. AgX Filmic or Camera-Matching Tone Profiles
+        if image.is_raw || edits.contrast != 0.0 || edits.tone_profile != crate::ColorProfileMode::AgxFilmic {
+            match edits.tone_profile {
+                crate::ColorProfileMode::AgxVivid => {
+                    let c_rec2020 = Color3::new(r, g, b);
+                    let c_srgb = crate::color::agx_tone_map_vivid(c_rec2020, contrast_gain);
+                    let c_rec2020_out = LINEAR_SRGB_TO_REC2020.multiply_vector(c_srgb);
+                    r = c_rec2020_out.r();
+                    g = c_rec2020_out.g();
+                    b = c_rec2020_out.b();
+                }
+                crate::ColorProfileMode::AgxFilmic => {
+                    let c_rec2020 = Color3::new(r, g, b);
+                    let c_srgb = crate::color::agx_tone_map(c_rec2020, contrast_gain);
+                    let c_rec2020_out = LINEAR_SRGB_TO_REC2020.multiply_vector(c_srgb);
+                    r = c_rec2020_out.r();
+                    g = c_rec2020_out.g();
+                    b = c_rec2020_out.b();
+                }
+                mode => {
+                    let c_rec2020 = Color3::new(r, g, b);
+                    let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+                    let (h, s, v) = crate::color::rgb_to_hsv(c_srgb.r().max(0.0), c_srgb.g().max(0.0), c_srgb.b().max(0.0));
+                    
+                    let huesatmap = match mode {
+                        crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_huesatmap(),
+                        crate::ColorProfileMode::CameraLandscape => crate::color::dcp::DcpProfile::built_in_landscape_huesatmap(),
+                        crate::ColorProfileMode::CameraVivid => crate::color::dcp::DcpProfile::built_in_vivid_huesatmap(),
+                        _ => crate::color::dcp::DcpProfile::built_in_standard_huesatmap(),
+                    };
+                    let (h2, s2, v2) = huesatmap.apply_hsv(h, s, v);
+                    let (r_mapped, g_mapped, b_mapped) = crate::color::hsv_to_rgb(h2, s2, v2);
+                    
+                    let curve = match mode {
+                        crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_tone_curve(),
+                        crate::ColorProfileMode::CameraLandscape => crate::color::dcp::DcpProfile::built_in_landscape_tone_curve(),
+                        crate::ColorProfileMode::CameraVivid => crate::color::dcp::DcpProfile::built_in_vivid_tone_curve(),
+                        _ => crate::color::dcp::DcpProfile::built_in_standard_tone_curve(),
+                    };
+                    
+                    // Luminance-scaled tone curve: preserves chromaticity ratios (R/Y, G/Y, B/Y) without hue twisting
+                    let lum = 0.2126 * r_mapped + 0.7152 * g_mapped + 0.0722 * b_mapped;
+                    let lum_curved = crate::color::evaluate_tone_curve(lum, &curve);
+                    let lum_adj = ((lum_curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+                    let gain = lum_adj / lum.max(1e-6);
+                    
+                    let r_adj = (r_mapped * gain).clamp(0.0, 1.0);
+                    let g_adj = (g_mapped * gain).clamp(0.0, 1.0);
+                    let b_adj = (b_mapped * gain).clamp(0.0, 1.0);
+                    
+                    let c_rec2020_out = LINEAR_SRGB_TO_REC2020.multiply_vector(Color3::new(r_adj, g_adj, b_adj));
+                    r = c_rec2020_out.r();
+                    g = c_rec2020_out.g();
+                    b = c_rec2020_out.b();
+                }
+            }
         }
         
         // Linear Rec.2020 working values (gamma OETF applied at final 8-bit export encode)
@@ -241,6 +261,33 @@ pub fn f32_to_f16(val: f32) -> u16 {
         (sign | 0x7c00) as u16
     } else {
         (sign | ((exp as u32) << 10) | (mant >> 13)) as u16
+    }
+}
+
+/// Converts an IEEE 754 binary16 (half-float) bit representation to an f32 float.
+#[inline]
+pub fn f16_to_f32(val: u16) -> f32 {
+    let sign = ((val & 0x8000) as u32) << 16;
+    let exp = ((val >> 10) & 0x1f) as u32;
+    let mant = (val & 0x03ff) as u32;
+    if exp == 0 {
+        if mant == 0 {
+            f32::from_bits(sign)
+        } else {
+            let mut m = mant;
+            let mut e = 113;
+            while (m & 0x0400) == 0 {
+                m <<= 1;
+                e -= 1;
+            }
+            m &= 0x03ff;
+            f32::from_bits(sign | (e << 23) | (m << 13))
+        }
+    } else if exp == 31 {
+        f32::from_bits(sign | 0x7f80_0000 | (mant << 13))
+    } else {
+        let e = exp + 127 - 15;
+        f32::from_bits(sign | (e << 23) | (mant << 13))
     }
 }
 
@@ -396,7 +443,17 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             let (r_val, g_val, b_val) = sample_bilinear(&image, sx, sy);
             let c_rec2020 = Color3::new(r_val, g_val, b_val);
             let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
-            let srgb8 = linear_rgb_to_srgb8(c_srgb);
+            let srgb8 = if edits.tone_profile == crate::ColorProfileMode::AgxVivid
+                || edits.tone_profile == crate::ColorProfileMode::AgxFilmic
+            {
+                [
+                    (c_srgb.r().clamp(0.0, 1.0) * 255.0).round() as u8,
+                    (c_srgb.g().clamp(0.0, 1.0) * 255.0).round() as u8,
+                    (c_srgb.b().clamp(0.0, 1.0) * 255.0).round() as u8,
+                ]
+            } else {
+                linear_rgb_to_srgb8(c_srgb)
+            };
             
             rgb_img.put_pixel(tx, ty, Rgb(srgb8));
         }
@@ -455,6 +512,7 @@ mod tests {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            tone_profile: crate::ColorProfileMode::AgxFilmic,
         };
         
         let res = export_photo_file(tmp_in, tmp_out, &edits, None, 90, Some(50));
@@ -487,15 +545,26 @@ mod tests {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            tone_profile: crate::ColorProfileMode::AgxFilmic,
         };
         apply_edits(&mut img, &edits);
         
         let c_rec2020 = Color3::new(img.data[0], img.data[1], img.data[2]);
         let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
-        let srgb8 = linear_rgb_to_srgb8(c_srgb);
+        let srgb8 = if edits.tone_profile == crate::ColorProfileMode::AgxVivid
+            || edits.tone_profile == crate::ColorProfileMode::AgxFilmic
+        {
+            [
+                (c_srgb.r().clamp(0.0, 1.0) * 255.0).round() as u8,
+                (c_srgb.g().clamp(0.0, 1.0) * 255.0).round() as u8,
+                (c_srgb.b().clamp(0.0, 1.0) * 255.0).round() as u8,
+            ]
+        } else {
+            linear_rgb_to_srgb8(c_srgb)
+        };
         
-        // Mid-gray 0.18 + 0.65 EV exposure -> ~0.2825 -> filmic S-curve -> ~0.245 -> sRGB gamma -> ~0.529 -> ~135/255
-        assert!(srgb8[0] >= 120 && srgb8[0] <= 150, "Expected display midtone range, got {}", srgb8[0]);
+        // Mid-gray 0.18 -> filmic S-curve -> ~0.51085 display-referred -> ~130/255 (RapidRAW target median is 127-130)
+        assert!(srgb8[0] >= 120 && srgb8[0] <= 135, "Expected display midtone range, got {}", srgb8[0]);
         assert_eq!(srgb8[0], srgb8[1]);
         assert_eq!(srgb8[1], srgb8[2]);
     }

@@ -71,6 +71,7 @@ public final class AppViewModel {
     public var tint: Float = 0.0          // -150 .. +150
     public var straightenAngle: Float = 0.0 // -45 .. +45 deg
     public var lensCorrectionEnabled: Bool = true
+    public var toneProfile: ColorProfileMode = .agxVivid
     
     // MARK: - Takeout & Metadata
     public var takeoutMatches: [TakeoutMatchRecord] = []
@@ -531,6 +532,7 @@ public final class AppViewModel {
             self.temperature = xmp.edits.temperature
             self.tint = xmp.edits.tint
             self.straightenAngle = xmp.edits.cropAngle
+            self.toneProfile = xmp.edits.toneProfile
         } else {
             resetAllSliders()
         }
@@ -684,7 +686,7 @@ public final class AppViewModel {
             description: existingXmp?.description,
             latitude: currentPhoto?.latitude,
             longitude: currentPhoto?.longitude,
-            edits: existingXmp?.edits ?? EditSettings(
+            edits: EditSettings(
                 exposure: self.exposure,
                 contrast: self.contrast,
                 temperature: self.temperature,
@@ -693,15 +695,55 @@ public final class AppViewModel {
                 cropTop: 0.0,
                 cropRight: 1.0,
                 cropBottom: 1.0,
-                cropAngle: self.straightenAngle
+                cropAngle: self.straightenAngle,
+                toneProfile: self.toneProfile
             )
         )
         _ = writeXmp(path: xmpPath, record: record)
     }
     
+    public func saveCurrentEdits() {
+        guard let photo = selectedPhoto else { return }
+        let path = photo.filePath
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            self?.syncXmp(for: path, rating: nil, status: nil)
+        }
+    }
+    
     // MARK: - As-Shot Baselines
     public var asShotTemperature: Float = 5500.0
     public var asShotTint: Float = 0.0
+    
+    // MARK: - Auto Development Adjustments
+    public func applyAutoAdjustments() {
+        guard let photo = selectedPhoto else { return }
+        
+        // 1. Fast-path: Calculate from already decoded half-float preview buffer
+        if let rawRecord = rawPreviewRecord {
+            if let adj = computeAutoAdjustmentsFromBuffer(width: rawRecord.width, height: rawRecord.height, data: rawRecord.data) {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    self.exposure = adj.exposure
+                    self.contrast = adj.contrast
+                }
+                saveCurrentEdits()
+                return
+            }
+        }
+        
+        // 2. Background path: Decode from file
+        let path = photo.filePath
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let adj = computeAutoAdjustments(path: path) else { return }
+            DispatchQueue.main.async {
+                guard let self = self, self.selectedPhoto?.filePath == path else { return }
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    self.exposure = adj.exposure
+                    self.contrast = adj.contrast
+                }
+                self.saveCurrentEdits()
+            }
+        }
+    }
     
     // MARK: - Slider Reset Helpers
     public func resetSlider(_ type: EditSliderType) {
@@ -725,6 +767,7 @@ public final class AppViewModel {
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0
+        toneProfile = .agxVivid
     }
     
     // MARK: - Filtered Photo List

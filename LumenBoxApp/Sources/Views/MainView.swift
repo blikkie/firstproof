@@ -80,6 +80,11 @@ struct MainView: View {
                         viewModel.isExportPackageSheetPresented = true
                     }
                 }.keyboardShortcut("e", modifiers: [.command, .shift])
+                Button("") {
+                    if viewModel.selectedPhoto != nil && viewModel.canvasMode == .detail {
+                        viewModel.applyAutoAdjustments()
+                    }
+                }.keyboardShortcut("u", modifiers: .command)
                 WindowAccessor { window in
                     window.setFrameAutosaveName("LumenBoxMainWindow")
                 }

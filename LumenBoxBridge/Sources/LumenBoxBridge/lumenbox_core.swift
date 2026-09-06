@@ -897,6 +897,72 @@ public func FfiConverterTypeLumenBoxLensfun_lower(_ value: LumenBoxLensfun) -> U
 }
 
 
+public struct AutoAdjustments {
+    public var exposure: Float
+    public var contrast: Float
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(exposure: Float, contrast: Float) {
+        self.exposure = exposure
+        self.contrast = contrast
+    }
+}
+
+
+
+extension AutoAdjustments: Equatable, Hashable {
+    public static func ==(lhs: AutoAdjustments, rhs: AutoAdjustments) -> Bool {
+        if lhs.exposure != rhs.exposure {
+            return false
+        }
+        if lhs.contrast != rhs.contrast {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(exposure)
+        hasher.combine(contrast)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAutoAdjustments: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AutoAdjustments {
+        return
+            try AutoAdjustments(
+                exposure: FfiConverterFloat.read(from: &buf), 
+                contrast: FfiConverterFloat.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AutoAdjustments, into buf: inout [UInt8]) {
+        FfiConverterFloat.write(value.exposure, into: &buf)
+        FfiConverterFloat.write(value.contrast, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAutoAdjustments_lift(_ buf: RustBuffer) throws -> AutoAdjustments {
+    return try FfiConverterTypeAutoAdjustments.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAutoAdjustments_lower(_ value: AutoAdjustments) -> RustBuffer {
+    return FfiConverterTypeAutoAdjustments.lower(value)
+}
+
+
 public struct EditSettings {
     public var exposure: Float
     public var contrast: Float
@@ -907,10 +973,11 @@ public struct EditSettings {
     public var cropRight: Float
     public var cropBottom: Float
     public var cropAngle: Float
+    public var toneProfile: ColorProfileMode
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float) {
+    public init(exposure: Float, contrast: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, toneProfile: ColorProfileMode) {
         self.exposure = exposure
         self.contrast = contrast
         self.temperature = temperature
@@ -920,6 +987,7 @@ public struct EditSettings {
         self.cropRight = cropRight
         self.cropBottom = cropBottom
         self.cropAngle = cropAngle
+        self.toneProfile = toneProfile
     }
 }
 
@@ -954,6 +1022,9 @@ extension EditSettings: Equatable, Hashable {
         if lhs.cropAngle != rhs.cropAngle {
             return false
         }
+        if lhs.toneProfile != rhs.toneProfile {
+            return false
+        }
         return true
     }
 
@@ -967,6 +1038,7 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(cropRight)
         hasher.combine(cropBottom)
         hasher.combine(cropAngle)
+        hasher.combine(toneProfile)
     }
 }
 
@@ -986,7 +1058,8 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 cropTop: FfiConverterFloat.read(from: &buf), 
                 cropRight: FfiConverterFloat.read(from: &buf), 
                 cropBottom: FfiConverterFloat.read(from: &buf), 
-                cropAngle: FfiConverterFloat.read(from: &buf)
+                cropAngle: FfiConverterFloat.read(from: &buf), 
+                toneProfile: FfiConverterTypeColorProfileMode.read(from: &buf)
         )
     }
 
@@ -1000,6 +1073,7 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.cropRight, into: &buf)
         FfiConverterFloat.write(value.cropBottom, into: &buf)
         FfiConverterFloat.write(value.cropAngle, into: &buf)
+        FfiConverterTypeColorProfileMode.write(value.toneProfile, into: &buf)
     }
 }
 
@@ -1938,6 +2012,98 @@ public func FfiConverterTypeXmpDataRecord_lower(_ value: XmpDataRecord) -> RustB
     return FfiConverterTypeXmpDataRecord.lower(value)
 }
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ColorProfileMode {
+    
+    case agxVivid
+    case agxFilmic
+    case cameraStandard
+    case cameraPortrait
+    case cameraLandscape
+    case cameraVivid
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeColorProfileMode: FfiConverterRustBuffer {
+    typealias SwiftType = ColorProfileMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColorProfileMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .agxVivid
+        
+        case 2: return .agxFilmic
+        
+        case 3: return .cameraStandard
+        
+        case 4: return .cameraPortrait
+        
+        case 5: return .cameraLandscape
+        
+        case 6: return .cameraVivid
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ColorProfileMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .agxVivid:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .agxFilmic:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .cameraStandard:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .cameraPortrait:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .cameraLandscape:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .cameraVivid:
+            writeInt(&buf, Int32(6))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeColorProfileMode_lift(_ buf: RustBuffer) throws -> ColorProfileMode {
+    return try FfiConverterTypeColorProfileMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeColorProfileMode_lower(_ value: ColorProfileMode) -> RustBuffer {
+    return FfiConverterTypeColorProfileMode.lower(value)
+}
+
+
+
+extension ColorProfileMode: Equatable, Hashable {}
+
+
+
 
 public enum LumenBoxError {
 
@@ -2156,6 +2322,30 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterData.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeAutoAdjustments: FfiConverterRustBuffer {
+    typealias SwiftType = AutoAdjustments?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAutoAdjustments.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAutoAdjustments.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -2410,6 +2600,22 @@ public func checkConnection() -> String {
     )
 })
 }
+public func computeAutoAdjustments(path: String) -> AutoAdjustments? {
+    return try!  FfiConverterOptionTypeAutoAdjustments.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_compute_auto_adjustments(
+        FfiConverterString.lower(path),$0
+    )
+})
+}
+public func computeAutoAdjustmentsFromBuffer(width: UInt32, height: UInt32, data: Data) -> AutoAdjustments? {
+    return try!  FfiConverterOptionTypeAutoAdjustments.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_compute_auto_adjustments_from_buffer(
+        FfiConverterUInt32.lower(width),
+        FfiConverterUInt32.lower(height),
+        FfiConverterData.lower(data),$0
+    )
+})
+}
 public func decodeRawPreview(path: String, maxDimension: UInt32?) -> RawPreviewRecord? {
     return try!  FfiConverterOptionTypeRawPreviewRecord.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_decode_raw_preview(
@@ -2514,6 +2720,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.contractVersionMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_check_connection() != 58636) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_compute_auto_adjustments() != 65384) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_compute_auto_adjustments_from_buffer() != 13733) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_decode_raw_preview() != 62888) {
