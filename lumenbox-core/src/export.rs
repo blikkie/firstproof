@@ -96,8 +96,8 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                     }
                 }
                 
-                // Sensor linear RGB with white balance (subtle 0.98 green normalization eliminates D65 daylight green tint)
-                let c_sensor = Color3::new((r * wb_r).clamp(0.0, 1.0), (g * 0.98).clamp(0.0, 1.0), (b * wb_b).clamp(0.0, 1.0));
+                // Sensor linear RGB with white balance
+                let c_sensor = Color3::new((r * wb_r).clamp(0.0, 1.0), g.clamp(0.0, 1.0), (b * wb_b).clamp(0.0, 1.0));
                 
                 // Map to Wide-Gamut Linear Rec.2020 working space
                 let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor);
@@ -136,9 +136,7 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
 
 /// Applies user edits (Exposure, White Balance, Contrast, Display gamma) in 16-bit linear space.
 pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
-    // Baseline photographic exposure gain (+0.65 EV) matching standard camera RAW development (Darktable/Apple RAW)
-    let total_exposure = edits.exposure + 0.65;
-    let exposure_gain = 2.0f32.powf(total_exposure);
+    let exposure_gain = 2.0f32.powf(edits.exposure);
     let contrast_gain = 1.0 + (edits.contrast / 100.0);
     
     let temp_norm = (edits.temperature / 5500.0).clamp(0.25, 4.0);
@@ -225,21 +223,25 @@ fn sample_bilinear(image: &DemosaicedImage, x: f32, y: f32) -> (f32, f32, f32) {
     (r, g, b)
 }
 
-/// Decodes a RAW image into an 8-bit RGBA preview buffer for live Metal rendering.
+/// Converts an f32 float to IEEE 754 binary16 (half-float) bit representation.
+#[inline]
+pub fn f32_to_f16(val: f32) -> u16 {
+    let bits = val.to_bits();
+    let sign = (bits >> 16) & 0x8000;
+    let exp = ((bits >> 23) & 0xff) as i32 - 127 + 15;
+    let mant = bits & 0x007f_ffff;
+    if exp <= 0 {
+        0
+    } else if exp >= 31 {
+        (sign | 0x7c00) as u16
+    } else {
+        (sign | ((exp as u32) << 10) | (mant >> 13)) as u16
+    }
+}
+
+/// Decodes a RAW image into a 16-bit half-float RGBA preview buffer in Wide-Gamut Linear Rec.2020 space.
 pub fn decode_raw_preview_buffer<P: AsRef<Path>>(path: P, max_dimension: Option<u32>) -> Result<(u32, u32, Vec<u8>), String> {
-    let mut demosaiced = decode_image(path)?;
-    let neutral_edits = EditSettings {
-        exposure: 0.0,
-        contrast: 0.0,
-        temperature: 5500.0,
-        tint: 0.0,
-        crop_left: 0.0,
-        crop_top: 0.0,
-        crop_right: 1.0,
-        crop_bottom: 1.0,
-        crop_angle: 0.0,
-    };
-    apply_edits(&mut demosaiced, &neutral_edits);
+    let demosaiced = decode_image(path)?;
     
     let orig_w = demosaiced.width;
     let orig_h = demosaiced.height;
@@ -261,26 +263,28 @@ pub fn decode_raw_preview_buffer<P: AsRef<Path>>(path: P, max_dimension: Option<
         (orig_w, orig_h)
     };
     
-    let mut out_rgba = vec![0u8; target_w * target_h * 4];
+    let mut out_rgba_f16 = vec![0u8; target_w * target_h * 8];
+    let a16 = f32_to_f16(1.0);
     
     for ty in 0..target_h {
         let sy = (ty as f32 + 0.5) * (orig_h as f32) / (target_h as f32);
         for tx in 0..target_w {
             let sx = (tx as f32 + 0.5) * (orig_w as f32) / (target_w as f32);
             let (r, g, b) = sample_bilinear(&demosaiced, sx, sy);
-            let c_rec2020 = Color3::new(r, g, b);
-            let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
-            let srgb8 = linear_rgb_to_srgb8(c_srgb);
             
-            let out_idx = (ty * target_w + tx) * 4;
-            out_rgba[out_idx] = srgb8[0];
-            out_rgba[out_idx + 1] = srgb8[1];
-            out_rgba[out_idx + 2] = srgb8[2];
-            out_rgba[out_idx + 3] = 255;
+            let r16 = f32_to_f16(r.max(0.0));
+            let g16 = f32_to_f16(g.max(0.0));
+            let b16 = f32_to_f16(b.max(0.0));
+            
+            let out_idx = (ty * target_w + tx) * 8;
+            out_rgba_f16[out_idx..out_idx + 2].copy_from_slice(&r16.to_le_bytes());
+            out_rgba_f16[out_idx + 2..out_idx + 4].copy_from_slice(&g16.to_le_bytes());
+            out_rgba_f16[out_idx + 4..out_idx + 6].copy_from_slice(&b16.to_le_bytes());
+            out_rgba_f16[out_idx + 6..out_idx + 8].copy_from_slice(&a16.to_le_bytes());
         }
     }
     
-    Ok((target_w as u32, target_h as u32, out_rgba))
+    Ok((target_w as u32, target_h as u32, out_rgba_f16))
 }
 
 /// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing and Lensfun distortion correction.
@@ -551,18 +555,45 @@ mod tests {
             println!("  Cheek: R={}, G={}, B={}", p_cheek[0], p_cheek[1], p_cheek[2]);
         }
         
-        // 3. Apple RAW Engine (sips) Reference
-        if let Ok(sips_img) = image::open("/Users/blikkie/Desktop/sips_reference.jpg") {
-            let rgb = sips_img.to_rgb8();
-            let w = rgb.width();
-            let h = rgb.height();
-            let p_sky = rgb.get_pixel(w / 4, h / 4);
-            let p_hair = rgb.get_pixel(w / 3, h / 2);
-            let p_cheek = rgb.get_pixel(w / 2, (h * 55) / 100);
-            println!("APPLE RAW ENGINE (sips) SAMPLES:");
-            println!("  Sky:   R={}, G={}, B={}", p_sky[0], p_sky[1], p_sky[2]);
-            println!("  Hair:  R={}, G={}, B={}", p_hair[0], p_hair[1], p_hair[2]);
-            println!("  Cheek: R={}, G={}, B={}", p_cheek[0], p_cheek[1], p_cheek[2]);
+        // 4. LumenBox Export on Desktop vs Screenshot Comparison
+        let export_desktop = "/Users/blikkie/Desktop/20250409_0265_LumenBox.jpg";
+        let screenshot_desktop = "/Users/blikkie/Desktop/Screenshot 2026-09-05 at 9.45.54\u{202f}PM.png";
+        
+        if let (Ok(exp_img), Ok(sc_img)) = (image::open(export_desktop), image::open(screenshot_desktop)) {
+            let exp_rgb = exp_img.to_rgb8();
+            let sc_rgb = sc_img.to_rgb8();
+            
+            let ew = exp_rgb.width();
+            let eh = exp_rgb.height();
+            let sw = sc_rgb.width();
+            let sh = sc_rgb.height();
+            
+            println!("\n========================================================");
+            println!("🔍 DESKTOP EXPORT vs SCREENSHOT PARITY COMPARISON:");
+            println!("Export dims: {}x{}, Screenshot dims: {}x{}", ew, eh, sw, sh);
+            
+            // Check several normalized regions: Sky, Cheek, Sweater, Hair
+            let sample_points = [
+                ("Sky (Cyan)", 0.25f32, 0.25f32),
+                ("Cheek (Skin)", 0.50f32, 0.55f32),
+                ("Sweater", 0.50f32, 0.78f32),
+                ("Hair (Dark)", 0.33f32, 0.50f32),
+            ];
+            
+            for (name, fx, fy) in sample_points {
+                let ep = exp_rgb.get_pixel(((ew as f32 * fx) as u32).min(ew - 1), ((eh as f32 * fy) as u32).min(eh - 1));
+                let sp = sc_rgb.get_pixel(((sw as f32 * fx) as u32).min(sw - 1), ((sh as f32 * fy) as u32).min(sh - 1));
+                
+                println!("  [{}]:", name);
+                println!("    Export JPEG: R={}, G={}, B={}", ep[0], ep[1], ep[2]);
+                println!("    Screenshot:  R={}, G={}, B={}", sp[0], sp[1], sp[2]);
+                println!("    Difference:  ΔR={:+4}, ΔG={:+4}, ΔB={:+4}", 
+                    sp[0] as i32 - ep[0] as i32,
+                    sp[1] as i32 - ep[1] as i32,
+                    sp[2] as i32 - ep[2] as i32
+                );
+            }
+            println!("========================================================\n");
         }
     }
 }

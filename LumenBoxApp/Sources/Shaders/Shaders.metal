@@ -25,6 +25,7 @@ struct ShaderUniforms {
     float k3;
     float k4;
     float isOriginal;        // 1.0 = Bypass edits
+    int isLinearRaw;         // 1 = Texture contains Wide-Gamut Linear Rec.2020 half-floats
 };
 
 // MARK: - Vertex Shader
@@ -168,9 +169,16 @@ constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
     float3(-0.0728499, -0.0083494,  1.1187297)
 );
 
-    // 2. Decode texture to Linear sRGB then transition into Wide-Gamut Linear Rec.2020
-    float3 linearSrgb = srgbGammaToLinear3(sampledColor.rgb);
-    float3 rec2020Color = LINEAR_SRGB_TO_REC2020 * linearSrgb;
+    // 2. Decode texture to Linear Rec.2020 working space
+    float3 rec2020Color;
+    if (uniforms.isLinearRaw == 1) {
+        // Texture is already native Wide-Gamut Linear Rec.2020 scene photons!
+        rec2020Color = sampledColor.rgb;
+    } else {
+        // Embedded JPEG or standard sRGB image: decode gamma to linear then map to Rec.2020
+        float3 linearSrgb = srgbGammaToLinear3(sampledColor.rgb);
+        rec2020Color = LINEAR_SRGB_TO_REC2020 * linearSrgb;
+    }
     
     // 3. White Balance & Temperature Adjustment in Wide-Gamut Space
     if (abs(uniforms.temperature - 5500.0) >= 1.0 || uniforms.tint != 0.0) {

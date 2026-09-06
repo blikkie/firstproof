@@ -1591,13 +1591,15 @@ public struct RawPreviewRecord {
     public var width: UInt32
     public var height: UInt32
     public var data: Data
+    public var isLinearFloat: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(width: UInt32, height: UInt32, data: Data) {
+    public init(width: UInt32, height: UInt32, data: Data, isLinearFloat: Bool) {
         self.width = width
         self.height = height
         self.data = data
+        self.isLinearFloat = isLinearFloat
     }
 }
 
@@ -1614,6 +1616,9 @@ extension RawPreviewRecord: Equatable, Hashable {
         if lhs.data != rhs.data {
             return false
         }
+        if lhs.isLinearFloat != rhs.isLinearFloat {
+            return false
+        }
         return true
     }
 
@@ -1621,6 +1626,7 @@ extension RawPreviewRecord: Equatable, Hashable {
         hasher.combine(width)
         hasher.combine(height)
         hasher.combine(data)
+        hasher.combine(isLinearFloat)
     }
 }
 
@@ -1634,7 +1640,8 @@ public struct FfiConverterTypeRawPreviewRecord: FfiConverterRustBuffer {
             try RawPreviewRecord(
                 width: FfiConverterUInt32.read(from: &buf), 
                 height: FfiConverterUInt32.read(from: &buf), 
-                data: FfiConverterData.read(from: &buf)
+                data: FfiConverterData.read(from: &buf), 
+                isLinearFloat: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -1642,6 +1649,7 @@ public struct FfiConverterTypeRawPreviewRecord: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.width, into: &buf)
         FfiConverterUInt32.write(value.height, into: &buf)
         FfiConverterData.write(value.data, into: &buf)
+        FfiConverterBool.write(value.isLinearFloat, into: &buf)
     }
 }
 

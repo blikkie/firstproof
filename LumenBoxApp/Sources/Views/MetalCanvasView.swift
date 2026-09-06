@@ -34,7 +34,14 @@ public struct MetalCanvasView: NSViewRepresentable {
             context.coordinator.renderer = renderer
             mtkView.delegate = renderer
             
-            if let image = viewModel.previewImage {
+            if let rawRecord = viewModel.rawPreviewRecord {
+                renderer.updateLinearRawTexture(
+                    width: Int(rawRecord.width),
+                    height: Int(rawRecord.height),
+                    data: rawRecord.data
+                )
+                context.coordinator.lastRawKey = "\(rawRecord.width)x\(rawRecord.height):\(rawRecord.data.count)"
+            } else if let image = viewModel.previewImage {
                 renderer.updateTexture(with: image)
             }
         }
@@ -48,14 +55,26 @@ public struct MetalCanvasView: NSViewRepresentable {
         }
         guard let renderer = context.coordinator.renderer else { return }
         
-        // 1. Update Texture if photo selection or preview image changed
+        // 1. Update Texture if photo selection, raw record, or preview image changed
         let photoChanged = context.coordinator.lastPhotoPath != viewModel.selectedPhoto?.filePath
+        let currentRawKey = viewModel.rawPreviewRecord.map { "\($0.width)x\($0.height):\($0.data.count)" }
+        let rawChanged = context.coordinator.lastRawKey != currentRawKey
         let imageChanged = context.coordinator.lastPreviewImage !== viewModel.previewImage
         
-        if (photoChanged || imageChanged), let image = viewModel.previewImage {
-            renderer.updateTexture(with: image)
+        if photoChanged || rawChanged || imageChanged {
+            if let rawRecord = viewModel.rawPreviewRecord {
+                renderer.updateLinearRawTexture(
+                    width: Int(rawRecord.width),
+                    height: Int(rawRecord.height),
+                    data: rawRecord.data
+                )
+                context.coordinator.lastRawKey = currentRawKey
+            } else if let image = viewModel.previewImage {
+                renderer.updateTexture(with: image)
+                context.coordinator.lastRawKey = nil
+            }
             context.coordinator.lastPhotoPath = viewModel.selectedPhoto?.filePath
-            context.coordinator.lastPreviewImage = image
+            context.coordinator.lastPreviewImage = viewModel.previewImage
         }
         
         // 2. Transmit Slider & Lensfun Uniforms to GPU
@@ -88,5 +107,6 @@ public struct MetalCanvasView: NSViewRepresentable {
         var renderer: MetalRenderer?
         var lastPhotoPath: String?
         var lastPreviewImage: NSImage?
+        var lastRawKey: String?
     }
 }

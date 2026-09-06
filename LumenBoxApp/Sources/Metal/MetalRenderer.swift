@@ -22,6 +22,7 @@ public struct ShaderUniforms {
     public var k3: Float = 0.0
     public var k4: Float = 0.0
     public var isOriginal: Float = 0.0
+    public var isLinearRaw: Int32 = 0
 }
 
 public final class MetalRenderer: NSObject, MTKViewDelegate {
@@ -208,6 +209,7 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
                 )
                 self.currentTexture = texture
                 self.uniforms.aspectRatio = Float(width) / Float(height)
+                self.uniforms.isLinearRaw = 0
                 return
             }
         }
@@ -216,8 +218,37 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         do {
             self.currentTexture = try textureLoader.newTexture(cgImage: cgImage, options: [.SRGB: false])
             self.uniforms.aspectRatio = Float(width) / Float(height)
+            self.uniforms.isLinearRaw = 0
         } catch {
             print("Failed to load Metal texture: \(error)")
+        }
+    }
+    
+    // MARK: - Linear Raw Half-Float Texture Upload
+    public func updateLinearRawTexture(width: Int, height: Int, data: Data) {
+        guard width > 0, height > 0, data.count >= width * height * 8 else { return }
+        
+        let texDesc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba16Float,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        texDesc.usage = [.shaderRead]
+        if let texture = device.makeTexture(descriptor: texDesc) {
+            data.withUnsafeBytes { rawBuffer in
+                if let baseAddress = rawBuffer.baseAddress {
+                    texture.replace(
+                        region: MTLRegionMake2D(0, 0, width, height),
+                        mipmapLevel: 0,
+                        withBytes: baseAddress,
+                        bytesPerRow: width * 8
+                    )
+                }
+            }
+            self.currentTexture = texture
+            self.uniforms.aspectRatio = Float(width) / Float(height)
+            self.uniforms.isLinearRaw = 1
         }
     }
     

@@ -48,6 +48,7 @@ public final class AppViewModel {
     public var selectedPhotoPaths: Set<String> = []
     public var isBulkSelectionMode: Bool = false
     public var previewImage: NSImage? = nil
+    public var rawPreviewRecord: RawPreviewRecord? = nil
     public var isDemosaicing: Bool = false
     @ObservationIgnored private var activeDecodeToken: UUID = UUID()
     public var isExportSheetPresented: Bool = false
@@ -437,6 +438,8 @@ public final class AppViewModel {
         self.activeDecodeToken = token
         self.isDemosaicing = true
         
+        self.rawPreviewRecord = nil
+        
         // Fast switch: immediately present cached thumbnail so user can scrub instantly
         if let cached = ThumbnailCache.shared.image(for: photo.filePath) {
             self.previewImage = cached
@@ -496,41 +499,20 @@ public final class AppViewModel {
                 }
             }
             
-            // 3. Stage 2 Progressive Hybrid Promotion: Asynchronously demosaic calibrated RAW buffer for parity with export
+            // 3. Stage 2 Progressive Hybrid Promotion: Stream linear RAW half-float buffer to GPU
             if self.selectedPhotoIsRaw {
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     guard let self = self else { return }
                     guard self.activeDecodeToken == token else { return }
                     
                     if let rawRecord = decodeRawPreview(path: photo.filePath, maxDimension: 2560) {
-                        let w = Int(rawRecord.width)
-                        let h = Int(rawRecord.height)
-                        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
-                        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
-                        
-                        if let provider = CGDataProvider(data: rawRecord.data as CFData),
-                           let cgImage = CGImage(
-                               width: w,
-                               height: h,
-                               bitsPerComponent: 8,
-                               bitsPerPixel: 32,
-                               bytesPerRow: w * 4,
-                               space: colorSpace,
-                               bitmapInfo: bitmapInfo,
-                               provider: provider,
-                               decode: nil,
-                               shouldInterpolate: true,
-                               intent: .defaultIntent
-                           ) {
-                            let rawImage = NSImage(cgImage: cgImage, size: NSSize(width: w, height: h))
-                            DispatchQueue.main.async {
-                                if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
-                                    self.previewImage = rawImage
-                                    self.isDemosaicing = false
-                                }
+                        DispatchQueue.main.async {
+                            if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
+                                self.rawPreviewRecord = rawRecord
+                                self.isDemosaicing = false
                             }
-                            return
                         }
+                        return
                     }
                     
                     DispatchQueue.main.async {
