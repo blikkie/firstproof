@@ -1,13 +1,20 @@
-# Rust
+# Build Artifacts & App Bundles
+/dist/
 /target/
+.build/
+**/.build/
+.swiftpm/
+**/.swiftpm/
+
+# Generated FFI Binaries
+LumenBoxBridge/Sources/LumenBoxCoreFFI/include/liblumenbox_core.a
+
+# Rust
 **/*.rs.bk
 
 # macOS
 .DS_Store
-
-# Swift / Xcode
-.build/
-DerivedData/
+**/.DS_Store
 
 # IDEs
 .vscode/
