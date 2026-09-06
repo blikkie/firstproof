@@ -208,3 +208,8 @@ pub const CANON_EOS_SENSOR_TO_XYZ_D50: Matrix3x3 = Matrix3x3([
     [ 0.2721,  0.6409,  0.0870],
     [-0.0102, -0.0841,  0.9193],
 ]);
+
+/// Canonical sRGB ICC profile ("sRGB IEC61966-2.1") for embedding into exported JPEGs.
+/// Enables macOS ColorSync and display servers to accurately map sRGB pixel values
+/// into wide-gamut Display P3 panels without green/cyan chromaticity drift.
+pub const SRGB_ICC_PROFILE: &[u8] = include_bytes!("srgb.icc");

@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use image::{ColorType, ImageBuffer, Rgb, RgbImage};
 use image::codecs::jpeg::JpegEncoder;
@@ -151,23 +151,24 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
         b *= exposure_gain;
         
         // 3. AgX Filmic or Camera-Matching Tone Profiles
+        // Tone profiles output sRGB (display-referred for AgX, linear sRGB for camera profiles / raw passthrough).
+        // Outputting sRGB directly avoids matrix inversion back into Rec.2020 and eliminates channel cross-talk
+        // or clamping discrepancies prior to bilinear interpolation.
         if image.is_raw || edits.contrast != 0.0 || edits.tone_profile != crate::ColorProfileMode::AgxFilmic {
             match edits.tone_profile {
                 crate::ColorProfileMode::AgxVivid => {
                     let c_rec2020 = Color3::new(r, g, b);
                     let c_srgb = crate::color::agx_tone_map_vivid(c_rec2020, contrast_gain);
-                    let c_rec2020_out = LINEAR_SRGB_TO_REC2020.multiply_vector(c_srgb);
-                    r = c_rec2020_out.r();
-                    g = c_rec2020_out.g();
-                    b = c_rec2020_out.b();
+                    r = c_srgb.r();
+                    g = c_srgb.g();
+                    b = c_srgb.b();
                 }
                 crate::ColorProfileMode::AgxFilmic => {
                     let c_rec2020 = Color3::new(r, g, b);
                     let c_srgb = crate::color::agx_tone_map(c_rec2020, contrast_gain);
-                    let c_rec2020_out = LINEAR_SRGB_TO_REC2020.multiply_vector(c_srgb);
-                    r = c_rec2020_out.r();
-                    g = c_rec2020_out.g();
-                    b = c_rec2020_out.b();
+                    r = c_srgb.r();
+                    g = c_srgb.g();
+                    b = c_srgb.b();
                 }
                 mode => {
                     let c_rec2020 = Color3::new(r, g, b);
@@ -196,19 +197,21 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
                     let lum_adj = ((lum_curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
                     let gain = lum_adj / lum.max(1e-6);
                     
-                    let r_adj = (r_mapped * gain).clamp(0.0, 1.0);
-                    let g_adj = (g_mapped * gain).clamp(0.0, 1.0);
-                    let b_adj = (b_mapped * gain).clamp(0.0, 1.0);
-                    
-                    let c_rec2020_out = LINEAR_SRGB_TO_REC2020.multiply_vector(Color3::new(r_adj, g_adj, b_adj));
-                    r = c_rec2020_out.r();
-                    g = c_rec2020_out.g();
-                    b = c_rec2020_out.b();
+                    r = (r_mapped * gain).clamp(0.0, 1.0);
+                    g = (g_mapped * gain).clamp(0.0, 1.0);
+                    b = (b_mapped * gain).clamp(0.0, 1.0);
                 }
             }
+        } else {
+            // Passthrough for non-raw with no profile adjustments: convert Rec.2020 working space to linear sRGB
+            let c_rec2020 = Color3::new(r, g, b);
+            let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+            r = c_srgb.r();
+            g = c_srgb.g();
+            b = c_srgb.b();
         }
         
-        // Linear Rec.2020 working values (gamma OETF applied at final 8-bit export encode)
+        // Store sRGB color values (display-referred for AgX, linear sRGB for camera profiles)
         image.data[idx] = r.max(0.0);
         image.data[idx + 1] = g.max(0.0);
         image.data[idx + 2] = b.max(0.0);
@@ -441,18 +444,16 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             let sy = (ry * aspect_ratio + 0.5) * (orig_height as f32);
             
             let (r_val, g_val, b_val) = sample_bilinear(&image, sx, sy);
-            let c_rec2020 = Color3::new(r_val, g_val, b_val);
-            let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
             let srgb8 = if edits.tone_profile == crate::ColorProfileMode::AgxVivid
                 || edits.tone_profile == crate::ColorProfileMode::AgxFilmic
             {
                 [
-                    (c_srgb.r().clamp(0.0, 1.0) * 255.0).round() as u8,
-                    (c_srgb.g().clamp(0.0, 1.0) * 255.0).round() as u8,
-                    (c_srgb.b().clamp(0.0, 1.0) * 255.0).round() as u8,
+                    (r_val.clamp(0.0, 1.0) * 255.0).round() as u8,
+                    (g_val.clamp(0.0, 1.0) * 255.0).round() as u8,
+                    (b_val.clamp(0.0, 1.0) * 255.0).round() as u8,
                 ]
             } else {
-                linear_rgb_to_srgb8(c_srgb)
+                linear_rgb_to_srgb8(Color3::new(r_val, g_val, b_val))
             };
             
             rgb_img.put_pixel(tx, ty, Rgb(srgb8));
@@ -464,9 +465,6 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
         let _ = std::fs::create_dir_all(parent);
     }
     
-    let file = File::create(output_path).map_err(|e| format!("Failed to create output file: {}", e))?;
-    let mut writer = BufWriter::new(file);
-    
     let ext = output_path
         .extension()
         .and_then(|s| s.to_str())
@@ -474,18 +472,72 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
         .to_lowercase();
         
     if ext == "tif" || ext == "tiff" {
+        let file = File::create(output_path).map_err(|e| format!("Failed to create output file: {}", e))?;
+        let mut writer = BufWriter::new(file);
         let encoder = TiffEncoder::new(&mut writer);
         encoder
             .encode(&rgb_img, target_w, target_h, ColorType::Rgb8)
             .map_err(|e| format!("Failed to encode TIFF: {}", e))?;
     } else {
-        let mut encoder = JpegEncoder::new_with_quality(&mut writer, quality.clamp(1, 100));
+        let mut jpeg_buf = Vec::new();
+        let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_buf, quality.clamp(1, 100));
         encoder
             .encode(&rgb_img, target_w, target_h, ColorType::Rgb8)
             .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
+            
+        let tagged_jpeg = inject_icc_profile_into_jpeg(&jpeg_buf, crate::color::SRGB_ICC_PROFILE);
+        let mut file = File::create(output_path).map_err(|e| format!("Failed to create output file: {}", e))?;
+        file.write_all(&tagged_jpeg).map_err(|e| format!("Failed to write JPEG: {}", e))?;
     }
     
     Ok(())
+}
+
+/// Injects an ICC profile into a JPEG byte stream as an APP2 segment (ICC.1:2010 specification).
+/// This enables macOS ColorSync, iOS ImageIO, browsers, and image viewers to color-manage
+/// the exported photo and map its sRGB coordinates faithfully to wide-gamut displays (Display P3).
+pub fn inject_icc_profile_into_jpeg(jpeg_data: &[u8], icc_profile: &[u8]) -> Vec<u8> {
+    if jpeg_data.len() < 4 || jpeg_data[0] != 0xff || jpeg_data[1] != 0xd8 {
+        return jpeg_data.to_vec();
+    }
+
+    // Build APP2 segment according to ICC specification:
+    // Marker: 0xFF, 0xE2
+    // Length: 2 bytes (big endian, includes length field itself)
+    // Identification: b"ICC_PROFILE\0" (12 bytes)
+    // Sequence number: 1 (1 byte)
+    // Total chunks: 1 (1 byte)
+    // Profile payload
+    let header = b"ICC_PROFILE\0\x01\x01";
+    let payload_len = header.len() + icc_profile.len();
+    let marker_len = payload_len + 2;
+    if marker_len > 65535 {
+        return jpeg_data.to_vec();
+    }
+
+    let mut app2 = Vec::with_capacity(4 + payload_len);
+    app2.push(0xff);
+    app2.push(0xe2);
+    app2.push(((marker_len >> 8) & 0xff) as u8);
+    app2.push((marker_len & 0xff) as u8);
+    app2.extend_from_slice(header);
+    app2.extend_from_slice(icc_profile);
+
+    // Insert immediately after SOI (pos 2), or after APP0 (JFIF) if present
+    let mut insert_pos = 2;
+    if jpeg_data.len() > 5 && jpeg_data[2] == 0xff && jpeg_data[3] == 0xe0 {
+        let app0_len = ((jpeg_data[4] as usize) << 8) | (jpeg_data[5] as usize);
+        let next_pos = 4 + app0_len;
+        if next_pos <= jpeg_data.len() {
+            insert_pos = next_pos;
+        }
+    }
+
+    let mut result = Vec::with_capacity(jpeg_data.len() + app2.len());
+    result.extend_from_slice(&jpeg_data[..insert_pos]);
+    result.extend_from_slice(&app2);
+    result.extend_from_slice(&jpeg_data[insert_pos..]);
+    result
 }
 
 #[cfg(test)]
@@ -549,8 +601,7 @@ mod tests {
         };
         apply_edits(&mut img, &edits);
         
-        let c_rec2020 = Color3::new(img.data[0], img.data[1], img.data[2]);
-        let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+        let c_srgb = Color3::new(img.data[0], img.data[1], img.data[2]);
         let srgb8 = if edits.tone_profile == crate::ColorProfileMode::AgxVivid
             || edits.tone_profile == crate::ColorProfileMode::AgxFilmic
         {
@@ -567,6 +618,58 @@ mod tests {
         assert!(srgb8[0] >= 120 && srgb8[0] <= 135, "Expected display midtone range, got {}", srgb8[0]);
         assert_eq!(srgb8[0], srgb8[1]);
         assert_eq!(srgb8[1], srgb8[2]);
+    }
+
+    #[test]
+    fn test_jpeg_icc_profile_embedding() {
+        let tmp_in = "test_icc_in.jpg";
+        let tmp_out = "test_icc_out.jpg";
+        
+        let img = RgbImage::from_fn(20, 20, |x, y| {
+            Rgb([x as u8 * 10, y as u8 * 10, 128])
+        });
+        img.save(tmp_in).unwrap();
+        
+        let edits = EditSettings {
+            exposure: 0.0,
+            contrast: 0.0,
+            temperature: 5500.0,
+            tint: 0.0,
+            crop_left: 0.0,
+            crop_top: 0.0,
+            crop_right: 1.0,
+            crop_bottom: 1.0,
+            crop_angle: 0.0,
+            tone_profile: crate::ColorProfileMode::AgxVivid,
+        };
+        
+        export_photo_file(tmp_in, tmp_out, &edits, None, 95, None).unwrap();
+        
+        let bytes = std::fs::read(tmp_out).unwrap();
+        // Verify APP2 ICC marker presence: 0xFF, 0xE2 followed by "ICC_PROFILE\0"
+        let marker = [0xff, 0xe2];
+        let found_app2 = bytes.windows(marker.len()).any(|w| w == marker);
+        assert!(found_app2, "Exported JPEG must contain APP2 marker");
+        let icc_ident = b"ICC_PROFILE\0";
+        let found_ident = bytes.windows(icc_ident.len()).any(|w| w == icc_ident);
+        assert!(found_ident, "Exported JPEG must contain ICC_PROFILE identifier");
+        
+        // On macOS, verify using sips
+        if cfg!(target_os = "macos") {
+            let sips_out = std::process::Command::new("sips")
+                .arg("-g")
+                .arg("profile")
+                .arg(tmp_out)
+                .output();
+            if let Ok(output) = sips_out {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                println!("sips output: {}", stdout);
+                assert!(stdout.contains("sRGB"), "macOS sips must report sRGB color profile, got: {}", stdout);
+            }
+        }
+        
+        let _ = std::fs::remove_file(tmp_in);
+        let _ = std::fs::remove_file(tmp_out);
     }
 }
 
