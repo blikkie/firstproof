@@ -32,6 +32,8 @@ pub struct RawSensorFrame {
     pub white_levels: [f32; 4],
     pub wb_coeffs: [f32; 4],
     pub color_matrix: Option<[[f32; 3]; 3]>,
+    pub color_matrix_tungsten: Option<[[f32; 3]; 3]>,
+    pub camera_model: String,
     pub sensor_data: Vec<u16>,
 }
 
@@ -102,6 +104,43 @@ impl RawSensorFrame {
         };
         (wb_r, wb_b)
     }
+
+    /// Computes the camera sensor to Linear Rec.2020 matrix dynamically interpolated
+    /// for the specified white balance temperature (in Kelvin).
+    pub fn sensor_to_rec2020_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3 {
+        if let (Some(m_tungsten), Some(m_daylight)) = (self.color_matrix_tungsten, self.color_matrix) {
+            let dcp = crate::color::dcp::DcpProfile {
+                profile_name: format!("{} (Rawler Dual-Illuminant)", self.camera_model),
+                illuminant1: crate::color::dcp::ILLUMINANT_STANDARD_A,
+                illuminant2: Some(crate::color::dcp::ILLUMINANT_D65),
+                color_matrix1: crate::color::Matrix3x3(m_tungsten),
+                color_matrix2: Some(crate::color::Matrix3x3(m_daylight)),
+                forward_matrix1: None,
+                forward_matrix2: None,
+                tone_curve: None,
+                hue_sat_map1: None,
+                hue_sat_map2: None,
+            };
+            dcp.interpolate_sensor_to_rec2020(temp_kelvin)
+        } else if let Some(m_daylight) = self.color_matrix {
+            let dcp = crate::color::dcp::DcpProfile {
+                profile_name: format!("{} (Single Illuminant)", self.camera_model),
+                illuminant1: crate::color::dcp::ILLUMINANT_D65,
+                illuminant2: None,
+                color_matrix1: crate::color::Matrix3x3(m_daylight),
+                color_matrix2: None,
+                forward_matrix1: None,
+                forward_matrix2: None,
+                tone_curve: None,
+                hue_sat_map1: None,
+                hue_sat_map2: None,
+            };
+            dcp.interpolate_sensor_to_rec2020(temp_kelvin)
+        } else {
+            let dcp = crate::color::dcp::DcpProfile::built_in_for_camera(&self.camera_model);
+            dcp.interpolate_sensor_to_rec2020(temp_kelvin)
+        }
+    }
 }
 
 /// Common trait for all RAW decoders
@@ -140,23 +179,39 @@ impl RawDecoder for RawlerDecoder {
             _ => CfaPattern::Rggb,
         };
 
-        // Find D65 color matrix if available (for daylight scenes), fallback to first available
-        let d65_matrix = raw.color_matrix.iter().find(|(k, _)| format!("{:?}", k) == "D65")
-            .or_else(|| raw.color_matrix.iter().find(|(k, _)| format!("{:?}", k) == "D50"))
-            .or_else(|| raw.color_matrix.iter().next())
-            .map(|(_, v)| v);
+        // Extract both Illuminant A (tungsten ~2856K) and Illuminant D65 (daylight ~6504K)
+        let find_matrix = |pattern: &str| -> Option<[[f32; 3]; 3]> {
+            raw.color_matrix.iter()
+                .find(|(k, _)| format!("{:?}", k).to_lowercase() == pattern)
+                .and_then(|(_, v)| {
+                    if v.len() >= 9 {
+                        Some([
+                            [v[0], v[1], v[2]],
+                            [v[3], v[4], v[5]],
+                            [v[6], v[7], v[8]],
+                        ])
+                    } else {
+                        None
+                    }
+                })
+        };
 
-        let color_matrix = d65_matrix.and_then(|v| {
-            if v.len() >= 9 {
-                Some([
-                    [v[0], v[1], v[2]],
-                    [v[3], v[4], v[5]],
-                    [v[6], v[7], v[8]],
-                ])
-            } else {
-                None
-            }
-        });
+        let color_matrix_tungsten = find_matrix("a");
+        let color_matrix = find_matrix("d65")
+            .or_else(|| find_matrix("d50"))
+            .or_else(|| raw.color_matrix.iter().next().and_then(|(_, v)| {
+                if v.len() >= 9 {
+                    Some([
+                        [v[0], v[1], v[2]],
+                        [v[3], v[4], v[5]],
+                        [v[6], v[7], v[8]],
+                    ])
+                } else {
+                    None
+                }
+            }));
+
+        let camera_model = format!("{} {}", raw.clean_make, raw.clean_model).trim().to_string();
 
         let mut black_levels = [0.0f32; 4];
         if raw.blacklevel.levels.is_empty() {
@@ -203,6 +258,8 @@ impl RawDecoder for RawlerDecoder {
             white_levels,
             wb_coeffs,
             color_matrix,
+            color_matrix_tungsten,
+            camera_model,
             sensor_data,
         })
     }

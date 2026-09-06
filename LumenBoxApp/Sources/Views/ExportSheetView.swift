@@ -176,7 +176,8 @@ public struct ExportSheetView: View {
             cropTop: 0.0,
             cropRight: 1.0,
             cropBottom: 1.0,
-            cropAngle: viewModel.straightenAngle
+            cropAngle: viewModel.straightenAngle,
+            toneProfile: viewModel.toneProfile
         )
         let lensCoeffs = viewModel.lensCorrectionEnabled ? viewModel.lensCoefficients : nil
         

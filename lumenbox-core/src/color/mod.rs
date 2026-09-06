@@ -7,7 +7,12 @@
 //! - Bradford Chromatic Adaptation ($D50 \leftrightarrow D65$)
 //! - Standard Display Transfer Functions (sRGB / Display P3)
 
+pub mod agx;
 pub mod ciede2000;
+pub mod dcp;
+
+pub use agx::{agx_tone_map, agx_tone_map_vivid, AGX_INSET_MATRIX, AGX_OUTSET_MATRIX};
+pub use dcp::{DcpHueSatMap, DcpProfile, evaluate_tone_curve, hsv_to_rgb, rgb_to_hsv};
 
 /// 3-component floating point color vector (e.g. RGB or XYZ)
 #[derive(Debug, Clone, Copy, PartialEq)]

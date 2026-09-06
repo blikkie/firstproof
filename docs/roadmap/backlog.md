@@ -245,4 +245,61 @@ HDR photos are now the standard on the web, Google Photos, Instagram, and modern
 *   **Google Photos Takeout & Ingestion**:
     *   Detect incoming Google Pixel & Google Photos Ultra HDR JPEGs and extract their gain map channels for instant high-dynamic-range playback.
 
+---
 
+## 8. Core Refactoring & Library Modernization Audit (P2 Tech Debt)
+
+An architectural audit of existing `lumenbox-core` code revealed several areas where algorithms were hand-rolled from scratch rather than leveraging mature, community-tested Rust crates. While some hand-rolled code was intentionally defensive (e.g. avoiding LGPL C++ bindings), other areas represent maintenance surface area and should be modernized:
+
+### Story 8.1: Migrate Hand-Rolled CIEDE2000 & Color Conversions to `palette`
+*   **Current State**: `lumenbox-core/src/color/ciede2000.rs` (163 lines) implements ISO/CIE 11664-6:2014 CIEDE2000 perceptual difference math by hand, along with custom `Lab` and `Color3` conversions.
+*   **The Modernization**:
+    *   Adopt the **`palette`** crate (`palette = "0.7"`, MIT / Apache-2.0).
+    *   `palette` natively supports SIMD-friendly `Lab`, `Xyz`, `Srgb`, `LinSrgb`, `Rec2020`, `Oklab`, and provides the `Difference` trait (`ciede2000`) out of the box with zero boilerplate.
+    *   Eliminates 160+ lines of fragile trigonometric color difference math while guaranteeing compliance with official CIE test vectors.
+
+### Story 8.2: Adopt `glam` for High-Performance SIMD Matrix & Vector Math
+*   **Current State**: `lumenbox-core/src/color/mod.rs` implements a custom `struct Matrix3x3([[f32; 3]; 3])` with hand-rolled 3x3 cofactor inversion, matrix-matrix multiplication, and matrix-vector transforms.
+*   **The Modernization**:
+    *   Adopt **`glam`** (`glam = "0.27"`, MIT / Apache-2.0).
+    *   Replaces hand-rolled matrix operations with `glam::Mat3` and `glam::Vec3`.
+    *   Compiles to hardware NEON SIMD instructions on Apple Silicon ARM64, and shares a bit-identical 1:1 memory layout with Apple Metal's `simd_float3x3` and `simd_float3`.
+
+### Story 8.3: Adopt `xmp-writer` for Robust Sidecar Generation
+*   **Current State**: `lumenbox-core/src/xmp.rs` uses manual format strings and XML string concatenation to write RDF/XMP sidecar files.
+*   **The Modernization**:
+    *   Adopt **`xmp-writer`** (used by Typst, MIT / Apache-2.0).
+    *   Provides a type-safe, validated builder pattern for standard Dublin Core (`dc:`), TIFF (`tiff:`), EXIF (`exif:`), and custom (`pm:`) namespace properties without risk of XML formatting regressions or escaping bugs.
+
+### Story 8.4: Upgrade from Naive Bilinear Demosaicing to Directional (RCD / VNG)
+*   **Current State**: `lumenbox-core/src/export.rs` uses simple 2x2 bilinear interpolation over the Bayer grid. Bilinear demosaicing is fast, but causes "zipper" edge artifacts, chromatic aberration false colors, and high-frequency resolution loss.
+*   **The Modernization**:
+    *   Adopt or port a permissive (MIT/BSD-licensed) directional demosaicer such as **RCD (Ratio Color Difference)** or **VNG (Variable Number of Gradients)** for high-quality batch exports, while retaining bilinear only for fast-path scratch previews.
+
+### Story 8.5: Lensfun Database Licensing & Pure-Rust Engine Isolation
+*   **Current State**: `lumenbox-core/src/lensfun.rs` (560 lines) parses Lensfun XML database files using `roxmltree`.
+*   **The Audit Finding**: Hand-rolling this pure Rust XML parser was a necessary architectural defense to avoid linking against the official `liblensfun` C++ library (which is LGPL-3.0).
+*   **Actionable Task**:
+    *   Factor `lensfun.rs` into an internal standalone sub-crate (`lumenbox-lensfun`).
+    *   Verify licensing boundaries: The Lensfun calibration database XML files are licensed under **CC-BY-SA 3.0 / LGPL-3.0**. Ensure that shipping updated lens profiles to users is structured either via dynamic runtime downloads or as user-provided data packs to prevent ShareAlike ambiguity.
+
+---
+
+## 9. Third-Party Libraries & Licensing Guardrails
+
+To preserve LumenBox's ability to be distributed as a proprietary, commercial macOS application on the Mac App Store and direct download, the project enforces strict IP and licensing guardrails:
+
+| Technology / Component | Recommended Library | License | Licensing Risk & Policy |
+| :--- | :--- | :--- | :--- |
+| **Color Spaces & Metrics** | `palette` | MIT / Apache-2.0 | **Safe**. Fully permissive. Replaces hand-rolled CIEDE2000. |
+| **Vector & Matrix Math** | `glam` | MIT / Apache-2.0 | **Safe**. High-speed SIMD math matching Metal shaders. |
+| **ICC Profile Management** | `lcms2` / `lcms2-sys` | MIT | **Safe**. Safe bindings to LittleCMS2. Used by Safari/Firefox. |
+| **Filmic Tone Mapping** | Internal AgX (Troy Sobotka) | CC0-1.0 / MIT | **Safe**. Standard public-domain affine matrices & polynomial sigmoid. |
+| **RAW Unpacking** | `rawler` | MPL-2.0 / MIT | **Safe**. Pure Rust RAW container reader. |
+| **EXIF Parsing** | `kamadak-exif` | BSD-2-Clause | **Safe**. Permissive EXIF metadata reader. |
+| **XMP Writing** | `xmp-writer` | MIT / Apache-2.0 | **Safe**. Type-safe standard RDF/XMP generation. |
+| **Darktable / RawTherapee** | *None (Reference Only)* | **GPL-3.0 (Strictly Prohibited)** | **High Risk**. Never copy or translate source code directly. Would trigger viral copyleft obligations on Swift/Rust codebase. |
+| **Adobe ICC Profiles** | *Runtime LittleCMS generation* | Adobe Proprietary | **High Risk**. Do not copy `/Library/ColorSync/Profiles` or Adobe ICCs into the app bundle. Generate profiles programmatically via `lcms2` or bundle Elle Stone's CC-BY ICCs. |
+| **Adobe DCP Camera Profiles** | Native `.dcp` parser (`dcp.rs`) | Adobe Open Specification | **Safe for Parsing**. Reading DNG/DCP metadata is permitted under Adobe's royalty-free patent grant. Do not bundle copyrighted creative DCP profiles; let users supply them. |
+| **Compressed RAW Patents** | *Apple ImageIO Stills Only* | RED / Apple Patents | **High Risk**. Never attempt to implement reverse-engineered REDCODE or ProRes RAW decompression. |
+| **Lensfun Calibration Data** | Pure-Rust XML Parser | CC-BY-SA 3.0 / LGPL-3.0 | **Medium Risk**. Keep calibration data decoupled from binary code; do not statically bake database into executable. |

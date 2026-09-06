@@ -22,17 +22,7 @@ impl Default for XmpData {
             description: None,
             latitude: None,
             longitude: None,
-            edits: EditSettings {
-                exposure: 0.0,
-                contrast: 0.0,
-                temperature: 5000.0,
-                tint: 0.0,
-                crop_left: 0.0,
-                crop_top: 0.0,
-                crop_right: 1.0,
-                crop_bottom: 1.0,
-                crop_angle: 0.0,
-            },
+            edits: EditSettings::default(),
         }
     }
 }
@@ -141,6 +131,15 @@ pub fn generate_xmp(data: &XmpData) -> String {
         None => "".to_string(),
     };
     
+    let tone_profile_str = match data.edits.tone_profile {
+        crate::ColorProfileMode::AgxVivid => "AgxVivid",
+        crate::ColorProfileMode::AgxFilmic => "AgxFilmic",
+        crate::ColorProfileMode::CameraStandard => "CameraStandard",
+        crate::ColorProfileMode::CameraPortrait => "CameraPortrait",
+        crate::ColorProfileMode::CameraLandscape => "CameraLandscape",
+        crate::ColorProfileMode::CameraVivid => "CameraVivid",
+    };
+
     format!(
         r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="LumenBox Core 0.1.0">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -158,7 +157,8 @@ pub fn generate_xmp(data: &XmpData) -> String {
     pm:cropTop="{crop_top:.4}"
     pm:cropRight="{crop_right:.4}"
     pm:cropBottom="{crop_bottom:.4}"
-    pm:cropAngle="{crop_angle:.4}">
+    pm:cropAngle="{crop_angle:.4}"
+    pm:toneProfile="{tone_profile}">
 {title_block}{desc_block}  </rdf:Description>
  </rdf:RDF>
 </x:xmpmeta>"#,
@@ -172,6 +172,7 @@ pub fn generate_xmp(data: &XmpData) -> String {
         crop_right = data.edits.crop_right,
         crop_bottom = data.edits.crop_bottom,
         crop_angle = data.edits.crop_angle,
+        tone_profile = tone_profile_str,
         rating_attr = rating_attr,
         gps_attrs = gps_attrs,
         title_block = title_block,
@@ -273,6 +274,17 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         if let Ok(val) = ca_str.parse::<f32>() {
             data.edits.crop_angle = val;
         }
+    }
+    if let Some(tp_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "toneProfile" )) {
+        data.edits.tone_profile = match tp_str {
+            "AgxVivid" => crate::ColorProfileMode::AgxVivid,
+            "AgxFilmic" => crate::ColorProfileMode::AgxFilmic,
+            "CameraStandard" => crate::ColorProfileMode::CameraStandard,
+            "CameraPortrait" => crate::ColorProfileMode::CameraPortrait,
+            "CameraLandscape" => crate::ColorProfileMode::CameraLandscape,
+            "CameraVivid" => crate::ColorProfileMode::CameraVivid,
+            _ => crate::ColorProfileMode::AgxVivid,
+        };
     }
     
     // 3. Fallback: Parse Adobe Camera Raw settings (crs:) if native ones are missing
