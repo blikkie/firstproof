@@ -8,6 +8,10 @@
 		<data>
 		a7ujTrKOwqEc6SbEfzJ63gr5SBQ=
 		</data>
+		<key>Resources/Shaders.metal</key>
+		<data>
+		3oZD4aTxr+OySZCZTQDfXCm50Fg=
+		</data>
 	</dict>
 	<key>files2</key>
 	<dict>
@@ -16,6 +20,13 @@
 			<key>hash2</key>
 			<data>
 			nhCPwmZWmXNh6ZoY8WEVAnvG9cVLkk6awCF/KBcp1BM=
+			</data>
+		</dict>
+		<key>Resources/Shaders.metal</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			R4MTH38w/GTEUophhICSO/256lDGs7TxLRKs4pCMLwk=
 			</data>
 		</dict>
 	</dict>
