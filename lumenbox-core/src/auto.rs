@@ -36,18 +36,29 @@ pub fn compute_auto_adjustments_from_luminances(mut lums: Vec<f32>) -> AutoAdjus
     let p90 = p(90.0);
     let p98 = p(98.0); // Highlight ceiling / shoulder
 
-    // 1. Exposure Calculation:
+    // 1. Exposure Calculation (Zone System Log-Luminance Key-Value Anchoring):
     // Photographic middle gray targets ~0.16 linear scene reflectance.
-    // Sensor underexposure typically puts p50 around 0.04 .. 0.10.
     let target_mid = 0.16f32;
+
+    // Compute log-geometric mean luminance L_g across all samples:
+    let log_sum: f32 = lums.iter().map(|&l| l.max(1e-5).ln()).sum();
+    let log_mean_lum = (log_sum / (n as f32)).exp();
+
+    // Zone V (18% photographic middle gray) target EV compensation:
+    let zone_v_ev = (target_mid / log_mean_lum.max(0.005)).log2();
+
+    // Percentile midtone EV requirement:
     let midtone_ev = (target_mid / p50.max(0.01)).log2();
+
+    // Combine Zone V log-geometric mean with 50th percentile median (50/50 weighted key anchor)
+    let combined_mid_ev: f32 = 0.5 * zone_v_ev + 0.5 * midtone_ev;
 
     // Highlight ceiling safety check:
     // Ensure the 98th percentile does not get pushed past 1.0 (specular threshold)
     let max_headroom_ev = (1.0 / p98.max(0.05)).log2().max(0.0);
 
     // Take the minimum of midtone requirement and highlight headroom
-    let target_ev = midtone_ev.min(max_headroom_ev);
+    let target_ev = combined_mid_ev.min(max_headroom_ev);
 
     // Apply conservative damping (65% factor) and clamp to [-1.0, +1.75]
     let damped_ev = target_ev * 0.65;
