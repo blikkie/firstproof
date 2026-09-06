@@ -5,13 +5,6 @@ import LumenBoxBridge
 struct InspectorView: View {
     @Bindable var viewModel: AppViewModel
     
-    // Persisted app-wide collapse preferences
-    @AppStorage("inspector_isMetadataExpanded") private var isMetadataExpanded: Bool = true
-    @AppStorage("inspector_isOpticsExpanded") private var isOpticsExpanded: Bool = true
-    @AppStorage("inspector_isLightExpanded") private var isLightExpanded: Bool = true
-    @AppStorage("inspector_isToneExpanded") private var isToneExpanded: Bool = true
-    @AppStorage("inspector_isLutExpanded") private var isLutExpanded: Bool = true
-    
     private var isBulkSelection: Bool {
         viewModel.selectedPhotoPaths.count > 1
     }
@@ -101,59 +94,50 @@ struct InspectorView: View {
         }
     }
     
-    // MARK: - Single Photo Panel (Always shows Filename, Quick Controls, Collapsible EXIF, and Adjustments)
+    // MARK: - Single Photo Panel (Workspace Tabs Architecture)
     @ViewBuilder
     private func singlePhotoPanel(for photo: PhotoRecord) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             // 1. Permanent Filename & Header Card (Always Visible)
             permanentHeaderCard(for: photo)
             
-            // 2. Quick Rating & Flag
-            ratingControls
-            flagControls
+            // 2. Workspace Tabs Segmented Picker & Reset All Button
+            HStack(spacing: 8) {
+                Picker("Workspace Tab", selection: $viewModel.selectedInspectorTab) {
+                    ForEach(InspectorTab.allCases) { tab in
+                        Image(systemName: tab.iconName)
+                            .help(tab.rawValue)
+                            .tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                
+                Button(action: {
+                    viewModel.resetAllSliders()
+                }) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!viewModel.hasCustomEdits)
+                .help("Reset All Edits to As-Shot (Cmd+Shift+R)")
+            }
             
             Divider()
             
-            // 3. Collapsible EXIF Metadata Section
-            collapsibleMetadataSection(for: photo)
-            
-            // 4. Detail View RAW Adjustments (Only when in Detail Mode)
-            if viewModel.canvasMode == .detail {
-                Divider()
-                
-                Text("DEVELOPMENT")
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .foregroundColor(.secondary)
-                
-                // Optics & Geometry
-                collapsibleOpticsSection
-                
-                Divider()
-                
-                // Basic Light & Color
-                collapsibleLightSection
-                
-                Divider()
-                
-                // Tone & Contrast
-                collapsibleToneSection
-                
-                Divider()
-                
-                // Creative Look & 3D LUT
-                collapsibleLutSection
-            } else {
-                // In Grid view: affordance to enter detail mode
-                Button(action: {
-                    viewModel.enterDetailMode()
-                }) {
-                    Label("Open in Detail View (Return)", systemImage: "photo.fill")
-                        .font(.caption)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .padding(.top, 6)
+            // 3. Active Workspace Tab View
+            switch viewModel.selectedInspectorTab {
+            case .light:
+                lightWorkspaceTab
+            case .color:
+                colorWorkspaceTab
+            case .optics:
+                opticsWorkspaceTab
+            case .detail:
+                detailWorkspaceTab
+            case .metadata:
+                metadataWorkspaceTab(for: photo)
             }
         }
     }
@@ -288,244 +272,303 @@ struct InspectorView: View {
         }
     }
     
-    // MARK: - Collapsible EXIF Metadata Section
-    private func collapsibleMetadataSection(for photo: PhotoRecord) -> some View {
-        DisclosureGroup(isExpanded: $isMetadataExpanded) {
-            VStack(alignment: .leading, spacing: 6) {
-                let cameraMake = photo.cameraMake ?? ""
-                let cameraModel = photo.cameraModel ?? ""
-                let fullCamera = "\(cameraMake) \(cameraModel)".trimmingCharacters(in: .whitespaces)
-                if !fullCamera.isEmpty {
-                    MetadataRow(label: "Camera", value: fullCamera)
-                }
-                if let lens = photo.lensModel, !lens.isEmpty {
-                    MetadataRow(label: "Lens", value: lens)
-                }
-                if let iso = photo.iso {
-                    MetadataRow(label: "ISO", value: "\(iso)")
-                }
-                if let aperture = photo.aperture {
-                    MetadataRow(label: "Aperture", value: String(format: "f/%.1f", aperture))
-                }
-                if let shutter = photo.shutterSpeed, !shutter.isEmpty {
-                    MetadataRow(label: "Shutter", value: shutter)
-                }
-                if let focal = photo.focalLength {
-                    MetadataRow(label: "Focal Length", value: String(format: "%.0f mm", focal))
-                }
-                if let taken = photo.takenTime, taken > 0 {
-                    MetadataRow(label: "Date", value: formatDate(taken))
-                }
-                if let lat = photo.latitude, let lon = photo.longitude {
-                    MetadataRow(label: "GPS", value: String(format: "%.4f, %.4f", lat, lon))
-                }
-                
-                let hasTakeout = viewModel.takeoutMatches.contains(where: { $0.imagePath == photo.filePath })
-                HStack {
-                    Text("Google Takeout:")
+    // MARK: - Workspace Tab 1: ☀️ Light
+    private var lightWorkspaceTab: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("LIGHT & TONE")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button(action: {
+                    viewModel.applyAutoAdjustments()
+                }) {
+                    Label("Auto", systemImage: "wand.and.stars")
                         .font(.caption)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    if hasTakeout {
-                        Label("JSON Matched", systemImage: "checkmark.circle.fill")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                    } else {
-                        Text("None")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
                 }
-                .padding(.top, 2)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Automatically calculate conservative exposure and contrast (Cmd+U)")
             }
-            .padding(.top, 6)
-        } label: {
-            Label("EXIF Metadata", systemImage: "info.circle.fill")
-                .font(.headline)
-        }
-    }
-    
-    // MARK: - Collapsible Optics & Geometry
-    private var collapsibleOpticsSection: some View {
-        DisclosureGroup(isExpanded: $isOpticsExpanded) {
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle("Lens Correction (Lensfun)", isOn: $viewModel.lensCorrectionEnabled)
-                    .toggleStyle(.switch)
-                
-                SliderRow(
-                    label: "Straighten",
-                    value: $viewModel.straightenAngle,
-                    range: -45.0...45.0,
-                    format: "%.1f°",
-                    onReset: { viewModel.resetSlider(.straighten) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
-                )
-            }
-            .padding(.top, 8)
-        } label: {
-            Label("Optics & Geometry", systemImage: "crop.rotate")
-                .font(.headline)
-        }
-    }
-    
-    // MARK: - Collapsible Basic Light & Color
-    private var collapsibleLightSection: some View {
-        DisclosureGroup(isExpanded: $isLightExpanded) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Auto Tone")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Button(action: {
-                        viewModel.applyAutoAdjustments()
-                    }) {
-                        Label("Auto", systemImage: "wand.and.stars")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Automatically calculate conservative exposure and contrast (Cmd+U)")
+            
+            SliderRow(
+                label: "Exposure",
+                value: $viewModel.exposure,
+                range: -5.0...5.0,
+                format: "%.2f EV",
+                onReset: { viewModel.resetSlider(.exposure) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
                 }
-                .padding(.bottom, 2)
-                
-                SliderRow(
-                    label: "Exposure",
-                    value: $viewModel.exposure,
-                    range: -5.0...5.0,
-                    format: "%.2f EV",
-                    onReset: { viewModel.resetSlider(.exposure) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
-                )
-                
-                SliderRow(
-                    label: "Temperature",
-                    value: $viewModel.temperature,
-                    range: 2000.0...50000.0,
-                    format: "%.0f K",
-                    onReset: { viewModel.resetSlider(.temperature) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
-                )
-                
-                SliderRow(
-                    label: "Tint",
-                    value: $viewModel.tint,
-                    range: -150.0...150.0,
-                    format: "%.0f",
-                    onReset: { viewModel.resetSlider(.tint) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
-                )
-            }
-            .padding(.top, 8)
-        } label: {
-            Label("Basic Light & Color", systemImage: "sun.max.fill")
-                .font(.headline)
+            )
+            
+            SliderRow(
+                label: "Contrast",
+                value: $viewModel.contrast,
+                range: -100.0...100.0,
+                format: "%.0f",
+                onReset: { viewModel.resetSlider(.contrast) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
         }
+        .padding(.top, 4)
     }
     
-    // MARK: - Collapsible Tone & Contrast
-    private var collapsibleToneSection: some View {
-        DisclosureGroup(isExpanded: $isToneExpanded) {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Profile")
-                        .font(.subheadline)
-                    Picker("", selection: $viewModel.toneProfile) {
-                        Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
-                        Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
-                        Text("Camera Standard").tag(ColorProfileMode.cameraStandard)
-                        Text("Camera Portrait").tag(ColorProfileMode.cameraPortrait)
-                        Text("Camera Landscape").tag(ColorProfileMode.cameraLandscape)
-                        Text("Camera Vivid").tag(ColorProfileMode.cameraVivid)
+    // MARK: - Workspace Tab 2: 🎨 Color
+    private var colorWorkspaceTab: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("WHITE BALANCE & COLOR")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.secondary)
+            
+            SliderRow(
+                label: "Temperature",
+                value: $viewModel.temperature,
+                range: 2000.0...50000.0,
+                format: "%.0f K",
+                onReset: { viewModel.resetSlider(.temperature) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
+            
+            SliderRow(
+                label: "Tint",
+                value: $viewModel.tint,
+                range: -150.0...150.0,
+                format: "%.0f",
+                onReset: { viewModel.resetSlider(.tint) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Tone Profile")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Picker("", selection: $viewModel.toneProfile) {
+                    Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
+                    Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
+                    Text("Camera Standard").tag(ColorProfileMode.cameraStandard)
+                    Text("Camera Portrait").tag(ColorProfileMode.cameraPortrait)
+                    Text("Camera Landscape").tag(ColorProfileMode.cameraLandscape)
+                    Text("Camera Vivid").tag(ColorProfileMode.cameraVivid)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .onChange(of: viewModel.toneProfile) {
+                    viewModel.saveCurrentEdits()
+                }
+            }
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("3D LUT Look")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                HStack(spacing: 8) {
+                    Picker("", selection: Binding<String>(
+                        get: { viewModel.selectedLutName ?? "" },
+                        set: { newValue in
+                            viewModel.selectedLutName = newValue.isEmpty ? nil : newValue
+                            viewModel.saveCurrentEdits()
+                        }
+                    )) {
+                        Text("None (Bypass)").tag("")
+                        Divider()
+                        ForEach(viewModel.allLutTitles, id: \.self) { title in
+                            Text(title).tag(title)
+                        }
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .onChange(of: viewModel.toneProfile) {
-                        viewModel.saveCurrentEdits()
+                    
+                    Button(action: {
+                        viewModel.importCustomLut()
+                    }) {
+                        Image(systemName: "plus.circle")
+                            .help("Import .cube LUT file...")
                     }
+                    .buttonStyle(.borderless)
                 }
-                
+            }
+            
+            if viewModel.selectedLutName != nil {
                 SliderRow(
-                    label: "Contrast",
-                    value: $viewModel.contrast,
-                    range: -100.0...100.0,
-                    format: "%.0f",
-                    onReset: { viewModel.resetSlider(.contrast) },
+                    label: "Intensity",
+                    value: $viewModel.lutIntensity,
+                    range: 0.0...1.0,
+                    format: "%.0f%%",
+                    onReset: { viewModel.resetSlider(.lutIntensity) },
                     onEditingChanged: { isEditing in
                         if !isEditing { viewModel.saveCurrentEdits() }
-                    }
+                    },
+                    multiplier: 100.0
                 )
             }
-            .padding(.top, 8)
-        } label: {
-            Label("Tone & Contrast", systemImage: "slider.horizontal.3")
-                .font(.headline)
         }
+        .padding(.top, 4)
     }
     
-    // MARK: - Collapsible Creative Look & 3D LUT
-    private var collapsibleLutSection: some View {
-        DisclosureGroup(isExpanded: $isLutExpanded) {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("3D LUT Look")
-                        .font(.subheadline)
-                    
-                    HStack(spacing: 8) {
-                        Picker("", selection: Binding<String>(
-                            get: { viewModel.selectedLutName ?? "" },
-                            set: { newValue in
-                                viewModel.selectedLutName = newValue.isEmpty ? nil : newValue
-                                viewModel.saveCurrentEdits()
-                            }
-                        )) {
-                            Text("None (Bypass)").tag("")
-                            
-                            Divider()
-                            
-                            ForEach(viewModel.allLutTitles, id: \.self) { title in
-                                Text(title).tag(title)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        
-                        Button(action: {
-                            viewModel.importCustomLut()
-                        }) {
-                            Image(systemName: "plus.circle")
-                                .help("Import .cube LUT file...")
-                        }
-                        .buttonStyle(.borderless)
-                    }
+    // MARK: - Workspace Tab 3: 📐 Optics & Geometry
+    private var opticsWorkspaceTab: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("GEOMETRY & OPTICS")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.secondary)
+            
+            // 90-degree rotate controls
+            HStack(spacing: 8) {
+                Button(action: { viewModel.rotateCounterClockwise() }) {
+                    Label("Rotate Left", systemImage: "rotate.left")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity)
                 }
+                .help("Rotate 90° Counter-Clockwise (Cmd+[)")
                 
-                if viewModel.selectedLutName != nil {
-                    SliderRow(
-                        label: "Intensity",
-                        value: $viewModel.lutIntensity,
-                        range: 0.0...1.0,
-                        format: "%.0f%%",
-                        onReset: { viewModel.resetSlider(.lutIntensity) },
-                        onEditingChanged: { isEditing in
-                            if !isEditing { viewModel.saveCurrentEdits() }
-                        },
-                        multiplier: 100.0
-                    )
+                Button(action: { viewModel.rotateClockwise() }) {
+                    Label("Rotate Right", systemImage: "rotate.right")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity)
+                }
+                .help("Rotate 90° Clockwise (Cmd+])")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            
+            SliderRow(
+                label: "Straighten",
+                value: $viewModel.straightenAngle,
+                range: -45.0...45.0,
+                format: "%.1f°",
+                onReset: { viewModel.resetSlider(.straighten) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
+            
+            Divider()
+            
+            Toggle("Lens Correction (Lensfun)", isOn: $viewModel.lensCorrectionEnabled)
+                .toggleStyle(.switch)
+            
+            if let coeff = viewModel.lensCoefficients {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let lens = viewModel.selectedPhoto?.lensModel, !lens.isEmpty {
+                        Text(lens)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    Text("Model: \(coeff.distortionModel.uppercased())")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary.opacity(0.8))
+                }
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.08))
+                .cornerRadius(4)
+            }
+        }
+        .padding(.top, 4)
+    }
+    
+    // MARK: - Workspace Tab 4: 🔎 Detail
+    private var detailWorkspaceTab: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("DETAIL & SHARPENING")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.secondary)
+            
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "viewfinder")
+                        .foregroundColor(.accentColor)
+                    Text("1:1 Pixel Inspection")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                Text("Evaluating critical focus, optical sharpness, and sensor noise requires inspecting pixels at 100% (1:1) scale.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.08))
+            .cornerRadius(8)
+        }
+        .padding(.top, 4)
+    }
+    
+    // MARK: - Workspace Tab 5: ℹ️ Metadata
+    @ViewBuilder
+    private func metadataWorkspaceTab(for photo: PhotoRecord) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ratingControls
+            flagControls
+            Divider()
+            metadataRows(for: photo)
+        }
+        .padding(.top, 4)
+    }
+    
+    // MARK: - Metadata Rows View
+    @ViewBuilder
+    private func metadataRows(for photo: PhotoRecord) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let make = photo.cameraMake, let model = photo.cameraModel, !make.isEmpty || !model.isEmpty {
+                MetadataRow(label: "Camera", value: "\(make) \(model)".trimmingCharacters(in: .whitespaces))
+            }
+            if let lens = photo.lensModel, !lens.isEmpty {
+                MetadataRow(label: "Lens", value: lens)
+            }
+            if let iso = photo.iso {
+                MetadataRow(label: "ISO", value: "\(iso)")
+            }
+            if let aperture = photo.aperture {
+                MetadataRow(label: "Aperture", value: String(format: "f/%.1f", aperture))
+            }
+            if let shutter = photo.shutterSpeed, !shutter.isEmpty {
+                MetadataRow(label: "Shutter", value: shutter)
+            }
+            if let focal = photo.focalLength {
+                MetadataRow(label: "Focal Length", value: String(format: "%.0f mm", focal))
+            }
+            if let taken = photo.takenTime, taken > 0 {
+                MetadataRow(label: "Date", value: formatDate(taken))
+            }
+            if let lat = photo.latitude, let lon = photo.longitude {
+                MetadataRow(label: "GPS", value: String(format: "%.4f, %.4f", lat, lon))
+            }
+            
+            let hasTakeout = viewModel.takeoutMatches.contains(where: { $0.imagePath == photo.filePath })
+            HStack {
+                Text("Google Takeout:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                if hasTakeout {
+                    Label("JSON Matched", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                } else {
+                    Text("None")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
-            .padding(.top, 8)
-        } label: {
-            Label("Creative Look / 3D LUT", systemImage: "film")
-                .font(.headline)
+            .padding(.top, 2)
         }
     }
     

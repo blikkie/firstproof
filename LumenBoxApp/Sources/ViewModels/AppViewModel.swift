@@ -23,6 +23,26 @@ public enum LibraryScope: Hashable, Equatable {
     case session(folderPath: String)
 }
 
+public enum InspectorTab: String, CaseIterable, Identifiable {
+    case light = "Light"
+    case color = "Color"
+    case optics = "Optics"
+    case detail = "Detail"
+    case metadata = "Info"
+    
+    public var id: String { rawValue }
+    
+    public var iconName: String {
+        switch self {
+        case .light: return "sun.max.fill"
+        case .color: return "paintpalette.fill"
+        case .optics: return "crop.rotate"
+        case .detail: return "slider.horizontal.2.square"
+        case .metadata: return "info.circle.fill"
+        }
+    }
+}
+
 @Observable
 public final class AppViewModel {
     // MARK: - Navigation & Directory State
@@ -77,6 +97,31 @@ public final class AppViewModel {
     public var lutIntensity: Float = 1.0
     public var availableLutTitles: [String] = []
     public var customLuts: [CubeLutRecord] = []
+    
+    // MARK: - Workspace Navigation & Tabs
+    public var selectedInspectorTab: InspectorTab = .light
+    public var rotationDegrees: Int = 0 // 0, 90, 180, 270
+    
+    public var hasCustomEdits: Bool {
+        exposure != 0.0 ||
+        contrast != 0.0 ||
+        abs(temperature - asShotTemperature) >= 1.0 ||
+        tint != asShotTint ||
+        straightenAngle != 0.0 ||
+        rotationDegrees != 0 ||
+        toneProfile != .agxVivid ||
+        selectedLutName != nil
+    }
+    
+    public func rotateClockwise() {
+        rotationDegrees = (rotationDegrees + 90) % 360
+        saveCurrentEdits()
+    }
+    
+    public func rotateCounterClockwise() {
+        rotationDegrees = (rotationDegrees + 270) % 360
+        saveCurrentEdits()
+    }
     
     public var allLutTitles: [String] {
         availableLutTitles + customLuts.map(\.title)
@@ -839,6 +884,7 @@ public final class AppViewModel {
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0
+        rotationDegrees = 0
         toneProfile = .agxVivid
         selectedLutName = nil
         lutIntensity = 1.0

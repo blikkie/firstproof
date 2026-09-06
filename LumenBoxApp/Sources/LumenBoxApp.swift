@@ -58,11 +58,104 @@ struct LumenBoxApp: App {
         .commands {
             SidebarCommands()
             CommandGroup(replacing: .newItem) {}
+            
             CommandMenu("Photo") {
+                Button("Auto Adjust Tone") {
+                    viewModel.applyAutoAdjustments()
+                }
+                .keyboardShortcut("u", modifiers: [.command])
+                .disabled(viewModel.selectedPhoto == nil || viewModel.canvasMode != .detail)
+                
+                Button("Reset All Edits") {
+                    viewModel.resetAllSliders()
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(viewModel.selectedPhoto == nil || !viewModel.hasCustomEdits)
+                
+                Divider()
+                
+                Button("Rotate Clockwise") {
+                    viewModel.rotateClockwise()
+                }
+                .keyboardShortcut("]", modifiers: [.command])
+                .disabled(viewModel.selectedPhoto == nil)
+                
+                Button("Rotate Counter-Clockwise") {
+                    viewModel.rotateCounterClockwise()
+                }
+                .keyboardShortcut("[", modifiers: [.command])
+                .disabled(viewModel.selectedPhoto == nil)
+                
+                Divider()
+                
+                Menu("Rating") {
+                    Button("5 Stars") { viewModel.setRating(5) }.keyboardShortcut("5", modifiers: [.command])
+                    Button("4 Stars") { viewModel.setRating(4) }.keyboardShortcut("4", modifiers: [.command])
+                    Button("3 Stars") { viewModel.setRating(3) }.keyboardShortcut("3", modifiers: [.command])
+                    Button("2 Stars") { viewModel.setRating(2) }.keyboardShortcut("2", modifiers: [.command])
+                    Button("1 Star")  { viewModel.setRating(1) }.keyboardShortcut("1", modifiers: [.command])
+                    Divider()
+                    Button("No Rating") { viewModel.setRating(nil) }.keyboardShortcut("0", modifiers: [.command])
+                }
+                
+                Menu("Flag") {
+                    Button("Pick")   { viewModel.setStatus("pick") }.keyboardShortcut("p", modifiers: [.command])
+                    Button("Reject") { viewModel.setStatus("reject") }.keyboardShortcut("x", modifiers: [.command])
+                    Button("Clear Flag") { viewModel.setStatus("none") }.keyboardShortcut("u", modifiers: [.command, .shift])
+                }
+                
+                Divider()
+                
                 Button("Export Photo...") {
-                    NotificationCenter.default.post(name: NSNotification.Name("ExportCurrentPhoto"), object: nil)
+                    viewModel.isExportSheetPresented = true
                 }
                 .keyboardShortcut("e", modifiers: [.command])
+                .disabled(viewModel.selectedPhoto == nil)
+                
+                Button("Export as Portable Package...") {
+                    viewModel.isExportPackageSheetPresented = true
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
+            }
+            
+            CommandMenu("View") {
+                Button(viewModel.canvasMode == .detail ? "Show Grid View" : "Show Detail View") {
+                    if viewModel.canvasMode == .detail {
+                        viewModel.enterGridMode()
+                    } else {
+                        viewModel.enterDetailMode()
+                    }
+                }
+                
+                Divider()
+                
+                Menu("Inspector Workspace") {
+                    Button("Light & Tone") {
+                        viewModel.selectedInspectorTab = .light
+                    }
+                    .keyboardShortcut("1", modifiers: [.command, .option])
+                    
+                    Button("Color & Look") {
+                        viewModel.selectedInspectorTab = .color
+                    }
+                    .keyboardShortcut("2", modifiers: [.command, .option])
+                    
+                    Button("Optics & Geometry") {
+                        viewModel.selectedInspectorTab = .optics
+                    }
+                    .keyboardShortcut("3", modifiers: [.command, .option])
+                    
+                    Button("Detail & Sharpening") {
+                        viewModel.selectedInspectorTab = .detail
+                    }
+                    .keyboardShortcut("4", modifiers: [.command, .option])
+                    
+                    Button("EXIF Metadata") {
+                        viewModel.selectedInspectorTab = .metadata
+                    }
+                    .keyboardShortcut("5", modifiers: [.command, .option])
+                }
             }
         }
     }

@@ -51,18 +51,6 @@ struct CanvasView: View {
                 }
                 
                 Spacer()
-                
-                if viewModel.canvasMode == .detail && viewModel.selectedPhoto != nil {
-                    Button(action: {}) {
-                        Label("Hold for Original (\\)", systemImage: "eye.fill")
-                    }
-                    .buttonStyle(.bordered)
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { _ in isShowingOriginal = true }
-                            .onEnded { _ in isShowingOriginal = false }
-                    )
-                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -183,63 +171,69 @@ struct CanvasView: View {
                         }
                     }
                     
-                    // 2. Detail View (Metal GPU Canvas)
+                    // 2. Detail View (Metal GPU Canvas & Docked Control Bar)
                     if viewModel.canvasMode == .detail {
-                        ZStack {
-                            Color(NSColor.underPageBackgroundColor)
-                                .edgesIgnoringSafeArea(.all)
-                            
-                            if viewModel.previewImage != nil {
-                                MetalCanvasView(viewModel: viewModel, isShowingOriginal: isShowingOriginal)
-                                    .padding(24)
-                                    .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
-                                    .overlay(
-                                        isShowingOriginal ?
-                                        VStack {
-                                            Text("ORIGINAL RAW (AS SHOT)")
-                                                .font(.caption)
-                                                .fontWeight(.bold)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 6)
-                                                .background(Color.black.opacity(0.8))
-                                                .foregroundColor(.white)
-                                                .cornerRadius(4)
-                                            Spacer()
-                                        }
-                                        .padding(.top, 32) : nil
-                                    )
-                                    .overlay(alignment: .bottom) {
-                                        if viewModel.isDemosaicing {
-                                            HStack(spacing: 8) {
-                                                ProgressView()
-                                                    .controlSize(.small)
-                                                Text(viewModel.selectedPhotoIsRaw ? "Developing 14-bit RAW..." : "Loading...")
-                                                    .font(.system(size: 11, weight: .semibold))
+                        VStack(spacing: 0) {
+                            ZStack {
+                                Color(NSColor.underPageBackgroundColor)
+                                    .edgesIgnoringSafeArea(.all)
+                                
+                                if viewModel.previewImage != nil {
+                                    MetalCanvasView(viewModel: viewModel, isShowingOriginal: isShowingOriginal)
+                                        .padding(16)
+                                        .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
+                                        .overlay(
+                                            isShowingOriginal ?
+                                            VStack {
+                                                Text("ORIGINAL RAW (AS SHOT)")
+                                                    .font(.caption)
+                                                    .fontWeight(.bold)
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 6)
+                                                    .background(Color.black.opacity(0.8))
                                                     .foregroundColor(.white)
+                                                    .cornerRadius(4)
+                                                Spacer()
                                             }
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 8)
-                                            .background(.ultraThinMaterial)
-                                            .background(Color.black.opacity(0.65))
-                                            .cornerRadius(20)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 20)
-                                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                            )
-                                            .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 2)
-                                            .padding(.bottom, 24)
-                                            .transition(.opacity.animation(.easeInOut(duration: 0.15)))
+                                            .padding(.top, 24) : nil
+                                        )
+                                        .overlay(alignment: .bottom) {
+                                            if viewModel.isDemosaicing {
+                                                HStack(spacing: 8) {
+                                                    ProgressView()
+                                                        .controlSize(.small)
+                                                    Text(viewModel.selectedPhotoIsRaw ? "Developing 14-bit RAW..." : "Loading...")
+                                                        .font(.system(size: 11, weight: .semibold))
+                                                        .foregroundColor(.white)
+                                                }
+                                                .padding(.horizontal, 14)
+                                                .padding(.vertical, 8)
+                                                .background(.ultraThinMaterial)
+                                                .background(Color.black.opacity(0.65))
+                                                .cornerRadius(20)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 20)
+                                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                                )
+                                                .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 2)
+                                                .padding(.bottom, 16)
+                                                .transition(.opacity.animation(.easeInOut(duration: 0.15)))
+                                            }
                                         }
+                                } else {
+                                    VStack(spacing: 12) {
+                                        ProgressView()
+                                            .controlSize(.regular)
+                                        Text(viewModel.selectedPhotoIsRaw ? "Developing 14-bit RAW..." : "Loading...")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
                                     }
-                            } else {
-                                VStack(spacing: 12) {
-                                    ProgressView()
-                                        .controlSize(.regular)
-                                    Text(viewModel.selectedPhotoIsRaw ? "Developing 14-bit RAW..." : "Loading...")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
                                 }
                             }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            
+                            // Docked Control Bar (Never occludes the photo canvas)
+                            detailControlBar
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .transition(.opacity)
@@ -326,6 +320,115 @@ struct CanvasView: View {
                 viewModel.selectPhoto(photo)
             }
         }
+    }
+    
+    // MARK: - Docked Detail Control Bar
+    private var detailControlBar: some View {
+        HStack(spacing: 12) {
+            // 1. Zoom Mode (Fit vs 1:1)
+            HStack(spacing: 4) {
+                Button(action: {
+                    // Fit to Window
+                }) {
+                    Text("Fit")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                
+                Button(action: {
+                    // 1:1 Loupe
+                }) {
+                    Text("1:1")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            
+            Divider()
+                .frame(height: 16)
+            
+            // 2. Quick 90-degree Rotate
+            HStack(spacing: 4) {
+                Button(action: {
+                    viewModel.rotateCounterClockwise()
+                }) {
+                    Image(systemName: "rotate.left")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Rotate 90° Counter-Clockwise (Cmd+[)")
+                
+                Button(action: {
+                    viewModel.rotateClockwise()
+                }) {
+                    Image(systemName: "rotate.right")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Rotate 90° Clockwise (Cmd+])")
+            }
+            
+            Divider()
+                .frame(height: 16)
+            
+            // 3. Before / After Comparison Peek
+            Button(action: {}) {
+                Label("Hold for Original (\\)", systemImage: "eye.fill")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in isShowingOriginal = true }
+                    .onEnded { _ in isShowingOriginal = false }
+            )
+            
+            // 4. Quick Reset All Edits
+            Button(action: {
+                viewModel.resetAllSliders()
+            }) {
+                Label("Reset", systemImage: "arrow.counterclockwise")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!viewModel.hasCustomEdits)
+            .help("Reset All Edits to As-Shot (Cmd+Shift+R)")
+            
+            Spacer()
+            
+            // 5. Image Format & Dimension Readout
+            if let photo = viewModel.selectedPhoto {
+                if let raw = viewModel.rawPreviewRecord {
+                    Text("\(raw.width) × \(raw.height) • 14-bit RAW")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.secondary)
+                } else if let img = viewModel.previewImage {
+                    let w = Int(img.size.width)
+                    let h = Int(img.size.height)
+                    let ext = URL(fileURLWithPath: photo.filePath).pathExtension.uppercased()
+                    Text("\(w) × \(h) • \(ext)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(Color(NSColor.windowBackgroundColor))
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(Color(NSColor.separatorColor)),
+            alignment: .top
+        )
     }
 }
 
