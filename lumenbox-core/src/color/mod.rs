@@ -169,6 +169,155 @@ pub const REC2020_TO_DISPLAY_P3: Matrix3x3 = Matrix3x3([
     [-0.0125866, -0.0527376,  1.0653242],
 ]);
 
+// ---------------------------------------------------------------------------
+// Dynamic Color Science & Primary Algebra
+// ---------------------------------------------------------------------------
+
+/// Primary CIE 1931 (x, y) chromaticity coordinates and reference white point
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ColorSpacePrimaries {
+    pub red: (f32, f32),
+    pub green: (f32, f32),
+    pub blue: (f32, f32),
+    pub white: (f32, f32),
+}
+
+impl ColorSpacePrimaries {
+    pub const SRGB: Self = Self {
+        red: (0.6400, 0.3300),
+        green: (0.3000, 0.6000),
+        blue: (0.1500, 0.0600),
+        white: (0.3127, 0.3290), // D65
+    };
+
+    pub const REC2020: Self = Self {
+        red: (0.7080, 0.2920),
+        green: (0.1700, 0.7970),
+        blue: (0.1310, 0.0460),
+        white: (0.3127, 0.3290), // D65
+    };
+
+    pub const DISPLAY_P3: Self = Self {
+        red: (0.6800, 0.3200),
+        green: (0.2650, 0.6900),
+        blue: (0.1500, 0.0600),
+        white: (0.3127, 0.3290), // D65
+    };
+
+    pub const ADOBE_RGB: Self = Self {
+        red: (0.6400, 0.3300),
+        green: (0.2100, 0.7100),
+        blue: (0.1500, 0.0600),
+        white: (0.3127, 0.3290), // D65
+    };
+
+    /// Computes the exact 3x3 transformation matrix mapping RGB -> CIE XYZ (D65)
+    pub fn rgb_to_xyz_matrix(&self) -> Matrix3x3 {
+        let (xr, yr) = self.red;
+        let (xg, yg) = self.green;
+        let (xb, yb) = self.blue;
+        let (xw, yw) = self.white;
+
+        let xr_x = xr / yr;
+        let xr_y = 1.0f32;
+        let xr_z = (1.0 - xr - yr) / yr;
+
+        let xg_x = xg / yg;
+        let xg_y = 1.0f32;
+        let xg_z = (1.0 - xg - yg) / yg;
+
+        let xb_x = xb / yb;
+        let xb_y = 1.0f32;
+        let xb_z = (1.0 - xb - yb) / yb;
+
+        let xw_x = xw / yw;
+        let xw_y = 1.0f32;
+        let xw_z = (1.0 - xw - yw) / yw;
+
+        let m_prim = Matrix3x3([
+            [xr_x, xg_x, xb_x],
+            [xr_y, xg_y, xb_y],
+            [xr_z, xg_z, xb_z],
+        ]);
+
+        let m_inv = m_prim.inverse().unwrap_or(Matrix3x3::IDENTITY);
+        let s = m_inv.multiply_vector(Color3::new(xw_x, xw_y, xw_z));
+
+        Matrix3x3([
+            [xr_x * s.r(), xg_x * s.g(), xb_x * s.b()],
+            [xr_y * s.r(), xg_y * s.g(), xb_y * s.b()],
+            [xr_z * s.r(), xg_z * s.g(), xb_z * s.b()],
+        ])
+    }
+
+    /// Computes the exact 3x3 transformation matrix mapping CIE XYZ (D65) -> RGB
+    pub fn xyz_to_rgb_matrix(&self) -> Matrix3x3 {
+        self.rgb_to_xyz_matrix().inverse().unwrap_or(Matrix3x3::IDENTITY)
+    }
+
+    /// Computes direct conversion matrix from this color space to target color space
+    pub fn conversion_matrix_to(&self, target: &Self) -> Matrix3x3 {
+        let xyz_to_target = target.xyz_to_rgb_matrix();
+        let self_to_xyz = self.rgb_to_xyz_matrix();
+        xyz_to_target.multiply_matrix(&self_to_xyz)
+    }
+}
+
+/// CAT16 Chromatic Adaptation Transform matrix generator for arbitrary white points
+pub fn cat16_adaptation_matrix(source_xy: (f32, f32), target_xy: (f32, f32)) -> Matrix3x3 {
+    let cat16 = Matrix3x3([
+        [ 0.401288,  0.650173, -0.051461],
+        [-0.250268,  1.204414,  0.045854],
+        [-0.002079,  0.048952,  0.953127],
+    ]);
+    let cat16_inv = cat16.inverse().unwrap_or(Matrix3x3::IDENTITY);
+
+    let (x1, y1) = source_xy;
+    let (x2, y2) = target_xy;
+
+    let xyz1 = Color3::new(x1 / y1, 1.0, (1.0 - x1 - y1) / y1);
+    let xyz2 = Color3::new(x2 / y2, 1.0, (1.0 - x2 - y2) / y2);
+
+    let rgb1 = cat16.multiply_vector(xyz1);
+    let rgb2 = cat16.multiply_vector(xyz2);
+
+    let diag = Matrix3x3([
+        [rgb2.r() / rgb1.r().max(1e-6), 0.0, 0.0],
+        [0.0, rgb2.g() / rgb1.g().max(1e-6), 0.0],
+        [0.0, 0.0, rgb2.b() / rgb1.b().max(1e-6)],
+    ]);
+
+    let step = diag.multiply_matrix(&cat16);
+    cat16_inv.multiply_matrix(&step)
+}
+
+/// Computes CIE 1931 (x, y) chromaticity for a given correlated color temperature (Kelvin) and green-magenta tint.
+pub fn kelvin_and_tint_to_xy(temp_kelvin: f32, tint: f32) -> (f32, f32) {
+    let t = temp_kelvin.clamp(2000.0, 50000.0);
+    let x = if t <= 7000.0 {
+        -4.6070e9 / (t * t * t) + 2.9678e6 / (t * t) + 0.09911e3 / t + 0.244063
+    } else {
+        -2.0064e9 / (t * t * t) + 1.9018e6 / (t * t) + 0.24748e3 / t + 0.237040
+    };
+    let y = -3.000 * x * x + 2.870 * x - 0.275;
+
+    // Apply Tint perpendicular to Planckian locus in CIE 1976 u'v' space
+    let denom = (-2.0 * x + 12.0 * y + 3.0).max(1e-6);
+    let u_prime = 4.0 * x / denom;
+    let v_prime = 9.0 * y / denom;
+
+    // Perpendicular green-magenta shift vector in u'v'
+    let tint_shift = tint * 0.0002;
+    let u_corr = u_prime - tint_shift * 0.3;
+    let v_corr = v_prime + tint_shift;
+
+    // Convert u'v' back to xy
+    let x_corr = (9.0 * u_corr) / (6.0 * u_corr - 16.0 * v_corr + 12.0).max(1e-6);
+    let y_corr = (4.0 * v_corr) / (6.0 * u_corr - 16.0 * v_corr + 12.0).max(1e-6);
+
+    (x_corr, y_corr)
+}
+
 /// Standard sRGB electro-optical transfer function (linear -> gamma sRGB)
 #[inline]
 pub fn linear_to_srgb_gamma(x: f32) -> f32 {

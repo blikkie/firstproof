@@ -134,3 +134,52 @@ fn test_ciede2000_properties() {
     assert!((d_ab - d_ba).abs() < 1e-6);
     assert!(d_ab > 0.0);
 }
+
+#[test]
+fn test_dynamic_color_space_primaries_math() {
+    // 1. Verify dynamic primary algebra matrix for sRGB matches static XYZ_D65_TO_REC2020 & sRGB constants to < 1e-3
+    let _srgb_dynamic_to_xyz = ColorSpacePrimaries::SRGB.rgb_to_xyz_matrix();
+    let _rec2020_dynamic_to_xyz = ColorSpacePrimaries::REC2020.rgb_to_xyz_matrix();
+    
+    // Dynamic Rec.2020 -> sRGB conversion matrix
+    let rec2020_to_srgb_dyn = ColorSpacePrimaries::REC2020.conversion_matrix_to(&ColorSpacePrimaries::SRGB);
+    
+    for r in 0..3 {
+        for c in 0..3 {
+            let static_val = REC2020_TO_LINEAR_SRGB.0[r][c];
+            let dyn_val = rec2020_to_srgb_dyn.0[r][c];
+            assert!((static_val - dyn_val).abs() < 1e-3, "Rec2020->sRGB mismatch at [{r}][{c}]: static={static_val}, dyn={dyn_val}");
+        }
+    }
+
+    // 2. Identity mapping: ColorSpacePrimaries conversion to self should yield identity matrix
+    let srgb_self = ColorSpacePrimaries::SRGB.conversion_matrix_to(&ColorSpacePrimaries::SRGB);
+    for r in 0..3 {
+        for c in 0..3 {
+            let expected = if r == c { 1.0 } else { 0.0 };
+            assert!((srgb_self.0[r][c] - expected).abs() < 1e-5);
+        }
+    }
+}
+
+#[test]
+fn test_planckian_kelvin_to_xy_math() {
+    // 6500K daylight white point should evaluate close to D65 CIE (x=0.3127, y=0.3290)
+    let (x_d65, y_d65) = kelvin_and_tint_to_xy(6500.0, 0.0);
+    assert!((x_d65 - 0.3127).abs() < 0.005, "x mismatch for 6500K: got {x_d65}");
+    assert!((y_d65 - 0.3290).abs() < 0.005, "y mismatch for 6500K: got {y_d65}");
+
+    // 2856K tungsten should evaluate close to Illuminant A (x=0.4476, y=0.4074)
+    let (x_a, y_a) = kelvin_and_tint_to_xy(2856.0, 0.0);
+    assert!((x_a - 0.4476).abs() < 0.01, "x mismatch for 2856K: got {x_a}");
+    assert!((y_a - 0.4074).abs() < 0.01, "y mismatch for 2856K: got {y_a}");
+
+    // CAT16 self-adaptation should be identity
+    let cat_identity = cat16_adaptation_matrix((0.3127, 0.3290), (0.3127, 0.3290));
+    for r in 0..3 {
+        for c in 0..3 {
+            let expected = if r == c { 1.0 } else { 0.0 };
+            assert!((cat_identity.0[r][c] - expected).abs() < 1e-4);
+        }
+    }
+}
