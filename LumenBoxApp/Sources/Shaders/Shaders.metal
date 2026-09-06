@@ -133,10 +133,46 @@ fragment float4 fragmentShader(
         return sampledColor;
     }
     
-    // 2. Linear Space Conversion (sRGB/Gamma 2.2 -> Linear Light)
-    float3 linearColor = pow(max(sampledColor.rgb, float3(0.0)), float3(2.2));
+// MARK: - Scene-Referred Rec.2020 Color Pipeline
+
+// Exact sRGB electro-optical transfer functions (IEC 61966-2-1)
+inline float srgbGammaToLinear(float c) {
+    c = clamp(c, 0.0, 1.0);
+    return (c <= 0.04045) ? (c / 12.92) : pow((c + 0.055) / 1.055, 2.4);
+}
+
+inline float3 srgbGammaToLinear3(float3 c) {
+    return float3(srgbGammaToLinear(c.r), srgbGammaToLinear(c.g), srgbGammaToLinear(c.b));
+}
+
+inline float linearToSrgbGamma(float c) {
+    c = clamp(c, 0.0, 1.0);
+    return (c <= 0.0031308) ? (12.92 * c) : (1.055 * pow(c, 1.0 / 2.4) - 0.055);
+}
+
+inline float3 linearToSrgbGamma3(float3 c) {
+    return float3(linearToSrgbGamma(c.r), linearToSrgbGamma(c.g), linearToSrgbGamma(c.b));
+}
+
+// Linear sRGB -> Linear Rec.2020 Matrix (columns in Metal MSL)
+constant float3x3 LINEAR_SRGB_TO_REC2020 = float3x3(
+    float3(0.6274041, 0.0690972, 0.0163914),
+    float3(0.3292821, 0.9195411, 0.0880133),
+    float3(0.0433138, 0.0113617, 0.8955953)
+);
+
+// Linear Rec.2020 -> Linear sRGB Matrix (columns in Metal MSL)
+constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
+    float3( 1.6604910, -0.1245505, -0.0181508),
+    float3(-0.5876411,  1.1328999, -0.1005789),
+    float3(-0.0728499, -0.0083494,  1.1187297)
+);
+
+    // 2. Decode texture to Linear sRGB then transition into Wide-Gamut Linear Rec.2020
+    float3 linearSrgb = srgbGammaToLinear3(sampledColor.rgb);
+    float3 rec2020Color = LINEAR_SRGB_TO_REC2020 * linearSrgb;
     
-    // 3. White Balance & Temperature Adjustment
+    // 3. White Balance & Temperature Adjustment in Wide-Gamut Space
     if (abs(uniforms.temperature - 5500.0) >= 1.0 || uniforms.tint != 0.0) {
         float tempNorm = clamp(uniforms.temperature / 5500.0, 0.25, 4.0);
         float rScale = pow(tempNorm, 0.75);
@@ -147,25 +183,26 @@ fragment float4 fragmentShader(
         rScale += tintFactor * 0.5;
         bScale += tintFactor * 0.5;
         
-        linearColor.r *= rScale;
-        linearColor.g *= gScale;
-        linearColor.b *= bScale;
+        rec2020Color.r *= rScale;
+        rec2020Color.g *= gScale;
+        rec2020Color.b *= bScale;
     }
     
-    // 4. Linear Exposure Multiplication (2^EV)
+    // 4. Linear Exposure Multiplication (2^EV) in Wide-Gamut Space
     if (uniforms.exposure != 0.0) {
-        linearColor *= pow(2.0, uniforms.exposure);
+        rec2020Color *= pow(2.0, uniforms.exposure);
     }
     
-    // 5. Tone & Contrast S-Curve
+    // 5. Tone & Contrast S-Curve in Wide-Gamut Space
     if (uniforms.contrast != 0.0) {
         float contrastGain = 1.0 + (uniforms.contrast / 100.0);
-        float3 normalized = max(linearColor / 0.18, float3(0.0001));
-        linearColor = 0.18 * pow(normalized, float3(contrastGain));
+        float3 normalized = max(rec2020Color / 0.18, float3(0.0001));
+        rec2020Color = 0.18 * pow(normalized, float3(contrastGain));
     }
     
-    // 6. Display OETF (Linear -> Display Gamma 2.2)
-    float3 finalColor = pow(clamp(linearColor, float3(0.0), float3(1.0)), float3(1.0 / 2.2));
+    // 6. Display Target Transform: Linear Rec.2020 -> Linear sRGB -> Standard Display Gamma
+    float3 srgbLinearOut = max(REC2020_TO_LINEAR_SRGB * rec2020Color, float3(0.0));
+    float3 finalColor = linearToSrgbGamma3(srgbLinearOut);
     
     return float4(finalColor, sampledColor.a);
 }

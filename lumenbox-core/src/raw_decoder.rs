@@ -140,6 +140,19 @@ impl RawDecoder for RawlerDecoder {
             _ => CfaPattern::Rggb,
         };
 
+        let color_matrix = raw.color_matrix.values().next().and_then(|v| {
+            if v.len() >= 9 {
+                let m = crate::color::Matrix3x3([
+                    [v[0], v[1], v[2]],
+                    [v[3], v[4], v[5]],
+                    [v[6], v[7], v[8]],
+                ]);
+                m.inverse().map(|inv| inv.0)
+            } else {
+                None
+            }
+        });
+
         let mut black_levels = [0.0f32; 4];
         if raw.blacklevel.levels.is_empty() {
             // default 0.0
@@ -184,7 +197,7 @@ impl RawDecoder for RawlerDecoder {
             black_levels,
             white_levels,
             wb_coeffs,
-            color_matrix: None,
+            color_matrix,
             sensor_data,
         })
     }

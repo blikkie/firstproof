@@ -9,6 +9,7 @@ pub mod takeout;
 pub mod db;
 pub mod lensfun;
 pub mod export;
+pub mod color;
 
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct PhotoRecord {

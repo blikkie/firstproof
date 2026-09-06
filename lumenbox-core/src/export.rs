@@ -6,6 +6,11 @@ use image::codecs::jpeg::JpegEncoder;
 use image::codecs::tiff::TiffEncoder;
 
 use crate::EditSettings;
+use crate::color::{
+    Color3, Matrix3x3, BRADFORD_D50_TO_D65, CANON_EOS_SENSOR_TO_XYZ_D50,
+    LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB, XYZ_D65_TO_REC2020,
+    linear_rgb_to_srgb8, srgb_gamma_to_linear,
+};
 
 pub struct DemosaicedImage {
     pub width: usize,
@@ -36,6 +41,28 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
         
         let (wb_r, wb_b) = frame.as_shot_wb();
         
+        // Camera sensor matrix (Sensor -> XYZ D50)
+        let sensor_to_xyz = frame.color_matrix.map(Matrix3x3).unwrap_or(CANON_EOS_SENSOR_TO_XYZ_D50);
+        
+        // Composite transform: Sensor -> XYZ D50 -> XYZ D65 -> Linear Rec.2020
+        let sensor_to_rec2020 = XYZ_D65_TO_REC2020
+            .multiply_matrix(&BRADFORD_D50_TO_D65)
+            .multiply_matrix(&sensor_to_xyz);
+
+        // Normalize matrix rows so neutral white balances cleanly without luminance bias
+        let norm_r = sensor_to_rec2020.0[0][0] + sensor_to_rec2020.0[0][1] + sensor_to_rec2020.0[0][2];
+        let norm_g = sensor_to_rec2020.0[1][0] + sensor_to_rec2020.0[1][1] + sensor_to_rec2020.0[1][2];
+        let norm_b = sensor_to_rec2020.0[2][0] + sensor_to_rec2020.0[2][1] + sensor_to_rec2020.0[2][2];
+        let sensor_to_rec2020_norm = if norm_r.abs() > 1e-4 && norm_g.abs() > 1e-4 && norm_b.abs() > 1e-4 {
+            Matrix3x3([
+                [sensor_to_rec2020.0[0][0] / norm_r, sensor_to_rec2020.0[0][1] / norm_r, sensor_to_rec2020.0[0][2] / norm_r],
+                [sensor_to_rec2020.0[1][0] / norm_g, sensor_to_rec2020.0[1][1] / norm_g, sensor_to_rec2020.0[1][2] / norm_g],
+                [sensor_to_rec2020.0[2][0] / norm_b, sensor_to_rec2020.0[2][1] / norm_b, sensor_to_rec2020.0[2][2] / norm_b],
+            ])
+        } else {
+            sensor_to_rec2020
+        };
+
         // Dynamic CFA Bayer Demosaicing (Supports RGGB, BGGR, GBRG, GRBG)
         for y in 0..active_h {
             let full_y = (frame.active_y + y).min(frame.full_height - 2).max(1);
@@ -72,12 +99,16 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                     }
                 }
                 
-                let out_idx = (y * active_w + x) * 3;
+                // Sensor linear RGB with white balance
+                let c_sensor = Color3::new((r * wb_r).clamp(0.0, 1.0), g.clamp(0.0, 1.0), (b * wb_b).clamp(0.0, 1.0));
                 
-                // Standard neutral daylight white balance baseline (zero color distortion)
-                demosaiced.data[out_idx] = (r * wb_r).clamp(0.0, 1.0);
-                demosaiced.data[out_idx + 1] = g.clamp(0.0, 1.0);
-                demosaiced.data[out_idx + 2] = (b * wb_b).clamp(0.0, 1.0);
+                // Map to Wide-Gamut Linear Rec.2020 working space
+                let c_rec2020 = sensor_to_rec2020_norm.multiply_vector(c_sensor);
+                
+                let out_idx = (y * active_w + x) * 3;
+                demosaiced.data[out_idx] = c_rec2020.r().max(0.0);
+                demosaiced.data[out_idx + 1] = c_rec2020.g().max(0.0);
+                demosaiced.data[out_idx + 2] = c_rec2020.b().max(0.0);
             }
         }
         
@@ -93,9 +124,14 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
     let mut demosaiced = DemosaicedImage::new(width, height);
     for (i, pixel) in rgb.pixels().enumerate() {
         let out_idx = i * 3;
-        demosaiced.data[out_idx] = ((pixel[0] as f32) / 255.0).powf(2.2);
-        demosaiced.data[out_idx + 1] = ((pixel[1] as f32) / 255.0).powf(2.2);
-        demosaiced.data[out_idx + 2] = ((pixel[2] as f32) / 255.0).powf(2.2);
+        let r_lin = srgb_gamma_to_linear((pixel[0] as f32) / 255.0);
+        let g_lin = srgb_gamma_to_linear((pixel[1] as f32) / 255.0);
+        let b_lin = srgb_gamma_to_linear((pixel[2] as f32) / 255.0);
+        let c_srgb = Color3::new(r_lin, g_lin, b_lin);
+        let c_rec2020 = LINEAR_SRGB_TO_REC2020.multiply_vector(c_srgb);
+        demosaiced.data[out_idx] = c_rec2020.r().max(0.0);
+        demosaiced.data[out_idx + 1] = c_rec2020.g().max(0.0);
+        demosaiced.data[out_idx + 2] = c_rec2020.b().max(0.0);
     }
     
     Ok(demosaiced)
@@ -211,12 +247,14 @@ pub fn decode_raw_preview_buffer<P: AsRef<Path>>(path: P, max_dimension: Option<
         for tx in 0..target_w {
             let sx = (tx as f32 + 0.5) * (orig_w as f32) / (target_w as f32);
             let (r, g, b) = sample_bilinear(&demosaiced, sx, sy);
+            let c_rec2020 = Color3::new(r, g, b);
+            let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+            let srgb8 = linear_rgb_to_srgb8(c_srgb);
             
             let out_idx = (ty * target_w + tx) * 4;
-            // Convert linear float to standard display gamma (pow 1/2.2)
-            out_rgba[out_idx] = ((r.clamp(0.0, 1.0).powf(1.0 / 2.2)) * 255.0).round() as u8;
-            out_rgba[out_idx + 1] = ((g.clamp(0.0, 1.0).powf(1.0 / 2.2)) * 255.0).round() as u8;
-            out_rgba[out_idx + 2] = ((b.clamp(0.0, 1.0).powf(1.0 / 2.2)) * 255.0).round() as u8;
+            out_rgba[out_idx] = srgb8[0];
+            out_rgba[out_idx + 1] = srgb8[1];
+            out_rgba[out_idx + 2] = srgb8[2];
             out_rgba[out_idx + 3] = 255;
         }
     }
@@ -326,11 +364,11 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             let sy = (ry * aspect_ratio + 0.5) * (orig_height as f32);
             
             let (r_val, g_val, b_val) = sample_bilinear(&image, sx, sy);
-            let r = (r_val * 255.0).round().clamp(0.0, 255.0) as u8;
-            let g = (g_val * 255.0).round().clamp(0.0, 255.0) as u8;
-            let b = (b_val * 255.0).round().clamp(0.0, 255.0) as u8;
+            let c_rec2020 = Color3::new(r_val, g_val, b_val);
+            let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+            let srgb8 = linear_rgb_to_srgb8(c_srgb);
             
-            rgb_img.put_pixel(tx, ty, Rgb([r, g, b]));
+            rgb_img.put_pixel(tx, ty, Rgb(srgb8));
         }
     }
     
