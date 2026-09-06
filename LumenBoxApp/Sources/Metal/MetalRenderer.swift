@@ -48,6 +48,14 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     
     public var uniforms = ShaderUniforms()
     
+    // MARK: - Viewport Zoom & Pan
+    public var zoomScale: Float = 1.0
+    public var panOffset: SIMD2<Float> = SIMD2<Float>(0.0, 0.0)
+    public private(set) var zoomScale100: Float = 1.0
+    
+    public var textureWidth: Int { currentTexture?.width ?? 0 }
+    public var textureHeight: Int { currentTexture?.height ?? 0 }
+    
     public init?(device: MTLDevice) {
         self.device = device
         guard let queue = device.makeCommandQueue() else { return nil }
@@ -216,8 +224,8 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         self.uniforms.lutSize = Float(size)
     }
     
-    // MARK: - Aspect-Fit Quad Update
-    private func updateQuad(viewSize: CGSize) {
+    // MARK: - Aspect-Fit, Zoom & Pan Quad Update
+    public func updateQuad(viewSize: CGSize) {
         guard let texture = currentTexture, viewSize.width > 0, viewSize.height > 0 else { return }
         
         var imageAspect = Float(texture.width) / Float(texture.height)
@@ -247,11 +255,32 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
             quadH = 1.0
         }
         
+        // Compute 1:1 Pixel Mapping Scale (where 1 image pixel = 1 screen pixel)
+        let fitWidthPixels = Float(viewSize.width) * quadW
+        let fitScale = Float(texture.width) / max(fitWidthPixels, 1.0)
+        self.zoomScale100 = max(1.0, fitScale)
+        
+        // Apply zoom scale
+        let currentScale = max(1.0, zoomScale)
+        let scaledW = quadW * currentScale
+        let scaledH = quadH * currentScale
+        
+        // Clamp pan offsets so the image edge cannot be dragged past the viewport bounds
+        let maxPanX = max(0.0, scaledW - 1.0)
+        let maxPanY = max(0.0, scaledH - 1.0)
+        panOffset.x = max(-maxPanX, min(maxPanX, panOffset.x))
+        panOffset.y = max(-maxPanY, min(maxPanY, panOffset.y))
+        
+        let left   = -scaledW + panOffset.x
+        let right  =  scaledW + panOffset.x
+        let top    =  scaledH + panOffset.y
+        let bottom = -scaledH + panOffset.y
+        
         let vertices: [Vertex] = [
-            Vertex(position: SIMD2<Float>(-quadW,  quadH), texCoord: SIMD2<Float>(0.0, 0.0)),
-            Vertex(position: SIMD2<Float>( quadW,  quadH), texCoord: SIMD2<Float>(1.0, 0.0)),
-            Vertex(position: SIMD2<Float>(-quadW, -quadH), texCoord: SIMD2<Float>(0.0, 1.0)),
-            Vertex(position: SIMD2<Float>( quadW, -quadH), texCoord: SIMD2<Float>(1.0, 1.0))
+            Vertex(position: SIMD2<Float>(left,   top), texCoord: SIMD2<Float>(0.0, 0.0)),
+            Vertex(position: SIMD2<Float>(right,  top), texCoord: SIMD2<Float>(1.0, 0.0)),
+            Vertex(position: SIMD2<Float>(left,  bottom), texCoord: SIMD2<Float>(0.0, 1.0)),
+            Vertex(position: SIMD2<Float>(right, bottom), texCoord: SIMD2<Float>(1.0, 1.0))
         ]
         
         if let vertexBuffer = vertexBuffer {

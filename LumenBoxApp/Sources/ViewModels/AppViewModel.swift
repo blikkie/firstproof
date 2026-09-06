@@ -135,6 +135,63 @@ public final class AppViewModel {
         return getBuiltinCubeLut(title: title, size: 33)
     }
     
+    // MARK: - Viewport Zoom & Pan
+    public var zoomScale: Float = 1.0
+    public var panOffset: CGPoint = .zero
+    public var zoomScale100: Float = 1.0
+    
+    public var isZoomed: Bool {
+        zoomScale > 1.05
+    }
+    
+    public var zoomPercentage: Int {
+        if zoomScale <= 1.02 {
+            let fitRatio = (1.0 / max(1.0, zoomScale100)) * 100.0
+            return max(1, Int(round(fitRatio)))
+        } else {
+            let actualRatio = (zoomScale / max(1.0, zoomScale100)) * 100.0
+            return max(1, Int(round(actualRatio)))
+        }
+    }
+    
+    public var zoomReadoutText: String {
+        if zoomScale <= 1.02 {
+            return "Fit (\(zoomPercentage)%)"
+        } else {
+            return "\(zoomPercentage)%"
+        }
+    }
+    
+    public func zoomToFit() {
+        zoomScale = 1.0
+        panOffset = .zero
+    }
+    
+    public func zoomTo100() {
+        zoomScale = max(1.0, zoomScale100)
+        panOffset = .zero
+    }
+    
+    public func toggleZoom(at pointInNDC: CGPoint = .zero) {
+        if isZoomed {
+            zoomToFit()
+        } else {
+            zoomScale = max(1.0, zoomScale100)
+            panOffset = CGPoint(x: -pointInNDC.x * CGFloat(zoomScale - 1.0), y: -pointInNDC.y * CGFloat(zoomScale - 1.0))
+        }
+    }
+    
+    public func zoomIn() {
+        zoomScale = min(zoomScale * 1.3, max(16.0, zoomScale100 * 8.0))
+    }
+    
+    public func zoomOut() {
+        zoomScale = max(zoomScale / 1.3, 1.0)
+        if zoomScale <= 1.05 {
+            panOffset = .zero
+        }
+    }
+    
     // MARK: - Takeout & Metadata
     public var takeoutMatches: [TakeoutMatchRecord] = []
     public var lensCoefficients: LensCorrectionCoefficientsRecord? = nil

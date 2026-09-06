@@ -130,6 +130,32 @@ struct LumenBoxApp: App {
                 
                 Divider()
                 
+                Button("Zoom to Fit") {
+                    viewModel.zoomToFit()
+                }
+                .keyboardShortcut("0", modifiers: [.command])
+                .disabled(viewModel.canvasMode != .detail)
+                
+                Button("Zoom 100% (1:1)") {
+                    viewModel.zoomTo100()
+                }
+                .keyboardShortcut("0", modifiers: [.command, .option])
+                .disabled(viewModel.canvasMode != .detail)
+                
+                Button("Zoom In") {
+                    viewModel.zoomIn()
+                }
+                .keyboardShortcut("=", modifiers: [.command])
+                .disabled(viewModel.canvasMode != .detail)
+                
+                Button("Zoom Out") {
+                    viewModel.zoomOut()
+                }
+                .keyboardShortcut("-", modifiers: [.command])
+                .disabled(viewModel.canvasMode != .detail)
+                
+                Divider()
+                
                 Menu("Inspector Workspace") {
                     Button("Light & Tone") {
                         viewModel.selectedInspectorTab = .light

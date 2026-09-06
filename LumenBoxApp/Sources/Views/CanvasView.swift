@@ -325,27 +325,36 @@ struct CanvasView: View {
     // MARK: - Docked Detail Control Bar
     private var detailControlBar: some View {
         HStack(spacing: 12) {
-            // 1. Zoom Mode (Fit vs 1:1)
-            HStack(spacing: 4) {
+            // 1. Zoom Mode Segment (Fit / 1:1 Loupe)
+            HStack(spacing: 6) {
                 Button(action: {
-                    // Fit to Window
+                    viewModel.zoomToFit()
                 }) {
                     Text("Fit")
                         .font(.caption)
                         .fontWeight(.medium)
                 }
                 .buttonStyle(.bordered)
+                .tint(viewModel.zoomScale <= 1.05 ? .accentColor : nil)
                 .controlSize(.small)
+                .help("Fit Photo to Viewport (Cmd+0)")
                 
                 Button(action: {
-                    // 1:1 Loupe
+                    viewModel.zoomTo100()
                 }) {
                     Text("1:1")
                         .font(.caption)
                         .fontWeight(.medium)
                 }
                 .buttonStyle(.bordered)
+                .tint(abs(viewModel.zoomScale - viewModel.zoomScale100) < 0.05 && viewModel.isZoomed ? .accentColor : nil)
                 .controlSize(.small)
+                .help("Zoom to 100% 1:1 Pixels (Opt+Cmd+0)")
+                
+                Text(viewModel.zoomReadoutText)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .frame(minWidth: 54, alignment: .leading)
             }
             
             Divider()
@@ -549,6 +558,8 @@ struct DetailMetalCanvasContainer: View {
             lutIntensity: viewModel.lutIntensity,
             toneProfile: viewModel.toneProfile,
             rotationDegrees: viewModel.rotationDegrees,
+            zoomScale: viewModel.zoomScale,
+            panOffset: viewModel.panOffset,
             isShowingOriginal: isShowingOriginal
         )
     }
