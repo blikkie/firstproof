@@ -17,6 +17,23 @@ pub struct ImageMetadata {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub description: Option<String>,
+    pub orientation: Option<u32>,
+}
+
+/// Decodes an EXIF orientation tag (1-8) into canonical rotation degrees (0, 90, 180, 270)
+/// and horizontal/vertical flip booleans.
+pub fn decode_exif_orientation(orientation: u32) -> (i32, bool, bool) {
+    match orientation {
+        1 => (0, false, false),    // Normal
+        2 => (0, true, false),     // Flip horizontal
+        3 => (180, false, false),  // Rotate 180
+        4 => (0, false, true),     // Flip vertical
+        5 => (270, true, false),   // Transpose: Flip horizontal + Rotate 270 CW
+        6 => (90, false, false),   // Rotate 90 CW
+        7 => (90, true, false),    // Transverse: Flip horizontal + Rotate 90 CW
+        8 => (270, false, false),  // Rotate 270 CW (90 CCW)
+        _ => (0, false, false),
+    }
 }
 
 /// Helper function to parse EXIF date string "YYYY:MM:DD HH:MM:SS" into a Unix timestamp.
@@ -202,6 +219,15 @@ pub fn extract_metadata<P: AsRef<Path>>(path: P) -> std::io::Result<ImageMetadat
     let latitude = parse_gps(&exif, Tag::GPSLatitude, Tag::GPSLatitudeRef);
     let longitude = parse_gps(&exif, Tag::GPSLongitude, Tag::GPSLongitudeRef);
     
+    let mut orientation = None;
+    if let Some(field) = exif.get_field(Tag::Orientation, In::PRIMARY).or_else(|| exif.fields().find(|f| f.tag == Tag::Orientation)) {
+        if let Value::Short(ref v) = field.value {
+            if let Some(&val) = v.get(0) {
+                orientation = Some(val as u32);
+            }
+        }
+    }
+    
     Ok(ImageMetadata {
         file_path: path.as_ref().to_string_lossy().into_owned(),
         camera_make,
@@ -215,6 +241,7 @@ pub fn extract_metadata<P: AsRef<Path>>(path: P) -> std::io::Result<ImageMetadat
         latitude,
         longitude,
         description,
+        orientation,
     })
 }
 

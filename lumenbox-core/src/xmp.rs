@@ -167,6 +167,9 @@ pub fn generate_xmp(data: &XmpData) -> String {
     pm:cropRight="{crop_right:.4}"
     pm:cropBottom="{crop_bottom:.4}"
     pm:cropAngle="{crop_angle:.4}"
+    pm:rotation="{rotation}"
+    pm:flipHorizontal="{flip_h}"
+    pm:flipVertical="{flip_v}"
     pm:toneProfile="{tone_profile}"{lut_attrs}>
 {title_block}{desc_block}  </rdf:Description>
  </rdf:RDF>
@@ -181,6 +184,9 @@ pub fn generate_xmp(data: &XmpData) -> String {
         crop_right = data.edits.crop_right,
         crop_bottom = data.edits.crop_bottom,
         crop_angle = data.edits.crop_angle,
+        rotation = data.edits.rotation,
+        flip_h = data.edits.flip_horizontal,
+        flip_v = data.edits.flip_vertical,
         tone_profile = tone_profile_str,
         lut_attrs = lut_attrs,
         rating_attr = rating_attr,
@@ -285,6 +291,17 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
             data.edits.crop_angle = val;
         }
     }
+    if let Some(rot_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "rotation" )) {
+        if let Ok(val) = rot_str.parse::<i32>() {
+            data.edits.rotation = val;
+        }
+    }
+    if let Some(fh_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "flipHorizontal" )) {
+        data.edits.flip_horizontal = fh_str == "true" || fh_str == "1";
+    }
+    if let Some(fv_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "flipVertical" )) {
+        data.edits.flip_vertical = fv_str == "true" || fv_str == "1";
+    }
     if let Some(tp_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "toneProfile" )) {
         data.edits.tone_profile = match tp_str {
             "AgxVivid" => crate::ColorProfileMode::AgxVivid,
@@ -363,6 +380,39 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         if let Some(ca_str) = desc.attribute(( crs_ns, "CropAngle" )) {
             if let Ok(val) = ca_str.parse::<f32>() {
                 data.edits.crop_angle = val;
+            }
+        }
+    }
+    
+    // Fallback: Parse Orientation hints from third-party editors (Lightroom, Capture One, Darktable, Digikam)
+    if data.edits.rotation == 0 && !data.edits.flip_horizontal && !data.edits.flip_vertical {
+        let tiff_ns = "http://ns.adobe.com/tiff/1.0/";
+        let exif_ns = "http://ns.adobe.com/exif/1.0/";
+
+        let orient_hint = desc.attribute(( tiff_ns, "Orientation" ))
+            .or_else(|| desc.attribute(( exif_ns, "Orientation" )))
+            .or_else(|| desc.attribute(( crs_ns, "Orientation" )))
+            .or_else(|| desc.attribute("Orientation"));
+
+        if let Some(orient_str) = orient_hint {
+            if let Ok(num) = orient_str.trim().parse::<u32>() {
+                if (1..=8).contains(&num) {
+                    let (rot, fh, fv) = crate::raw::decode_exif_orientation(num);
+                    data.edits.rotation = rot;
+                    data.edits.flip_horizontal = fh;
+                    data.edits.flip_vertical = fv;
+                }
+            } else {
+                let trimmed = orient_str.trim();
+                if trimmed.eq_ignore_ascii_case("Rotate 90 CW") || trimmed.eq_ignore_ascii_case("Right-top") {
+                    data.edits.rotation = 90;
+                } else if trimmed.eq_ignore_ascii_case("Rotate 180") || trimmed.eq_ignore_ascii_case("Bottom-right") {
+                    data.edits.rotation = 180;
+                } else if trimmed.eq_ignore_ascii_case("Rotate 270 CW") || trimmed.eq_ignore_ascii_case("Left-bottom") {
+                    data.edits.rotation = 270;
+                } else if trimmed.eq_ignore_ascii_case("Horizontal") || trimmed.eq_ignore_ascii_case("Top-left") {
+                    data.edits.rotation = 0;
+                }
             }
         }
     }
@@ -453,6 +503,9 @@ mod tests {
         data.edits.crop_right = 0.95;
         data.edits.crop_bottom = 0.95;
         data.edits.crop_angle = -0.5;
+        data.edits.rotation = 90;
+        data.edits.flip_horizontal = true;
+        data.edits.flip_vertical = false;
         
         let path = "test_image_metadata.xmp";
         write_xmp_file(path, &data).unwrap();
@@ -474,6 +527,9 @@ mod tests {
         assert_eq!(parsed.edits.temperature, 5800.0);
         assert_eq!(parsed.edits.tint, -12.0);
         assert_eq!(parsed.edits.crop_angle, -0.5);
+        assert_eq!(parsed.edits.rotation, 90);
+        assert_eq!(parsed.edits.flip_horizontal, true);
+        assert_eq!(parsed.edits.flip_vertical, false);
     }
 
     #[test]
@@ -497,5 +553,50 @@ mod tests {
         assert_eq!(read_back.status, "Pick");
         
         let _ = std::fs::remove_file(expected_xmp);
+    }
+
+    #[test]
+    fn test_xmp_third_party_orientation_hints() {
+        // 1. Adobe Lightroom / Camera Raw with tiff:Orientation="6"
+        let lr_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:tiff="http://ns.adobe.com/tiff/1.0/"
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    tiff:Orientation="6"
+    crs:Orientation="Rotate 90 CW">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+        let parsed_lr = parse_xmp(lr_xmp).unwrap();
+        assert_eq!(parsed_lr.edits.rotation, 90);
+        assert_eq!(parsed_lr.edits.flip_horizontal, false);
+        assert_eq!(parsed_lr.edits.flip_vertical, false);
+
+        // 2. Capture One / Darktable with tiff:Orientation="8" (270 deg)
+        let c1_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:tiff="http://ns.adobe.com/tiff/1.0/"
+    tiff:Orientation="8">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+        let parsed_c1 = parse_xmp(c1_xmp).unwrap();
+        assert_eq!(parsed_c1.edits.rotation, 270);
+        assert_eq!(parsed_c1.edits.flip_horizontal, false);
+
+        // 3. Front camera / scanner mirrored portrait: orientation 5 (Transpose: 270 deg + flip H)
+        let mirror_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+    exif:Orientation="5">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+        let parsed_mirror = parse_xmp(mirror_xmp).unwrap();
+        assert_eq!(parsed_mirror.edits.rotation, 270);
+        assert_eq!(parsed_mirror.edits.flip_horizontal, true);
     }
 }

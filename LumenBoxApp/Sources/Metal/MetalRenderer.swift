@@ -54,6 +54,11 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     public private(set) var zoomScale100: Float = 1.0
     public var onZoomScale100Changed: ((Float) -> Void)?
     
+    // MARK: - Viewport Geometry (Rotation & Flip)
+    public var rotationDegrees: Int = 0 // 0, 90, 180, 270
+    public var flipHorizontal: Bool = false
+    public var flipVertical: Bool = false
+    
     public var textureWidth: Int { currentTexture?.width ?? 0 }
     public var textureHeight: Int { currentTexture?.height ?? 0 }
     
@@ -241,24 +246,28 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
             }
         }
         
+        let isOrthogonal = (rotationDegrees == 90 || rotationDegrees == 270)
+        let displayAspect = isOrthogonal ? (1.0 / imageAspect) : imageAspect
+        
         let viewAspect = Float(viewSize.width) / Float(viewSize.height)
         
         var quadW: Float = 1.0
         var quadH: Float = 1.0
         
-        if imageAspect > viewAspect {
+        if displayAspect > viewAspect {
             // Image is wider than viewport: fit width, letterbox top/bottom
             quadW = 1.0
-            quadH = viewAspect / imageAspect
+            quadH = viewAspect / displayAspect
         } else {
             // Image is taller than viewport: fit height, pillarbox left/right
-            quadW = imageAspect / viewAspect
+            quadW = displayAspect / viewAspect
             quadH = 1.0
         }
         
         // Compute 1:1 Pixel Mapping Scale (where 1 image pixel = 1 screen pixel)
+        let displayPixelsW = isOrthogonal ? Float(texture.height) : Float(texture.width)
         let fitWidthPixels = Float(viewSize.width) * quadW
-        let fitScale = Float(texture.width) / max(fitWidthPixels, 1.0)
+        let fitScale = displayPixelsW / max(fitWidthPixels, 1.0)
         let newZ100 = max(1.0, fitScale)
         if abs(self.zoomScale100 - newZ100) > 0.01 {
             self.zoomScale100 = newZ100
@@ -281,11 +290,46 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         let top    =  scaledH + panOffset.y
         let bottom = -scaledH + panOffset.y
         
+        // Derive vertex texture coordinates according to 90° rotation and horizontal/vertical flips
+        var (tl, tr, bl, br): (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>)
+        switch (rotationDegrees % 360 + 360) % 360 {
+        case 90:
+            tl = SIMD2<Float>(0.0, 1.0)
+            tr = SIMD2<Float>(0.0, 0.0)
+            bl = SIMD2<Float>(1.0, 1.0)
+            br = SIMD2<Float>(1.0, 0.0)
+        case 180:
+            tl = SIMD2<Float>(1.0, 1.0)
+            tr = SIMD2<Float>(0.0, 1.0)
+            bl = SIMD2<Float>(1.0, 0.0)
+            br = SIMD2<Float>(0.0, 0.0)
+        case 270:
+            tl = SIMD2<Float>(1.0, 0.0)
+            tr = SIMD2<Float>(1.0, 1.0)
+            bl = SIMD2<Float>(0.0, 0.0)
+            br = SIMD2<Float>(0.0, 1.0)
+        default: // 0
+            tl = SIMD2<Float>(0.0, 0.0)
+            tr = SIMD2<Float>(1.0, 0.0)
+            bl = SIMD2<Float>(0.0, 1.0)
+            br = SIMD2<Float>(1.0, 1.0)
+        }
+        
+        if flipHorizontal {
+            swap(&tl, &tr)
+            swap(&bl, &br)
+        }
+        
+        if flipVertical {
+            swap(&tl, &bl)
+            swap(&tr, &br)
+        }
+        
         let vertices: [Vertex] = [
-            Vertex(position: SIMD2<Float>(left,   top), texCoord: SIMD2<Float>(0.0, 0.0)),
-            Vertex(position: SIMD2<Float>(right,  top), texCoord: SIMD2<Float>(1.0, 0.0)),
-            Vertex(position: SIMD2<Float>(left,  bottom), texCoord: SIMD2<Float>(0.0, 1.0)),
-            Vertex(position: SIMD2<Float>(right, bottom), texCoord: SIMD2<Float>(1.0, 1.0))
+            Vertex(position: SIMD2<Float>(left,   top), texCoord: tl),
+            Vertex(position: SIMD2<Float>(right,  top), texCoord: tr),
+            Vertex(position: SIMD2<Float>(left,  bottom), texCoord: bl),
+            Vertex(position: SIMD2<Float>(right, bottom), texCoord: br)
         ]
         
         if let vertexBuffer = vertexBuffer {

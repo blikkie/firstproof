@@ -445,21 +445,41 @@ struct InspectorView: View {
                 .fontWeight(.bold)
                 .foregroundColor(.secondary)
             
-            // 90-degree rotate controls
-            HStack(spacing: 8) {
-                Button(action: { viewModel.rotateCounterClockwise() }) {
-                    Label("Rotate Left", systemImage: "rotate.left")
-                        .font(.caption)
-                        .frame(maxWidth: .infinity)
+            // 90-degree rotate and flip controls
+            VStack(spacing: 6) {
+                HStack(spacing: 8) {
+                    Button(action: { viewModel.rotateCounterClockwise() }) {
+                        Label("Rotate Left", systemImage: "rotate.left")
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .help("Rotate 90° Counter-Clockwise (Cmd+[)")
+                    
+                    Button(action: { viewModel.rotateClockwise() }) {
+                        Label("Rotate Right", systemImage: "rotate.right")
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .help("Rotate 90° Clockwise (Cmd+])")
                 }
-                .help("Rotate 90° Counter-Clockwise (Cmd+[)")
                 
-                Button(action: { viewModel.rotateClockwise() }) {
-                    Label("Rotate Right", systemImage: "rotate.right")
-                        .font(.caption)
-                        .frame(maxWidth: .infinity)
+                HStack(spacing: 8) {
+                    Button(action: { viewModel.toggleFlipHorizontal() }) {
+                        Label("Flip H", systemImage: "flip.horizontal")
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .tint(viewModel.flipHorizontal ? .accentColor : nil)
+                    .help("Flip Horizontal")
+                    
+                    Button(action: { viewModel.toggleFlipVertical() }) {
+                        Label("Flip V", systemImage: "arrow.up.and.down.righttriangle.up.righttriangle.down")
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .tint(viewModel.flipVertical ? .accentColor : nil)
+                    .help("Flip Vertical")
                 }
-                .help("Rotate 90° Clockwise (Cmd+])")
             }
             .buttonStyle(.bordered)
             .controlSize(.small)

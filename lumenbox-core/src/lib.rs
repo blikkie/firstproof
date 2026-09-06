@@ -47,6 +47,9 @@ pub struct EditSettings {
     pub crop_right: f32,
     pub crop_bottom: f32,
     pub crop_angle: f32,
+    pub rotation: i32,
+    pub flip_horizontal: bool,
+    pub flip_vertical: bool,
     pub tone_profile: ColorProfileMode,
     pub lut_name: Option<String>,
     pub lut_intensity: f32,
@@ -64,6 +67,9 @@ impl Default for EditSettings {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            rotation: 0,
+            flip_horizontal: false,
+            flip_vertical: false,
             tone_profile: ColorProfileMode::AgxVivid,
             lut_name: None,
             lut_intensity: 1.0,
@@ -140,6 +146,24 @@ pub struct ImageMetadata {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub description: Option<String>,
+    pub orientation: Option<u32>,
+}
+
+#[derive(uniffi::Record, Clone, Debug, PartialEq)]
+pub struct ExifOrientationRecord {
+    pub rotation: i32,
+    pub flip_horizontal: bool,
+    pub flip_vertical: bool,
+}
+
+#[uniffi::export]
+pub fn decode_exif_orientation(orientation: u32) -> ExifOrientationRecord {
+    let (rotation, flip_horizontal, flip_vertical) = raw::decode_exif_orientation(orientation);
+    ExifOrientationRecord {
+        rotation,
+        flip_horizontal,
+        flip_vertical,
+    }
 }
 
 #[derive(uniffi::Record)]
@@ -185,6 +209,7 @@ pub fn extract_metadata(path: String) -> Option<ImageMetadata> {
             latitude: m.latitude,
             longitude: m.longitude,
             description: m.description,
+            orientation: m.orientation,
         }),
         Err(_) => None,
     }

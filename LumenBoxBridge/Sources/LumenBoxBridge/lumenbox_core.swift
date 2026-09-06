@@ -1047,13 +1047,16 @@ public struct EditSettings {
     public var cropRight: Float
     public var cropBottom: Float
     public var cropAngle: Float
+    public var rotation: Int32
+    public var flipHorizontal: Bool
+    public var flipVertical: Bool
     public var toneProfile: ColorProfileMode
     public var lutName: String?
     public var lutIntensity: Float
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float) {
+    public init(exposure: Float, contrast: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float) {
         self.exposure = exposure
         self.contrast = contrast
         self.temperature = temperature
@@ -1063,6 +1066,9 @@ public struct EditSettings {
         self.cropRight = cropRight
         self.cropBottom = cropBottom
         self.cropAngle = cropAngle
+        self.rotation = rotation
+        self.flipHorizontal = flipHorizontal
+        self.flipVertical = flipVertical
         self.toneProfile = toneProfile
         self.lutName = lutName
         self.lutIntensity = lutIntensity
@@ -1100,6 +1106,15 @@ extension EditSettings: Equatable, Hashable {
         if lhs.cropAngle != rhs.cropAngle {
             return false
         }
+        if lhs.rotation != rhs.rotation {
+            return false
+        }
+        if lhs.flipHorizontal != rhs.flipHorizontal {
+            return false
+        }
+        if lhs.flipVertical != rhs.flipVertical {
+            return false
+        }
         if lhs.toneProfile != rhs.toneProfile {
             return false
         }
@@ -1122,6 +1137,9 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(cropRight)
         hasher.combine(cropBottom)
         hasher.combine(cropAngle)
+        hasher.combine(rotation)
+        hasher.combine(flipHorizontal)
+        hasher.combine(flipVertical)
         hasher.combine(toneProfile)
         hasher.combine(lutName)
         hasher.combine(lutIntensity)
@@ -1145,6 +1163,9 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 cropRight: FfiConverterFloat.read(from: &buf), 
                 cropBottom: FfiConverterFloat.read(from: &buf), 
                 cropAngle: FfiConverterFloat.read(from: &buf), 
+                rotation: FfiConverterInt32.read(from: &buf), 
+                flipHorizontal: FfiConverterBool.read(from: &buf), 
+                flipVertical: FfiConverterBool.read(from: &buf), 
                 toneProfile: FfiConverterTypeColorProfileMode.read(from: &buf), 
                 lutName: FfiConverterOptionString.read(from: &buf), 
                 lutIntensity: FfiConverterFloat.read(from: &buf)
@@ -1161,6 +1182,9 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.cropRight, into: &buf)
         FfiConverterFloat.write(value.cropBottom, into: &buf)
         FfiConverterFloat.write(value.cropAngle, into: &buf)
+        FfiConverterInt32.write(value.rotation, into: &buf)
+        FfiConverterBool.write(value.flipHorizontal, into: &buf)
+        FfiConverterBool.write(value.flipVertical, into: &buf)
         FfiConverterTypeColorProfileMode.write(value.toneProfile, into: &buf)
         FfiConverterOptionString.write(value.lutName, into: &buf)
         FfiConverterFloat.write(value.lutIntensity, into: &buf)
@@ -1180,6 +1204,80 @@ public func FfiConverterTypeEditSettings_lift(_ buf: RustBuffer) throws -> EditS
 #endif
 public func FfiConverterTypeEditSettings_lower(_ value: EditSettings) -> RustBuffer {
     return FfiConverterTypeEditSettings.lower(value)
+}
+
+
+public struct ExifOrientationRecord {
+    public var rotation: Int32
+    public var flipHorizontal: Bool
+    public var flipVertical: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(rotation: Int32, flipHorizontal: Bool, flipVertical: Bool) {
+        self.rotation = rotation
+        self.flipHorizontal = flipHorizontal
+        self.flipVertical = flipVertical
+    }
+}
+
+
+
+extension ExifOrientationRecord: Equatable, Hashable {
+    public static func ==(lhs: ExifOrientationRecord, rhs: ExifOrientationRecord) -> Bool {
+        if lhs.rotation != rhs.rotation {
+            return false
+        }
+        if lhs.flipHorizontal != rhs.flipHorizontal {
+            return false
+        }
+        if lhs.flipVertical != rhs.flipVertical {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rotation)
+        hasher.combine(flipHorizontal)
+        hasher.combine(flipVertical)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExifOrientationRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExifOrientationRecord {
+        return
+            try ExifOrientationRecord(
+                rotation: FfiConverterInt32.read(from: &buf), 
+                flipHorizontal: FfiConverterBool.read(from: &buf), 
+                flipVertical: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExifOrientationRecord, into buf: inout [UInt8]) {
+        FfiConverterInt32.write(value.rotation, into: &buf)
+        FfiConverterBool.write(value.flipHorizontal, into: &buf)
+        FfiConverterBool.write(value.flipVertical, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExifOrientationRecord_lift(_ buf: RustBuffer) throws -> ExifOrientationRecord {
+    return try FfiConverterTypeExifOrientationRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExifOrientationRecord_lower(_ value: ExifOrientationRecord) -> RustBuffer {
+    return FfiConverterTypeExifOrientationRecord.lower(value)
 }
 
 
@@ -1286,10 +1384,11 @@ public struct ImageMetadata {
     public var latitude: Double?
     public var longitude: Double?
     public var description: String?
+    public var orientation: UInt32?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(filePath: String, cameraMake: String?, cameraModel: String?, lensModel: String?, iso: UInt32?, aperture: Float?, shutterSpeed: String?, focalLength: Float?, takenTime: Int64?, latitude: Double?, longitude: Double?, description: String?) {
+    public init(filePath: String, cameraMake: String?, cameraModel: String?, lensModel: String?, iso: UInt32?, aperture: Float?, shutterSpeed: String?, focalLength: Float?, takenTime: Int64?, latitude: Double?, longitude: Double?, description: String?, orientation: UInt32?) {
         self.filePath = filePath
         self.cameraMake = cameraMake
         self.cameraModel = cameraModel
@@ -1302,6 +1401,7 @@ public struct ImageMetadata {
         self.latitude = latitude
         self.longitude = longitude
         self.description = description
+        self.orientation = orientation
     }
 }
 
@@ -1345,6 +1445,9 @@ extension ImageMetadata: Equatable, Hashable {
         if lhs.description != rhs.description {
             return false
         }
+        if lhs.orientation != rhs.orientation {
+            return false
+        }
         return true
     }
 
@@ -1361,6 +1464,7 @@ extension ImageMetadata: Equatable, Hashable {
         hasher.combine(latitude)
         hasher.combine(longitude)
         hasher.combine(description)
+        hasher.combine(orientation)
     }
 }
 
@@ -1383,7 +1487,8 @@ public struct FfiConverterTypeImageMetadata: FfiConverterRustBuffer {
                 takenTime: FfiConverterOptionInt64.read(from: &buf), 
                 latitude: FfiConverterOptionDouble.read(from: &buf), 
                 longitude: FfiConverterOptionDouble.read(from: &buf), 
-                description: FfiConverterOptionString.read(from: &buf)
+                description: FfiConverterOptionString.read(from: &buf), 
+                orientation: FfiConverterOptionUInt32.read(from: &buf)
         )
     }
 
@@ -1400,6 +1505,7 @@ public struct FfiConverterTypeImageMetadata: FfiConverterRustBuffer {
         FfiConverterOptionDouble.write(value.latitude, into: &buf)
         FfiConverterOptionDouble.write(value.longitude, into: &buf)
         FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterOptionUInt32.write(value.orientation, into: &buf)
     }
 }
 
@@ -2730,6 +2836,13 @@ public func computeAutoAdjustmentsFromBuffer(width: UInt32, height: UInt32, data
     )
 })
 }
+public func decodeExifOrientation(orientation: UInt32) -> ExifOrientationRecord {
+    return try!  FfiConverterTypeExifOrientationRecord.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_decode_exif_orientation(
+        FfiConverterUInt32.lower(orientation),$0
+    )
+})
+}
 public func decodeRawPreview(path: String, maxDimension: UInt32?) -> RawPreviewRecord? {
     return try!  FfiConverterOptionTypeRawPreviewRecord.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_decode_raw_preview(
@@ -2861,6 +2974,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_compute_auto_adjustments_from_buffer() != 13733) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_decode_exif_orientation() != 16941) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_decode_raw_preview() != 62888) {

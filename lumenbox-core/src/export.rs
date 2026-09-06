@@ -8,7 +8,7 @@ use image::codecs::tiff::TiffEncoder;
 use crate::EditSettings;
 use crate::color::{
     Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB,
-    linear_rgb_to_srgb8, linear_to_srgb_gamma, srgb_gamma_to_linear,
+    linear_to_srgb_gamma, srgb_gamma_to_linear,
 };
 
 pub struct DemosaicedImage {
@@ -492,6 +492,25 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
         }
     }
     
+    // Apply 90/180/270 degree rotation and horizontal/vertical flips
+    if edits.rotation != 0 || edits.flip_horizontal || edits.flip_vertical {
+        match edits.rotation {
+            90 => rgb_img = image::imageops::rotate90(&rgb_img),
+            180 => rgb_img = image::imageops::rotate180(&rgb_img),
+            270 => rgb_img = image::imageops::rotate270(&rgb_img),
+            _ => {}
+        }
+        if edits.flip_horizontal {
+            rgb_img = image::imageops::flip_horizontal(&rgb_img);
+        }
+        if edits.flip_vertical {
+            rgb_img = image::imageops::flip_vertical(&rgb_img);
+        }
+    }
+    
+    let final_w = rgb_img.width();
+    let final_h = rgb_img.height();
+    
     // Ensure parent directory exists
     if let Some(parent) = output_path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -508,13 +527,13 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
         let mut writer = BufWriter::new(file);
         let encoder = TiffEncoder::new(&mut writer);
         encoder
-            .encode(&rgb_img, target_w, target_h, ColorType::Rgb8)
+            .encode(&rgb_img, final_w, final_h, ColorType::Rgb8)
             .map_err(|e| format!("Failed to encode TIFF: {}", e))?;
     } else {
         let mut jpeg_buf = Vec::new();
         let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_buf, quality.clamp(1, 100));
         encoder
-            .encode(&rgb_img, target_w, target_h, ColorType::Rgb8)
+            .encode(&rgb_img, final_w, final_h, ColorType::Rgb8)
             .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
             
         let tagged_jpeg = inject_icc_profile_into_jpeg(&jpeg_buf, crate::color::SRGB_ICC_PROFILE);
@@ -596,6 +615,9 @@ mod tests {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            rotation: 0,
+            flip_horizontal: false,
+            flip_vertical: false,
             tone_profile: crate::ColorProfileMode::AgxFilmic,
             lut_name: None,
             lut_intensity: 1.0,
@@ -631,6 +653,9 @@ mod tests {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            rotation: 0,
+            flip_horizontal: false,
+            flip_vertical: false,
             tone_profile: crate::ColorProfileMode::AgxFilmic,
             lut_name: None,
             lut_intensity: 1.0,
@@ -677,6 +702,9 @@ mod tests {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            rotation: 0,
+            flip_horizontal: false,
+            flip_vertical: false,
             tone_profile: crate::ColorProfileMode::AgxVivid,
             lut_name: None,
             lut_intensity: 1.0,
@@ -726,6 +754,9 @@ mod tests {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            rotation: 0,
+            flip_horizontal: false,
+            flip_vertical: false,
             tone_profile: crate::ColorProfileMode::AgxVivid,
             lut_name: None,
             lut_intensity: 1.0,
@@ -758,6 +789,46 @@ mod tests {
         
         let _ = std::fs::remove_file(tmp_in);
         let _ = std::fs::remove_file(tmp_out);
+    }
+
+    #[test]
+    fn test_export_rotation_and_flips() {
+        let tmp_in = "test_rot_in.jpg";
+        let tmp_out_90 = "test_rot_out_90.jpg";
+        let tmp_out_flip = "test_rot_out_flip.jpg";
+
+        // Create a 60x40 landscape image
+        let img = RgbImage::from_fn(60, 40, |x, _y| {
+            if x < 30 {
+                Rgb([255, 0, 0]) // Red left half
+            } else {
+                Rgb([0, 255, 0]) // Green right half
+            }
+        });
+        img.save(tmp_in).unwrap();
+
+        // 1. Test 90-degree CW rotation (60x40 -> 40x60 portrait)
+        let mut edits = EditSettings::default();
+        edits.rotation = 90;
+        export_photo_file(tmp_in, tmp_out_90, &edits, None, 95, None).unwrap();
+        let rotated = image::open(tmp_out_90).unwrap().to_rgb8();
+        assert_eq!(rotated.width(), 40);
+        assert_eq!(rotated.height(), 60);
+
+        // 2. Test horizontal flip (left red becomes right red)
+        let mut edits_flip = EditSettings::default();
+        edits_flip.flip_horizontal = true;
+        export_photo_file(tmp_in, tmp_out_flip, &edits_flip, None, 95, None).unwrap();
+        let flipped = image::open(tmp_out_flip).unwrap().to_rgb8();
+        assert_eq!(flipped.width(), 60);
+        assert_eq!(flipped.height(), 40);
+        // Pixel at (5, 5) was red, now should be green after horizontal flip
+        let px = flipped.get_pixel(5, 5);
+        assert_eq!(px[1], 255); // Green
+
+        let _ = std::fs::remove_file(tmp_in);
+        let _ = std::fs::remove_file(tmp_out_90);
+        let _ = std::fs::remove_file(tmp_out_flip);
     }
 }
 

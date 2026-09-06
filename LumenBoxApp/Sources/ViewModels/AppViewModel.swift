@@ -101,6 +101,11 @@ public final class AppViewModel {
     // MARK: - Workspace Navigation & Tabs
     public var selectedInspectorTab: InspectorTab = .light
     public var rotationDegrees: Int = 0 // 0, 90, 180, 270
+    public var flipHorizontal: Bool = false
+    public var flipVertical: Bool = false
+    public var defaultExifRotation: Int = 0
+    public var defaultExifFlipH: Bool = false
+    public var defaultExifFlipV: Bool = false
     
     public var hasCustomEdits: Bool {
         exposure != 0.0 ||
@@ -108,7 +113,9 @@ public final class AppViewModel {
         abs(temperature - asShotTemperature) >= 1.0 ||
         tint != asShotTint ||
         straightenAngle != 0.0 ||
-        rotationDegrees != 0 ||
+        rotationDegrees != defaultExifRotation ||
+        flipHorizontal != defaultExifFlipH ||
+        flipVertical != defaultExifFlipV ||
         toneProfile != .agxVivid ||
         selectedLutName != nil
     }
@@ -116,11 +123,31 @@ public final class AppViewModel {
     public func rotateClockwise() {
         rotationDegrees = (rotationDegrees + 90) % 360
         saveCurrentEdits()
+        notifyThumbnailChanged()
     }
     
     public func rotateCounterClockwise() {
         rotationDegrees = (rotationDegrees + 270) % 360
         saveCurrentEdits()
+        notifyThumbnailChanged()
+    }
+    
+    public func toggleFlipHorizontal() {
+        flipHorizontal.toggle()
+        saveCurrentEdits()
+        notifyThumbnailChanged()
+    }
+    
+    public func toggleFlipVertical() {
+        flipVertical.toggle()
+        saveCurrentEdits()
+        notifyThumbnailChanged()
+    }
+    
+    private func notifyThumbnailChanged() {
+        guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
+        ThumbnailCache.shared.removeImage(for: path)
+        NotificationCenter.default.post(name: .thumbnailDidChange, object: path)
     }
     
     public var allLutTitles: [String] {
@@ -665,6 +692,18 @@ public final class AppViewModel {
             }
         }
         
+        // Determine baseline EXIF camera orientation
+        if let meta = extractMetadata(path: photo.filePath), let orient = meta.orientation {
+            let dec = decodeExifOrientation(orientation: orient)
+            self.defaultExifRotation = Int(dec.rotation)
+            self.defaultExifFlipH = dec.flipHorizontal
+            self.defaultExifFlipV = dec.flipVertical
+        } else {
+            self.defaultExifRotation = 0
+            self.defaultExifFlipH = false
+            self.defaultExifFlipV = false
+        }
+        
         // Sync XMP edit sliders if sidecar exists
         if let xmp = readXmp(path: photo.filePath) {
             self.exposure = xmp.edits.exposure
@@ -672,6 +711,9 @@ public final class AppViewModel {
             self.temperature = xmp.edits.temperature
             self.tint = xmp.edits.tint
             self.straightenAngle = xmp.edits.cropAngle
+            self.rotationDegrees = Int(xmp.edits.rotation)
+            self.flipHorizontal = xmp.edits.flipHorizontal
+            self.flipVertical = xmp.edits.flipVertical
             self.toneProfile = xmp.edits.toneProfile
             self.selectedLutName = xmp.edits.lutName
             self.lutIntensity = xmp.edits.lutIntensity
@@ -681,6 +723,9 @@ public final class AppViewModel {
             self.temperature = 5500.0
             self.tint = 0.0
             self.straightenAngle = 0.0
+            self.rotationDegrees = self.defaultExifRotation
+            self.flipHorizontal = self.defaultExifFlipH
+            self.flipVertical = self.defaultExifFlipV
             self.toneProfile = .agxVivid
             self.selectedLutName = nil
             self.lutIntensity = 1.0
@@ -833,6 +878,9 @@ public final class AppViewModel {
             cropRight: 1.0,
             cropBottom: 1.0,
             cropAngle: self.straightenAngle,
+            rotation: Int32(self.rotationDegrees),
+            flipHorizontal: self.flipHorizontal,
+            flipVertical: self.flipVertical,
             toneProfile: self.toneProfile,
             lutName: self.selectedLutName,
             lutIntensity: self.lutIntensity
@@ -861,6 +909,9 @@ public final class AppViewModel {
             cropRight: 1.0,
             cropBottom: 1.0,
             cropAngle: 0.0,
+            rotation: 0,
+            flipHorizontal: false,
+            flipVertical: false,
             toneProfile: .agxVivid,
             lutName: nil,
             lutIntensity: 1.0
@@ -946,11 +997,14 @@ public final class AppViewModel {
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0
-        rotationDegrees = 0
+        rotationDegrees = defaultExifRotation
+        flipHorizontal = defaultExifFlipH
+        flipVertical = defaultExifFlipV
         toneProfile = .agxVivid
         selectedLutName = nil
         lutIntensity = 1.0
         saveCurrentEdits()
+        notifyThumbnailChanged()
     }
     
     // MARK: - Custom 3D LUT Import

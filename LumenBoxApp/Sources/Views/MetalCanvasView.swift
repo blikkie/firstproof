@@ -15,6 +15,8 @@ public struct MetalCanvasView: NSViewRepresentable {
     let lutIntensity: Float
     let toneProfile: ColorProfileMode
     let rotationDegrees: Int
+    let flipHorizontal: Bool
+    let flipVertical: Bool
     let zoomScale: Float
     let panOffset: CGPoint
     let isShowingOriginal: Bool
@@ -31,6 +33,8 @@ public struct MetalCanvasView: NSViewRepresentable {
         lutIntensity: Float,
         toneProfile: ColorProfileMode,
         rotationDegrees: Int,
+        flipHorizontal: Bool,
+        flipVertical: Bool,
         zoomScale: Float,
         panOffset: CGPoint,
         isShowingOriginal: Bool
@@ -46,6 +50,8 @@ public struct MetalCanvasView: NSViewRepresentable {
         self.lutIntensity = lutIntensity
         self.toneProfile = toneProfile
         self.rotationDegrees = rotationDegrees
+        self.flipHorizontal = flipHorizontal
+        self.flipVertical = flipVertical
         self.zoomScale = zoomScale
         self.panOffset = panOffset
         self.isShowingOriginal = isShowingOriginal
@@ -185,7 +191,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         renderer.uniforms.lutEnabled = (selectedLutName != nil) ? 1 : 0
         renderer.uniforms.lutIntensity = lutIntensity
         
-        // 4. Viewport Zoom & Pan
+        // 4. Viewport Geometry, Zoom & Pan
+        renderer.rotationDegrees = rotationDegrees
+        renderer.flipHorizontal = flipHorizontal
+        renderer.flipVertical = flipVertical
         renderer.zoomScale = zoomScale
         renderer.panOffset = SIMD2<Float>(Float(panOffset.x), Float(panOffset.y))
         renderer.updateQuad(viewSize: nsView.drawableSize)

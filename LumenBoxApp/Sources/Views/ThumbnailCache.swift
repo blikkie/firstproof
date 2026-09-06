@@ -25,6 +25,10 @@ public final class ThumbnailCache {
     public func setImage(_ image: NSImage, for path: String) {
         cache.setObject(image, forKey: path as NSString)
     }
+    
+    public func removeImage(for path: String) {
+        cache.removeObject(forKey: path as NSString)
+    }
 }
 
 public struct AsyncThumbnailView: View {
@@ -57,6 +61,12 @@ public struct AsyncThumbnailView: View {
             // Cancel background decode if scrolled out of viewport
             loadOperation?.cancel()
             loadOperation = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .thumbnailDidChange)) { note in
+            if let targetPath = note.object as? String, targetPath == filePath {
+                self.image = nil
+                loadThumbnail()
+            }
         }
     }
     
@@ -112,6 +122,31 @@ public struct AsyncThumbnailView: View {
                 }
             }
             
+            // If XMP contains user adjustments that delta from camera EXIF, apply them to the thumbnail
+            if var base = loaded {
+                if let xmp = readXmp(path: filePath) {
+                    let userRot = xmp.edits.rotation
+                    let userFlipH = xmp.edits.flipHorizontal
+                    let userFlipV = xmp.edits.flipVertical
+                    
+                    let meta = extractMetadata(path: filePath)
+                    let exifDec = meta?.orientation.map { decodeExifOrientation(orientation: $0) }
+                    let exifRot = exifDec?.rotation ?? 0
+                    let exifFlipH = exifDec?.flipHorizontal ?? false
+                    let exifFlipV = exifDec?.flipVertical ?? false
+                    
+                    // The embedded JPEG from ImageIO was already transformed to camera EXIF orientation
+                    let deltaRot = (userRot - exifRot + 360) % 360
+                    let deltaFlipH = userFlipH != exifFlipH
+                    let deltaFlipV = userFlipV != exifFlipV
+                    
+                    if deltaRot != 0 || deltaFlipH || deltaFlipV {
+                        base = base.transformed(rotationDegrees: CGFloat(deltaRot), flipH: deltaFlipH, flipV: deltaFlipV)
+                        loaded = base
+                    }
+                }
+            }
+            
             if !op.isCancelled {
                 let finalImg = loaded ?? NSImage(size: NSSize(width: 1, height: 1))
                 ThumbnailCache.shared.setImage(finalImg, for: filePath)
@@ -126,4 +161,33 @@ public struct AsyncThumbnailView: View {
         self.loadOperation = op
         ThumbnailCache.shared.queue.addOperation(op)
     }
+}
+
+extension NSImage {
+    public func transformed(rotationDegrees: CGFloat, flipH: Bool, flipV: Bool) -> NSImage {
+        guard rotationDegrees != 0 || flipH || flipV else { return self }
+        
+        let rot = Int(rotationDegrees.rounded()) % 360
+        let is90or270 = rot == 90 || rot == 270
+        let newSize = is90or270 ? NSSize(width: size.height, height: size.width) : size
+        
+        let newImage = NSImage(size: newSize)
+        newImage.lockFocus()
+        
+        let transform = NSAffineTransform()
+        transform.translateX(by: newSize.width / 2.0, yBy: newSize.height / 2.0)
+        transform.rotate(byDegrees: -CGFloat(rot))
+        transform.scaleX(by: flipH ? -1.0 : 1.0, yBy: flipV ? -1.0 : 1.0)
+        transform.translateX(by: -size.width / 2.0, yBy: -size.height / 2.0)
+        transform.concat()
+        
+        draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .copy, fraction: 1.0)
+        
+        newImage.unlockFocus()
+        return newImage
+    }
+}
+
+extension Notification.Name {
+    public static let thumbnailDidChange = Notification.Name("com.lumenbox.thumbnailDidChange")
 }

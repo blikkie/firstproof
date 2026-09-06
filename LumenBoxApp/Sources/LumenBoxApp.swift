@@ -86,6 +86,16 @@ struct LumenBoxApp: App {
                 .keyboardShortcut("[", modifiers: [.command])
                 .disabled(viewModel.selectedPhoto == nil)
                 
+                Button("Flip Horizontal") {
+                    viewModel.toggleFlipHorizontal()
+                }
+                .disabled(viewModel.selectedPhoto == nil)
+                
+                Button("Flip Vertical") {
+                    viewModel.toggleFlipVertical()
+                }
+                .disabled(viewModel.selectedPhoto == nil)
+                
                 Divider()
                 
                 Menu("Rating") {

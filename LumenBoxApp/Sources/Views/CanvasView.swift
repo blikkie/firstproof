@@ -372,7 +372,7 @@ struct CanvasView: View {
             Divider()
                 .frame(height: 16)
             
-            // 2. Quick 90-degree Rotate
+            // 2. Quick 90-degree Rotate & Flip
             HStack(spacing: 4) {
                 Button(action: {
                     viewModel.rotateCounterClockwise()
@@ -393,6 +393,28 @@ struct CanvasView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help("Rotate 90° Clockwise (Cmd+])")
+                
+                Button(action: {
+                    viewModel.toggleFlipHorizontal()
+                }) {
+                    Image(systemName: "flip.horizontal")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(viewModel.flipHorizontal ? .accentColor : nil)
+                .help("Flip Horizontal")
+                
+                Button(action: {
+                    viewModel.toggleFlipVertical()
+                }) {
+                    Image(systemName: "arrow.up.and.down.righttriangle.up.righttriangle.down")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(viewModel.flipVertical ? .accentColor : nil)
+                .help("Flip Vertical")
             }
             
             Divider()
@@ -570,6 +592,8 @@ struct DetailMetalCanvasContainer: View {
             lutIntensity: viewModel.lutIntensity,
             toneProfile: viewModel.toneProfile,
             rotationDegrees: viewModel.rotationDegrees,
+            flipHorizontal: viewModel.flipHorizontal,
+            flipVertical: viewModel.flipVertical,
             zoomScale: viewModel.zoomScale,
             panOffset: viewModel.panOffset,
             isShowingOriginal: isShowingOriginal

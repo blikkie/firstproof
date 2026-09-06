@@ -343,6 +343,11 @@ RustBuffer uniffi_lumenbox_core_fn_func_compute_auto_adjustments(RustBuffer path
 RustBuffer uniffi_lumenbox_core_fn_func_compute_auto_adjustments_from_buffer(uint32_t width, uint32_t height, RustBuffer data, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_DECODE_EXIF_ORIENTATION
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_DECODE_EXIF_ORIENTATION
+RustBuffer uniffi_lumenbox_core_fn_func_decode_exif_orientation(uint32_t orientation, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_DECODE_RAW_PREVIEW
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_DECODE_RAW_PREVIEW
 RustBuffer uniffi_lumenbox_core_fn_func_decode_raw_preview(RustBuffer path, RustBuffer max_dimension, RustCallStatus *_Nonnull out_status
@@ -709,6 +714,12 @@ uint16_t uniffi_lumenbox_core_checksum_func_compute_auto_adjustments(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_COMPUTE_AUTO_ADJUSTMENTS_FROM_BUFFER
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_COMPUTE_AUTO_ADJUSTMENTS_FROM_BUFFER
 uint16_t uniffi_lumenbox_core_checksum_func_compute_auto_adjustments_from_buffer(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_DECODE_EXIF_ORIENTATION
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_DECODE_EXIF_ORIENTATION
+uint16_t uniffi_lumenbox_core_checksum_func_decode_exif_orientation(void
     
 );
 #endif
