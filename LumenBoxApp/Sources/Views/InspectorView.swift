@@ -351,7 +351,10 @@ struct InspectorView: View {
                     value: $viewModel.straightenAngle,
                     range: -45.0...45.0,
                     format: "%.1f°",
-                    onReset: { viewModel.resetSlider(.straighten) }
+                    onReset: { viewModel.resetSlider(.straighten) },
+                    onEditingChanged: { isEditing in
+                        if !isEditing { viewModel.saveCurrentEdits() }
+                    }
                 )
             }
             .padding(.top, 8)
@@ -387,7 +390,10 @@ struct InspectorView: View {
                     value: $viewModel.exposure,
                     range: -5.0...5.0,
                     format: "%.2f EV",
-                    onReset: { viewModel.resetSlider(.exposure) }
+                    onReset: { viewModel.resetSlider(.exposure) },
+                    onEditingChanged: { isEditing in
+                        if !isEditing { viewModel.saveCurrentEdits() }
+                    }
                 )
                 
                 SliderRow(
@@ -395,7 +401,10 @@ struct InspectorView: View {
                     value: $viewModel.temperature,
                     range: 2000.0...50000.0,
                     format: "%.0f K",
-                    onReset: { viewModel.resetSlider(.temperature) }
+                    onReset: { viewModel.resetSlider(.temperature) },
+                    onEditingChanged: { isEditing in
+                        if !isEditing { viewModel.saveCurrentEdits() }
+                    }
                 )
                 
                 SliderRow(
@@ -403,7 +412,10 @@ struct InspectorView: View {
                     value: $viewModel.tint,
                     range: -150.0...150.0,
                     format: "%.0f",
-                    onReset: { viewModel.resetSlider(.tint) }
+                    onReset: { viewModel.resetSlider(.tint) },
+                    onEditingChanged: { isEditing in
+                        if !isEditing { viewModel.saveCurrentEdits() }
+                    }
                 )
             }
             .padding(.top, 8)
@@ -440,7 +452,10 @@ struct InspectorView: View {
                     value: $viewModel.contrast,
                     range: -100.0...100.0,
                     format: "%.0f",
-                    onReset: { viewModel.resetSlider(.contrast) }
+                    onReset: { viewModel.resetSlider(.contrast) },
+                    onEditingChanged: { isEditing in
+                        if !isEditing { viewModel.saveCurrentEdits() }
+                    }
                 )
             }
             .padding(.top, 8)
@@ -465,6 +480,7 @@ struct SliderRow: View {
     let range: ClosedRange<Float>
     let format: String
     let onReset: () -> Void
+    var onEditingChanged: ((Bool) -> Void)? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -479,7 +495,9 @@ struct SliderRow: View {
                     .foregroundColor(.secondary)
             }
             
-            Slider(value: $value, in: range)
+            Slider(value: $value, in: range) { isEditing in
+                onEditingChanged?(isEditing)
+            }
         }
     }
 }

@@ -177,6 +177,10 @@ public final class AppViewModel {
         self.isScanning = true
         self.scanningStatusMessage = "Scanning \(isMain ? "Main Library" : URL(fileURLWithPath: folderPath).lastPathComponent)..."
         
+        // Save any pending edits before changing directory
+        saveCurrentEdits()
+        self.currentlyLoadedPhotoPath = nil
+
         // Reset state for new scope
         self.photos = []
         self.selectedPhoto = nil
@@ -418,7 +422,18 @@ public final class AppViewModel {
         loadPreview(for: target)
     }
     
+    private var currentlyLoadedPhotoPath: String? = nil
+    
     public func loadPreview(for photo: PhotoRecord) {
+        // Save edits of previously active photo before switching
+        if let prevPath = currentlyLoadedPhotoPath, prevPath != photo.filePath {
+            let editsSnapshot = currentEdits
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                self?.syncXmp(for: prevPath, rating: nil, status: nil, edits: editsSnapshot)
+            }
+        }
+        self.currentlyLoadedPhotoPath = photo.filePath
+        
         // Resolve Lensfun lens distortion coefficients
         if let make = photo.cameraMake,
            let model = photo.cameraModel,
@@ -534,7 +549,12 @@ public final class AppViewModel {
             self.straightenAngle = xmp.edits.cropAngle
             self.toneProfile = xmp.edits.toneProfile
         } else {
-            resetAllSliders()
+            self.exposure = 0.0
+            self.contrast = 0.0
+            self.temperature = 5500.0
+            self.tint = 0.0
+            self.straightenAngle = 0.0
+            self.toneProfile = .agxVivid
         }
     }
     
@@ -622,10 +642,13 @@ public final class AppViewModel {
         }
         
         // 3. Asynchronous XMP Sidecar Sync
+        let activeSnapshot = currentEdits
+        let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
             for path in targets {
-                self.syncXmp(for: path, rating: newRating, status: nil)
+                let edits = (path == activePath) ? activeSnapshot : nil
+                self.syncXmp(for: path, rating: newRating, status: nil, edits: edits)
             }
         }
     }
@@ -658,16 +681,34 @@ public final class AppViewModel {
         }
         
         // 3. Asynchronous XMP Sidecar Sync
+        let activeSnapshot = currentEdits
+        let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
             for path in targets {
-                self.syncXmp(for: path, rating: nil, status: newStatus)
+                let edits = (path == activePath) ? activeSnapshot : nil
+                self.syncXmp(for: path, rating: nil, status: newStatus, edits: edits)
             }
         }
     }
     
-    private func syncXmp(for filePath: String, rating: Int32??, status: String?) {
-        let xmpPath = URL(fileURLWithPath: filePath).deletingPathExtension().appendingPathExtension("xmp").path
+    // MARK: - Current Edits Snapshot
+    public var currentEdits: EditSettings {
+        EditSettings(
+            exposure: self.exposure,
+            contrast: self.contrast,
+            temperature: self.temperature,
+            tint: self.tint,
+            cropLeft: 0.0,
+            cropTop: 0.0,
+            cropRight: 1.0,
+            cropBottom: 1.0,
+            cropAngle: self.straightenAngle,
+            toneProfile: self.toneProfile
+        )
+    }
+    
+    private func syncXmp(for filePath: String, rating: Int32??, status: String?, edits: EditSettings? = nil) {
         let existingXmp = readXmp(path: filePath)
         
         let currentPhoto = photos.first(where: { $0.filePath == filePath })
@@ -679,6 +720,19 @@ public final class AppViewModel {
         }
         let finalStatus = status ?? currentPhoto?.status ?? "none"
         
+        let finalEdits = edits ?? existingXmp?.edits ?? EditSettings(
+            exposure: 0.0,
+            contrast: 0.0,
+            temperature: 5500.0,
+            tint: 0.0,
+            cropLeft: 0.0,
+            cropTop: 0.0,
+            cropRight: 1.0,
+            cropBottom: 1.0,
+            cropAngle: 0.0,
+            toneProfile: .agxVivid
+        )
+        
         let record = XmpDataRecord(
             rating: finalRating,
             status: finalStatus,
@@ -686,27 +740,16 @@ public final class AppViewModel {
             description: existingXmp?.description,
             latitude: currentPhoto?.latitude,
             longitude: currentPhoto?.longitude,
-            edits: EditSettings(
-                exposure: self.exposure,
-                contrast: self.contrast,
-                temperature: self.temperature,
-                tint: self.tint,
-                cropLeft: 0.0,
-                cropTop: 0.0,
-                cropRight: 1.0,
-                cropBottom: 1.0,
-                cropAngle: self.straightenAngle,
-                toneProfile: self.toneProfile
-            )
+            edits: finalEdits
         )
-        _ = writeXmp(path: xmpPath, record: record)
+        _ = writeXmp(path: filePath, record: record)
     }
     
     public func saveCurrentEdits() {
-        guard let photo = selectedPhoto else { return }
-        let path = photo.filePath
+        guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
+        let editsSnapshot = currentEdits
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            self?.syncXmp(for: path, rating: nil, status: nil)
+            self?.syncXmp(for: path, rating: nil, status: nil, edits: editsSnapshot)
         }
     }
     
@@ -759,6 +802,7 @@ public final class AppViewModel {
         case .straighten:
             straightenAngle = 0.0
         }
+        saveCurrentEdits()
     }
     
     public func resetAllSliders() {
@@ -768,6 +812,7 @@ public final class AppViewModel {
         tint = asShotTint
         straightenAngle = 0.0
         toneProfile = .agxVivid
+        saveCurrentEdits()
     }
     
     // MARK: - Filtered Photo List

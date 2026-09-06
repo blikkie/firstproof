@@ -1,5 +1,5 @@
 use roxmltree::{Document, Node};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use crate::EditSettings;
 
 #[derive(Clone, Debug)]
@@ -359,16 +359,55 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
     Ok(data)
 }
 
-/// Reads XMP from a file path.
+/// Resolves the sidecar file path for reading XMP.
+/// Supports path directly (if it exists), foo.CR2.xmp (Darktable), and foo.xmp (Lightroom/standard).
+pub fn resolve_xmp_read_path<P: AsRef<Path>>(path: P) -> Option<PathBuf> {
+    let p = path.as_ref();
+    if p.extension().map(|e| e.to_string_lossy().eq_ignore_ascii_case("xmp")).unwrap_or(false) {
+        if p.exists() {
+            return Some(p.to_path_buf());
+        }
+    }
+    let p_str = p.to_string_lossy();
+    let xmp_sidecar = PathBuf::from(format!("{}.xmp", p_str));
+    if xmp_sidecar.exists() {
+        return Some(xmp_sidecar);
+    }
+    let xmp_stem = p.with_extension("xmp");
+    if xmp_stem.exists() {
+        return Some(xmp_stem);
+    }
+    None
+}
+
+/// Resolves the sidecar file path for writing XMP.
+/// If an existing sidecar file already exists (e.g. foo.CR2.xmp or foo.xmp), updates that file.
+/// Otherwise defaults to foo.xmp.
+pub fn resolve_xmp_write_path<P: AsRef<Path>>(path: P) -> PathBuf {
+    let p = path.as_ref();
+    if p.extension().map(|e| e.to_string_lossy().eq_ignore_ascii_case("xmp")).unwrap_or(false) {
+        return p.to_path_buf();
+    }
+    let p_str = p.to_string_lossy();
+    let xmp_sidecar = PathBuf::from(format!("{}.xmp", p_str));
+    if xmp_sidecar.exists() {
+        return xmp_sidecar;
+    }
+    p.with_extension("xmp")
+}
+
+/// Reads XMP from a file path or photo path by resolving sidecars.
 pub fn read_xmp_file<P: AsRef<Path>>(path: P) -> std::io::Result<XmpData> {
-    let content = std::fs::read_to_string(path)?;
+    let target = resolve_xmp_read_path(&path).unwrap_or_else(|| path.as_ref().to_path_buf());
+    let content = std::fs::read_to_string(target)?;
     parse_xmp(&content)
 }
 
-/// Writes XMP to a file path.
+/// Writes XMP to a file path or photo path by resolving sidecars.
 pub fn write_xmp_file<P: AsRef<Path>>(path: P, data: &XmpData) -> std::io::Result<()> {
+    let target = resolve_xmp_write_path(&path);
     let xml_str = generate_xmp(data);
-    std::fs::write(path, xml_str)
+    std::fs::write(target, xml_str)
 }
 
 #[cfg(test)]
@@ -415,5 +454,28 @@ mod tests {
         assert_eq!(parsed.edits.temperature, 5800.0);
         assert_eq!(parsed.edits.tint, -12.0);
         assert_eq!(parsed.edits.crop_angle, -0.5);
+    }
+
+    #[test]
+    fn test_xmp_sidecar_resolution_from_image_path() {
+        let raw_photo = "test_photo.CR2";
+        let expected_xmp = "test_photo.xmp";
+        
+        let mut data = XmpData::default();
+        data.edits.exposure = 1.25;
+        data.edits.temperature = 6200.0;
+        data.status = "Pick".to_string();
+        
+        // Writing with RAW image path creates test_photo.xmp
+        write_xmp_file(raw_photo, &data).unwrap();
+        assert!(std::path::Path::new(expected_xmp).exists());
+        
+        // Reading with RAW image path automatically finds test_photo.xmp
+        let read_back = read_xmp_file(raw_photo).unwrap();
+        assert_eq!(read_back.edits.exposure, 1.25);
+        assert_eq!(read_back.edits.temperature, 6200.0);
+        assert_eq!(read_back.status, "Pick");
+        
+        let _ = std::fs::remove_file(expected_xmp);
     }
 }
