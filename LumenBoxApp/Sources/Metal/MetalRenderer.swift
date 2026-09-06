@@ -326,6 +326,41 @@ struct ShaderUniforms {
     int isLinearRaw;         // 1 = Texture contains Wide-Gamut Linear Rec.2020 half-floats
 };
 
+// MARK: - Scene-Referred Rec.2020 Color Transfer Functions & Matrices (File Scope)
+
+// Exact sRGB electro-optical transfer functions (IEC 61966-2-1)
+inline float srgbGammaToLinear(float c) {
+    c = clamp(c, 0.0, 1.0);
+    return (c <= 0.04045) ? (c / 12.92) : pow((c + 0.055) / 1.055, 2.4);
+}
+
+inline float3 srgbGammaToLinear3(float3 c) {
+    return float3(srgbGammaToLinear(c.r), srgbGammaToLinear(c.g), srgbGammaToLinear(c.b));
+}
+
+inline float linearToSrgbGamma(float c) {
+    c = clamp(c, 0.0, 1.0);
+    return (c <= 0.0031308) ? (12.92 * c) : (1.055 * pow(c, 1.0 / 2.4) - 0.055);
+}
+
+inline float3 linearToSrgbGamma3(float3 c) {
+    return float3(linearToSrgbGamma(c.r), linearToSrgbGamma(c.g), linearToSrgbGamma(c.b));
+}
+
+// Linear sRGB -> Linear Rec.2020 Matrix (columns in Metal MSL)
+constant float3x3 LINEAR_SRGB_TO_REC2020 = float3x3(
+    float3(0.6274041, 0.0690972, 0.0163914),
+    float3(0.3292821, 0.9195411, 0.0880133),
+    float3(0.0433138, 0.0113617, 0.8955953)
+);
+
+// Linear Rec.2020 -> Linear sRGB Matrix (columns in Metal MSL)
+constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
+    float3( 1.6604910, -0.1245505, -0.0181508),
+    float3(-0.5876411,  1.1328999, -0.1005789),
+    float3(-0.0728499, -0.0083494,  1.1187297)
+);
+
 // MARK: - Vertex Shader
 vertex VertexOutput vertexShader(
     uint vertexID [[vertex_id]],
@@ -439,26 +474,6 @@ fragment float4 fragmentShader(
     float editTint = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.tint;
     float editContrast = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.contrast;
     
-// MARK: - Scene-Referred Rec.2020 Color Pipeline
-
-// Exact sRGB electro-optical transfer functions (IEC 61966-2-1)
-#define srgbGammaToLinear(c) ((c <= 0.04045) ? (c / 12.92) : pow((c + 0.055) / 1.055, 2.4))
-#define linearToSrgbGamma(c) ((c <= 0.0031308) ? (12.92 * c) : (1.055 * pow(c, 1.0 / 2.4) - 0.055))
-
-// Linear sRGB -> Linear Rec.2020 Matrix (columns in Metal MSL)
-constant float3x3 LINEAR_SRGB_TO_REC2020 = float3x3(
-    float3(0.6274041, 0.0690972, 0.0163914),
-    float3(0.3292821, 0.9195411, 0.0880133),
-    float3(0.0433138, 0.0113617, 0.8955953)
-);
-
-// Linear Rec.2020 -> Linear sRGB Matrix (columns in Metal MSL)
-constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
-    float3( 1.6604910, -0.1245505, -0.0181508),
-    float3(-0.5876411,  1.1328999, -0.1005789),
-    float3(-0.0728499, -0.0083494,  1.1187297)
-);
-
     // 2. Decode texture to Linear Rec.2020 working space
     float3 rec2020Color;
     if (uniforms.isLinearRaw == 1) {
@@ -466,11 +481,7 @@ constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
         rec2020Color = sampledColor.rgb;
     } else {
         // Embedded JPEG or standard sRGB image: decode gamma to linear then map to Rec.2020
-        float3 linearSrgb = float3(
-            srgbGammaToLinear(clamp(sampledColor.r, 0.0, 1.0)),
-            srgbGammaToLinear(clamp(sampledColor.g, 0.0, 1.0)),
-            srgbGammaToLinear(clamp(sampledColor.b, 0.0, 1.0))
-        );
+        float3 linearSrgb = srgbGammaToLinear3(sampledColor.rgb);
         rec2020Color = LINEAR_SRGB_TO_REC2020 * linearSrgb;
     }
     
@@ -509,11 +520,7 @@ constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
     
     // 6. Display Target Transform: Linear Rec.2020 -> Linear sRGB -> Standard Display Gamma
     float3 srgbLinearOut = max(REC2020_TO_LINEAR_SRGB * rec2020Color, float3(0.0));
-    float3 finalColor = float3(
-        linearToSrgbGamma(clamp(srgbLinearOut.r, 0.0, 1.0)),
-        linearToSrgbGamma(clamp(srgbLinearOut.g, 0.0, 1.0)),
-        linearToSrgbGamma(clamp(srgbLinearOut.b, 0.0, 1.0))
-    );
+    float3 finalColor = linearToSrgbGamma3(srgbLinearOut);
     
     return float4(finalColor, sampledColor.a);
 }
