@@ -140,14 +140,19 @@ impl RawDecoder for RawlerDecoder {
             _ => CfaPattern::Rggb,
         };
 
-        let color_matrix = raw.color_matrix.values().next().and_then(|v| {
+        // Find D65 color matrix if available (for daylight scenes), fallback to first available
+        let d65_matrix = raw.color_matrix.iter().find(|(k, _)| format!("{:?}", k) == "D65")
+            .or_else(|| raw.color_matrix.iter().find(|(k, _)| format!("{:?}", k) == "D50"))
+            .or_else(|| raw.color_matrix.iter().next())
+            .map(|(_, v)| v);
+
+        let color_matrix = d65_matrix.and_then(|v| {
             if v.len() >= 9 {
-                let m = crate::color::Matrix3x3([
+                Some([
                     [v[0], v[1], v[2]],
                     [v[3], v[4], v[5]],
                     [v[6], v[7], v[8]],
-                ]);
-                m.inverse().map(|inv| inv.0)
+                ])
             } else {
                 None
             }

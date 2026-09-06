@@ -196,8 +196,9 @@ constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
     // 5. Tone & Contrast S-Curve in Wide-Gamut Space
     if (uniforms.contrast != 0.0) {
         float contrastGain = 1.0 + (uniforms.contrast / 100.0);
-        float3 normalized = max(rec2020Color / 0.18, float3(0.0001));
-        rec2020Color = 0.18 * pow(normalized, float3(contrastGain));
+        float3 norm = max(rec2020Color / 0.18, float3(0.0001));
+        float3 curved = 0.18 * pow(norm, float3(1.15 * contrastGain));
+        rec2020Color = curved / (float3(1.0) + curved * 0.35);
     }
     
     // 6. Display Target Transform: Linear Rec.2020 -> Linear sRGB -> Standard Display Gamma

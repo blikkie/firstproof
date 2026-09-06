@@ -9,7 +9,7 @@ use crate::EditSettings;
 use crate::color::{
     Color3, Matrix3x3, BRADFORD_D50_TO_D65, CANON_EOS_SENSOR_TO_XYZ_D50,
     LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB, XYZ_D65_TO_REC2020,
-    linear_rgb_to_srgb8, srgb_gamma_to_linear,
+    REC2020_TO_XYZ_D65, linear_rgb_to_srgb8, srgb_gamma_to_linear,
 };
 
 pub struct DemosaicedImage {
@@ -38,32 +38,29 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
         let active_w = frame.active_width;
         let active_h = frame.active_height;
         let mut demosaiced = DemosaicedImage::new(active_w, active_h);
-        
         let (wb_r, wb_b) = frame.as_shot_wb();
         
-        // Camera sensor matrix (Sensor -> XYZ D50)
-        let sensor_to_xyz = frame.color_matrix.map(Matrix3x3).unwrap_or(CANON_EOS_SENSOR_TO_XYZ_D50);
-        
-        // Composite transform: Sensor -> XYZ D50 -> XYZ D65 -> Linear Rec.2020
-        let sensor_to_rec2020 = XYZ_D65_TO_REC2020
-            .multiply_matrix(&BRADFORD_D50_TO_D65)
-            .multiply_matrix(&sensor_to_xyz);
-
-        // Normalize matrix rows so neutral white balances cleanly without luminance bias
-        let norm_r = sensor_to_rec2020.0[0][0] + sensor_to_rec2020.0[0][1] + sensor_to_rec2020.0[0][2];
-        let norm_g = sensor_to_rec2020.0[1][0] + sensor_to_rec2020.0[1][1] + sensor_to_rec2020.0[1][2];
-        let norm_b = sensor_to_rec2020.0[2][0] + sensor_to_rec2020.0[2][1] + sensor_to_rec2020.0[2][2];
-        let sensor_to_rec2020_norm = if norm_r.abs() > 1e-4 && norm_g.abs() > 1e-4 && norm_b.abs() > 1e-4 {
-            Matrix3x3([
-                [sensor_to_rec2020.0[0][0] / norm_r, sensor_to_rec2020.0[0][1] / norm_r, sensor_to_rec2020.0[0][2] / norm_r],
-                [sensor_to_rec2020.0[1][0] / norm_g, sensor_to_rec2020.0[1][1] / norm_g, sensor_to_rec2020.0[1][2] / norm_g],
-                [sensor_to_rec2020.0[2][0] / norm_b, sensor_to_rec2020.0[2][1] / norm_b, sensor_to_rec2020.0[2][2] / norm_b],
-            ])
+        // Derive exact Camera -> Linear Rec.2020 matrix using standard RAW colorimetric derivation:
+        // rec2cam = normalize(xyz2cam * rec2020_to_xyz)
+        // sensor_to_rec2020 = (rec2cam)^-1
+        let sensor_to_rec2020 = if let Some(m) = frame.color_matrix {
+            let xyz2cam = Matrix3x3(m);
+            let rec2cam_raw = xyz2cam.multiply_matrix(&REC2020_TO_XYZ_D65);
+            // Normalize rows so neutral [1, 1, 1] in Rec.2020 maps to [1, 1, 1] in camera sensor space
+            let norm_r = rec2cam_raw.0[0][0] + rec2cam_raw.0[0][1] + rec2cam_raw.0[0][2];
+            let norm_g = rec2cam_raw.0[1][0] + rec2cam_raw.0[1][1] + rec2cam_raw.0[1][2];
+            let norm_b = rec2cam_raw.0[2][0] + rec2cam_raw.0[2][1] + rec2cam_raw.0[2][2];
+            let rec2cam = Matrix3x3([
+                [rec2cam_raw.0[0][0] / norm_r, rec2cam_raw.0[0][1] / norm_r, rec2cam_raw.0[0][2] / norm_r],
+                [rec2cam_raw.0[1][0] / norm_g, rec2cam_raw.0[1][1] / norm_g, rec2cam_raw.0[1][2] / norm_g],
+                [rec2cam_raw.0[2][0] / norm_b, rec2cam_raw.0[2][1] / norm_b, rec2cam_raw.0[2][2] / norm_b],
+            ]);
+            rec2cam.inverse().unwrap_or(rec2cam)
         } else {
-            sensor_to_rec2020
+            XYZ_D65_TO_REC2020
+                .multiply_matrix(&BRADFORD_D50_TO_D65)
+                .multiply_matrix(&CANON_EOS_SENSOR_TO_XYZ_D50)
         };
-
-        // Dynamic CFA Bayer Demosaicing (Supports RGGB, BGGR, GBRG, GRBG)
         for y in 0..active_h {
             let full_y = (frame.active_y + y).min(frame.full_height - 2).max(1);
             
@@ -103,7 +100,7 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                 let c_sensor = Color3::new((r * wb_r).clamp(0.0, 1.0), g.clamp(0.0, 1.0), (b * wb_b).clamp(0.0, 1.0));
                 
                 // Map to Wide-Gamut Linear Rec.2020 working space
-                let c_rec2020 = sensor_to_rec2020_norm.multiply_vector(c_sensor);
+                let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor);
                 
                 let out_idx = (y * active_w + x) * 3;
                 demosaiced.data[out_idx] = c_rec2020.r().max(0.0);
@@ -139,7 +136,9 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
 
 /// Applies user edits (Exposure, White Balance, Contrast, Display gamma) in 16-bit linear space.
 pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
-    let exposure_gain = 2.0f32.powf(edits.exposure);
+    // Baseline photographic exposure gain (+0.65 EV) matching standard camera RAW development (Darktable/Apple RAW)
+    let total_exposure = edits.exposure + 0.65;
+    let exposure_gain = 2.0f32.powf(total_exposure);
     let contrast_gain = 1.0 + (edits.contrast / 100.0);
     
     let temp_norm = (edits.temperature / 5500.0).clamp(0.25, 4.0);
@@ -164,22 +163,32 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
         g *= g_scale;
         b *= b_scale;
         
-        // 2. Linear Exposure
+        // 2. Linear Exposure (including baseline camera gain)
         r *= exposure_gain;
         g *= exposure_gain;
         b *= exposure_gain;
         
-        // 3. Filmic Mid-Gray Sigmoid Contrast
-        if contrast_gain != 1.0 {
-            r = 0.18 * (r.max(0.0001) / 0.18).powf(contrast_gain);
-            g = 0.18 * (g.max(0.0001) / 0.18).powf(contrast_gain);
-            b = 0.18 * (b.max(0.0001) / 0.18).powf(contrast_gain);
-        }
+        // 3. Baseline Filmic Tone Curve (Mid-Gray Sigmoid S-Curve)
+        // Shapes linear sensor photons into photographic contrast:
+        // anchors deep shadows, expands midtone contrast, and smoothly compresses highlights.
+        let shape_channel = |c: f32| -> f32 {
+            let x = c.max(0.0);
+            // Filmic rational polynomial tone mapper: x * (1 + 0.5 * x) / (1 + x * (1 + 0.25 * x))
+            let mid_scale = 0.18f32;
+            let norm = x / mid_scale;
+            let curved = mid_scale * (norm.powf(1.15 * contrast_gain));
+            // Highlight compression shoulder
+            curved / (1.0 + curved * 0.35)
+        };
         
-        // 4. Display OETF Gamma Transform (Linear -> sRGB Gamma 2.2)
-        image.data[idx] = r.clamp(0.0, 1.0).powf(1.0 / 2.2);
-        image.data[idx + 1] = g.clamp(0.0, 1.0).powf(1.0 / 2.2);
-        image.data[idx + 2] = b.clamp(0.0, 1.0).powf(1.0 / 2.2);
+        r = shape_channel(r);
+        g = shape_channel(g);
+        b = shape_channel(b);
+        
+        // Linear Rec.2020 working values (gamma OETF applied at final 8-bit export encode)
+        image.data[idx] = r.max(0.0);
+        image.data[idx + 1] = g.max(0.0);
+        image.data[idx + 2] = b.max(0.0);
     }
 }
 
@@ -218,7 +227,19 @@ fn sample_bilinear(image: &DemosaicedImage, x: f32, y: f32) -> (f32, f32, f32) {
 
 /// Decodes a RAW image into an 8-bit RGBA preview buffer for live Metal rendering.
 pub fn decode_raw_preview_buffer<P: AsRef<Path>>(path: P, max_dimension: Option<u32>) -> Result<(u32, u32, Vec<u8>), String> {
-    let demosaiced = decode_image(path)?;
+    let mut demosaiced = decode_image(path)?;
+    let neutral_edits = EditSettings {
+        exposure: 0.0,
+        contrast: 0.0,
+        temperature: 5500.0,
+        tint: 0.0,
+        crop_left: 0.0,
+        crop_top: 0.0,
+        crop_right: 1.0,
+        crop_bottom: 1.0,
+        crop_angle: 0.0,
+    };
+    apply_edits(&mut demosaiced, &neutral_edits);
     
     let orig_w = demosaiced.width;
     let orig_h = demosaiced.height;
@@ -440,12 +461,54 @@ mod tests {
 
     #[test]
     fn test_debug_cr2() {
-        let path = "/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0359.CR2";
-        let out_path = "test_calibrated_cr2.jpg";
+        let path = "/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0265.CR2";
+        let out_path = "/Users/blikkie/Desktop/20250409_0265_calibrated.jpg";
+
+        let decoder = crate::raw_decoder::RawlerDecoder;
+        if let Ok(frame) = crate::raw_decoder::RawDecoder::decode(&decoder, Path::new(path)) {
+            let hx = frame.active_x + frame.active_width / 3;
+            let hy = frame.active_y + frame.active_height / 2;
+            let sx = frame.active_x + frame.active_width / 4;
+            let sy = frame.active_y + frame.active_height / 4;
+            let cx = frame.active_x + frame.active_width / 2;
+            let cy = frame.active_y + (frame.active_height * 55) / 100;
+            
+            let h_val = frame.sensor_data[hy * frame.full_width + hx];
+            let s_val = frame.sensor_data[sy * frame.full_width + sx];
+            let c_val = frame.sensor_data[cy * frame.full_width + cx];
+            
+            println!("RAW SENSOR VALUES:");
+            println!("  Hair raw: {} (norm: {:.4})", h_val, frame.sample_normalized(hx, hy));
+            println!("  Sky raw:  {} (norm: {:.4})", s_val, frame.sample_normalized(sx, sy));
+            println!("  Cheek raw: {} (norm: {:.4})", c_val, frame.sample_normalized(cx, cy));
+        }
+        
+        if let Ok(raw) = rawler::decode_file(path) {
+            println!("RAWLER MAKE/MODEL: {:?} / {:?}", raw.camera.make, raw.camera.model);
+            println!("RAWLER DIMS: width={}, height={}", raw.width, raw.height);
+            println!("RAWLER CFA: {:?}", raw.camera.cfa);
+            println!("RAWLER CFA (0,0): {:?}", raw.camera.cfa.color_at(0, 0));
+            println!("RAWLER CFA (0,1): {:?}", raw.camera.cfa.color_at(0, 1));
+            println!("RAWLER CFA (1,0): {:?}", raw.camera.cfa.color_at(1, 0));
+            println!("RAWLER CFA (1,1): {:?}", raw.camera.cfa.color_at(1, 1));
+            println!("RAWLER CROP: {:?}", raw.crop_area);
+            println!("RAWLER COLOR MATRIX RAW: {:?}", raw.color_matrix);
+            println!("RAWLER BLACK LEVEL: {:?}", raw.blacklevel);
+            println!("RAWLER WHITE LEVEL: {:?}", raw.whitelevel);
+            println!("RAWLER WB COEFFS: {:?}", raw.wb_coeffs);
+            
+            // Check sensor data values in dark hair vs sky
+            if let rawler::RawImageData::Integer(cfa) = &raw.data {
+                println!("TOTAL CFA SAMPLES: {}", cfa.len());
+                let min_val = cfa.iter().copied().min();
+                let max_val = cfa.iter().copied().max();
+                println!("RAW CFA MIN VAL: {:?}, MAX VAL: {:?}", min_val, max_val);
+            }
+        }
         
         let edits = EditSettings {
-            exposure: 0.8,
-            contrast: 15.0,
+            exposure: 0.0,
+            contrast: 0.0,
             temperature: 5500.0,
             tint: 0.0,
             crop_left: 0.0,
@@ -461,34 +524,45 @@ mod tests {
         if let Ok(preview_bytes) = crate::raw::extract_preview_jpeg(path) {
             if let Ok(cam_img) = image::load_from_memory(&preview_bytes) {
                 let rgb = cam_img.to_rgb8();
-                let mut sum_r = 0u64;
-                let mut sum_g = 0u64;
-                let mut sum_b = 0u64;
-                for p in rgb.pixels() {
-                    sum_r += p[0] as u64;
-                    sum_g += p[1] as u64;
-                    sum_b += p[2] as u64;
-                }
-                let count = rgb.pixels().len() as u64;
-                println!("CAMERA JPEG AVERAGE: R={}, G={}, B={}", sum_r / count, sum_g / count, sum_b / count);
+                let w = rgb.width();
+                let h = rgb.height();
+                // Sky (center top), Hair (mid upper-left), Cheek (center)
+                let p_sky = rgb.get_pixel(w / 4, h / 4);
+                let p_hair = rgb.get_pixel(w / 3, h / 2);
+                let p_cheek = rgb.get_pixel(w / 2, (h * 55) / 100);
+                println!("CAMERA JPEG SAMPLES:");
+                println!("  Sky:   R={}, G={}, B={}", p_sky[0], p_sky[1], p_sky[2]);
+                println!("  Hair:  R={}, G={}, B={}", p_hair[0], p_hair[1], p_hair[2]);
+                println!("  Cheek: R={}, G={}, B={}", p_cheek[0], p_cheek[1], p_cheek[2]);
             }
         }
         
         // 2. Calibrated Exported Image
         if let Ok(img) = image::open(out_path) {
             let rgb = img.to_rgb8();
-            let mut sum_r = 0u64;
-            let mut sum_g = 0u64;
-            let mut sum_b = 0u64;
-            for p in rgb.pixels() {
-                sum_r += p[0] as u64;
-                sum_g += p[1] as u64;
-                sum_b += p[2] as u64;
-            }
-            let count = rgb.pixels().len() as u64;
-            println!("CALIBRATED RAW EXPORT AVERAGE: R={}, G={}, B={}", sum_r / count, sum_g / count, sum_b / count);
+            let w = rgb.width();
+            let h = rgb.height();
+            let p_sky = rgb.get_pixel(w / 4, h / 4);
+            let p_hair = rgb.get_pixel(w / 3, h / 2);
+            let p_cheek = rgb.get_pixel(w / 2, (h * 55) / 100);
+            println!("CALIBRATED RAW EXPORT SAMPLES:");
+            println!("  Sky:   R={}, G={}, B={}", p_sky[0], p_sky[1], p_sky[2]);
+            println!("  Hair:  R={}, G={}, B={}", p_hair[0], p_hair[1], p_hair[2]);
+            println!("  Cheek: R={}, G={}, B={}", p_cheek[0], p_cheek[1], p_cheek[2]);
         }
         
-        let _ = std::fs::remove_file(out_path);
+        // 3. Apple RAW Engine (sips) Reference
+        if let Ok(sips_img) = image::open("/Users/blikkie/Desktop/sips_reference.jpg") {
+            let rgb = sips_img.to_rgb8();
+            let w = rgb.width();
+            let h = rgb.height();
+            let p_sky = rgb.get_pixel(w / 4, h / 4);
+            let p_hair = rgb.get_pixel(w / 3, h / 2);
+            let p_cheek = rgb.get_pixel(w / 2, (h * 55) / 100);
+            println!("APPLE RAW ENGINE (sips) SAMPLES:");
+            println!("  Sky:   R={}, G={}, B={}", p_sky[0], p_sky[1], p_sky[2]);
+            println!("  Hair:  R={}, G={}, B={}", p_hair[0], p_hair[1], p_hair[2]);
+            println!("  Cheek: R={}, G={}, B={}", p_cheek[0], p_cheek[1], p_cheek[2]);
+        }
     }
 }
