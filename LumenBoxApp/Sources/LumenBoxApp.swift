@@ -142,6 +142,12 @@ struct LumenBoxApp: App {
                 .keyboardShortcut("0", modifiers: [.command, .option])
                 .disabled(viewModel.canvasMode != .detail)
                 
+                Button("Zoom 200% (2:1 Loupe)") {
+                    viewModel.zoomTo200()
+                }
+                .keyboardShortcut("2", modifiers: [.command, .option])
+                .disabled(viewModel.canvasMode != .detail)
+                
                 Button("Zoom In") {
                     viewModel.zoomIn()
                 }

@@ -217,11 +217,12 @@ public struct MetalCanvasView: NSViewRepresentable {
                 renderer.zoomScale = 1.0
                 renderer.panOffset = .zero
             } else {
-                let target100 = renderer.zoomScale100 > 1.05 ? renderer.zoomScale100 : 3.0
-                vm.zoomScale = target100
-                renderer.zoomScale = target100
+                let base = renderer.zoomScale100 > 1.05 ? renderer.zoomScale100 : 3.0
+                let target200 = base * 2.0 // Double-click targets 200% Retina Loupe
+                vm.zoomScale = target200
+                renderer.zoomScale = target200
                 
-                let ratio = CGFloat(target100 - 1.0)
+                let ratio = CGFloat(target200 - 1.0)
                 let targetPan = CGPoint(x: -pointInNDC.x * ratio, y: -pointInNDC.y * ratio)
                 vm.panOffset = targetPan
                 renderer.panOffset = SIMD2<Float>(Float(targetPan.x), Float(targetPan.y))

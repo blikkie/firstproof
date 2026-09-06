@@ -342,14 +342,26 @@ struct CanvasView: View {
                 Button(action: {
                     viewModel.zoomTo100()
                 }) {
-                    Text("1:1")
+                    Text("100%")
                         .font(.caption)
                         .fontWeight(.medium)
                 }
                 .buttonStyle(.bordered)
-                .tint(abs(viewModel.zoomScale - viewModel.zoomScale100) < 0.05 && viewModel.isZoomed ? .accentColor : nil)
+                .tint(abs(viewModel.zoomScale - viewModel.zoomScale100) < 0.1 && viewModel.isZoomed ? .accentColor : nil)
                 .controlSize(.small)
-                .help("Zoom to 100% 1:1 Pixels (Opt+Cmd+0)")
+                .help("Zoom to 100% Physical Pixels (Opt+Cmd+0)")
+                
+                Button(action: {
+                    viewModel.zoomTo200()
+                }) {
+                    Text("200%")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+                .buttonStyle(.bordered)
+                .tint(abs(viewModel.zoomScale - (viewModel.zoomScale100 * 2.0)) < 0.25 && viewModel.isZoomed ? .accentColor : nil)
+                .controlSize(.small)
+                .help("Zoom to 200% Retina Loupe (Double Click Canvas)")
                 
                 Text(viewModel.zoomReadoutText)
                     .font(.system(size: 11, design: .monospaced))

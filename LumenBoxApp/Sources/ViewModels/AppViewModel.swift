@@ -173,11 +173,18 @@ public final class AppViewModel {
         panOffset = .zero
     }
     
+    public func zoomTo200() {
+        let base = zoomScale100 > 1.05 ? zoomScale100 : 3.0
+        zoomScale = base * 2.0
+        panOffset = .zero
+    }
+    
     public func toggleZoom(at pointInNDC: CGPoint = .zero) {
         if isZoomed {
             zoomToFit()
         } else {
-            let target = zoomScale100 > 1.05 ? zoomScale100 : 3.0
+            let base = zoomScale100 > 1.05 ? zoomScale100 : 3.0
+            let target = base * 2.0 // Double-click targets 200% Retina Loupe
             zoomScale = target
             panOffset = CGPoint(x: -pointInNDC.x * CGFloat(zoomScale - 1.0), y: -pointInNDC.y * CGFloat(zoomScale - 1.0))
         }
