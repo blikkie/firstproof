@@ -260,6 +260,8 @@ fn test_gpu_preview_vs_export_parity() {
         crop_bottom: 1.0,
         crop_angle: 0.0,
         tone_profile: lumenbox_core::ColorProfileMode::AgxVivid,
+        lut_name: None,
+        lut_intensity: 1.0,
     };
     lumenbox_core::export::apply_edits(&mut export_img, &edits);
     let export_srgb = Color3::new(export_img.data[idx], export_img.data[idx + 1], export_img.data[idx + 2]);

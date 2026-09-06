@@ -11,6 +11,65 @@ pub mod lensfun;
 pub mod export;
 pub mod color;
 pub mod auto;
+pub mod lut;
+
+#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorProfileMode {
+    AgxVivid,
+    AgxFilmic,
+    CameraStandard,
+    CameraPortrait,
+    CameraLandscape,
+    CameraVivid,
+}
+
+impl Default for ColorProfileMode {
+    fn default() -> Self {
+        Self::AgxVivid
+    }
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct CubeLutRecord {
+    pub title: String,
+    pub size: u32,
+    pub data_rgba32f: Vec<f32>,
+}
+
+#[derive(uniffi::Record, Clone, Debug, PartialEq)]
+pub struct EditSettings {
+    pub exposure: f32,
+    pub contrast: f32,
+    pub temperature: f32,
+    pub tint: f32,
+    pub crop_left: f32,
+    pub crop_top: f32,
+    pub crop_right: f32,
+    pub crop_bottom: f32,
+    pub crop_angle: f32,
+    pub tone_profile: ColorProfileMode,
+    pub lut_name: Option<String>,
+    pub lut_intensity: f32,
+}
+
+impl Default for EditSettings {
+    fn default() -> Self {
+        Self {
+            exposure: 0.0,
+            contrast: 0.0,
+            temperature: 5000.0,
+            tint: 0.0,
+            crop_left: 0.0,
+            crop_top: 0.0,
+            crop_right: 1.0,
+            crop_bottom: 1.0,
+            crop_angle: 0.0,
+            tone_profile: ColorProfileMode::AgxVivid,
+            lut_name: None,
+            lut_intensity: 1.0,
+        }
+    }
+}
 
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct PhotoRecord {
@@ -63,53 +122,6 @@ impl From<db::PhotoRecord> for PhotoRecord {
             has_takeout: r.has_takeout,
             created_at: r.created_at,
             updated_at: r.updated_at,
-        }
-    }
-}
-
-#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ColorProfileMode {
-    AgxVivid,
-    AgxFilmic,
-    CameraStandard,
-    CameraPortrait,
-    CameraLandscape,
-    CameraVivid,
-}
-
-impl Default for ColorProfileMode {
-    fn default() -> Self {
-        Self::AgxVivid
-    }
-}
-
-#[derive(uniffi::Record, Clone, Copy, Debug, PartialEq)]
-pub struct EditSettings {
-    pub exposure: f32,
-    pub contrast: f32,
-    pub temperature: f32,
-    pub tint: f32,
-    pub crop_left: f32,
-    pub crop_top: f32,
-    pub crop_right: f32,
-    pub crop_bottom: f32,
-    pub crop_angle: f32,
-    pub tone_profile: ColorProfileMode,
-}
-
-impl Default for EditSettings {
-    fn default() -> Self {
-        Self {
-            exposure: 0.0,
-            contrast: 0.0,
-            temperature: 5000.0,
-            tint: 0.0,
-            crop_left: 0.0,
-            crop_top: 0.0,
-            crop_right: 1.0,
-            crop_bottom: 1.0,
-            crop_angle: 0.0,
-            tone_profile: ColorProfileMode::AgxVivid,
         }
     }
 }
@@ -523,3 +535,32 @@ impl LumenBoxLensfun {
 pub fn check_connection() -> String {
     "LumenBox Rust Core Connected!".to_string()
 }
+
+#[uniffi::export]
+pub fn get_builtin_cube_luts(size: u32) -> Vec<CubeLutRecord> {
+    let s = (size as usize).clamp(17, 65);
+    lut::FilmSimulationGenerator::all_builtin(s)
+        .into_iter()
+        .map(|l| {
+            let data_rgba32f = l.to_rgba32f();
+            CubeLutRecord {
+                title: l.title,
+                size: l.size as u32,
+                data_rgba32f,
+            }
+        })
+        .collect()
+}
+
+#[uniffi::export]
+pub fn load_cube_lut(path: String) -> Option<CubeLutRecord> {
+    lut::load_cube_lut_file(&path).ok().map(|l| {
+        let data_rgba32f = l.to_rgba32f();
+        CubeLutRecord {
+            title: l.title,
+            size: l.size as u32,
+            data_rgba32f,
+        }
+    })
+}
+

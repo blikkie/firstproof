@@ -2,6 +2,7 @@ import Foundation
 import Metal
 import MetalKit
 import AppKit
+import LumenBoxBridge
 
 public struct Vertex {
     public var position: SIMD2<Float>
@@ -24,7 +25,11 @@ public struct ShaderUniforms {
     public var isOriginal: Float = 0.0
     public var isLinearRaw: Int32 = 0
     public var toneProfileMode: Int32 = 0
+    public var lutEnabled: Int32 = 0
+    public var lutIntensity: Float = 1.0
+    public var lutSize: Float = 33.0
     public var _padding: Int32 = 0
+    public var _padding2: Int32 = 0
 }
 
 public final class MetalRenderer: NSObject, MTKViewDelegate {
@@ -32,10 +37,13 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     private let commandQueue: MTLCommandQueue
     private var pipelineState: MTLRenderPipelineState?
     private var samplerState: MTLSamplerState?
+    private var lutSamplerState: MTLSamplerState?
     private var vertexBuffer: MTLBuffer?
     private var uniformsBuffer: MTLBuffer?
     
     private var currentTexture: MTLTexture?
+    private var lutTexture: MTLTexture?
+    private var defaultLutTexture: MTLTexture?
     private var textureLoader: MTKTextureLoader
     
     public var uniforms = ShaderUniforms()
@@ -128,6 +136,84 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         samplerDescriptor.sAddressMode = .clampToZero
         samplerDescriptor.tAddressMode = .clampToZero
         self.samplerState = device.makeSamplerState(descriptor: samplerDescriptor)
+        
+        let lutSamplerDescriptor = MTLSamplerDescriptor()
+        lutSamplerDescriptor.minFilter = .linear
+        lutSamplerDescriptor.magFilter = .linear
+        lutSamplerDescriptor.rAddressMode = .clampToEdge
+        lutSamplerDescriptor.sAddressMode = .clampToEdge
+        lutSamplerDescriptor.tAddressMode = .clampToEdge
+        self.lutSamplerState = device.makeSamplerState(descriptor: lutSamplerDescriptor)
+        
+        setupDefaultLutTexture()
+    }
+    
+    private func setupDefaultLutTexture() {
+        let desc = MTLTextureDescriptor()
+        desc.textureType = .type3D
+        desc.pixelFormat = .rgba32Float
+        desc.width = 2
+        desc.height = 2
+        desc.depth = 2
+        desc.usage = [.shaderRead]
+        
+        guard let tex = device.makeTexture(descriptor: desc) else { return }
+        var identityData: [Float] = []
+        for b in 0..<2 {
+            let bVal = Float(b)
+            for g in 0..<2 {
+                let gVal = Float(g)
+                for r in 0..<2 {
+                    let rVal = Float(r)
+                    identityData.append(contentsOf: [rVal, gVal, bVal, 1.0])
+                }
+            }
+        }
+        identityData.withUnsafeBytes { raw in
+            guard let ptr = raw.baseAddress else { return }
+            tex.replace(
+                region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: 2, height: 2, depth: 2)),
+                mipmapLevel: 0,
+                slice: 0,
+                withBytes: ptr,
+                bytesPerRow: 2 * 4 * MemoryLayout<Float>.size,
+                bytesPerImage: 2 * 2 * 4 * MemoryLayout<Float>.size
+            )
+        }
+        self.defaultLutTexture = tex
+    }
+    
+    public func updateLutTexture(with lutRecord: CubeLutRecord?) {
+        guard let lut = lutRecord, lut.size >= 2 else {
+            self.lutTexture = nil
+            self.uniforms.lutEnabled = 0
+            return
+        }
+        
+        let size = Int(lut.size)
+        let desc = MTLTextureDescriptor()
+        desc.textureType = .type3D
+        desc.pixelFormat = .rgba32Float
+        desc.width = size
+        desc.height = size
+        desc.depth = size
+        desc.usage = [.shaderRead]
+        
+        guard let tex = device.makeTexture(descriptor: desc) else { return }
+        lut.dataRgba32f.withUnsafeBytes { raw in
+            guard let ptr = raw.baseAddress else { return }
+            tex.replace(
+                region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: size, height: size, depth: size)),
+                mipmapLevel: 0,
+                slice: 0,
+                withBytes: ptr,
+                bytesPerRow: size * 4 * MemoryLayout<Float>.size,
+                bytesPerImage: size * size * 4 * MemoryLayout<Float>.size
+            )
+        }
+        self.lutTexture = tex
+        self.uniforms.lutEnabled = 1
+        self.uniforms.lutSize = Float(size)
     }
     
     // MARK: - Aspect-Fit Quad Update
@@ -296,6 +382,9 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         
         encoder.setFragmentTexture(texture, index: 0)
         encoder.setFragmentSamplerState(samplerState, index: 0)
+        let activeLut = lutTexture ?? defaultLutTexture
+        encoder.setFragmentTexture(activeLut, index: 1)
+        encoder.setFragmentSamplerState(lutSamplerState ?? samplerState, index: 1)
         encoder.setFragmentBuffer(uniformsBuffer, offset: 0, index: 1)
         
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
@@ -336,7 +425,11 @@ struct ShaderUniforms {
     float isOriginal;        // 1.0 = Bypass edits
     int isLinearRaw;         // 1 = Texture contains Wide-Gamut Linear Rec.2020 half-floats
     int toneProfileMode;     // 0 = AgX Vivid, 1 = AgX Neutral, 2 = Standard, 3 = Portrait, 4 = Landscape, 5 = Vivid
+    int lutEnabled;          // 1 = 3D LUT active, 0 = disabled
+    float lutIntensity;      // 0.0 .. 1.0
+    float lutSize;           // Dimension N (e.g. 17, 33, 65)
     int _padding;
+    int _padding2;
 };
 
 // MARK: - Scene-Referred Rec.2020 Color Transfer Functions & Matrices (File Scope)
@@ -584,6 +677,8 @@ fragment float4 fragmentShader(
     VertexOutput in [[stage_in]],
     texture2d<float> texture [[texture(0)]],
     sampler textureSampler [[sampler(0)]],
+    texture3d<float> lutTexture [[texture(1)]],
+    sampler lutSampler [[sampler(1)]],
     constant ShaderUniforms &uniforms [[buffer(1)]]
 ) {
     float2 uv = in.texCoord;
@@ -638,7 +733,8 @@ fragment float4 fragmentShader(
     bool isNeutralEdits = (uniforms.exposure == 0.0) && 
                           (abs(uniforms.temperature - 5500.0) < 1.0) && 
                           (uniforms.tint == 0.0) && 
-                          (uniforms.contrast == 0.0);
+                          (uniforms.contrast == 0.0) &&
+                          (uniforms.lutEnabled == 0);
     
     if (uniforms.isLinearRaw == 0 && isNeutralEdits) {
         return sampledColor;
@@ -724,6 +820,14 @@ fragment float4 fragmentShader(
         finalColor = clamp(srgbLinearOut, 0.0, 1.0);
     } else {
         finalColor = linearToSrgbGamma3(srgbLinearOut);
+    }
+    
+    // 7. Creative 3D Look-Up Table (Post-Tone-Mapping)
+    if (uniforms.lutEnabled != 0 && uniforms.lutIntensity > 0.0 && uniforms.isOriginal < 0.5) {
+        float size = max(uniforms.lutSize, 2.0);
+        float3 lutCoord = (finalColor * (size - 1.0) + 0.5) / size;
+        float3 lutSample = lutTexture.sample(lutSampler, lutCoord).rgb;
+        finalColor = mix(finalColor, lutSample, clamp(uniforms.lutIntensity, 0.0, 1.0));
     }
     
     return float4(finalColor, sampledColor.a);

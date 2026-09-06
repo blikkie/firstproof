@@ -281,11 +281,28 @@ An architectural audit of existing `lumenbox-core` code revealed several areas w
 *   **The Audit Finding**: Hand-rolling this pure Rust XML parser was a necessary architectural defense to avoid linking against the official `liblensfun` C++ library (which is LGPL-3.0).
 *   **Actionable Task**:
     *   Factor `lensfun.rs` into an internal standalone sub-crate (`lumenbox-lensfun`).
-    *   Verify licensing boundaries: The Lensfun calibration database XML files are licensed under **CC-BY-SA 3.0 / LGPL-3.0**. Ensure that shipping updated lens profiles to users is structured either via dynamic runtime downloads or as user-provided data packs to prevent ShareAlike ambiguity.
+---
+
+## 9. Procedural Organic Film Grain Simulation (P3)
+
+Physical film grain simulation (distinct from pointwise 3D LUTs) models the stochastic, physical behavior of silver halide crystal clumping across photographic emulsions (e.g. Kodak Portra, Tri-X, CineStill):
+
+*   **Non-Linear Luminance-Dependent Clumping**:
+    Unlike digital sensor noise which dominates dark shadows, silver halide grain is an optical density phenomenon that is **most pronounced in the midtones (Zone V)**, diminishes in the shadows (where few crystals were exposed), and completely washes out in specular highlights (where the emulsion is fully saturated and opaque).
+    \[G(Y) = 4 \cdot Y \cdot (1.0 - Y) \cdot \text{Amount}\]
+*   **Tri-Layer Emulsion Chemistry**:
+    Color negative film consists of three physical gelatin emulsion layers (Yellow, Magenta, Cyan). The top blue-sensitive/yellow layer has physically coarser silver halide crystals than the lower layers. The simulation provides per-channel stochastic weight to emulate natural chromatic grain rather than flat digital noise.
+*   **Metal GPU & Rust Export Parity**:
+    *   **Metal Viewport**: Evaluated in `Shaders.metal` using procedural high-frequency noise (blue noise or simplex noise texture) with zero runtime FPS cost.
+    *   **Rust Export**: Deterministic evaluation in `export.rs` for full-resolution batch exports.
+*   **Inspector Controls**:
+    *   *Grain Amount* ($0\%\dots 100\%$)
+    *   *Grain Size / Roughness* (35mm fine grain vs 16mm/Super-8 coarse grain)
+    *   *Color Variation / Chroma Noise*
 
 ---
 
-## 9. Third-Party Libraries & Licensing Guardrails
+## 10. Third-Party Libraries & Licensing Guardrails
 
 To preserve LumenBox's ability to be distributed as a proprietary, commercial macOS application on the Mac App Store and direct download, the project enforces strict IP and licensing guardrails:
 

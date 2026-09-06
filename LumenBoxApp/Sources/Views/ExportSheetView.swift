@@ -167,18 +167,7 @@ public struct ExportSheetView: View {
             .appendingPathComponent("\(baseName)_LumenBox.\(ext)")
             .path
         
-        let edits = EditSettings(
-            exposure: viewModel.exposure,
-            contrast: viewModel.contrast,
-            temperature: viewModel.temperature,
-            tint: viewModel.tint,
-            cropLeft: 0.0,
-            cropTop: 0.0,
-            cropRight: 1.0,
-            cropBottom: 1.0,
-            cropAngle: viewModel.straightenAngle,
-            toneProfile: viewModel.toneProfile
-        )
+        let edits = viewModel.currentEdits
         let lensCoeffs = viewModel.lensCorrectionEnabled ? viewModel.lensCoefficients : nil
         
         DispatchQueue.global(qos: .userInitiated).async {

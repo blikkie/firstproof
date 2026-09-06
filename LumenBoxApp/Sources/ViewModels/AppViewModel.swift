@@ -10,6 +10,7 @@ public enum EditSliderType {
     case temperature
     case tint
     case straighten
+    case lutIntensity
 }
 
 public enum CanvasMode: Hashable {
@@ -72,6 +73,9 @@ public final class AppViewModel {
     public var straightenAngle: Float = 0.0 // -45 .. +45 deg
     public var lensCorrectionEnabled: Bool = true
     public var toneProfile: ColorProfileMode = .agxVivid
+    public var selectedLutName: String? = nil
+    public var lutIntensity: Float = 1.0
+    public var availableLuts: [CubeLutRecord] = []
     
     // MARK: - Takeout & Metadata
     public var takeoutMatches: [TakeoutMatchRecord] = []
@@ -83,6 +87,7 @@ public final class AppViewModel {
     
     public init() {
         self.lensfun = LumenBoxLensfun()
+        self.availableLuts = getBuiltinCubeLuts(size: 33)
         
         // Restore multi-project opened folder list (preserves disconnected external drive sessions)
         self.openedFolders = UserDefaults.standard.stringArray(forKey: "openedFolders") ?? []
@@ -548,6 +553,8 @@ public final class AppViewModel {
             self.tint = xmp.edits.tint
             self.straightenAngle = xmp.edits.cropAngle
             self.toneProfile = xmp.edits.toneProfile
+            self.selectedLutName = xmp.edits.lutName
+            self.lutIntensity = xmp.edits.lutIntensity
         } else {
             self.exposure = 0.0
             self.contrast = 0.0
@@ -555,6 +562,8 @@ public final class AppViewModel {
             self.tint = 0.0
             self.straightenAngle = 0.0
             self.toneProfile = .agxVivid
+            self.selectedLutName = nil
+            self.lutIntensity = 1.0
         }
     }
     
@@ -704,7 +713,9 @@ public final class AppViewModel {
             cropRight: 1.0,
             cropBottom: 1.0,
             cropAngle: self.straightenAngle,
-            toneProfile: self.toneProfile
+            toneProfile: self.toneProfile,
+            lutName: self.selectedLutName,
+            lutIntensity: self.lutIntensity
         )
     }
     
@@ -730,7 +741,9 @@ public final class AppViewModel {
             cropRight: 1.0,
             cropBottom: 1.0,
             cropAngle: 0.0,
-            toneProfile: .agxVivid
+            toneProfile: .agxVivid,
+            lutName: nil,
+            lutIntensity: 1.0
         )
         
         let record = XmpDataRecord(
@@ -801,6 +814,8 @@ public final class AppViewModel {
             tint = asShotTint
         case .straighten:
             straightenAngle = 0.0
+        case .lutIntensity:
+            lutIntensity = 1.0
         }
         saveCurrentEdits()
     }
@@ -812,7 +827,30 @@ public final class AppViewModel {
         tint = asShotTint
         straightenAngle = 0.0
         toneProfile = .agxVivid
+        selectedLutName = nil
+        lutIntensity = 1.0
         saveCurrentEdits()
+    }
+    
+    // MARK: - Custom 3D LUT Import
+    public func importCustomLut() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "cube")].compactMap { $0 }
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.title = "Import 3D LUT (.cube)"
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            if let customLut = loadCubeLut(path: url.path) {
+                if !self.availableLuts.contains(where: { $0.title == customLut.title }) {
+                    self.availableLuts.append(customLut)
+                }
+                self.selectedLutName = customLut.title
+                self.lutIntensity = 1.0
+                saveCurrentEdits()
+            }
+        }
     }
     
     // MARK: - Filtered Photo List

@@ -140,6 +140,15 @@ pub fn generate_xmp(data: &XmpData) -> String {
         crate::ColorProfileMode::CameraVivid => "CameraVivid",
     };
 
+    let lut_attrs = match &data.edits.lut_name {
+        Some(name) => format!(
+            " pm:lutName=\"{}\" pm:lutIntensity=\"{:.4}\"",
+            escape_xml(name),
+            data.edits.lut_intensity
+        ),
+        None => "".to_string(),
+    };
+
     format!(
         r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="LumenBox Core 0.1.0">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -158,7 +167,7 @@ pub fn generate_xmp(data: &XmpData) -> String {
     pm:cropRight="{crop_right:.4}"
     pm:cropBottom="{crop_bottom:.4}"
     pm:cropAngle="{crop_angle:.4}"
-    pm:toneProfile="{tone_profile}">
+    pm:toneProfile="{tone_profile}"{lut_attrs}>
 {title_block}{desc_block}  </rdf:Description>
  </rdf:RDF>
 </x:xmpmeta>"#,
@@ -173,6 +182,7 @@ pub fn generate_xmp(data: &XmpData) -> String {
         crop_bottom = data.edits.crop_bottom,
         crop_angle = data.edits.crop_angle,
         tone_profile = tone_profile_str,
+        lut_attrs = lut_attrs,
         rating_attr = rating_attr,
         gps_attrs = gps_attrs,
         title_block = title_block,
@@ -285,6 +295,16 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
             "CameraVivid" => crate::ColorProfileMode::CameraVivid,
             _ => crate::ColorProfileMode::AgxVivid,
         };
+    }
+    if let Some(lut_name_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "lutName" )) {
+        if !lut_name_str.trim().is_empty() {
+            data.edits.lut_name = Some(lut_name_str.to_string());
+        }
+    }
+    if let Some(lut_intensity_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "lutIntensity" )) {
+        if let Ok(val) = lut_intensity_str.parse::<f32>() {
+            data.edits.lut_intensity = val;
+        }
     }
     
     // 3. Fallback: Parse Adobe Camera Raw settings (crs:) if native ones are missing

@@ -44,6 +44,12 @@ public struct MetalCanvasView: NSViewRepresentable {
             } else if let image = viewModel.previewImage {
                 renderer.updateTexture(with: image)
             }
+            
+            if let lutName = viewModel.selectedLutName {
+                let lutRecord = viewModel.availableLuts.first(where: { $0.title == lutName })
+                renderer.updateLutTexture(with: lutRecord)
+                context.coordinator.lastLutName = lutName
+            }
         }
         
         return mtkView
@@ -114,6 +120,21 @@ public struct MetalCanvasView: NSViewRepresentable {
             renderer.uniforms.k4 = 0.0
         }
         
+        // 3. Update 3D LUT texture if LUT selection changed
+        let lutChanged = context.coordinator.lastLutName != viewModel.selectedLutName
+        if lutChanged {
+            context.coordinator.lastLutName = viewModel.selectedLutName
+            if let lutName = viewModel.selectedLutName {
+                let lutRecord = viewModel.availableLuts.first(where: { $0.title == lutName })
+                renderer.updateLutTexture(with: lutRecord)
+            } else {
+                renderer.updateLutTexture(with: nil)
+            }
+        }
+        
+        renderer.uniforms.lutEnabled = (viewModel.selectedLutName != nil) ? 1 : 0
+        renderer.uniforms.lutIntensity = viewModel.lutIntensity
+        
         // Trigger live redraw on MTKView
         nsView.setNeedsDisplay(nsView.bounds)
     }
@@ -123,5 +144,6 @@ public struct MetalCanvasView: NSViewRepresentable {
         var lastPhotoPath: String?
         var lastPreviewImage: NSImage?
         var lastRawKey: String?
+        var lastLutName: String?
     }
 }

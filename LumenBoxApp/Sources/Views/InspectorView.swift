@@ -10,6 +10,7 @@ struct InspectorView: View {
     @AppStorage("inspector_isOpticsExpanded") private var isOpticsExpanded: Bool = true
     @AppStorage("inspector_isLightExpanded") private var isLightExpanded: Bool = true
     @AppStorage("inspector_isToneExpanded") private var isToneExpanded: Bool = true
+    @AppStorage("inspector_isLutExpanded") private var isLutExpanded: Bool = true
     
     private var isBulkSelection: Bool {
         viewModel.selectedPhotoPaths.count > 1
@@ -137,6 +138,11 @@ struct InspectorView: View {
                 
                 // Tone & Contrast
                 collapsibleToneSection
+                
+                Divider()
+                
+                // Creative Look & 3D LUT
+                collapsibleLutSection
             } else {
                 // In Grid view: affordance to enter detail mode
                 Button(action: {
@@ -465,6 +471,64 @@ struct InspectorView: View {
         }
     }
     
+    // MARK: - Collapsible Creative Look & 3D LUT
+    private var collapsibleLutSection: some View {
+        DisclosureGroup(isExpanded: $isLutExpanded) {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("3D LUT Look")
+                        .font(.subheadline)
+                    
+                    HStack(spacing: 8) {
+                        Picker("", selection: Binding<String>(
+                            get: { viewModel.selectedLutName ?? "" },
+                            set: { newValue in
+                                viewModel.selectedLutName = newValue.isEmpty ? nil : newValue
+                                viewModel.saveCurrentEdits()
+                            }
+                        )) {
+                            Text("None (Bypass)").tag("")
+                            
+                            Divider()
+                            
+                            ForEach(viewModel.availableLuts, id: \.title) { lut in
+                                Text(lut.title).tag(lut.title)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        
+                        Button(action: {
+                            viewModel.importCustomLut()
+                        }) {
+                            Image(systemName: "plus.circle")
+                                .help("Import .cube LUT file...")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                
+                if viewModel.selectedLutName != nil {
+                    SliderRow(
+                        label: "Intensity",
+                        value: $viewModel.lutIntensity,
+                        range: 0.0...1.0,
+                        format: "%.0f%%",
+                        onReset: { viewModel.resetSlider(.lutIntensity) },
+                        onEditingChanged: { isEditing in
+                            if !isEditing { viewModel.saveCurrentEdits() }
+                        },
+                        multiplier: 100.0
+                    )
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            Label("Creative Look / 3D LUT", systemImage: "film")
+                .font(.headline)
+        }
+    }
+    
     private func formatDate(_ timestamp: Int64) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
         let formatter = DateFormatter()
@@ -481,6 +545,7 @@ struct SliderRow: View {
     let format: String
     let onReset: () -> Void
     var onEditingChanged: ((Bool) -> Void)? = nil
+    var multiplier: Float = 1.0
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -489,7 +554,7 @@ struct SliderRow: View {
                     .font(.subheadline)
                     .onTapGesture(count: 2, perform: onReset) // Double click label to reset!
                 Spacer()
-                Text(String(format: format, value))
+                Text(String(format: format, value * multiplier))
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundColor(.secondary)

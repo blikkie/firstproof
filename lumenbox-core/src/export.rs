@@ -8,7 +8,7 @@ use image::codecs::tiff::TiffEncoder;
 use crate::EditSettings;
 use crate::color::{
     Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB,
-    linear_rgb_to_srgb8, srgb_gamma_to_linear,
+    linear_rgb_to_srgb8, linear_to_srgb_gamma, srgb_gamma_to_linear,
 };
 
 pub struct DemosaicedImage {
@@ -403,6 +403,22 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
         (false, 0.0, 0.0, 0.0, false)
     };
     
+    let active_lut: Option<crate::lut::CubeLut> = if let Some(ref lut_name) = edits.lut_name {
+        if edits.lut_intensity > 0.0 {
+            crate::lut::FilmSimulationGenerator::all_builtin(33)
+                .into_iter()
+                .find(|l| l.title == *lut_name)
+                .or_else(|| {
+                    crate::lut::load_cube_lut_file(lut_name).ok()
+                })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let lut_intensity = edits.lut_intensity.clamp(0.0, 1.0);
+
     for ty in 0..target_h {
         for tx in 0..target_w {
             let u = (tx as f32 + 0.5) / (target_w as f32);
@@ -444,17 +460,33 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             let sy = (rot_y / 2.0 + 0.5) * (orig_height as f32);
             
             let (r_val, g_val, b_val) = sample_bilinear(&image, sx, sy);
-            let srgb8 = if edits.tone_profile == crate::ColorProfileMode::AgxVivid
+            let (mut r_disp, mut g_disp, mut b_disp) = if edits.tone_profile == crate::ColorProfileMode::AgxVivid
                 || edits.tone_profile == crate::ColorProfileMode::AgxFilmic
             {
-                [
-                    (r_val.clamp(0.0, 1.0) * 255.0).round() as u8,
-                    (g_val.clamp(0.0, 1.0) * 255.0).round() as u8,
-                    (b_val.clamp(0.0, 1.0) * 255.0).round() as u8,
-                ]
+                (r_val.clamp(0.0, 1.0), g_val.clamp(0.0, 1.0), b_val.clamp(0.0, 1.0))
             } else {
-                linear_rgb_to_srgb8(Color3::new(r_val, g_val, b_val))
+                (
+                    linear_to_srgb_gamma(r_val).clamp(0.0, 1.0),
+                    linear_to_srgb_gamma(g_val).clamp(0.0, 1.0),
+                    linear_to_srgb_gamma(b_val).clamp(0.0, 1.0),
+                )
             };
+
+            // 3. 3D Look-Up Table (display-referred stage post-tone-mapping)
+            if let Some(ref lut) = active_lut {
+                if lut_intensity > 0.0 {
+                    let lut_out = lut.interpolate_tetrahedral([r_disp, g_disp, b_disp]);
+                    r_disp = r_disp * (1.0 - lut_intensity) + lut_out[0] * lut_intensity;
+                    g_disp = g_disp * (1.0 - lut_intensity) + lut_out[1] * lut_intensity;
+                    b_disp = b_disp * (1.0 - lut_intensity) + lut_out[2] * lut_intensity;
+                }
+            }
+
+            let srgb8 = [
+                (r_disp.clamp(0.0, 1.0) * 255.0).round() as u8,
+                (g_disp.clamp(0.0, 1.0) * 255.0).round() as u8,
+                (b_disp.clamp(0.0, 1.0) * 255.0).round() as u8,
+            ];
             
             rgb_img.put_pixel(tx, ty, Rgb(srgb8));
         }
@@ -565,6 +597,8 @@ mod tests {
             crop_bottom: 1.0,
             crop_angle: 0.0,
             tone_profile: crate::ColorProfileMode::AgxFilmic,
+            lut_name: None,
+            lut_intensity: 1.0,
         };
         
         let res = export_photo_file(tmp_in, tmp_out, &edits, None, 90, Some(50));
@@ -598,6 +632,8 @@ mod tests {
             crop_bottom: 1.0,
             crop_angle: 0.0,
             tone_profile: crate::ColorProfileMode::AgxFilmic,
+            lut_name: None,
+            lut_intensity: 1.0,
         };
         apply_edits(&mut img, &edits);
         
@@ -621,6 +657,56 @@ mod tests {
     }
 
     #[test]
+    fn test_lut_export_pipeline() {
+        let tmp_in = "test_lut_in.jpg";
+        let tmp_out_no_lut = "test_lut_out_no_lut.jpg";
+        let tmp_out_lut = "test_lut_out_lut.jpg";
+        
+        let img = RgbImage::from_fn(30, 30, |x, y| {
+            Rgb([x as u8 * 8, y as u8 * 8, 128])
+        });
+        img.save(tmp_in).unwrap();
+        
+        let mut edits = EditSettings {
+            exposure: 0.0,
+            contrast: 0.0,
+            temperature: 5500.0,
+            tint: 0.0,
+            crop_left: 0.0,
+            crop_top: 0.0,
+            crop_right: 1.0,
+            crop_bottom: 1.0,
+            crop_angle: 0.0,
+            tone_profile: crate::ColorProfileMode::AgxVivid,
+            lut_name: None,
+            lut_intensity: 1.0,
+        };
+        
+        export_photo_file(tmp_in, tmp_out_no_lut, &edits, None, 95, None).unwrap();
+        
+        // Now apply B&W Tri-X LUT
+        edits.lut_name = Some("Film - B&W High Contrast (Tri-X)".to_string());
+        edits.lut_intensity = 1.0;
+        export_photo_file(tmp_in, tmp_out_lut, &edits, None, 95, None).unwrap();
+        
+        let img_no_lut = image::open(tmp_out_no_lut).unwrap().to_rgb8();
+        let img_lut = image::open(tmp_out_lut).unwrap().to_rgb8();
+        
+        let p_no_lut = img_no_lut.get_pixel(15, 15);
+        let p_lut = img_lut.get_pixel(15, 15);
+        
+        // In B&W Tri-X LUT, R, G, and B should be equal (monochrome)
+        assert_eq!(p_lut[0], p_lut[1]);
+        assert_eq!(p_lut[1], p_lut[2]);
+        // The color image was not monochrome
+        assert_ne!(p_no_lut[0], p_no_lut[2]);
+        
+        let _ = std::fs::remove_file(tmp_in);
+        let _ = std::fs::remove_file(tmp_out_no_lut);
+        let _ = std::fs::remove_file(tmp_out_lut);
+    }
+
+    #[test]
     fn test_jpeg_icc_profile_embedding() {
         let tmp_in = "test_icc_in.jpg";
         let tmp_out = "test_icc_out.jpg";
@@ -641,6 +727,8 @@ mod tests {
             crop_bottom: 1.0,
             crop_angle: 0.0,
             tone_profile: crate::ColorProfileMode::AgxVivid,
+            lut_name: None,
+            lut_intensity: 1.0,
         };
         
         export_photo_file(tmp_in, tmp_out, &edits, None, 95, None).unwrap();

@@ -27,7 +27,11 @@ struct ShaderUniforms {
     float isOriginal;        // 1.0 = Bypass edits
     int isLinearRaw;         // 1 = Texture contains Wide-Gamut Linear Rec.2020 half-floats
     int toneProfileMode;     // 0 = AgX Vivid, 1 = AgX Neutral, 2 = Standard, 3 = Portrait, 4 = Landscape, 5 = Vivid
+    int lutEnabled;          // 1 = 3D LUT active, 0 = disabled
+    float lutIntensity;      // 0.0 .. 1.0
+    float lutSize;           // Dimension N (e.g. 17, 33, 65)
     int _padding;
+    int _padding2;
 };
 
 // MARK: - Scene-Referred Rec.2020 Color Transfer Functions & Matrices (File Scope)
@@ -277,6 +281,8 @@ fragment float4 fragmentShader(
     VertexOutput in [[stage_in]],
     texture2d<float> texture [[texture(0)]],
     sampler textureSampler [[sampler(0)]],
+    texture3d<float> lutTexture [[texture(1)]],
+    sampler lutSampler [[sampler(1)]],
     constant ShaderUniforms &uniforms [[buffer(1)]]
 ) {
     float2 uv = in.texCoord;
@@ -331,7 +337,8 @@ fragment float4 fragmentShader(
     bool isNeutralEdits = (uniforms.exposure == 0.0) && 
                           (abs(uniforms.temperature - 5500.0) < 1.0) && 
                           (uniforms.tint == 0.0) && 
-                          (uniforms.contrast == 0.0);
+                          (uniforms.contrast == 0.0) &&
+                          (uniforms.lutEnabled == 0);
     
     if (uniforms.isLinearRaw == 0 && isNeutralEdits) {
         return sampledColor;
@@ -415,6 +422,14 @@ fragment float4 fragmentShader(
         finalColor = clamp(srgbLinearOut, 0.0, 1.0);
     } else {
         finalColor = linearToSrgbGamma3(srgbLinearOut);
+    }
+    
+    // 7. Creative 3D Look-Up Table (Post-Tone-Mapping)
+    if (uniforms.lutEnabled != 0 && uniforms.lutIntensity > 0.0 && uniforms.isOriginal < 0.5) {
+        float size = max(uniforms.lutSize, 2.0);
+        float3 lutCoord = (finalColor * (size - 1.0) + 0.5) / size;
+        float3 lutSample = lutTexture.sample(lutSampler, lutCoord).rgb;
+        finalColor = mix(finalColor, lutSample, clamp(uniforms.lutIntensity, 0.0, 1.0));
     }
     
     return float4(finalColor, sampledColor.a);

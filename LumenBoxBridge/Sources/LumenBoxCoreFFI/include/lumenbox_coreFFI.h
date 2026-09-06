@@ -368,6 +368,16 @@ RustBuffer uniffi_lumenbox_core_fn_func_extract_metadata(RustBuffer path, RustCa
 RustBuffer uniffi_lumenbox_core_fn_func_extract_preview(RustBuffer path, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_GET_BUILTIN_CUBE_LUTS
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_GET_BUILTIN_CUBE_LUTS
+RustBuffer uniffi_lumenbox_core_fn_func_get_builtin_cube_luts(uint32_t size, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_LOAD_CUBE_LUT
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_LOAD_CUBE_LUT
+RustBuffer uniffi_lumenbox_core_fn_func_load_cube_lut(RustBuffer path, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_MATCH_TAKEOUT_JSON
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_MATCH_TAKEOUT_JSON
 RustBuffer uniffi_lumenbox_core_fn_func_match_takeout_json(RustBuffer image_path, RustCallStatus *_Nonnull out_status
@@ -723,6 +733,18 @@ uint16_t uniffi_lumenbox_core_checksum_func_extract_metadata(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXTRACT_PREVIEW
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXTRACT_PREVIEW
 uint16_t uniffi_lumenbox_core_checksum_func_extract_preview(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_GET_BUILTIN_CUBE_LUTS
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_GET_BUILTIN_CUBE_LUTS
+uint16_t uniffi_lumenbox_core_checksum_func_get_builtin_cube_luts(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_LOAD_CUBE_LUT
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_LOAD_CUBE_LUT
+uint16_t uniffi_lumenbox_core_checksum_func_load_cube_lut(void
     
 );
 #endif
