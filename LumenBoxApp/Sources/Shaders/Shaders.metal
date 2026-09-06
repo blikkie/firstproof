@@ -119,20 +119,27 @@ fragment float4 fragmentShader(
     // Sample texture
     float4 sampledColor = texture.sample(textureSampler, uv);
     
-    // If user is holding '\' for original as-shot comparison, return directly
-    if (uniforms.isOriginal > 0.5) {
+    // If user is holding '\' for original as-shot comparison:
+    // For JPEG thumbnails, return sampledColor directly.
+    if (uniforms.isOriginal > 0.5 && uniforms.isLinearRaw == 0) {
         return sampledColor;
     }
     
-    // Fast-path: When all edit sliders are at default neutral positions, return exact as-shot pixels
+    // Fast-path: When all edit sliders are at default neutral positions for JPEG thumbnails, return exact as-shot pixels.
+    // (Linear RAW must always pass through the baseline exposure, filmic curve, and sRGB color transform).
     bool isNeutralEdits = (uniforms.exposure == 0.0) && 
                           (abs(uniforms.temperature - 5500.0) < 1.0) && 
                           (uniforms.tint == 0.0) && 
                           (uniforms.contrast == 0.0);
     
-    if (isNeutralEdits) {
+    if (uniforms.isLinearRaw == 0 && isNeutralEdits) {
         return sampledColor;
     }
+    
+    float editExposure = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.exposure;
+    float editTemp = (uniforms.isOriginal > 0.5) ? 5500.0 : uniforms.temperature;
+    float editTint = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.tint;
+    float editContrast = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.contrast;
     
 // MARK: - Scene-Referred Rec.2020 Color Pipeline
 
@@ -181,12 +188,12 @@ constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
     }
     
     // 3. White Balance & Temperature Adjustment in Wide-Gamut Space
-    if (abs(uniforms.temperature - 5500.0) >= 1.0 || uniforms.tint != 0.0) {
-        float tempNorm = clamp(uniforms.temperature / 5500.0, 0.25, 4.0);
+    if (abs(editTemp - 5500.0) >= 1.0 || editTint != 0.0) {
+        float tempNorm = clamp(editTemp / 5500.0, 0.25, 4.0);
         float rScale = pow(tempNorm, 0.75);
         float bScale = pow(1.0 / tempNorm, 0.75);
         
-        float tintFactor = uniforms.tint * 0.003;
+        float tintFactor = editTint * 0.003;
         float gScale = 1.0 - tintFactor;
         rScale += tintFactor * 0.5;
         bScale += tintFactor * 0.5;
@@ -197,7 +204,7 @@ constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
     }
     
     // 4. Linear Exposure Multiplication (2^EV) in Wide-Gamut Space
-    float totalExposure = uniforms.exposure;
+    float totalExposure = editExposure;
     if (uniforms.isLinearRaw == 1) {
         totalExposure += 0.65; // Baseline photographic exposure gain for RAW sensor midtone anchoring
     }
@@ -206,8 +213,8 @@ constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
     }
     
     // 5. Tone & Contrast S-Curve in Wide-Gamut Space
-    if (uniforms.isLinearRaw == 1 || uniforms.contrast != 0.0) {
-        float contrastGain = 1.0 + (uniforms.contrast / 100.0);
+    if (uniforms.isLinearRaw == 1 || editContrast != 0.0) {
+        float contrastGain = 1.0 + (editContrast / 100.0);
         float3 norm = max(rec2020Color / 0.18, float3(0.0001));
         float3 curved = 0.18 * pow(norm, float3(1.15 * contrastGain));
         rec2020Color = curved / (float3(1.0) + curved * 0.35);

@@ -597,4 +597,36 @@ mod tests {
             println!("========================================================\n");
         }
     }
+
+    #[test]
+    fn test_pipeline_parity_math() {
+        // Verify that 18% mid-gray in linear Rec.2020 transforms to expected display midtone
+        let mut img = DemosaicedImage {
+            width: 1,
+            height: 1,
+            data: vec![0.18, 0.18, 0.18],
+        };
+        let edits = EditSettings {
+            exposure: 0.0,
+            contrast: 0.0,
+            temperature: 5500.0,
+            tint: 0.0,
+            crop_left: 0.0,
+            crop_top: 0.0,
+            crop_right: 1.0,
+            crop_bottom: 1.0,
+            crop_angle: 0.0,
+        };
+        apply_edits(&mut img, &edits);
+        
+        let c_rec2020 = Color3::new(img.data[0], img.data[1], img.data[2]);
+        let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+        let srgb8 = linear_rgb_to_srgb8(c_srgb);
+        
+        // Mid-gray 0.18 + 0.65 EV exposure -> ~0.2825 -> filmic S-curve -> ~0.245 -> sRGB gamma -> ~0.529 -> ~135/255
+        assert!(srgb8[0] >= 120 && srgb8[0] <= 150, "Expected display midtone range, got {}", srgb8[0]);
+        assert_eq!(srgb8[0], srgb8[1]);
+        assert_eq!(srgb8[1], srgb8[2]);
+    }
 }
+
