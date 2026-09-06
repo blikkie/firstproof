@@ -178,7 +178,7 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         guard let pixelBuffer = malloc(totalBytes) else { return }
         defer { free(pixelBuffer) }
         
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
         let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
         
         if let ctx = CGContext(

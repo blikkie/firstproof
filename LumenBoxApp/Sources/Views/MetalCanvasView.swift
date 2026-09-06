@@ -26,6 +26,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         mtkView.enableSetNeedsDisplay = true
         mtkView.isPaused = true // Event-driven rendering: only redraws when sliders or image change!
         
+        if let metalLayer = mtkView.layer as? CAMetalLayer {
+            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+        }
+        
         if let renderer = MetalRenderer(device: device) {
             context.coordinator.renderer = renderer
             mtkView.delegate = renderer
@@ -39,6 +43,9 @@ public struct MetalCanvasView: NSViewRepresentable {
     }
     
     public func updateNSView(_ nsView: MTKView, context: Context) {
+        if let metalLayer = nsView.layer as? CAMetalLayer, metalLayer.colorspace == nil {
+            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+        }
         guard let renderer = context.coordinator.renderer else { return }
         
         // 1. Update Texture if photo selection or preview image changed

@@ -96,8 +96,8 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                     }
                 }
                 
-                // Sensor linear RGB with white balance
-                let c_sensor = Color3::new((r * wb_r).clamp(0.0, 1.0), g.clamp(0.0, 1.0), (b * wb_b).clamp(0.0, 1.0));
+                // Sensor linear RGB with white balance (subtle 0.98 green normalization eliminates D65 daylight green tint)
+                let c_sensor = Color3::new((r * wb_r).clamp(0.0, 1.0), (g * 0.98).clamp(0.0, 1.0), (b * wb_b).clamp(0.0, 1.0));
                 
                 // Map to Wide-Gamut Linear Rec.2020 working space
                 let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor);
