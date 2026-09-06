@@ -136,7 +136,8 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
 
 /// Applies user edits (Exposure, White Balance, Contrast, Display gamma) in 16-bit linear space.
 pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
-    let exposure_gain = 2.0f32.powf(edits.exposure);
+    let total_exposure = edits.exposure + 0.65;
+    let exposure_gain = 2.0f32.powf(total_exposure);
     let contrast_gain = 1.0 + (edits.contrast / 100.0);
     
     let temp_norm = (edits.temperature / 5500.0).clamp(0.25, 4.0);

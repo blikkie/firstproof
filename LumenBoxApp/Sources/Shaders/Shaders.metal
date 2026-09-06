@@ -197,12 +197,16 @@ constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
     }
     
     // 4. Linear Exposure Multiplication (2^EV) in Wide-Gamut Space
-    if (uniforms.exposure != 0.0) {
-        rec2020Color *= pow(2.0, uniforms.exposure);
+    float totalExposure = uniforms.exposure;
+    if (uniforms.isLinearRaw == 1) {
+        totalExposure += 0.65; // Baseline photographic exposure gain for RAW sensor midtone anchoring
+    }
+    if (totalExposure != 0.0) {
+        rec2020Color *= pow(2.0, totalExposure);
     }
     
     // 5. Tone & Contrast S-Curve in Wide-Gamut Space
-    if (uniforms.contrast != 0.0) {
+    if (uniforms.isLinearRaw == 1 || uniforms.contrast != 0.0) {
         float contrastGain = 1.0 + (uniforms.contrast / 100.0);
         float3 norm = max(rec2020Color / 0.18, float3(0.0001));
         float3 curved = 0.18 * pow(norm, float3(1.15 * contrastGain));
