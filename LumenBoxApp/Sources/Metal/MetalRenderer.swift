@@ -52,6 +52,7 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     public var zoomScale: Float = 1.0
     public var panOffset: SIMD2<Float> = SIMD2<Float>(0.0, 0.0)
     public private(set) var zoomScale100: Float = 1.0
+    public var onZoomScale100Changed: ((Float) -> Void)?
     
     public var textureWidth: Int { currentTexture?.width ?? 0 }
     public var textureHeight: Int { currentTexture?.height ?? 0 }
@@ -258,7 +259,11 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         // Compute 1:1 Pixel Mapping Scale (where 1 image pixel = 1 screen pixel)
         let fitWidthPixels = Float(viewSize.width) * quadW
         let fitScale = Float(texture.width) / max(fitWidthPixels, 1.0)
-        self.zoomScale100 = max(1.0, fitScale)
+        let newZ100 = max(1.0, fitScale)
+        if abs(self.zoomScale100 - newZ100) > 0.01 {
+            self.zoomScale100 = newZ100
+            onZoomScale100Changed?(newZ100)
+        }
         
         // Apply zoom scale
         let currentScale = max(1.0, zoomScale)

@@ -77,6 +77,12 @@ public struct MetalCanvasView: NSViewRepresentable {
             context.coordinator.renderer = renderer
             mtkView.delegate = renderer
             
+            renderer.onZoomScale100Changed = { [weak viewModel] newZ100 in
+                DispatchQueue.main.async {
+                    viewModel?.zoomScale100 = newZ100
+                }
+            }
+            
             if let rawRecord = viewModel.rawPreviewRecord {
                 renderer.updateLinearRawTexture(
                     width: Int(rawRecord.width),
@@ -211,7 +217,7 @@ public struct MetalCanvasView: NSViewRepresentable {
                 renderer.zoomScale = 1.0
                 renderer.panOffset = .zero
             } else {
-                let target100 = renderer.zoomScale100
+                let target100 = renderer.zoomScale100 > 1.05 ? renderer.zoomScale100 : 3.0
                 vm.zoomScale = target100
                 renderer.zoomScale = target100
                 
@@ -257,6 +263,17 @@ public final class CanvasMTKView: MTKView {
     private var trackingArea: NSTrackingArea?
     
     public override var acceptsFirstResponder: Bool { true }
+    
+    public override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        if let coordinator = coordinator, let renderer = coordinator.renderer {
+            renderer.updateQuad(viewSize: self.drawableSize)
+            let z100 = renderer.zoomScale100
+            DispatchQueue.main.async {
+                coordinator.viewModel?.zoomScale100 = z100
+            }
+        }
+    }
     
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()

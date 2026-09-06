@@ -168,7 +168,8 @@ public final class AppViewModel {
     }
     
     public func zoomTo100() {
-        zoomScale = max(1.0, zoomScale100)
+        let target = zoomScale100 > 1.05 ? zoomScale100 : 3.0
+        zoomScale = target
         panOffset = .zero
     }
     
@@ -176,7 +177,8 @@ public final class AppViewModel {
         if isZoomed {
             zoomToFit()
         } else {
-            zoomScale = max(1.0, zoomScale100)
+            let target = zoomScale100 > 1.05 ? zoomScale100 : 3.0
+            zoomScale = target
             panOffset = CGPoint(x: -pointInNDC.x * CGFloat(zoomScale - 1.0), y: -pointInNDC.y * CGFloat(zoomScale - 1.0))
         }
     }
@@ -609,12 +611,7 @@ public final class AppViewModel {
             if preview == nil && !self.selectedPhotoIsRaw {
                 let url = URL(fileURLWithPath: photo.filePath) as CFURL
                 if let src = CGImageSourceCreateWithURL(url, nil) {
-                    let options: [CFString: Any] = [
-                        kCGImageSourceCreateThumbnailFromImageAlways: true,
-                        kCGImageSourceCreateThumbnailWithTransform: true,
-                        kCGImageSourceThumbnailMaxPixelSize: 3840
-                    ]
-                    if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
+                    if let cgThumb = CGImageSourceCreateImageAtIndex(src, 0, nil) {
                         preview = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
                     }
                 }
@@ -641,7 +638,8 @@ public final class AppViewModel {
                     guard let self = self else { return }
                     guard self.activeDecodeToken == token else { return }
                     
-                    if let rawRecord = decodeRawPreview(path: photo.filePath, maxDimension: 2560) {
+                    // Decode full unconstrained sensor resolution for true 1:1 pixel inspection
+                    if let rawRecord = decodeRawPreview(path: photo.filePath, maxDimension: nil) {
                         DispatchQueue.main.async {
                             if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
                                 self.rawPreviewRecord = rawRecord
