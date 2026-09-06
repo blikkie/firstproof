@@ -252,20 +252,16 @@ pub struct RawPreviewRecord {
     pub height: u32,
     pub data: Vec<u8>,
     pub is_linear_float: bool,
-    pub as_shot_temperature: f32,
-    pub as_shot_tint: f32,
 }
 
 #[uniffi::export]
 pub fn decode_raw_preview(path: String, max_dimension: Option<u32>) -> Option<RawPreviewRecord> {
     match export::decode_raw_preview_buffer(&path, max_dimension) {
-        Ok((width, height, data, as_shot_temperature, as_shot_tint)) => Some(RawPreviewRecord {
+        Ok((width, height, data)) => Some(RawPreviewRecord {
             width,
             height,
             data,
             is_linear_float: true,
-            as_shot_temperature,
-            as_shot_tint,
         }),
         Err(e) => {
             eprintln!("Failed to decode RAW preview for {}: {}", path, e);

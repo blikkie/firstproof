@@ -440,8 +440,6 @@ public final class AppViewModel {
         self.isDemosaicing = true
         
         self.rawPreviewRecord = nil
-        self.asShotTemperature = 5500.0
-        self.asShotTint = 0.0
         
         // Fast switch: immediately present cached thumbnail so user can scrub instantly
         if let cached = ThumbnailCache.shared.image(for: photo.filePath) {
@@ -513,13 +511,6 @@ public final class AppViewModel {
                             if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
                                 self.rawPreviewRecord = rawRecord
                                 self.isDemosaicing = false
-                                self.asShotTemperature = rawRecord.asShotTemperature
-                                self.asShotTint = rawRecord.asShotTint
-                                
-                                if readXmp(path: photo.filePath) == nil {
-                                    self.temperature = rawRecord.asShotTemperature
-                                    self.tint = rawRecord.asShotTint
-                                }
                             }
                         }
                         return
