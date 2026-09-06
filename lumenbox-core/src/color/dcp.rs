@@ -606,14 +606,19 @@ impl DcpProfile {
     /// - If only ColorMatrix is present:
     ///   Derives normalized $\text{Sensor} \to \text{Rec.2020}$ inverse per Adobe DNG specification.
     pub fn interpolate_sensor_to_rec2020(&self, temp_kelvin: f32) -> Matrix3x3 {
+        // D50 chromaticity (0.3457, 0.3585) -> D65 chromaticity (0.3127, 0.3290) CAT16 matrix
+        let d50_to_d65 = crate::color::cat16_adaptation_matrix((0.3457, 0.3585), (0.3127, 0.3290));
+        let xyz_to_rec2020 = crate::color::ColorSpacePrimaries::REC2020.xyz_to_rgb_matrix();
+        let rec2020_to_xyz = crate::color::ColorSpacePrimaries::REC2020.rgb_to_xyz_matrix();
+
         if let Some(fm) = self.interpolate_forward_matrix(temp_kelvin) {
-            // Sensor -> XYZ D50 -> XYZ D65 -> Linear Rec.2020
-            let sensor_to_xyz_d65 = BRADFORD_D50_TO_D65.multiply_matrix(&fm);
-            XYZ_D65_TO_REC2020.multiply_matrix(&sensor_to_xyz_d65)
+            // Sensor -> XYZ D50 -> CAT16 XYZ D65 -> Dynamic Linear Rec.2020
+            let sensor_to_xyz_d65 = d50_to_d65.multiply_matrix(&fm);
+            xyz_to_rec2020.multiply_matrix(&sensor_to_xyz_d65)
         } else {
             // Derive from ColorMatrix (XYZ D50 -> Sensor):
             let xyz2cam = self.interpolate_color_matrix(temp_kelvin);
-            let rec2cam_raw = xyz2cam.multiply_matrix(&REC2020_TO_XYZ_D65);
+            let rec2cam_raw = xyz2cam.multiply_matrix(&rec2020_to_xyz);
             
             // Normalize rows so neutral [1, 1, 1] in Rec.2020 maps to neutral [1, 1, 1] in Sensor
             let norm_r = (rec2cam_raw.0[0][0] + rec2cam_raw.0[0][1] + rec2cam_raw.0[0][2]).max(1e-6);

@@ -169,6 +169,31 @@ pub const REC2020_TO_DISPLAY_P3: Matrix3x3 = Matrix3x3([
     [-0.0125866, -0.0527376,  1.0653242],
 ]);
 
+/// Returns dynamic CAT16 chromatic adaptation matrix mapping CIE XYZ (D50) -> CIE XYZ (D65)
+pub fn d50_to_d65_cat16_matrix() -> Matrix3x3 {
+    cat16_adaptation_matrix((0.3457, 0.3585), (0.3127, 0.3290))
+}
+
+/// Returns dynamic CAT16 chromatic adaptation matrix mapping CIE XYZ (D65) -> CIE XYZ (D50)
+pub fn d65_to_d50_cat16_matrix() -> Matrix3x3 {
+    cat16_adaptation_matrix((0.3127, 0.3290), (0.3457, 0.3585))
+}
+
+/// Returns dynamic conversion matrix mapping Linear Rec.2020 -> Linear sRGB
+pub fn rec2020_to_linear_srgb_matrix() -> Matrix3x3 {
+    ColorSpacePrimaries::REC2020.conversion_matrix_to(&ColorSpacePrimaries::SRGB)
+}
+
+/// Returns dynamic conversion matrix mapping Linear sRGB -> Linear Rec.2020
+pub fn linear_srgb_to_rec2020_matrix() -> Matrix3x3 {
+    ColorSpacePrimaries::SRGB.conversion_matrix_to(&ColorSpacePrimaries::REC2020)
+}
+
+/// Returns dynamic conversion matrix mapping Linear Rec.2020 -> Display P3 (D65)
+pub fn rec2020_to_display_p3_matrix() -> Matrix3x3 {
+    ColorSpacePrimaries::REC2020.conversion_matrix_to(&ColorSpacePrimaries::DISPLAY_P3)
+}
+
 // ---------------------------------------------------------------------------
 // Dynamic Color Science & Primary Algebra
 // ---------------------------------------------------------------------------
