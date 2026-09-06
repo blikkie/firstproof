@@ -16,14 +16,16 @@ pub struct DemosaicedImage {
     pub width: usize,
     pub height: usize,
     pub data: Vec<f32>, // Width * Height * 3 (Linear RGB in range 0.0 .. 1.0)
+    pub is_raw: bool,
 }
 
 impl DemosaicedImage {
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: usize, height: usize, is_raw: bool) -> Self {
         Self {
             width,
             height,
             data: vec![0.0; width * height * 3],
+            is_raw,
         }
     }
 }
@@ -37,7 +39,7 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
     if let Ok(frame) = crate::raw_decoder::RawDecoder::decode(&decoder, path) {
         let active_w = frame.active_width;
         let active_h = frame.active_height;
-        let mut demosaiced = DemosaicedImage::new(active_w, active_h);
+        let mut demosaiced = DemosaicedImage::new(active_w, active_h, true);
         let (wb_r, wb_b) = frame.as_shot_wb();
         
         // Derive exact Camera -> Linear Rec.2020 matrix using standard RAW colorimetric derivation:
@@ -118,7 +120,7 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
     let width = rgb.width() as usize;
     let height = rgb.height() as usize;
     
-    let mut demosaiced = DemosaicedImage::new(width, height);
+    let mut demosaiced = DemosaicedImage::new(width, height, false);
     for (i, pixel) in rgb.pixels().enumerate() {
         let out_idx = i * 3;
         let r_lin = srgb_gamma_to_linear((pixel[0] as f32) / 255.0);
@@ -136,7 +138,7 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
 
 /// Applies user edits (Exposure, White Balance, Contrast, Display gamma) in 16-bit linear space.
 pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
-    let total_exposure = edits.exposure + 0.65;
+    let total_exposure = if image.is_raw { edits.exposure + 0.65 } else { edits.exposure };
     let exposure_gain = 2.0f32.powf(total_exposure);
     let contrast_gain = 1.0 + (edits.contrast / 100.0);
     
@@ -162,7 +164,7 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
         g *= g_scale;
         b *= b_scale;
         
-        // 2. Linear Exposure (including baseline camera gain)
+        // 2. Linear Exposure (including baseline camera gain for RAW)
         r *= exposure_gain;
         g *= exposure_gain;
         b *= exposure_gain;
@@ -170,19 +172,21 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
         // 3. Baseline Filmic Tone Curve (Mid-Gray Sigmoid S-Curve)
         // Shapes linear sensor photons into photographic contrast:
         // anchors deep shadows, expands midtone contrast, and smoothly compresses highlights.
-        let shape_channel = |c: f32| -> f32 {
-            let x = c.max(0.0);
-            // Filmic rational polynomial tone mapper: x * (1 + 0.5 * x) / (1 + x * (1 + 0.25 * x))
-            let mid_scale = 0.18f32;
-            let norm = x / mid_scale;
-            let curved = mid_scale * (norm.powf(1.15 * contrast_gain));
-            // Highlight compression shoulder
-            curved / (1.0 + curved * 0.35)
-        };
-        
-        r = shape_channel(r);
-        g = shape_channel(g);
-        b = shape_channel(b);
+        if image.is_raw || edits.contrast != 0.0 {
+            let shape_channel = |c: f32| -> f32 {
+                let x = c.max(0.0);
+                // Filmic rational polynomial tone mapper: x * (1 + 0.5 * x) / (1 + x * (1 + 0.25 * x))
+                let mid_scale = 0.18f32;
+                let norm = x / mid_scale;
+                let curved = mid_scale * (norm.powf(1.15 * contrast_gain));
+                // Highlight compression shoulder
+                curved / (1.0 + curved * 0.35)
+            };
+            
+            r = shape_channel(r);
+            g = shape_channel(g);
+            b = shape_channel(b);
+        }
         
         // Linear Rec.2020 working values (gamma OETF applied at final 8-bit export encode)
         image.data[idx] = r.max(0.0);
@@ -465,146 +469,13 @@ mod tests {
     }
 
     #[test]
-    fn test_debug_cr2() {
-        let path = "/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0265.CR2";
-        let out_path = "/Users/blikkie/Desktop/20250409_0265_calibrated.jpg";
-
-        let decoder = crate::raw_decoder::RawlerDecoder;
-        if let Ok(frame) = crate::raw_decoder::RawDecoder::decode(&decoder, Path::new(path)) {
-            let hx = frame.active_x + frame.active_width / 3;
-            let hy = frame.active_y + frame.active_height / 2;
-            let sx = frame.active_x + frame.active_width / 4;
-            let sy = frame.active_y + frame.active_height / 4;
-            let cx = frame.active_x + frame.active_width / 2;
-            let cy = frame.active_y + (frame.active_height * 55) / 100;
-            
-            let h_val = frame.sensor_data[hy * frame.full_width + hx];
-            let s_val = frame.sensor_data[sy * frame.full_width + sx];
-            let c_val = frame.sensor_data[cy * frame.full_width + cx];
-            
-            println!("RAW SENSOR VALUES:");
-            println!("  Hair raw: {} (norm: {:.4})", h_val, frame.sample_normalized(hx, hy));
-            println!("  Sky raw:  {} (norm: {:.4})", s_val, frame.sample_normalized(sx, sy));
-            println!("  Cheek raw: {} (norm: {:.4})", c_val, frame.sample_normalized(cx, cy));
-        }
-        
-        if let Ok(raw) = rawler::decode_file(path) {
-            println!("RAWLER MAKE/MODEL: {:?} / {:?}", raw.camera.make, raw.camera.model);
-            println!("RAWLER DIMS: width={}, height={}", raw.width, raw.height);
-            println!("RAWLER CFA: {:?}", raw.camera.cfa);
-            println!("RAWLER CFA (0,0): {:?}", raw.camera.cfa.color_at(0, 0));
-            println!("RAWLER CFA (0,1): {:?}", raw.camera.cfa.color_at(0, 1));
-            println!("RAWLER CFA (1,0): {:?}", raw.camera.cfa.color_at(1, 0));
-            println!("RAWLER CFA (1,1): {:?}", raw.camera.cfa.color_at(1, 1));
-            println!("RAWLER CROP: {:?}", raw.crop_area);
-            println!("RAWLER COLOR MATRIX RAW: {:?}", raw.color_matrix);
-            println!("RAWLER BLACK LEVEL: {:?}", raw.blacklevel);
-            println!("RAWLER WHITE LEVEL: {:?}", raw.whitelevel);
-            println!("RAWLER WB COEFFS: {:?}", raw.wb_coeffs);
-            
-            // Check sensor data values in dark hair vs sky
-            if let rawler::RawImageData::Integer(cfa) = &raw.data {
-                println!("TOTAL CFA SAMPLES: {}", cfa.len());
-                let min_val = cfa.iter().copied().min();
-                let max_val = cfa.iter().copied().max();
-                println!("RAW CFA MIN VAL: {:?}, MAX VAL: {:?}", min_val, max_val);
-            }
-        }
-        
-        let edits = EditSettings {
-            exposure: 0.0,
-            contrast: 0.0,
-            temperature: 5500.0,
-            tint: 0.0,
-            crop_left: 0.0,
-            crop_top: 0.0,
-            crop_right: 1.0,
-            crop_bottom: 1.0,
-            crop_angle: 0.0,
-        };
-        
-        let _ = export_photo_file(path, out_path, &edits, None, 90, Some(500));
-        
-        // 1. Camera Embedded JPEG
-        if let Ok(preview_bytes) = crate::raw::extract_preview_jpeg(path) {
-            if let Ok(cam_img) = image::load_from_memory(&preview_bytes) {
-                let rgb = cam_img.to_rgb8();
-                let w = rgb.width();
-                let h = rgb.height();
-                // Sky (center top), Hair (mid upper-left), Cheek (center)
-                let p_sky = rgb.get_pixel(w / 4, h / 4);
-                let p_hair = rgb.get_pixel(w / 3, h / 2);
-                let p_cheek = rgb.get_pixel(w / 2, (h * 55) / 100);
-                println!("CAMERA JPEG SAMPLES:");
-                println!("  Sky:   R={}, G={}, B={}", p_sky[0], p_sky[1], p_sky[2]);
-                println!("  Hair:  R={}, G={}, B={}", p_hair[0], p_hair[1], p_hair[2]);
-                println!("  Cheek: R={}, G={}, B={}", p_cheek[0], p_cheek[1], p_cheek[2]);
-            }
-        }
-        
-        // 2. Calibrated Exported Image
-        if let Ok(img) = image::open(out_path) {
-            let rgb = img.to_rgb8();
-            let w = rgb.width();
-            let h = rgb.height();
-            let p_sky = rgb.get_pixel(w / 4, h / 4);
-            let p_hair = rgb.get_pixel(w / 3, h / 2);
-            let p_cheek = rgb.get_pixel(w / 2, (h * 55) / 100);
-            println!("CALIBRATED RAW EXPORT SAMPLES:");
-            println!("  Sky:   R={}, G={}, B={}", p_sky[0], p_sky[1], p_sky[2]);
-            println!("  Hair:  R={}, G={}, B={}", p_hair[0], p_hair[1], p_hair[2]);
-            println!("  Cheek: R={}, G={}, B={}", p_cheek[0], p_cheek[1], p_cheek[2]);
-        }
-        
-        // 4. LumenBox Export on Desktop vs Screenshot Comparison
-        let export_desktop = "/Users/blikkie/Desktop/20250409_0265_LumenBox.jpg";
-        let screenshot_desktop = "/Users/blikkie/Desktop/Screenshot 2026-09-05 at 9.45.54\u{202f}PM.png";
-        
-        if let (Ok(exp_img), Ok(sc_img)) = (image::open(export_desktop), image::open(screenshot_desktop)) {
-            let exp_rgb = exp_img.to_rgb8();
-            let sc_rgb = sc_img.to_rgb8();
-            
-            let ew = exp_rgb.width();
-            let eh = exp_rgb.height();
-            let sw = sc_rgb.width();
-            let sh = sc_rgb.height();
-            
-            println!("\n========================================================");
-            println!("🔍 DESKTOP EXPORT vs SCREENSHOT PARITY COMPARISON:");
-            println!("Export dims: {}x{}, Screenshot dims: {}x{}", ew, eh, sw, sh);
-            
-            // Check several normalized regions: Sky, Cheek, Sweater, Hair
-            let sample_points = [
-                ("Sky (Cyan)", 0.25f32, 0.25f32),
-                ("Cheek (Skin)", 0.50f32, 0.55f32),
-                ("Sweater", 0.50f32, 0.78f32),
-                ("Hair (Dark)", 0.33f32, 0.50f32),
-            ];
-            
-            for (name, fx, fy) in sample_points {
-                let ep = exp_rgb.get_pixel(((ew as f32 * fx) as u32).min(ew - 1), ((eh as f32 * fy) as u32).min(eh - 1));
-                let sp = sc_rgb.get_pixel(((sw as f32 * fx) as u32).min(sw - 1), ((sh as f32 * fy) as u32).min(sh - 1));
-                
-                println!("  [{}]:", name);
-                println!("    Export JPEG: R={}, G={}, B={}", ep[0], ep[1], ep[2]);
-                println!("    Screenshot:  R={}, G={}, B={}", sp[0], sp[1], sp[2]);
-                println!("    Difference:  ΔR={:+4}, ΔG={:+4}, ΔB={:+4}", 
-                    sp[0] as i32 - ep[0] as i32,
-                    sp[1] as i32 - ep[1] as i32,
-                    sp[2] as i32 - ep[2] as i32
-                );
-            }
-            println!("========================================================\n");
-        }
-    }
-
-    #[test]
     fn test_pipeline_parity_math() {
         // Verify that 18% mid-gray in linear Rec.2020 transforms to expected display midtone
         let mut img = DemosaicedImage {
             width: 1,
             height: 1,
             data: vec![0.18, 0.18, 0.18],
+            is_raw: true,
         };
         let edits = EditSettings {
             exposure: 0.0,
