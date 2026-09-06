@@ -94,50 +94,68 @@ struct InspectorView: View {
         }
     }
     
-    // MARK: - Single Photo Panel (Workspace Tabs Architecture)
+    // MARK: - Single Photo Panel (Context-Aware: Metadata in Grid, Workspace Tabs in Detail)
     @ViewBuilder
     private func singlePhotoPanel(for photo: PhotoRecord) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             // 1. Permanent Filename & Header Card (Always Visible)
             permanentHeaderCard(for: photo)
             
-            // 2. Workspace Tabs Segmented Picker & Reset All Button
-            HStack(spacing: 8) {
-                Picker("Workspace Tab", selection: $viewModel.selectedInspectorTab) {
-                    ForEach(InspectorTab.allCases) { tab in
-                        Image(systemName: tab.iconName)
-                            .help(tab.rawValue)
-                            .tag(tab)
+            if viewModel.canvasMode == .detail {
+                // In Detail Mode: Full Development Workspace Tabs & Reset All Button
+                HStack(spacing: 8) {
+                    Picker("Workspace Tab", selection: $viewModel.selectedInspectorTab) {
+                        ForEach(InspectorTab.allCases) { tab in
+                            Image(systemName: tab.iconName)
+                                .help(tab.rawValue)
+                                .tag(tab)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    
+                    Button(action: {
+                        viewModel.resetAllSliders()
+                    }) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!viewModel.hasCustomEdits)
+                    .help("Reset All Edits to As-Shot (Cmd+Shift+R)")
                 }
-                .pickerStyle(.segmented)
+                
+                Divider()
+                
+                // Active Workspace Tab View
+                switch viewModel.selectedInspectorTab {
+                case .light:
+                    lightWorkspaceTab
+                case .color:
+                    colorWorkspaceTab
+                case .optics:
+                    opticsWorkspaceTab
+                case .detail:
+                    detailWorkspaceTab
+                case .metadata:
+                    metadataWorkspaceTab(for: photo)
+                }
+            } else {
+                // In Grid Mode: Metadata editing only (Rating, Flags, EXIF, Takeout)
+                metadataWorkspaceTab(for: photo)
+                
+                Divider()
                 
                 Button(action: {
-                    viewModel.resetAllSliders()
+                    viewModel.enterDetailMode()
                 }) {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 11, weight: .semibold))
+                    Label("Develop in Detail View (Return)", systemImage: "slider.horizontal.3")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(!viewModel.hasCustomEdits)
-                .help("Reset All Edits to As-Shot (Cmd+Shift+R)")
-            }
-            
-            Divider()
-            
-            // 3. Active Workspace Tab View
-            switch viewModel.selectedInspectorTab {
-            case .light:
-                lightWorkspaceTab
-            case .color:
-                colorWorkspaceTab
-            case .optics:
-                opticsWorkspaceTab
-            case .detail:
-                detailWorkspaceTab
-            case .metadata:
-                metadataWorkspaceTab(for: photo)
+                .controlSize(.regular)
+                .padding(.top, 2)
             }
         }
     }
