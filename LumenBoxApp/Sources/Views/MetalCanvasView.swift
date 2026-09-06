@@ -1,13 +1,47 @@
 import SwiftUI
 import AppKit
 import MetalKit
+import LumenBoxBridge
 
 public struct MetalCanvasView: NSViewRepresentable {
     @Bindable var viewModel: AppViewModel
+    let exposure: Float
+    let contrast: Float
+    let temperature: Float
+    let tint: Float
+    let straightenAngle: Float
+    let lensCorrectionEnabled: Bool
+    let selectedLutName: String?
+    let lutIntensity: Float
+    let toneProfile: ColorProfileMode
+    let rotationDegrees: Int
     let isShowingOriginal: Bool
     
-    public init(viewModel: AppViewModel, isShowingOriginal: Bool) {
+    public init(
+        viewModel: AppViewModel,
+        exposure: Float,
+        contrast: Float,
+        temperature: Float,
+        tint: Float,
+        straightenAngle: Float,
+        lensCorrectionEnabled: Bool,
+        selectedLutName: String?,
+        lutIntensity: Float,
+        toneProfile: ColorProfileMode,
+        rotationDegrees: Int,
+        isShowingOriginal: Bool
+    ) {
         self.viewModel = viewModel
+        self.exposure = exposure
+        self.contrast = contrast
+        self.temperature = temperature
+        self.tint = tint
+        self.straightenAngle = straightenAngle
+        self.lensCorrectionEnabled = lensCorrectionEnabled
+        self.selectedLutName = selectedLutName
+        self.lutIntensity = lutIntensity
+        self.toneProfile = toneProfile
+        self.rotationDegrees = rotationDegrees
         self.isShowingOriginal = isShowingOriginal
     }
     
@@ -45,7 +79,7 @@ public struct MetalCanvasView: NSViewRepresentable {
                 renderer.updateTexture(with: image)
             }
             
-            if let lutName = viewModel.selectedLutName {
+            if let lutName = selectedLutName {
                 let lutRecord = viewModel.resolveLutRecord(for: lutName)
                 renderer.updateLutTexture(with: lutRecord)
                 context.coordinator.lastLutName = lutName
@@ -84,15 +118,15 @@ public struct MetalCanvasView: NSViewRepresentable {
         }
         
         // 2. Transmit Slider & Lensfun Uniforms to GPU
-        renderer.uniforms.exposure = viewModel.exposure
-        renderer.uniforms.temperature = viewModel.temperature
-        renderer.uniforms.tint = viewModel.tint
-        renderer.uniforms.contrast = viewModel.contrast
-        renderer.uniforms.straightenAngle = viewModel.straightenAngle * (.pi / 180.0)
-        renderer.uniforms.lensCorrectionEnabled = viewModel.lensCorrectionEnabled ? 1 : 0
+        renderer.uniforms.exposure = exposure
+        renderer.uniforms.temperature = temperature
+        renderer.uniforms.tint = tint
+        renderer.uniforms.contrast = contrast
+        renderer.uniforms.straightenAngle = straightenAngle * (.pi / 180.0)
+        renderer.uniforms.lensCorrectionEnabled = lensCorrectionEnabled ? 1 : 0
         renderer.uniforms.isOriginal = isShowingOriginal ? 1.0 : 0.0
         
-        switch viewModel.toneProfile {
+        switch toneProfile {
         case .agxVivid:
             renderer.uniforms.toneProfileMode = 0
         case .agxFilmic:
@@ -121,10 +155,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         }
         
         // 3. Update 3D LUT texture if LUT selection changed
-        let lutChanged = context.coordinator.lastLutName != viewModel.selectedLutName
+        let lutChanged = context.coordinator.lastLutName != selectedLutName
         if lutChanged {
-            context.coordinator.lastLutName = viewModel.selectedLutName
-            if let lutName = viewModel.selectedLutName {
+            context.coordinator.lastLutName = selectedLutName
+            if let lutName = selectedLutName {
                 let lutRecord = viewModel.resolveLutRecord(for: lutName)
                 renderer.updateLutTexture(with: lutRecord)
             } else {
@@ -132,11 +166,11 @@ public struct MetalCanvasView: NSViewRepresentable {
             }
         }
         
-        renderer.uniforms.lutEnabled = (viewModel.selectedLutName != nil) ? 1 : 0
-        renderer.uniforms.lutIntensity = viewModel.lutIntensity
+        renderer.uniforms.lutEnabled = (selectedLutName != nil) ? 1 : 0
+        renderer.uniforms.lutIntensity = lutIntensity
         
-        // Trigger live redraw on MTKView
-        nsView.setNeedsDisplay(nsView.bounds)
+        // Trigger immediate synchronous draw call on MTKView (bypasses AppKit NSEventTracking coalescing)
+        nsView.draw()
     }
     
     public class Coordinator {

@@ -179,7 +179,7 @@ struct CanvasView: View {
                                     .edgesIgnoringSafeArea(.all)
                                 
                                 if viewModel.previewImage != nil {
-                                    MetalCanvasView(viewModel: viewModel, isShowingOriginal: isShowingOriginal)
+                                    DetailMetalCanvasContainer(viewModel: viewModel, isShowingOriginal: isShowingOriginal)
                                         .padding(16)
                                         .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
                                         .overlay(
@@ -525,6 +525,31 @@ struct GridThumbnailCell: View, Equatable {
             TapGesture().onEnded {
                 action()
             }
+        )
+    }
+}
+
+// MARK: - Dedicated Detail Canvas Container
+// Evaluated independently by SwiftUI to track live slider and orientation changes at 120 FPS
+// without invalidating the parent CanvasView or the background LazyVGrid hierarchy.
+struct DetailMetalCanvasContainer: View {
+    @Bindable var viewModel: AppViewModel
+    let isShowingOriginal: Bool
+    
+    var body: some View {
+        MetalCanvasView(
+            viewModel: viewModel,
+            exposure: viewModel.exposure,
+            contrast: viewModel.contrast,
+            temperature: viewModel.temperature,
+            tint: viewModel.tint,
+            straightenAngle: viewModel.straightenAngle,
+            lensCorrectionEnabled: viewModel.lensCorrectionEnabled,
+            selectedLutName: viewModel.selectedLutName,
+            lutIntensity: viewModel.lutIntensity,
+            toneProfile: viewModel.toneProfile,
+            rotationDegrees: viewModel.rotationDegrees,
+            isShowingOriginal: isShowingOriginal
         )
     }
 }
