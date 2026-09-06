@@ -105,6 +105,53 @@ impl RawSensorFrame {
         (wb_r, wb_b)
     }
 
+    /// Computes the camera's As-Shot Correlated Color Temperature (in Kelvin) and Tint
+    /// from the camera WB multipliers and sensor color matrix.
+    pub fn as_shot_kelvin_and_tint(&self) -> (f32, f32) {
+        let (wb_r, wb_b) = self.as_shot_wb();
+        if wb_r <= 0.0 || wb_b <= 0.0 {
+            return (5500.0, 0.0);
+        }
+
+        // Neutral sensor response vector: [1/wb_r, 1.0, 1/wb_b]
+        let cam_neutral = crate::color::Color3::new(1.0 / wb_r, 1.0, 1.0 / wb_b);
+
+        let m_cam = self.color_matrix
+            .map(crate::color::Matrix3x3)
+            .unwrap_or_else(|| crate::color::dcp::DcpProfile::built_in_for_camera(&self.camera_model).color_matrix1);
+
+        let m_cam_inv = m_cam.inverse().unwrap_or(crate::color::Matrix3x3::IDENTITY);
+
+        // Transform sensor neutral vector into XYZ D65 space
+        let xyz_ill = m_cam_inv.multiply_vector(cam_neutral);
+        let sum_xyz = (xyz_ill.r() + xyz_ill.g() + xyz_ill.b()).max(1e-6);
+
+        let x = (xyz_ill.r() / sum_xyz).clamp(0.1, 0.9);
+        let y = (xyz_ill.g() / sum_xyz).clamp(0.1, 0.9);
+
+        // McCamy's approximation formula for Correlated Color Temperature (CCT)
+        let n = (x - 0.3320) / (0.1858 - y).max(1e-6);
+        let cct = 449.0 * n * n * n + 3525.0 * n * n + 6823.3 * n + 5520.33;
+        let kelvin = cct.clamp(2000.0, 50000.0);
+
+        // Tint estimation in u'v' space
+        let denom = (-2.0 * x + 12.0 * y + 3.0).max(1e-6);
+        let _u_prime = 4.0 * x / denom;
+        let v_prime = 9.0 * y / denom;
+
+        let (x_planck, y_planck) = crate::color::kelvin_and_tint_to_xy(kelvin, 0.0);
+        let denom_p = (-2.0 * x_planck + 12.0 * y_planck + 3.0).max(1e-6);
+        let v_prime_p = 9.0 * y_planck / denom_p;
+
+        let tint = ((v_prime - v_prime_p) / 0.0002).clamp(-150.0, 150.0);
+
+        // Round Kelvin to nearest 50K and tint to nearest integer for clean UI display
+        let kelvin_rounded = (kelvin / 50.0).round() * 50.0;
+        let tint_rounded = tint.round();
+
+        (kelvin_rounded, tint_rounded)
+    }
+
     /// Computes the camera sensor to Linear Rec.2020 matrix dynamically interpolated
     /// for the specified white balance temperature (in Kelvin).
     pub fn sensor_to_rec2020_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3 {

@@ -16,6 +16,8 @@ pub struct DemosaicedImage {
     pub height: usize,
     pub data: Vec<f32>, // Width * Height * 3 (Linear RGB in range 0.0 .. 1.0)
     pub is_raw: bool,
+    pub as_shot_kelvin: f32,
+    pub as_shot_tint: f32,
 }
 
 impl DemosaicedImage {
@@ -25,6 +27,8 @@ impl DemosaicedImage {
             height,
             data: vec![0.0; width * height * 3],
             is_raw,
+            as_shot_kelvin: 5500.0,
+            as_shot_tint: 0.0,
         }
     }
 }
@@ -40,10 +44,13 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
         let active_h = frame.active_height;
         let mut demosaiced = DemosaicedImage::new(active_w, active_h, true);
         let (wb_r, wb_b) = frame.as_shot_wb();
+        let (as_shot_kelvin, as_shot_tint) = frame.as_shot_kelvin_and_tint();
+        demosaiced.as_shot_kelvin = as_shot_kelvin;
+        demosaiced.as_shot_tint = as_shot_tint;
         
         // Derive Camera -> Linear Rec.2020 matrix dynamically interpolated
-        // along the Planckian blackbody locus for the photo's as-shot / default daylight temperature (5500K).
-        let sensor_to_rec2020 = frame.sensor_to_rec2020_at(5500.0);
+        // along the Planckian blackbody locus for the photo's as-shot camera white balance.
+        let sensor_to_rec2020 = frame.sensor_to_rec2020_at(as_shot_kelvin);
         for y in 0..active_h {
             let full_y = (frame.active_y + y).min(frame.full_height - 2).max(1);
             
@@ -295,7 +302,7 @@ pub fn f16_to_f32(val: u16) -> f32 {
 }
 
 /// Decodes a RAW image into a 16-bit half-float RGBA preview buffer in Wide-Gamut Linear Rec.2020 space.
-pub fn decode_raw_preview_buffer<P: AsRef<Path>>(path: P, max_dimension: Option<u32>) -> Result<(u32, u32, Vec<u8>), String> {
+pub fn decode_raw_preview_buffer<P: AsRef<Path>>(path: P, max_dimension: Option<u32>) -> Result<(u32, u32, Vec<u8>, f32, f32), String> {
     let demosaiced = decode_image(path)?;
     
     let orig_w = demosaiced.width;
@@ -339,7 +346,7 @@ pub fn decode_raw_preview_buffer<P: AsRef<Path>>(path: P, max_dimension: Option<
         }
     }
     
-    Ok((target_w as u32, target_h as u32, out_rgba_f16))
+    Ok((target_w as u32, target_h as u32, out_rgba_f16, demosaiced.as_shot_kelvin, demosaiced.as_shot_tint))
 }
 
 /// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing and Lensfun distortion correction.
@@ -586,6 +593,8 @@ mod tests {
             height: 1,
             data: vec![0.18, 0.18, 0.18],
             is_raw: true,
+            as_shot_kelvin: 5500.0,
+            as_shot_tint: 0.0,
         };
         let edits = EditSettings {
             exposure: 0.0,

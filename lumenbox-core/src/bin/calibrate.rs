@@ -38,7 +38,7 @@ fn main() {
 
     // 2. Decode RAW Sensor Pipeline
     let max_dim = 1200u32;
-    let (raw_w, raw_h, raw_rgba) = match decode_raw_preview_buffer(raw_path, Some(max_dim)) {
+    let (raw_w, raw_h, raw_rgba, _, _) = match decode_raw_preview_buffer(raw_path, Some(max_dim)) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Error decoding RAW sensor preview: {}", e);
