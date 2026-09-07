@@ -37,7 +37,7 @@ Photographers rely on tone curves for surgical control over tonal contrast and s
     *   Bake the evaluated 256-sample curve into a 1D Metal texture (`MTLTextureType1D` with linear filtering) or evaluate directly in `Shaders.metal` with zero GPU latency.
 
 ### Sharpening, Detail Masking & Clarity Engine (P1)
-Camera optical low-pass filters (OLPF) and 2x2 Bayer demosaic reconstruction inherently introduce subtle high-frequency smoothing. Camera internal JPEGs counteract this by baking in aggressive edge sharpening:
+Camera optical low-pass filters (OLPF) and 2x2 Bayer demosaic reconstruction inherently introduce subtle high-frequency smoothing (see **Story 8.4** for upgrading the RAW Bayer pipeline to directional RCD / VNG demosaicing via the `bayer` crate). Camera internal JPEGs counteract this by baking in aggressive edge sharpening:
 *   **Luminance Unsharp Masking (USM)**:
     Apply high-pass edge enhancement strictly to the perceptual Luminance (\(Y\)) channel to avoid color noise amplification:
     \[Y_{\text{sharp}} = Y + \text{Amount} \cdot (Y - \text{GaussianBlur}(Y, \sigma = \text{Radius}))\]
@@ -88,8 +88,8 @@ Google Pixel phones (Pixel 3 through Pixel 9 Pro) capture computational RAWs in 
     *   **Benefits**:
         1. **Zero Quality Loss**: The original JPEG is never recompressed or degraded.
         2. **Infinite Undo & Repurposing**: Users can adjust edits years later or export in different aspect ratios, resolutions, or color grades on demand.
-        3. **Interoperability**: Sidecars are fully compatible with Darktable, Lightroom, Adobe Bridge, and external archival systems.
-        4. **Export Engine**: Generates a pristine, freshly rendered derivative image (JPEG, WebP, or 16-bit TIFF) only when exporting or sharing.
+        3. **Interoperability**: Sidecars are written via type-safe standard builders (`xmp-writer`, Story 8.3) and are fully compatible with Darktable, Lightroom, Adobe Bridge, and external archival systems.
+        4. **Export Engine**: Generates a pristine, freshly rendered derivative image (JPEG, WebP, or 16-bit TIFF) only when exporting or sharing, using `img-parts` (Story 8.6) to inject ICC color profiles and EXIF metadata without re-encoding generations.
 
 ---
 
@@ -171,10 +171,11 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
 *   **Scope for Wide-Gamut Epic**:
     1.  **Dual-Target Export (Display P3 & sRGB)**:
         *   Provide an Export Color Space selector in the Export Sheet: **sRGB** (standard web/print compatibility) vs. **Display P3** (wide-gamut preservation for modern Apple, Android, and OLED displays).
-        *   When Display P3 export is selected, map the working Rec.2020 space directly into Display P3 coordinates and embed the official Display P3 ICC profile.
+        *   When Display P3 export is selected, map the working Rec.2020 space directly into Display P3 coordinates and embed the official Display P3 ICC profile via `img-parts` (Story 8.6).
     2.  **ColorSync Proofing & Intent Control**:
         *   Support *Soft Proofing* mode in the Canvas toolbar to simulate sRGB gamut clipping on wide-gamut displays.
-        *   Integrate LittleCMS2 (`lcms2`) in the Rust export pipeline to support Perceptual vs. Relative Colorimetric rendering intents for out-of-gamut saturated reds and magentas.
+        *   Integrate LittleCMS2 (`lcms2`, Story 8.7/Table 10) in the Rust export pipeline to support Perceptual vs. Relative Colorimetric rendering intents for out-of-gamut saturated reds and magentas.
+        *   Use `img-parts` (Story 8.6) to inject the resulting target ICC profile cleanly into the JPEG APP2 marker segment, replacing handwritten byte-scanning loops.
     3.  **Dynamic Viewport Layer Calibration**:
         *   Expose a preference to toggle the live viewport between native wide-gamut Display P3 rendering and soft-proofed sRGB.
 
@@ -305,6 +306,19 @@ An architectural audit of existing `lumenbox-core` code revealed several areas w
 *   **The Audit Finding**: Hand-rolling this pure Rust XML parser was a necessary architectural defense to avoid linking against the official `liblensfun` C++ library (which is LGPL-3.0).
 *   **Actionable Task**:
     *   Factor `lensfun.rs` into an internal standalone sub-crate (`lumenbox-lensfun`).
+
+### Story 8.6: Adopt `img-parts` for Zero-Copy JPEG APP2 ICC & Metadata Injection
+*   **Current State**: `lumenbox-core/src/export.rs:847-875` uses a handwritten byte scanner searching for `0xFF, 0xD8` (SOI) and manually constructs raw `APP2` marker chunks with `ICC_PROFILE\0\x01\x01`.
+*   **The Modernization**:
+    *   Adopt **`img-parts`** (`img-parts = "0.3"`, MIT / Apache-2.0).
+    *   Provides zero-copy parsing and manipulation of JPEG/PNG segment containers, guaranteeing conformant marker insertion (`APP1` EXIF/XMP, `APP2` ICC profile) without risks of offset truncation or stream corruption.
+
+### Story 8.7: Adopt `lcms2` for ICC Color Management, Soft-Proofing & Gamut Checking
+*   **Current State**: `lumenbox-core/src/export.rs` embeds a hardcoded static sRGB ICC byte array without colorimetric intent transformation or gamut remapping. Viewport soft-proofing relies on naive sRGB gamut clipping.
+*   **The Modernization**:
+    *   Adopt **`lcms2`** (`lcms2 = "6.0"`, MIT license, safe bindings to LittleCMS 2.16+).
+    *   Integrates the industry-standard color management engine (used by Safari and Firefox) to generate parametric ICC profiles (sRGB, Display P3, AdobeRGB), execute Perceptual and Relative Colorimetric transformations with Black Point Compensation (BPC), and calculate soft-proofing gamut alarm masks for print simulation.
+
 ---
 
 ## 9. Procedural Organic Film Grain Simulation (P3)
@@ -335,6 +349,8 @@ To preserve LumenBox's ability to be distributed as a proprietary, commercial ma
 | **Color Spaces & Metrics** | `palette` | MIT / Apache-2.0 | **Safe**. Fully permissive. Replaces hand-rolled CIEDE2000. |
 | **Vector & Matrix Math** | `glam` | MIT / Apache-2.0 | **Safe**. High-speed SIMD math matching Metal shaders. |
 | **ICC Profile Management** | `lcms2` / `lcms2-sys` | MIT | **Safe**. Safe bindings to LittleCMS2. Used by Safari/Firefox. |
+| **JPEG / PNG Metadata Chunks** | `img-parts` | MIT / Apache-2.0 | **Safe**. Structured APP2/APP1 ICC and EXIF chunk manipulation. |
+| **Demosaicing (Directional)** | `bayer` / RCD port | MIT / BSD | **Safe**. High-quality sensor demosaicing replacing bilinear. |
 | **Filmic Tone Mapping** | Internal AgX (Troy Sobotka) | CC0-1.0 / MIT | **Safe**. Standard public-domain affine matrices & polynomial sigmoid. |
 | **RAW Unpacking** | `rawler` | MPL-2.0 / MIT | **Safe**. Pure Rust RAW container reader. |
 | **EXIF Parsing** | `kamadak-exif` | BSD-2-Clause | **Safe**. Permissive EXIF metadata reader. |

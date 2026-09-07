@@ -84,53 +84,73 @@ fn parse_gps_xmp(s: &str) -> Option<f64> {
     Some(val)
 }
 
-fn escape_xml(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&apos;"),
-            _ => out.push(c),
-        }
-    }
-    out
-}
+use xmp_writer::{CustomNamespace, Namespace, XmpWriter};
 
-/// Generates XMP XML sidecar string.
+/// Generates XMP XML sidecar string using type-safe XmpWriter.
 pub fn generate_xmp(data: &XmpData) -> String {
-    let rating_attr = match data.rating {
-        Some(r) => format!(" xmp:Rating=\"{}\"", r),
-        None => "".to_string(),
-    };
-    
-    let gps_attrs = match (data.latitude, data.longitude) {
-        (Some(lat), Some(lon)) => format!(
-            " exif:GPSLatitude=\"{}\" exif:GPSLongitude=\"{}\" exif:GPSVersionID=\"2.2.0.0\"",
-            format_gps_xmp(lat, true),
-            format_gps_xmp(lon, false)
-        ),
-        _ => "".to_string(),
-    };
-    
-    let title_block = match &data.title {
-        Some(t) => format!(
-            "   <dc:title>\n    <rdf:Alt>\n     <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n    </rdf:Alt>\n   </dc:title>\n",
-            escape_xml(t)
-        ),
-        None => "".to_string(),
-    };
-    
-    let desc_block = match &data.description {
-        Some(d) => format!(
-            "   <dc:description>\n    <rdf:Alt>\n     <rdf:li xml:lang=\"x-default\">{}</rdf:li>\n    </rdf:Alt>\n   </dc:description>\n",
-            escape_xml(d)
-        ),
-        None => "".to_string(),
-    };
-    
+    let mut writer = XmpWriter::new();
+
+    // Standard Dublin Core schemas
+    if let Some(t) = &data.title {
+        writer.title([(None, t.as_str())]);
+    }
+    if let Some(d) = &data.description {
+        writer.description([(None, d.as_str())]);
+    }
+
+    // Standard XMP Rating
+    if let Some(r) = data.rating {
+        writer.element("Rating", Namespace::Xmp).value(r);
+    }
+
+    // EXIF namespace
+    let exif_ns = Namespace::Custom(Box::new(CustomNamespace::new(
+        "Exif",
+        "exif",
+        "http://ns.adobe.com/exif/1.0/",
+    )));
+    if let (Some(lat), Some(lon)) = (data.latitude, data.longitude) {
+        writer.element("GPSLatitude", exif_ns.clone()).value(format_gps_xmp(lat, true).as_str());
+        writer.element("GPSLongitude", exif_ns.clone()).value(format_gps_xmp(lon, false).as_str());
+        writer.element("GPSVersionID", exif_ns).value("2.2.0.0");
+    }
+
+    // Custom LumenBox PM namespace
+    let pm_ns = Namespace::Custom(Box::new(CustomNamespace::new(
+        "LumenBox Photo Metadata",
+        "pm",
+        "http://ns.lumenbox.app/pm/1.0/",
+    )));
+
+    writer.element("status", pm_ns.clone()).value(data.status.as_str());
+    writer.element("exposure", pm_ns.clone()).value(format!("{:.4}", data.edits.exposure).as_str());
+    writer.element("contrast", pm_ns.clone()).value(format!("{:.4}", data.edits.contrast).as_str());
+    writer.element("highlights", pm_ns.clone()).value(format!("{:.4}", data.edits.highlights).as_str());
+    writer.element("shadows", pm_ns.clone()).value(format!("{:.4}", data.edits.shadows).as_str());
+    writer.element("whites", pm_ns.clone()).value(format!("{:.4}", data.edits.whites).as_str());
+    writer.element("blacks", pm_ns.clone()).value(format!("{:.4}", data.edits.blacks).as_str());
+    writer.element("vibrance", pm_ns.clone()).value(format!("{:.4}", data.edits.vibrance).as_str());
+    writer.element("saturation", pm_ns.clone()).value(format!("{:.4}", data.edits.saturation).as_str());
+    writer.element("deepBlue", pm_ns.clone()).value(format!("{:.4}", data.edits.deep_blue).as_str());
+    writer.element("foliage", pm_ns.clone()).value(format!("{:.4}", data.edits.foliage).as_str());
+    writer.element("sharpeningAmount", pm_ns.clone()).value(format!("{:.4}", data.edits.sharpening_amount).as_str());
+    writer.element("sharpeningRadius", pm_ns.clone()).value(format!("{:.4}", data.edits.sharpening_radius).as_str());
+    writer.element("sharpeningMasking", pm_ns.clone()).value(format!("{:.4}", data.edits.sharpening_masking).as_str());
+    writer.element("noiseReduction", pm_ns.clone()).value(format!("{:.4}", data.edits.noise_reduction).as_str());
+    writer.element("temperature", pm_ns.clone()).value(format!("{:.4}", data.edits.temperature).as_str());
+    writer.element("tint", pm_ns.clone()).value(format!("{:.4}", data.edits.tint).as_str());
+    writer.element("cropLeft", pm_ns.clone()).value(format!("{:.4}", data.edits.crop_left).as_str());
+    writer.element("cropTop", pm_ns.clone()).value(format!("{:.4}", data.edits.crop_top).as_str());
+    writer.element("cropRight", pm_ns.clone()).value(format!("{:.4}", data.edits.crop_right).as_str());
+    writer.element("cropBottom", pm_ns.clone()).value(format!("{:.4}", data.edits.crop_bottom).as_str());
+    writer.element("cropAngle", pm_ns.clone()).value(format!("{:.4}", data.edits.crop_angle).as_str());
+    writer.element("perspectiveVertical", pm_ns.clone()).value(format!("{:.4}", data.edits.perspective_vertical).as_str());
+    writer.element("perspectiveHorizontal", pm_ns.clone()).value(format!("{:.4}", data.edits.perspective_horizontal).as_str());
+    writer.element("cropConstrain", pm_ns.clone()).value(if data.edits.crop_constrain { "true" } else { "false" });
+    writer.element("rotation", pm_ns.clone()).value(format!("{}", data.edits.rotation).as_str());
+    writer.element("flipHorizontal", pm_ns.clone()).value(if data.edits.flip_horizontal { "true" } else { "false" });
+    writer.element("flipVertical", pm_ns.clone()).value(if data.edits.flip_vertical { "true" } else { "false" });
+
     let tone_profile_str = match data.edits.tone_profile {
         crate::ColorProfileMode::AgxVivid => "AgxVivid",
         crate::ColorProfileMode::AgxFilmic => "AgxFilmic",
@@ -139,103 +159,62 @@ pub fn generate_xmp(data: &XmpData) -> String {
         crate::ColorProfileMode::CameraLandscape => "CameraLandscape",
         crate::ColorProfileMode::CameraVivid => "CameraVivid",
     };
+    writer.element("toneProfile", pm_ns.clone()).value(tone_profile_str);
 
-    let lut_attrs = match &data.edits.lut_name {
-        Some(name) => format!(
-            " pm:lutName=\"{}\" pm:lutIntensity=\"{:.4}\"",
-            escape_xml(name),
-            data.edits.lut_intensity
-        ),
-        None => "".to_string(),
-    };
+    if let Some(name) = &data.edits.lut_name {
+        writer.element("lutName", pm_ns.clone()).value(name.as_str());
+        writer.element("lutIntensity", pm_ns).value(format!("{:.4}", data.edits.lut_intensity).as_str());
+    }
 
-    format!(
-        r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="LumenBox Core 0.1.0">
- <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-  <rdf:Description rdf:about=""
-    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
-    xmlns:dc="http://purl.org/dc/elements/1.1/"
-    xmlns:exif="http://ns.adobe.com/exif/1.0/"
-    xmlns:pm="http://ns.lumenbox.app/pm/1.0/"
-    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"{rating_attr}{gps_attrs}
-    pm:status="{status}"
-    pm:exposure="{exposure:.4}"
-    pm:contrast="{contrast:.4}"
-    pm:highlights="{highlights:.4}"
-    pm:shadows="{shadows:.4}"
-    pm:whites="{whites:.4}"
-    pm:blacks="{blacks:.4}"
-    pm:vibrance="{vibrance:.4}"
-    pm:saturation="{saturation:.4}"
-    pm:deepBlue="{deep_blue:.4}"
-    pm:foliage="{foliage:.4}"
-    pm:sharpeningAmount="{sharpening_amount:.4}"
-    pm:sharpeningRadius="{sharpening_radius:.4}"
-    pm:sharpeningMasking="{sharpening_masking:.4}"
-    pm:noiseReduction="{noise_reduction:.4}"
-    pm:temperature="{temperature:.4}"
-    pm:tint="{tint:.4}"
-    pm:cropLeft="{crop_left:.4}"
-    pm:cropTop="{crop_top:.4}"
-    pm:cropRight="{crop_right:.4}"
-    pm:cropBottom="{crop_bottom:.4}"
-    pm:cropAngle="{crop_angle:.4}"
-    pm:perspectiveVertical="{perspective_vertical:.4}"
-    pm:perspectiveHorizontal="{perspective_horizontal:.4}"
-    pm:cropConstrain="{crop_constrain}"
-    crs:PerspectiveVertical="{perspective_vertical:.4}"
-    crs:PerspectiveHorizontal="{perspective_horizontal:.4}"
-    crs:CropConstrainToWarp="{crop_constrain_int}"
-    pm:rotation="{rotation}"
-    pm:flipHorizontal="{flip_h}"
-    pm:flipVertical="{flip_v}"
-    pm:toneProfile="{tone_profile}"{lut_attrs}>
-{title_block}{desc_block}  </rdf:Description>
- </rdf:RDF>
-</x:xmpmeta>"#,
-        status = data.status,
-        exposure = data.edits.exposure,
-        contrast = data.edits.contrast,
-        highlights = data.edits.highlights,
-        shadows = data.edits.shadows,
-        whites = data.edits.whites,
-        blacks = data.edits.blacks,
-        vibrance = data.edits.vibrance,
-        saturation = data.edits.saturation,
-        deep_blue = data.edits.deep_blue,
-        foliage = data.edits.foliage,
-        sharpening_amount = data.edits.sharpening_amount,
-        sharpening_radius = data.edits.sharpening_radius,
-        sharpening_masking = data.edits.sharpening_masking,
-        noise_reduction = data.edits.noise_reduction,
-        temperature = data.edits.temperature,
-        tint = data.edits.tint,
-        crop_left = data.edits.crop_left,
-        crop_top = data.edits.crop_top,
-        crop_right = data.edits.crop_right,
-        crop_bottom = data.edits.crop_bottom,
-        crop_angle = data.edits.crop_angle,
-        perspective_vertical = data.edits.perspective_vertical,
-        perspective_horizontal = data.edits.perspective_horizontal,
-        crop_constrain = data.edits.crop_constrain,
-        crop_constrain_int = if data.edits.crop_constrain { 1 } else { 0 },
-        rotation = data.edits.rotation,
-        flip_h = data.edits.flip_horizontal,
-        flip_v = data.edits.flip_vertical,
-        tone_profile = tone_profile_str,
-        lut_attrs = lut_attrs,
-        rating_attr = rating_attr,
-        gps_attrs = gps_attrs,
-        title_block = title_block,
-        desc_block = desc_block
-    )
+    // Adobe Camera Raw Settings (CRS) namespace for compatibility with Lightroom / Camera Raw
+    let crs_ns = Namespace::Custom(Box::new(CustomNamespace::new(
+        "Camera Raw Settings",
+        "crs",
+        "http://ns.adobe.com/camera-raw-settings/1.0/",
+    )));
+    writer.element("PerspectiveVertical", crs_ns.clone()).value(format!("{:.4}", data.edits.perspective_vertical).as_str());
+    writer.element("PerspectiveHorizontal", crs_ns.clone()).value(format!("{:.4}", data.edits.perspective_horizontal).as_str());
+    writer.element("CropConstrainToWarp", crs_ns).value(if data.edits.crop_constrain { "1" } else { "0" });
+
+    writer.finish(None)
 }
 
 /// Reads title or description child node out of the dc:title/dc:description blocks.
 fn find_rdf_li_val(node: Node) -> Option<String> {
-    let rdf_alt = node.first_element_child()?;
-    let rdf_li = rdf_alt.first_element_child()?;
-    Some(rdf_li.text()?.to_string())
+    for child in node.descendants() {
+        if child.has_tag_name(( "http://www.w3.org/1999/02/22-rdf-syntax-ns#", "li" )) || child.tag_name().name() == "li" {
+            if let Some(text) = child.text() {
+                return Some(text.trim().to_string());
+            }
+        }
+    }
+    None
+}
+
+fn find_desc_node<'a, 'd>(doc: &'a Document<'d>) -> Option<Node<'a, 'd>> {
+    for node in doc.descendants() {
+        if node.is_element()
+            && (node.has_tag_name(( "http://www.w3.org/1999/02/22-rdf-syntax-ns#", "Description" ))
+                || node.tag_name().name() == "Description")
+        {
+            return Some(node);
+        }
+    }
+    None
+}
+
+fn get_prop<'a, 'd>(desc: &'a Node<'a, 'd>, ns: &str, name: &str) -> Option<&'a str> {
+    if let Some(attr) = desc.attribute((ns, name)).or_else(|| desc.attribute(name)) {
+        return Some(attr);
+    }
+    for child in desc.children() {
+        if (child.has_tag_name((ns, name)) || child.tag_name().name() == name) && child.is_element() {
+            if let Some(text) = child.text() {
+                return Some(text.trim());
+            }
+        }
+    }
+    None
 }
 
 /// Parses XMP XML sidecar string.
@@ -243,20 +222,16 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
     let doc = Document::parse(xmp_str)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
         
-    let root = doc.root_element();
-    
-    // Find Description node inside rdf:RDF
-    let rdf_rdf = root.first_element_child()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Missing rdf:RDF node"))?;
-        
-    let desc = rdf_rdf.first_element_child()
+    let desc = find_desc_node(&doc)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Missing rdf:Description node"))?;
         
     let mut data = XmpData::default();
+    let get = |ns: &str, name: &str| -> Option<&str> {
+        get_prop(&desc, ns, name)
+    };
     
     // 1. Parse standard attributes
-    let raw_rating = desc.attribute(( "http://ns.adobe.com/xap/1.0/", "Rating" ))
-        .or_else(|| desc.attribute("Rating"))
+    let raw_rating = get("http://ns.adobe.com/xap/1.0/", "Rating")
         .and_then(|r| r.parse::<i32>().ok());
 
     if let Some(r) = raw_rating {
@@ -270,147 +245,148 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         }
     }
     
-    if let Some(lat_str) = desc.attribute(( "http://ns.adobe.com/exif/1.0/", "GPSLatitude" )) {
+    if let Some(lat_str) = get("http://ns.adobe.com/exif/1.0/", "GPSLatitude") {
         data.latitude = parse_gps_xmp(lat_str);
     }
-    if let Some(lon_str) = desc.attribute(( "http://ns.adobe.com/exif/1.0/", "GPSLongitude" )) {
+    if let Some(lon_str) = get("http://ns.adobe.com/exif/1.0/", "GPSLongitude") {
         data.longitude = parse_gps_xmp(lon_str);
     }
     
     // 2. Parse Custom Adjustments (pm:)
-    if let Some(status_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "status" )) {
+    let pm = "http://ns.lumenbox.app/pm/1.0/";
+    if let Some(status_str) = get(pm, "status") {
         data.status = status_str.to_string();
     }
-    if let Some(exp_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "exposure" )) {
+    if let Some(exp_str) = get(pm, "exposure") {
         if let Ok(val) = exp_str.parse::<f32>() {
             data.edits.exposure = val;
         }
     }
-    if let Some(con_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "contrast" )) {
+    if let Some(con_str) = get(pm, "contrast") {
         if let Ok(val) = con_str.parse::<f32>() {
             data.edits.contrast = val;
         }
     }
-    if let Some(hl_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "highlights" )) {
+    if let Some(hl_str) = get(pm, "highlights") {
         if let Ok(val) = hl_str.parse::<f32>() {
             data.edits.highlights = val;
         }
     }
-    if let Some(sh_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "shadows" )) {
+    if let Some(sh_str) = get(pm, "shadows") {
         if let Ok(val) = sh_str.parse::<f32>() {
             data.edits.shadows = val;
         }
     }
-    if let Some(wh_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "whites" )) {
+    if let Some(wh_str) = get(pm, "whites") {
         if let Ok(val) = wh_str.parse::<f32>() {
             data.edits.whites = val;
         }
     }
-    if let Some(bl_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "blacks" )) {
+    if let Some(bl_str) = get(pm, "blacks") {
         if let Ok(val) = bl_str.parse::<f32>() {
             data.edits.blacks = val;
         }
     }
-    if let Some(vib_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "vibrance" )) {
+    if let Some(vib_str) = get(pm, "vibrance") {
         if let Ok(val) = vib_str.parse::<f32>() {
             data.edits.vibrance = val;
         }
     }
-    if let Some(sat_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "saturation" )) {
+    if let Some(sat_str) = get(pm, "saturation") {
         if let Ok(val) = sat_str.parse::<f32>() {
             data.edits.saturation = val;
         }
     }
-    if let Some(db_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "deepBlue" )) {
+    if let Some(db_str) = get(pm, "deepBlue") {
         if let Ok(val) = db_str.parse::<f32>() {
             data.edits.deep_blue = val;
         }
     }
-    if let Some(fol_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "foliage" )) {
+    if let Some(fol_str) = get(pm, "foliage") {
         if let Ok(val) = fol_str.parse::<f32>() {
             data.edits.foliage = val;
         }
     }
-    if let Some(s_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "sharpeningAmount" )) {
+    if let Some(s_str) = get(pm, "sharpeningAmount") {
         if let Ok(val) = s_str.parse::<f32>() {
             data.edits.sharpening_amount = val;
         }
     }
-    if let Some(r_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "sharpeningRadius" )) {
+    if let Some(r_str) = get(pm, "sharpeningRadius") {
         if let Ok(val) = r_str.parse::<f32>() {
             data.edits.sharpening_radius = val;
         }
     }
-    if let Some(m_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "sharpeningMasking" )) {
+    if let Some(m_str) = get(pm, "sharpeningMasking") {
         if let Ok(val) = m_str.parse::<f32>() {
             data.edits.sharpening_masking = val;
         }
     }
-    if let Some(nr_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "noiseReduction" )) {
+    if let Some(nr_str) = get(pm, "noiseReduction") {
         if let Ok(val) = nr_str.parse::<f32>() {
             data.edits.noise_reduction = val;
         }
     }
-    if let Some(temp_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "temperature" )) {
+    if let Some(temp_str) = get(pm, "temperature") {
         if let Ok(val) = temp_str.parse::<f32>() {
             data.edits.temperature = val;
         }
     }
-    if let Some(tint_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "tint" )) {
+    if let Some(tint_str) = get(pm, "tint") {
         if let Ok(val) = tint_str.parse::<f32>() {
             data.edits.tint = val;
         }
     }
-    if let Some(cl_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "cropLeft" )) {
+    if let Some(cl_str) = get(pm, "cropLeft") {
         if let Ok(val) = cl_str.parse::<f32>() {
             data.edits.crop_left = val;
         }
     }
-    if let Some(ct_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "cropTop" )) {
+    if let Some(ct_str) = get(pm, "cropTop") {
         if let Ok(val) = ct_str.parse::<f32>() {
             data.edits.crop_top = val;
         }
     }
-    if let Some(cr_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "cropRight" )) {
+    if let Some(cr_str) = get(pm, "cropRight") {
         if let Ok(val) = cr_str.parse::<f32>() {
             data.edits.crop_right = val;
         }
     }
-    if let Some(cb_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "cropBottom" )) {
+    if let Some(cb_str) = get(pm, "cropBottom") {
         if let Ok(val) = cb_str.parse::<f32>() {
             data.edits.crop_bottom = val;
         }
     }
-    if let Some(ca_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "cropAngle" )) {
+    if let Some(ca_str) = get(pm, "cropAngle") {
         if let Ok(val) = ca_str.parse::<f32>() {
             data.edits.crop_angle = val;
         }
     }
-    if let Some(pv_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "perspectiveVertical" )) {
+    if let Some(pv_str) = get(pm, "perspectiveVertical") {
         if let Ok(val) = pv_str.parse::<f32>() {
             data.edits.perspective_vertical = val;
         }
     }
-    if let Some(ph_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "perspectiveHorizontal" )) {
+    if let Some(ph_str) = get(pm, "perspectiveHorizontal") {
         if let Ok(val) = ph_str.parse::<f32>() {
             data.edits.perspective_horizontal = val;
         }
     }
-    if let Some(cc_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "cropConstrain" )) {
+    if let Some(cc_str) = get(pm, "cropConstrain") {
         data.edits.crop_constrain = cc_str == "true" || cc_str == "1";
     }
-    if let Some(rot_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "rotation" )) {
+    if let Some(rot_str) = get(pm, "rotation") {
         if let Ok(val) = rot_str.parse::<i32>() {
             data.edits.rotation = val;
         }
     }
-    if let Some(fh_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "flipHorizontal" )) {
+    if let Some(fh_str) = get(pm, "flipHorizontal") {
         data.edits.flip_horizontal = fh_str == "true" || fh_str == "1";
     }
-    if let Some(fv_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "flipVertical" )) {
+    if let Some(fv_str) = get(pm, "flipVertical") {
         data.edits.flip_vertical = fv_str == "true" || fv_str == "1";
     }
-    if let Some(tp_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "toneProfile" )) {
+    if let Some(tp_str) = get(pm, "toneProfile") {
         data.edits.tone_profile = match tp_str {
             "AgxVivid" => crate::ColorProfileMode::AgxVivid,
             "AgxFilmic" => crate::ColorProfileMode::AgxFilmic,
@@ -421,12 +397,12 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
             _ => crate::ColorProfileMode::AgxVivid,
         };
     }
-    if let Some(lut_name_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "lutName" )) {
+    if let Some(lut_name_str) = get(pm, "lutName") {
         if !lut_name_str.trim().is_empty() {
             data.edits.lut_name = Some(lut_name_str.to_string());
         }
     }
-    if let Some(lut_intensity_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "lutIntensity" )) {
+    if let Some(lut_intensity_str) = get(pm, "lutIntensity") {
         if let Ok(val) = lut_intensity_str.parse::<f32>() {
             data.edits.lut_intensity = val;
         }

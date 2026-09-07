@@ -28,6 +28,16 @@ impl Color3 {
     }
 
     #[inline]
+    pub fn to_vec3(&self) -> glam::Vec3 {
+        glam::Vec3::new(self.0[0], self.0[1], self.0[2])
+    }
+
+    #[inline]
+    pub fn from_vec3(v: glam::Vec3) -> Self {
+        Color3([v.x, v.y, v.z])
+    }
+
+    #[inline]
     pub fn r(&self) -> f32 { self.0[0] }
     #[inline]
     pub fn g(&self) -> f32 { self.0[1] }
@@ -36,16 +46,26 @@ impl Color3 {
 
     #[inline]
     pub fn clamp(&self, min: f32, max: f32) -> Self {
-        Color3([
-            self.0[0].clamp(min, max),
-            self.0[1].clamp(min, max),
-            self.0[2].clamp(min, max),
-        ])
+        Self::from_vec3(self.to_vec3().clamp(glam::Vec3::splat(min), glam::Vec3::splat(max)))
     }
 
     #[inline]
     pub fn scale(&self, s: f32) -> Self {
-        Color3([self.0[0] * s, self.0[1] * s, self.0[2] * s])
+        Self::from_vec3(self.to_vec3() * s)
+    }
+}
+
+impl From<glam::Vec3> for Color3 {
+    #[inline]
+    fn from(v: glam::Vec3) -> Self {
+        Color3::from_vec3(v)
+    }
+}
+
+impl From<Color3> for glam::Vec3 {
+    #[inline]
+    fn from(c: Color3) -> Self {
+        c.to_vec3()
     }
 }
 
@@ -64,55 +84,71 @@ impl Matrix3x3 {
     ]);
 
     #[inline]
+    pub fn to_mat3(&self) -> glam::Mat3 {
+        // glam::Mat3 stores columns: col0, col1, col2
+        glam::Mat3::from_cols(
+            glam::Vec3::new(self.0[0][0], self.0[1][0], self.0[2][0]),
+            glam::Vec3::new(self.0[0][1], self.0[1][1], self.0[2][1]),
+            glam::Vec3::new(self.0[0][2], self.0[1][2], self.0[2][2]),
+        )
+    }
+
+    #[inline]
+    pub fn from_mat3(m: glam::Mat3) -> Self {
+        let c0 = m.x_axis;
+        let c1 = m.y_axis;
+        let c2 = m.z_axis;
+        Matrix3x3([
+            [c0.x, c1.x, c2.x],
+            [c0.y, c1.y, c2.y],
+            [c0.z, c1.z, c2.z],
+        ])
+    }
+
+    #[inline]
     pub fn multiply_vector(&self, c: Color3) -> Color3 {
-        let x = self.0[0][0] * c.0[0] + self.0[0][1] * c.0[1] + self.0[0][2] * c.0[2];
-        let y = self.0[1][0] * c.0[0] + self.0[1][1] * c.0[1] + self.0[1][2] * c.0[2];
-        let z = self.0[2][0] * c.0[0] + self.0[2][1] * c.0[1] + self.0[2][2] * c.0[2];
-        Color3([x, y, z])
+        let v = self.to_mat3() * c.to_vec3();
+        Color3::from_vec3(v)
     }
 
+    #[inline]
     pub fn multiply_matrix(&self, other: &Matrix3x3) -> Matrix3x3 {
-        let mut res = [[0.0f32; 3]; 3];
-        for i in 0..3 {
-            for j in 0..3 {
-                res[i][j] = self.0[i][0] * other.0[0][j]
-                          + self.0[i][1] * other.0[1][j]
-                          + self.0[i][2] * other.0[2][j];
-            }
-        }
-        Matrix3x3(res)
+        let res = self.to_mat3() * other.to_mat3();
+        Matrix3x3::from_mat3(res)
     }
 
-    /// Computes analytical inverse of 3x3 matrix
+    #[inline]
     pub fn inverse(&self) -> Option<Matrix3x3> {
-        let m = &self.0;
-        let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-                - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-                + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-
-        if det.abs() < 1e-12 {
-            return None;
+        let m = self.to_mat3();
+        if m.determinant().abs() < 1e-12 {
+            None
+        } else {
+            Some(Matrix3x3::from_mat3(m.inverse()))
         }
-        let inv_det = 1.0 / det;
+    }
 
-        let res = [
-            [
-                (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * inv_det,
-                (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inv_det,
-                (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inv_det,
-            ],
-            [
-                (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inv_det,
-                (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inv_det,
-                (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * inv_det,
-            ],
-            [
-                (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * inv_det,
-                (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * inv_det,
-                (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * inv_det,
-            ],
-        ];
-        Some(Matrix3x3(res))
+    #[inline]
+    pub fn transpose(&self) -> Matrix3x3 {
+        Matrix3x3::from_mat3(self.to_mat3().transpose())
+    }
+
+    #[inline]
+    pub fn determinant(&self) -> f32 {
+        self.to_mat3().determinant()
+    }
+}
+
+impl From<glam::Mat3> for Matrix3x3 {
+    #[inline]
+    fn from(m: glam::Mat3) -> Self {
+        Matrix3x3::from_mat3(m)
+    }
+}
+
+impl From<Matrix3x3> for glam::Mat3 {
+    #[inline]
+    fn from(m: Matrix3x3) -> Self {
+        m.to_mat3()
     }
 }
 

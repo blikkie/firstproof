@@ -63,7 +63,7 @@
 - `[ ]` 15. Epic 8: Architecture Modernization & Refactoring (Phased Plan)
     - `[x]` 15.1 Phase 1: Swift State & Uniform Plumbing Encapsulation (`EditSettings` unification, eliminate 30-field copying)
     - `[x]` 15.2 Phase 2: Metal GPU Pipeline Modernization (Unified `ShaderTypes.h` bridging C/Swift/Metal, modular MSL headers, remove 700-line duplicate string)
-    - `[ ]` 15.3 Phase 3: Rust Core Modernization (`glam` SIMD NEON matrices, `xmp-writer` type-safe RDF, `palette` CIE)
+    - `[x]` 15.3 Phase 3: Rust Core Modernization (`glam` SIMD NEON matrices, `xmp-writer` type-safe RDF, `palette` CIE)
     - `[ ]` 15.4 Phase 4: SwiftUI View Decomposition & ViewModel Decoupling (Inspector panels, Library/Editor separation)
     - `[ ]` 15.5 Phase 5: Single-Key Professional Muscle Memory & First-Responder Input Filter
 - `[ ]` 16. Epic 9: Interactive RGB & Tone Curves Engine (P1)
@@ -74,6 +74,9 @@
     - `[ ]` 17.1 Multi-photo selection in Grid (`Cmd+A`, `Shift+Click`, `Cmd+Click`)
     - `[ ]` 17.2 Rayon multi-core thread pool in Rust core (`rayon::par_iter`)
     - `[ ]` 17.3 Background export queue with progress bar and Notification Center banner
+    - `[ ]` 17.4 Zero-copy ICC & metadata injection via `img-parts` (Story 8.6) replacing raw byte-scanning loops
+    - `[ ]` 17.5 Colorimetric rendering intents & LittleCMS soft-proofing via `lcms2` (Story 8.7 & 5.6)
+    - `[ ]` 17.6 High-fidelity directional Bayer demosaicing (RCD / VNG via `bayer`, Story 8.4)
 - `[ ]` 18. Epic 11: Apple EDR & Ultra HDR Gain Map Pipeline (P1)
     - `[ ]` 18.1 16-bit float Metal canvas layer (`.rgba16Float`) for 1,600-nit Liquid Retina XDR displays
     - `[ ]` 18.2 ISO 21496-1 gain map JPEG export and Google Pixel gain map ingestion
