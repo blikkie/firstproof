@@ -156,6 +156,23 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
 
 ---
 
+### Story 5.6: Wide-Gamut Display P3 Viewport & Export Color Management (Deferred from 6.4)
+*   **Background & Observations**:
+    *   During validation on high-chroma RAW files (e.g. `20250409_0194.CR2`), subtle differences in red saturation between the live Metal viewport and exported JPEGs highlighted how modern wide-gamut hardware interacts with color management pipelines.
+    *   **Viewport Presentation**: On macOS Liquid Retina XDR displays (which support 100% of the DCI-P3 color gamut), `CAMetalLayer` buffers are managed by WindowServer. If the layer is tagged as sRGB, WindowServer maps sRGB primaries into P3 display coordinates. If untagged or assigned native display space, sRGB coordinates are rendered directly to wide-gamut emitters, increasing perceived red saturation.
+    *   **Export Pipeline**: The headless Rust export pipeline currently tags JPEGs with an embedded sRGB ICC profile (`SRGB_ICC_PROFILE`). When opened in ColorSync-aware viewers (Preview.app, Safari, QuickLook), the embedded profile dictates how color coordinates are mapped to the monitor's profile.
+*   **Scope for Wide-Gamut Epic**:
+    1.  **Dual-Target Export (Display P3 & sRGB)**:
+        *   Provide an Export Color Space selector in the Export Sheet: **sRGB** (standard web/print compatibility) vs. **Display P3** (wide-gamut preservation for modern Apple, Android, and OLED displays).
+        *   When Display P3 export is selected, map the working Rec.2020 space directly into Display P3 coordinates and embed the official Display P3 ICC profile.
+    2.  **ColorSync Proofing & Intent Control**:
+        *   Support *Soft Proofing* mode in the Canvas toolbar to simulate sRGB gamut clipping on wide-gamut displays.
+        *   Integrate LittleCMS2 (`lcms2`) in the Rust export pipeline to support Perceptual vs. Relative Colorimetric rendering intents for out-of-gamut saturated reds and magentas.
+    3.  **Dynamic Viewport Layer Calibration**:
+        *   Expose a preference to toggle the live viewport between native wide-gamut Display P3 rendering and soft-proofed sRGB.
+
+---
+
 ### Story 5.2: AgX Filmic Tone Mapping Engine & Parity Guard
 *   **The Problem: Digital Clipping & The Abney Effect**:
     *   When bright skin tones approach high luminance in naive digital pipelines, the red channel clips first to $1.0$. As green and blue rise, $(R, G, B)$ shifts toward yellow, creating unnatural "salmon" skin tones and plastic highlight clipping.

@@ -164,6 +164,10 @@ pub fn generate_xmp(data: &XmpData) -> String {
     pm:shadows="{shadows:.4}"
     pm:whites="{whites:.4}"
     pm:blacks="{blacks:.4}"
+    pm:vibrance="{vibrance:.4}"
+    pm:saturation="{saturation:.4}"
+    pm:deepBlue="{deep_blue:.4}"
+    pm:foliage="{foliage:.4}"
     pm:temperature="{temperature:.4}"
     pm:tint="{tint:.4}"
     pm:cropLeft="{crop_left:.4}"
@@ -185,6 +189,10 @@ pub fn generate_xmp(data: &XmpData) -> String {
         shadows = data.edits.shadows,
         whites = data.edits.whites,
         blacks = data.edits.blacks,
+        vibrance = data.edits.vibrance,
+        saturation = data.edits.saturation,
+        deep_blue = data.edits.deep_blue,
+        foliage = data.edits.foliage,
         temperature = data.edits.temperature,
         tint = data.edits.tint,
         crop_left = data.edits.crop_left,
@@ -282,6 +290,26 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
     if let Some(bl_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "blacks" )) {
         if let Ok(val) = bl_str.parse::<f32>() {
             data.edits.blacks = val;
+        }
+    }
+    if let Some(vib_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "vibrance" )) {
+        if let Ok(val) = vib_str.parse::<f32>() {
+            data.edits.vibrance = val;
+        }
+    }
+    if let Some(sat_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "saturation" )) {
+        if let Ok(val) = sat_str.parse::<f32>() {
+            data.edits.saturation = val;
+        }
+    }
+    if let Some(db_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "deepBlue" )) {
+        if let Ok(val) = db_str.parse::<f32>() {
+            data.edits.deep_blue = val;
+        }
+    }
+    if let Some(fol_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "foliage" )) {
+        if let Ok(val) = fol_str.parse::<f32>() {
+            data.edits.foliage = val;
         }
     }
     if let Some(temp_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "temperature" )) {
@@ -395,6 +423,20 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         if let Some(bl_str) = desc.attribute(( crs_ns, "Blacks2012" )).or_else(|| desc.attribute(( crs_ns, "Blacks" ))) {
             if let Ok(val) = bl_str.parse::<f32>() {
                 data.edits.blacks = val;
+            }
+        }
+    }
+    if data.edits.vibrance == 0.0 {
+        if let Some(vib_str) = desc.attribute(( crs_ns, "Vibrance" )) {
+            if let Ok(val) = vib_str.parse::<f32>() {
+                data.edits.vibrance = val;
+            }
+        }
+    }
+    if data.edits.saturation == 0.0 {
+        if let Some(sat_str) = desc.attribute(( crs_ns, "Saturation" )) {
+            if let Ok(val) = sat_str.parse::<f32>() {
+                data.edits.saturation = val;
             }
         }
     }
@@ -556,6 +598,10 @@ mod tests {
         data.edits.shadows = 35.0;
         data.edits.whites = 15.0;
         data.edits.blacks = -20.0;
+        data.edits.vibrance = 25.0;
+        data.edits.saturation = -10.0;
+        data.edits.deep_blue = 40.0;
+        data.edits.foliage = 30.0;
         data.edits.temperature = 5800.0;
         data.edits.tint = -12.0;
         data.edits.crop_left = 0.05;
@@ -588,6 +634,10 @@ mod tests {
         assert_eq!(parsed.edits.shadows, 35.0);
         assert_eq!(parsed.edits.whites, 15.0);
         assert_eq!(parsed.edits.blacks, -20.0);
+        assert_eq!(parsed.edits.vibrance, 25.0);
+        assert_eq!(parsed.edits.saturation, -10.0);
+        assert_eq!(parsed.edits.deep_blue, 40.0);
+        assert_eq!(parsed.edits.foliage, 30.0);
         assert_eq!(parsed.edits.temperature, 5800.0);
         assert_eq!(parsed.edits.tint, -12.0);
         assert_eq!(parsed.edits.crop_angle, -0.5);
@@ -614,6 +664,22 @@ mod tests {
         assert_eq!(parsed.edits.shadows, 45.0);
         assert_eq!(parsed.edits.whites, 20.0);
         assert_eq!(parsed.edits.blacks, -15.0);
+    }
+
+    #[test]
+    fn test_xmp_adobe_color_sliders_ingestion() {
+        let adobe_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:Vibrance="35"
+    crs:Saturation="-15">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+        let parsed = parse_xmp(adobe_xmp).unwrap();
+        assert_eq!(parsed.edits.vibrance, 35.0);
+        assert_eq!(parsed.edits.saturation, -15.0);
     }
 
     #[test]

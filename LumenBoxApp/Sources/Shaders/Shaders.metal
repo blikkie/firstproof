@@ -20,6 +20,10 @@ struct ShaderUniforms {
     float shadows;           // -100 .. +100 (default 0.0)
     float whites;            // -100 .. +100 (default 0.0)
     float blacks;            // -100 .. +100 (default 0.0)
+    float vibrance;          // -100 .. +100 (default 0.0)
+    float saturation;        // -100 .. +100 (default 0.0)
+    float deepBlue;          // -100 .. +100 (default 0.0)
+    float foliage;           // -100 .. +100 (default 0.0)
     float straightenAngle;   // Radians
     float aspectRatio;       // width / height
     int lensCorrectionEnabled;
@@ -331,6 +335,95 @@ inline float3 applyToneRecovery(float3 color, float highlights, float shadows, f
     return color * gain;
 }
 
+// MARK: - Color & Vibrance Adjustment Function
+inline float3 applyColorAdjustments(
+    float3 rgb,
+    float vibrance,
+    float saturation,
+    float deepBlue,
+    float foliage
+) {
+    if (vibrance == 0.0 && saturation == 0.0 && deepBlue == 0.0 && foliage == 0.0) {
+        return rgb;
+    }
+    
+    float3 c = clamp(rgb, 0.0, 1.0);
+    float lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+
+    // 1. Global Saturation (-100..+100)
+    // Linear chromaticity scaling relative to perceptual luminance
+    if (saturation != 0.0) {
+        float satGain = max(1.0 + saturation / 100.0, 0.0);
+        c = lum + (c - lum) * satGain;
+    }
+
+    // 2. Smart Vibrance (-100..+100)
+    // Non-linear boost that protects already saturated tones and human skin tones.
+    if (vibrance != 0.0) {
+        float maxC = max(max(c.r, c.g), c.b);
+        float minC = min(min(c.r, c.g), c.b);
+        float chroma = maxC - minC;
+
+        // Detect human skin tones in RGB: R > G > B with warm peach chromaticity
+        float skinProtect = 1.0;
+        if (c.r > c.g && c.g > c.b && lum > 0.05) {
+            float rg = (c.r - c.g) / max(lum, 0.1);
+            float gb = (c.g - c.b) / max(lum, 0.1);
+            float dRg = abs(rg - 0.35);
+            float dGb = abs(gb - 0.25);
+            float skinMetric = clamp(1.0 - (dRg * 3.0 + dGb * 3.0), 0.0, 1.0);
+            skinProtect = 1.0 - 0.6 * skinMetric;
+        }
+
+        float vibGain = (vibrance > 0.0)
+            ? (vibrance / 100.0) * (1.0 - chroma) * 0.8 * skinProtect
+            : (vibrance / 100.0) * 0.6;
+
+        c += (c - lum) * vibGain;
+    }
+
+    // 3. Deep Blue (Sky & Water) (-100..+100)
+    // Direct chromatic optical polarizing model:
+    // Operates on blue excess over warm channels (B - max(R, G)).
+    // 100% linear in RGB space -> ZERO hue-division noise -> ZERO dithering!
+    if (deepBlue != 0.0) {
+        float maxWarm = max(c.r, c.g);
+        float skySignal = max(c.b - maxWarm, 0.0);
+        if (skySignal > 0.0) {
+            float factor = deepBlue / 100.0;
+            if (factor > 0.0) {
+                // Polarizing filter effect:
+                // Attenuates blue luminance, removes red haze to enrich azure saturation
+                c.r -= factor * skySignal * 0.30;
+                c.g -= factor * skySignal * 0.15;
+                c.b -= factor * skySignal * 0.20;
+            } else {
+                // Airy / luminous sky:
+                // factor is negative -> lifts values gently and evenly without color casting
+                c.r -= factor * skySignal * 0.25;
+                c.g -= factor * skySignal * 0.20;
+                c.b -= factor * skySignal * 0.10;
+            }
+        }
+    }
+
+    // 4. Foliage (Lush Greens) (-100..+100)
+    // Operates on green excess (G - max(R, B)).
+    // Shifts yellow grass towards rich emerald green (lower red, lift green, deepen blue).
+    if (foliage != 0.0) {
+        float maxRb = max(c.r, c.b);
+        float greenSignal = max(c.g - maxRb, 0.0);
+        if (greenSignal > 0.0) {
+            float factor = foliage / 100.0;
+            c.r -= factor * greenSignal * 0.30;
+            c.b -= factor * greenSignal * 0.15;
+            c.g += factor * greenSignal * 0.10;
+        }
+    }
+
+    return clamp(c, 0.0, 1.0);
+}
+
 // MARK: - Fragment Shader (Linear RAW Pipeline)
 fragment float4 fragmentShader(
     VertexOutput in [[stage_in]],
@@ -397,6 +490,10 @@ fragment float4 fragmentShader(
                           (uniforms.shadows == 0.0) &&
                           (uniforms.whites == 0.0) &&
                           (uniforms.blacks == 0.0) &&
+                          (uniforms.vibrance == 0.0) &&
+                          (uniforms.saturation == 0.0) &&
+                          (uniforms.deepBlue == 0.0) &&
+                          (uniforms.foliage == 0.0) &&
                           (uniforms.lutEnabled == 0);
     
     if (uniforms.isLinearRaw == 0 && isNeutralEdits) {
@@ -411,6 +508,10 @@ fragment float4 fragmentShader(
     float editShadows = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.shadows;
     float editWhites = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.whites;
     float editBlacks = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.blacks;
+    float editVibrance = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.vibrance;
+    float editSaturation = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.saturation;
+    float editDeepBlue = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.deepBlue;
+    float editFoliage = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.foliage;
     
     // 2. Decode texture to Linear Rec.2020 working space
     float3 rec2020Color;
@@ -489,6 +590,9 @@ fragment float4 fragmentShader(
     } else {
         finalColor = linearToSrgbGamma3(srgbLinearOut);
     }
+    
+    // 6b. Color & Vibrance Adjustments
+    finalColor = applyColorAdjustments(finalColor, editVibrance, editSaturation, editDeepBlue, editFoliage);
     
     // 7. Creative 3D Look-Up Table (Post-Tone-Mapping)
     if (uniforms.lutEnabled != 0 && uniforms.lutIntensity > 0.0 && uniforms.isOriginal < 0.5) {

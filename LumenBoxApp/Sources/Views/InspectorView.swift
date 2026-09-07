@@ -389,10 +389,27 @@ struct InspectorView: View {
     // MARK: - Workspace Tab 2: 🎨 Color
     private var colorWorkspaceTab: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("WHITE BALANCE & COLOR")
-                .font(.caption)
-                .fontWeight(.bold)
-                .foregroundColor(.secondary)
+            HStack {
+                Text("WHITE BALANCE")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button(action: {
+                    viewModel.isEyedropperActive.toggle()
+                }) {
+                    Image(systemName: "eyedropper")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(viewModel.isEyedropperActive ? .accentColor : .secondary)
+                        .padding(4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(viewModel.isEyedropperActive ? Color.accentColor.opacity(0.2) : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("White Balance Eyedropper: Click any neutral patch in the photo (Esc to cancel)")
+            }
             
             SliderRow(
                 label: "Temperature",
@@ -411,6 +428,57 @@ struct InspectorView: View {
                 range: -150.0...150.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.tint) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
+            
+            Divider()
+            
+            Text("COLOR & VIBRANCE")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.secondary)
+            
+            SliderRow(
+                label: "Vibrance",
+                value: $viewModel.vibrance,
+                range: -100.0...100.0,
+                format: "%.0f",
+                onReset: { viewModel.resetSlider(.vibrance) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
+            
+            SliderRow(
+                label: "Saturation",
+                value: $viewModel.saturation,
+                range: -100.0...100.0,
+                format: "%.0f",
+                onReset: { viewModel.resetSlider(.saturation) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
+            
+            SliderRow(
+                label: "Deep Blue",
+                value: $viewModel.deepBlue,
+                range: -100.0...100.0,
+                format: "%.0f",
+                onReset: { viewModel.resetSlider(.deepBlue) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
+            
+            SliderRow(
+                label: "Foliage",
+                value: $viewModel.foliage,
+                range: -100.0...100.0,
+                format: "%.0f",
+                onReset: { viewModel.resetSlider(.foliage) },
                 onEditingChanged: { isEditing in
                     if !isEditing { viewModel.saveCurrentEdits() }
                 }

@@ -1044,6 +1044,10 @@ public struct EditSettings {
     public var shadows: Float
     public var whites: Float
     public var blacks: Float
+    public var vibrance: Float
+    public var saturation: Float
+    public var deepBlue: Float
+    public var foliage: Float
     public var temperature: Float
     public var tint: Float
     public var cropLeft: Float
@@ -1060,13 +1064,17 @@ public struct EditSettings {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
         self.shadows = shadows
         self.whites = whites
         self.blacks = blacks
+        self.vibrance = vibrance
+        self.saturation = saturation
+        self.deepBlue = deepBlue
+        self.foliage = foliage
         self.temperature = temperature
         self.tint = tint
         self.cropLeft = cropLeft
@@ -1103,6 +1111,18 @@ extension EditSettings: Equatable, Hashable {
             return false
         }
         if lhs.blacks != rhs.blacks {
+            return false
+        }
+        if lhs.vibrance != rhs.vibrance {
+            return false
+        }
+        if lhs.saturation != rhs.saturation {
+            return false
+        }
+        if lhs.deepBlue != rhs.deepBlue {
+            return false
+        }
+        if lhs.foliage != rhs.foliage {
             return false
         }
         if lhs.temperature != rhs.temperature {
@@ -1154,6 +1174,10 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(shadows)
         hasher.combine(whites)
         hasher.combine(blacks)
+        hasher.combine(vibrance)
+        hasher.combine(saturation)
+        hasher.combine(deepBlue)
+        hasher.combine(foliage)
         hasher.combine(temperature)
         hasher.combine(tint)
         hasher.combine(cropLeft)
@@ -1184,6 +1208,10 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 shadows: FfiConverterFloat.read(from: &buf), 
                 whites: FfiConverterFloat.read(from: &buf), 
                 blacks: FfiConverterFloat.read(from: &buf), 
+                vibrance: FfiConverterFloat.read(from: &buf), 
+                saturation: FfiConverterFloat.read(from: &buf), 
+                deepBlue: FfiConverterFloat.read(from: &buf), 
+                foliage: FfiConverterFloat.read(from: &buf), 
                 temperature: FfiConverterFloat.read(from: &buf), 
                 tint: FfiConverterFloat.read(from: &buf), 
                 cropLeft: FfiConverterFloat.read(from: &buf), 
@@ -1207,6 +1235,10 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.shadows, into: &buf)
         FfiConverterFloat.write(value.whites, into: &buf)
         FfiConverterFloat.write(value.blacks, into: &buf)
+        FfiConverterFloat.write(value.vibrance, into: &buf)
+        FfiConverterFloat.write(value.saturation, into: &buf)
+        FfiConverterFloat.write(value.deepBlue, into: &buf)
+        FfiConverterFloat.write(value.foliage, into: &buf)
         FfiConverterFloat.write(value.temperature, into: &buf)
         FfiConverterFloat.write(value.tint, into: &buf)
         FfiConverterFloat.write(value.cropLeft, into: &buf)
@@ -2135,6 +2167,72 @@ public func FfiConverterTypeTakeoutMetadataRecord_lower(_ value: TakeoutMetadata
 }
 
 
+public struct WhiteBalanceResult {
+    public var temperature: Float
+    public var tint: Float
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(temperature: Float, tint: Float) {
+        self.temperature = temperature
+        self.tint = tint
+    }
+}
+
+
+
+extension WhiteBalanceResult: Equatable, Hashable {
+    public static func ==(lhs: WhiteBalanceResult, rhs: WhiteBalanceResult) -> Bool {
+        if lhs.temperature != rhs.temperature {
+            return false
+        }
+        if lhs.tint != rhs.tint {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(temperature)
+        hasher.combine(tint)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWhiteBalanceResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhiteBalanceResult {
+        return
+            try WhiteBalanceResult(
+                temperature: FfiConverterFloat.read(from: &buf), 
+                tint: FfiConverterFloat.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WhiteBalanceResult, into buf: inout [UInt8]) {
+        FfiConverterFloat.write(value.temperature, into: &buf)
+        FfiConverterFloat.write(value.tint, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhiteBalanceResult_lift(_ buf: RustBuffer) throws -> WhiteBalanceResult {
+    return try FfiConverterTypeWhiteBalanceResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhiteBalanceResult_lower(_ value: WhiteBalanceResult) -> RustBuffer {
+    return FfiConverterTypeWhiteBalanceResult.lower(value)
+}
+
+
 public struct XmpDataRecord {
     public var rating: Int32?
     public var status: String
@@ -2846,6 +2944,18 @@ fileprivate struct FfiConverterSequenceTypeTakeoutMatchRecord: FfiConverterRustB
         return seq
     }
 }
+/**
+ * Calculates photographic Kelvin temperature and tint from an unadjusted neutral pixel sample.
+ */
+public func calculateWhiteBalanceFromSample(r: Float, g: Float, b: Float) -> WhiteBalanceResult {
+    return try!  FfiConverterTypeWhiteBalanceResult.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_calculate_white_balance_from_sample(
+        FfiConverterFloat.lower(r),
+        FfiConverterFloat.lower(g),
+        FfiConverterFloat.lower(b),$0
+    )
+})
+}
 public func checkConnection() -> String {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_check_connection($0
@@ -2998,6 +3108,9 @@ private var initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_lumenbox_core_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_calculate_white_balance_from_sample() != 51544) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_check_connection() != 58636) {
         return InitializationResult.apiChecksumMismatch

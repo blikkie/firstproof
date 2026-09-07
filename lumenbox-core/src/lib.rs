@@ -36,6 +36,12 @@ pub struct CubeLutRecord {
     pub data_rgba32f: Vec<u8>,
 }
 
+#[derive(uniffi::Record, Clone, Copy, Debug, PartialEq)]
+pub struct WhiteBalanceResult {
+    pub temperature: f32,
+    pub tint: f32,
+}
+
 #[derive(uniffi::Record, Clone, Debug, PartialEq)]
 pub struct EditSettings {
     pub exposure: f32,
@@ -44,6 +50,10 @@ pub struct EditSettings {
     pub shadows: f32,
     pub whites: f32,
     pub blacks: f32,
+    pub vibrance: f32,
+    pub saturation: f32,
+    pub deep_blue: f32,
+    pub foliage: f32,
     pub temperature: f32,
     pub tint: f32,
     pub crop_left: f32,
@@ -68,6 +78,10 @@ impl Default for EditSettings {
             shadows: 0.0,
             whites: 0.0,
             blacks: 0.0,
+            vibrance: 0.0,
+            saturation: 0.0,
+            deep_blue: 0.0,
+            foliage: 0.0,
             temperature: 5000.0,
             tint: 0.0,
             crop_left: 0.0,
@@ -82,6 +96,33 @@ impl Default for EditSettings {
             lut_name: None,
             lut_intensity: 1.0,
         }
+    }
+}
+
+/// Calculates photographic Kelvin temperature and tint from an unadjusted neutral pixel sample.
+#[uniffi::export]
+pub fn calculate_white_balance_from_sample(r: f32, g: f32, b: f32) -> WhiteBalanceResult {
+    if r <= 1e-5 || g <= 1e-5 || b <= 1e-5 {
+        return WhiteBalanceResult {
+            temperature: 5500.0,
+            tint: 0.0,
+        };
+    }
+
+    let temp_ratio = (b / r).max(1e-4);
+    let temp_norm = temp_ratio.powf(2.0 / 3.0);
+    let target_temp = (5500.0 * temp_norm).clamp(2000.0, 50000.0);
+
+    let r_scaled = r * temp_norm.powf(0.75);
+    let b_scaled = b * (1.0 / temp_norm).powf(0.75);
+    let rb_avg = (r_scaled + b_scaled) * 0.5;
+
+    let tint_factor = 1.0 - (rb_avg / g.max(1e-4));
+    let target_tint = (tint_factor / 0.003).clamp(-150.0, 150.0);
+
+    WhiteBalanceResult {
+        temperature: (target_temp / 50.0).round() * 50.0,
+        tint: target_tint.round(),
     }
 }
 

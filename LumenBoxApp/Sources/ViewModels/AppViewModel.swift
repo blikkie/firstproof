@@ -11,6 +11,10 @@ public enum EditSliderType {
     case shadows
     case whites
     case blacks
+    case vibrance
+    case saturation
+    case deepBlue
+    case foliage
     case temperature
     case tint
     case straighten
@@ -96,6 +100,11 @@ public final class AppViewModel {
     public var shadows: Float = 0.0       // -100 .. +100
     public var whites: Float = 0.0        // -100 .. +100
     public var blacks: Float = 0.0        // -100 .. +100
+    public var vibrance: Float = 0.0      // -100 .. +100
+    public var saturation: Float = 0.0    // -100 .. +100
+    public var deepBlue: Float = 0.0      // -100 .. +100
+    public var foliage: Float = 0.0       // -100 .. +100
+    public var isEyedropperActive: Bool = false
     public var temperature: Float = 5500.0 // 2000K .. 50000K
     public var tint: Float = 0.0          // -150 .. +150
     public var straightenAngle: Float = 0.0 // -45 .. +45 deg
@@ -123,6 +132,10 @@ public final class AppViewModel {
         shadows != 0.0 ||
         whites != 0.0 ||
         blacks != 0.0 ||
+        vibrance != 0.0 ||
+        saturation != 0.0 ||
+        deepBlue != 0.0 ||
+        foliage != 0.0 ||
         abs(temperature - asShotTemperature) >= 1.0 ||
         tint != asShotTint ||
         straightenAngle != 0.0 ||
@@ -725,6 +738,10 @@ public final class AppViewModel {
             self.shadows = xmp.edits.shadows
             self.whites = xmp.edits.whites
             self.blacks = xmp.edits.blacks
+            self.vibrance = xmp.edits.vibrance
+            self.saturation = xmp.edits.saturation
+            self.deepBlue = xmp.edits.deepBlue
+            self.foliage = xmp.edits.foliage
             self.temperature = xmp.edits.temperature
             self.tint = xmp.edits.tint
             self.straightenAngle = xmp.edits.cropAngle
@@ -741,6 +758,10 @@ public final class AppViewModel {
             self.shadows = 0.0
             self.whites = 0.0
             self.blacks = 0.0
+            self.vibrance = 0.0
+            self.saturation = 0.0
+            self.deepBlue = 0.0
+            self.foliage = 0.0
             self.temperature = 5500.0
             self.tint = 0.0
             self.straightenAngle = 0.0
@@ -896,6 +917,10 @@ public final class AppViewModel {
             shadows: self.shadows,
             whites: self.whites,
             blacks: self.blacks,
+            vibrance: self.vibrance,
+            saturation: self.saturation,
+            deepBlue: self.deepBlue,
+            foliage: self.foliage,
             temperature: self.temperature,
             tint: self.tint,
             cropLeft: 0.0,
@@ -931,6 +956,10 @@ public final class AppViewModel {
             shadows: 0.0,
             whites: 0.0,
             blacks: 0.0,
+            vibrance: 0.0,
+            saturation: 0.0,
+            deepBlue: 0.0,
+            foliage: 0.0,
             temperature: 5500.0,
             tint: 0.0,
             cropLeft: 0.0,
@@ -1016,6 +1045,14 @@ public final class AppViewModel {
             whites = 0.0
         case .blacks:
             blacks = 0.0
+        case .vibrance:
+            vibrance = 0.0
+        case .saturation:
+            saturation = 0.0
+        case .deepBlue:
+            deepBlue = 0.0
+        case .foliage:
+            foliage = 0.0
         case .temperature:
             temperature = asShotTemperature
         case .tint:
@@ -1035,6 +1072,10 @@ public final class AppViewModel {
         shadows = 0.0
         whites = 0.0
         blacks = 0.0
+        vibrance = 0.0
+        saturation = 0.0
+        deepBlue = 0.0
+        foliage = 0.0
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0
@@ -1046,6 +1087,84 @@ public final class AppViewModel {
         lutIntensity = 1.0
         saveCurrentEdits()
         notifyThumbnailChanged()
+    }
+    
+    // MARK: - White Balance Eyedropper Sampling
+    public func applyEyedropperSample(atNormalizedUV uv: CGPoint) {
+        if let rawRecord = rawPreviewRecord, rawRecord.width > 0, rawRecord.height > 0 {
+            let width = Int(rawRecord.width)
+            let height = Int(rawRecord.height)
+            let cx = min(max(Int(uv.x * CGFloat(width)), 0), width - 1)
+            let cy = min(max(Int(uv.y * CGFloat(height)), 0), height - 1)
+            
+            var sumR: Float = 0.0
+            var sumG: Float = 0.0
+            var sumB: Float = 0.0
+            var count: Float = 0.0
+            
+            rawRecord.data.withUnsafeBytes { rawBuffer in
+                guard let basePtr = rawBuffer.baseAddress else { return }
+                for dy in -1...1 {
+                    let y = min(max(cy + dy, 0), height - 1)
+                    for dx in -1...1 {
+                        let x = min(max(cx + dx, 0), width - 1)
+                        let offset = (y * width + x) * 8
+                        let r16 = basePtr.load(fromByteOffset: offset, as: UInt16.self)
+                        let g16 = basePtr.load(fromByteOffset: offset + 2, as: UInt16.self)
+                        let b16 = basePtr.load(fromByteOffset: offset + 4, as: UInt16.self)
+                        sumR += Float(Float16(bitPattern: r16))
+                        sumG += Float(Float16(bitPattern: g16))
+                        sumB += Float(Float16(bitPattern: b16))
+                        count += 1.0
+                    }
+                }
+            }
+            
+            if count > 0 {
+                let wb = calculateWhiteBalanceFromSample(r: sumR / count, g: sumG / count, b: sumB / count)
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    self.temperature = wb.temperature
+                    self.tint = wb.tint
+                }
+                saveCurrentEdits()
+            }
+        } else if let preview = previewImage, let cgImage = preview.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            let width = cgImage.width
+            let height = cgImage.height
+            guard width > 0, height > 0 else { return }
+            let cx = min(max(Int(uv.x * CGFloat(width)), 0), width - 1)
+            let cy = min(max(Int(uv.y * CGFloat(height)), 0), height - 1)
+            
+            guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return }
+            var pixel = [UInt8](repeating: 0, count: 4)
+            guard let context = CGContext(
+                data: &pixel,
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return }
+            
+            context.draw(cgImage, in: CGRect(x: -cx, y: -(height - 1 - cy), width: width, height: height))
+            
+            let srgbToLinear: (Float) -> Float = { c in
+                let cf = min(max(c, 0.0), 1.0)
+                return cf <= 0.04045 ? (cf / 12.92) : pow((cf + 0.055) / 1.055, 2.4)
+            }
+            
+            let linR = srgbToLinear(Float(pixel[0]) / 255.0)
+            let linG = srgbToLinear(Float(pixel[1]) / 255.0)
+            let linB = srgbToLinear(Float(pixel[2]) / 255.0)
+            
+            let wb = calculateWhiteBalanceFromSample(r: linR, g: linG, b: linB)
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.temperature = wb.temperature
+                self.tint = wb.tint
+            }
+            saveCurrentEdits()
+        }
     }
     
     // MARK: - Custom 3D LUT Import

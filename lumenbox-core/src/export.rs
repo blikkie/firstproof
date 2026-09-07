@@ -285,6 +285,107 @@ pub fn apply_tone_recovery(
     (r * gain, g * gain, b * gain)
 }
 
+/// Applies photographic color adjustments (Vibrance, Saturation, Deep Blue, Foliage)
+/// using noise-free direct RGB optical models (preventing HSV singularity dithering).
+#[inline(always)]
+pub fn apply_color_adjustments(
+    mut r: f32, mut g: f32, mut b: f32,
+    vibrance: f32,
+    saturation: f32,
+    deep_blue: f32,
+    foliage: f32,
+) -> (f32, f32, f32) {
+    if vibrance == 0.0 && saturation == 0.0 && deep_blue == 0.0 && foliage == 0.0 {
+        return (r, g, b);
+    }
+
+    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+    // 1. Global Saturation (-100..+100)
+    // Standard chromaticity scaling relative to perceptual luminance
+    if saturation != 0.0 {
+        let sat_gain = (1.0 + saturation / 100.0).max(0.0);
+        r = lum + (r - lum) * sat_gain;
+        g = lum + (g - lum) * sat_gain;
+        b = lum + (b - lum) * sat_gain;
+    }
+
+    // 2. Smart Vibrance (-100..+100)
+    // Non-linear boost that protects saturated tones and human skin tones.
+    if vibrance != 0.0 {
+        let max_c = r.max(g).max(b);
+        let min_c = r.min(g).min(b);
+        let chroma = max_c - min_c; // in [0, 1]
+
+        // Detect human skin tones in RGB: R > G > B with warm golden/peach hue
+        let is_warm = (r > g) && (g > b);
+        let skin_metric = if is_warm && lum > 0.05 {
+            let rg = (r - g) / lum.max(0.1);
+            let gb = (g - b) / lum.max(0.1);
+            let d_rg = (rg - 0.35).abs();
+            let d_gb = (gb - 0.25).abs();
+            (1.0 - (d_rg * 3.0 + d_gb * 3.0)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let skin_protect = 1.0 - 0.6 * skin_metric;
+
+        let vib_gain = if vibrance > 0.0 {
+            // Headroom-preserving boost on low/moderate chroma
+            (vibrance / 100.0) * (1.0 - chroma) * 0.8 * skin_protect
+        } else {
+            (vibrance / 100.0) * 0.6
+        };
+
+        r += (r - lum) * vib_gain;
+        g += (g - lum) * vib_gain;
+        b += (b - lum) * vib_gain;
+    }
+
+    // 3. Deep Blue (Sky & Water) (-100..+100)
+    // Direct chromatic optical polarizing model:
+    // Operates on the blue excess over warm/neutral channels (B - max(R, G)).
+    // 100% linear in RGB space -> ZERO hue-division noise -> ZERO dithering!
+    if deep_blue != 0.0 {
+        let max_warm = r.max(g);
+        let sky_signal = (b - max_warm).max(0.0);
+        if sky_signal > 0.0 {
+            let factor = deep_blue / 100.0;
+            if factor > 0.0 {
+                // Polarizing filter effect:
+                // Attenuates blue luminance, removes red haze to enrich azure saturation
+                r -= factor * sky_signal * 0.30;
+                g -= factor * sky_signal * 0.15;
+                b -= factor * sky_signal * 0.20;
+            } else {
+                // Airy / luminous sky:
+                // factor is negative -> lifts values gently and evenly without color casting
+                r -= factor * sky_signal * 0.25;
+                g -= factor * sky_signal * 0.20;
+                b -= factor * sky_signal * 0.10;
+            }
+        }
+    }
+
+    // 4. Foliage (Lush Greens) (-100..+100)
+    // Operates on green excess (G - max(R, B)).
+    // Shifts yellow grass towards lush emerald green without hue noise.
+    if foliage != 0.0 {
+        let max_rb = r.max(b);
+        let green_signal = (g - max_rb).max(0.0);
+        if green_signal > 0.0 {
+            let factor = foliage / 100.0;
+            // Shift towards emerald green (lower red, lift green, deepen blue)
+            r -= factor * green_signal * 0.30;
+            b -= factor * green_signal * 0.15;
+            g += factor * green_signal * 0.10;
+        }
+    }
+
+    (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
+}
+
+
 #[inline(always)]
 fn sample_bilinear(image: &DemosaicedImage, x: f32, y: f32) -> (f32, f32, f32) {
     let w = image.width;
@@ -539,6 +640,15 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                 )
             };
 
+            // 2b. Color Adjustments: Vibrance, Saturation, Deep Blue, Foliage
+            let (r_adj, g_adj, b_adj) = apply_color_adjustments(
+                r_disp, g_disp, b_disp,
+                edits.vibrance, edits.saturation, edits.deep_blue, edits.foliage,
+            );
+            r_disp = r_adj;
+            g_disp = g_adj;
+            b_disp = b_adj;
+
             // 3. 3D Look-Up Table (display-referred stage post-tone-mapping)
             if let Some(ref lut) = active_lut {
                 if lut_intensity > 0.0 {
@@ -679,6 +789,10 @@ mod tests {
             shadows: 0.0,
             whites: 0.0,
             blacks: 0.0,
+            vibrance: 0.0,
+            saturation: 0.0,
+            deep_blue: 0.0,
+            foliage: 0.0,
             temperature: 6500.0,
             tint: 10.0,
             crop_left: 0.0,
@@ -721,6 +835,10 @@ mod tests {
             shadows: 0.0,
             whites: 0.0,
             blacks: 0.0,
+            vibrance: 0.0,
+            saturation: 0.0,
+            deep_blue: 0.0,
+            foliage: 0.0,
             temperature: 5500.0,
             tint: 0.0,
             crop_left: 0.0,
@@ -774,6 +892,10 @@ mod tests {
             shadows: 0.0,
             whites: 0.0,
             blacks: 0.0,
+            vibrance: 0.0,
+            saturation: 0.0,
+            deep_blue: 0.0,
+            foliage: 0.0,
             temperature: 5500.0,
             tint: 0.0,
             crop_left: 0.0,
@@ -830,6 +952,10 @@ mod tests {
             shadows: 0.0,
             whites: 0.0,
             blacks: 0.0,
+            vibrance: 0.0,
+            saturation: 0.0,
+            deep_blue: 0.0,
+            foliage: 0.0,
             temperature: 5500.0,
             tint: 0.0,
             crop_left: 0.0,
@@ -944,5 +1070,85 @@ mod tests {
         let (_, g_bl, _) = apply_tone_recovery(r_bl_in, g_bl_in, b_bl_in, 0.0, 0.0, 0.0, -50.0);
         assert!(g_bl < g_bl_in);
     }
+
+    #[test]
+    fn test_white_balance_from_sample() {
+        use crate::calculate_white_balance_from_sample;
+
+        // 1. Perfectly neutral sample (e.g. 18% gray R=0.5, G=0.5, B=0.5)
+        let neutral = calculate_white_balance_from_sample(0.5, 0.5, 0.5);
+        assert_eq!(neutral.temperature, 5500.0, "Neutral sample should target 5500K base");
+        assert_eq!(neutral.tint, 0.0, "Neutral sample should yield zero tint");
+
+        // 2. Warm/tungsten sample (R > B, e.g. R=0.8, G=0.6, B=0.3)
+        // Correcting warm cast requires lowering Kelvin (cooler WB)
+        let warm = calculate_white_balance_from_sample(0.8, 0.6, 0.3);
+        assert!(warm.temperature < 5500.0, "Warm sample must calculate cooler Kelvin: got {}", warm.temperature);
+
+        // 3. Cool/shade sample (B > R, e.g. R=0.3, G=0.5, B=0.8)
+        // Correcting cool cast requires raising Kelvin (warmer WB)
+        let cool = calculate_white_balance_from_sample(0.3, 0.5, 0.8);
+        assert!(cool.temperature > 5500.0, "Cool sample must calculate warmer Kelvin: got {}", cool.temperature);
+
+        // 4. Greenish tint sample (G > (R+B)/2, e.g. fluorescent cast)
+        // Correcting green cast requires positive magenta tint
+        let green = calculate_white_balance_from_sample(0.4, 0.6, 0.4);
+        assert!(green.tint > 0.0, "Green-cast sample must calculate positive magenta tint: got {}", green.tint);
+    }
+
+    #[test]
+    fn test_color_adjustments_math() {
+        // 1. Identity when all sliders are 0.0
+        let (r0, g0, b0) = apply_color_adjustments(0.5, 0.4, 0.3, 0.0, 0.0, 0.0, 0.0);
+        assert!((r0 - 0.5).abs() < 1e-5);
+        assert!((g0 - 0.4).abs() < 1e-5);
+        assert!((b0 - 0.3).abs() < 1e-5);
+
+        // 2. Saturation: boosting saturation on a color (R=0.6, G=0.4, B=0.2)
+        let (_, s_base, _) = crate::color::rgb_to_hsv(0.6, 0.4, 0.2);
+        let (r_sat, g_sat, b_sat) = apply_color_adjustments(0.6, 0.4, 0.2, 0.0, 50.0, 0.0, 0.0);
+        let (_, s_boosted, _) = crate::color::rgb_to_hsv(r_sat, g_sat, b_sat);
+        assert!(s_boosted > s_base, "Saturation +50 must increase HSV saturation");
+
+        // 3. Vibrance skin protection:
+        // Peach/warm skin tone (Hue ~ 35 deg, e.g. R=0.85, G=0.65, B=0.50)
+        let (r_skin, g_skin, b_skin) = (0.85, 0.65, 0.50);
+        let (h_skin, s_skin_orig, _) = crate::color::rgb_to_hsv(r_skin, g_skin, b_skin);
+        assert!((h_skin - 35.0).abs() < 10.0, "Test skin color must be near 35 deg");
+
+        // Vibrant blue with similar base saturation (Hue ~ 215 deg)
+        let (h_blue_base, s_blue_base, v_blue_base) = (215.0, s_skin_orig, 0.85);
+        let (r_blue, g_blue, b_blue) = crate::color::hsv_to_rgb(h_blue_base, s_blue_base, v_blue_base);
+
+        let (r_skin_vib, g_skin_vib, b_skin_vib) = apply_color_adjustments(r_skin, g_skin, b_skin, 80.0, 0.0, 0.0, 0.0);
+        let (_, s_skin_vib, _) = crate::color::rgb_to_hsv(r_skin_vib, g_skin_vib, b_skin_vib);
+
+        let (r_blue_vib, g_blue_vib, b_blue_vib) = apply_color_adjustments(r_blue, g_blue, b_blue, 80.0, 0.0, 0.0, 0.0);
+        let (_, s_blue_vib, _) = crate::color::rgb_to_hsv(r_blue_vib, g_blue_vib, b_blue_vib);
+
+        let skin_delta_s = s_skin_vib - s_skin_orig;
+        let blue_delta_s = s_blue_vib - s_blue_base;
+        assert!(
+            skin_delta_s < blue_delta_s * 0.7,
+            "Skin tone saturation boost ({:.3}) must be significantly lower than non-skin boost ({:.3})",
+            skin_delta_s, blue_delta_s
+        );
+
+        // 4. Deep Blue: Polarizer effect on sky blue (Hue ~ 215 deg)
+        let (r_sky, g_sky, b_sky) = (0.20, 0.50, 0.85);
+        let (_, s_sky_orig, v_sky_orig) = crate::color::rgb_to_hsv(r_sky, g_sky, b_sky);
+        let (r_db, g_db, b_db) = apply_color_adjustments(r_sky, g_sky, b_sky, 0.0, 0.0, 80.0, 0.0);
+        let (_, s_db, v_db) = crate::color::rgb_to_hsv(r_db, g_db, b_db);
+        assert!(s_db > s_sky_orig, "Deep Blue must boost sky saturation");
+        assert!(v_db < v_sky_orig, "Deep Blue must deepen (darken) sky luminance");
+
+        // 5. Foliage: Yellow-green grass (Hue ~ 85 deg) rotated towards emerald green (120 deg)
+        let (r_grass, g_grass, b_grass) = crate::color::hsv_to_rgb(85.0, 0.6, 0.7);
+        let (r_fol, g_fol, b_fol) = apply_color_adjustments(r_grass, g_grass, b_grass, 0.0, 0.0, 0.0, 80.0);
+        let (h_fol, s_fol, _) = crate::color::rgb_to_hsv(r_fol, g_fol, b_fol);
+        assert!(h_fol > 85.0, "Foliage slider must rotate yellowish grass towards green: got {}", h_fol);
+        assert!(s_fol > 0.6, "Foliage slider must boost grass saturation");
+    }
 }
+
 

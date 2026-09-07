@@ -327,6 +327,11 @@ int8_t uniffi_lumenbox_core_fn_method_lumenboxlensfun_load_xml_string(void*_Nonn
 RustBuffer uniffi_lumenbox_core_fn_method_lumenboxlensfun_resolve_coefficients(void*_Nonnull ptr, RustBuffer camera_make, RustBuffer camera_model, RustBuffer lens_model, float focal_length, RustBuffer aperture, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_CALCULATE_WHITE_BALANCE_FROM_SAMPLE
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_CALCULATE_WHITE_BALANCE_FROM_SAMPLE
+RustBuffer uniffi_lumenbox_core_fn_func_calculate_white_balance_from_sample(float r, float g, float b, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_CHECK_CONNECTION
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_CHECK_CONNECTION
 RustBuffer uniffi_lumenbox_core_fn_func_check_connection(RustCallStatus *_Nonnull out_status
@@ -697,6 +702,12 @@ void ffi_lumenbox_core_rust_future_free_void(uint64_t handle
 #ifndef UNIFFI_FFIDEF_FFI_LUMENBOX_CORE_RUST_FUTURE_COMPLETE_VOID
 #define UNIFFI_FFIDEF_FFI_LUMENBOX_CORE_RUST_FUTURE_COMPLETE_VOID
 void ffi_lumenbox_core_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_CALCULATE_WHITE_BALANCE_FROM_SAMPLE
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_CALCULATE_WHITE_BALANCE_FROM_SAMPLE
+uint16_t uniffi_lumenbox_core_checksum_func_calculate_white_balance_from_sample(void
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_CHECK_CONNECTION

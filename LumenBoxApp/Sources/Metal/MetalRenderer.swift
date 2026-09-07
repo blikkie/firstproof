@@ -18,6 +18,10 @@ public struct ShaderUniforms {
     public var shadows: Float = 0.0
     public var whites: Float = 0.0
     public var blacks: Float = 0.0
+    public var vibrance: Float = 0.0
+    public var saturation: Float = 0.0
+    public var deepBlue: Float = 0.0
+    public var foliage: Float = 0.0
     public var straightenAngle: Float = 0.0
     public var aspectRatio: Float = 1.5
     public var lensCorrectionEnabled: Int32 = 1
@@ -52,11 +56,30 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     
     public var uniforms = ShaderUniforms()
     
-    // MARK: - Viewport Zoom & Pan
+    // MARK: - Viewport Zoom, Pan & Hit-Testing
     public var zoomScale: Float = 1.0
     public var panOffset: SIMD2<Float> = SIMD2<Float>(0.0, 0.0)
     public private(set) var zoomScale100: Float = 1.0
     public var onZoomScale100Changed: ((Float) -> Void)?
+    public private(set) var lastQuadBounds: (left: Float, right: Float, top: Float, bottom: Float) = (-1.0, 1.0, 1.0, -1.0)
+    public private(set) var lastQuadUVs: (tl: SIMD2<Float>, tr: SIMD2<Float>, bl: SIMD2<Float>, br: SIMD2<Float>) = (SIMD2<Float>(0, 0), SIMD2<Float>(1, 0), SIMD2<Float>(0, 1), SIMD2<Float>(1, 1))
+    
+    public func normalizedTextureCoordinates(atNDC pt: CGPoint) -> CGPoint? {
+        let x = Float(pt.x)
+        let y = Float(pt.y)
+        let (left, right, top, bottom) = lastQuadBounds
+        guard x >= left, x <= right, y >= bottom, y <= top else { return nil }
+        
+        let uQuad = (x - left) / max(right - left, 1e-6)
+        let vQuad = (top - y) / max(top - bottom, 1e-6)
+        
+        let (tl, tr, bl, br) = lastQuadUVs
+        let uvTop = (1.0 - uQuad) * tl + uQuad * tr
+        let uvBottom = (1.0 - uQuad) * bl + uQuad * br
+        let uv = (1.0 - vQuad) * uvTop + vQuad * uvBottom
+        
+        return CGPoint(x: CGFloat(min(max(uv.x, 0.0), 1.0)), y: CGFloat(min(max(uv.y, 0.0), 1.0)))
+    }
     
     // MARK: - Viewport Geometry (Rotation & Flip)
     public var rotationDegrees: Int = 0 // 0, 90, 180, 270
@@ -342,6 +365,9 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
                 ptr[idx] = vertex
             }
         }
+        
+        self.lastQuadBounds = (left, right, top, bottom)
+        self.lastQuadUVs = (tl, tr, bl, br)
     }
     
     // MARK: - Texture Upload
@@ -437,6 +463,10 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     }
     
     public func draw(in view: MTKView) {
+        if let metalLayer = view.layer as? CAMetalLayer {
+            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+        }
+        
         guard let drawable = view.currentDrawable,
               let renderPassDescriptor = view.currentRenderPassDescriptor,
               let pipelineState = pipelineState,
@@ -496,6 +526,14 @@ struct ShaderUniforms {
     float temperature;       // 2000K .. 50000K (default 5500K)
     float tint;              // -150 .. +150 (default 0.0)
     float contrast;          // -100 .. +100 (default 0.0)
+    float highlights;        // -100 .. +100 (default 0.0)
+    float shadows;           // -100 .. +100 (default 0.0)
+    float whites;            // -100 .. +100 (default 0.0)
+    float blacks;            // -100 .. +100 (default 0.0)
+    float vibrance;          // -100 .. +100 (default 0.0)
+    float saturation;        // -100 .. +100 (default 0.0)
+    float deepBlue;          // -100 .. +100 (default 0.0)
+    float foliage;           // -100 .. +100 (default 0.0)
     float straightenAngle;   // Radians
     float aspectRatio;       // width / height
     int lensCorrectionEnabled;
@@ -754,6 +792,125 @@ vertex VertexOutput vertexShader(
     return out;
 }
 
+// MARK: - Selective Tone Recovery (Highlights, Shadows, Whites, Blacks)
+inline float3 applyToneRecovery(float3 color, float highlights, float shadows, float whites, float blacks) {
+    if (highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0) {
+        return color;
+    }
+    
+    float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+    if (lum <= 1e-6) {
+        return color;
+    }
+    
+    float ev = log2(max(lum, 1e-5) / 0.18);
+    float delta_ev = 0.0;
+    
+    if (blacks != 0.0) {
+        float u = clamp((-ev - 1.0) / 3.0, 0.0, 1.0);
+        float w_blacks = u * u * (3.0 - 2.0 * u);
+        delta_ev += (blacks / 100.0) * 1.5 * w_blacks;
+    }
+    
+    if (shadows != 0.0) {
+        float u = clamp((ev + 4.0) / 4.0, 0.0, 1.0);
+        float w_shadows = sin(3.141592653589793 * u);
+        delta_ev += (shadows / 100.0) * 1.75 * w_shadows;
+    }
+    
+    if (highlights != 0.0) {
+        float u = clamp(ev / 4.0, 0.0, 1.0);
+        float w_highlights = sin(3.141592653589793 * u);
+        delta_ev += (highlights / 100.0) * 2.0 * w_highlights;
+    }
+    
+    if (whites != 0.0) {
+        float u = clamp((ev - 1.0) / 3.0, 0.0, 1.0);
+        float w_whites = u * u * (3.0 - 2.0 * u);
+        delta_ev += (whites / 100.0) * 1.5 * w_whites;
+    }
+    
+    if (delta_ev == 0.0) {
+        return color;
+    }
+    
+    float gain = exp2(delta_ev);
+    return color * gain;
+}
+
+// MARK: - Color & Vibrance Adjustment Function
+inline float3 applyColorAdjustments(
+    float3 rgb,
+    float vibrance,
+    float saturation,
+    float deepBlue,
+    float foliage
+) {
+    if (vibrance == 0.0 && saturation == 0.0 && deepBlue == 0.0 && foliage == 0.0) {
+        return rgb;
+    }
+    
+    float3 c = clamp(rgb, 0.0, 1.0);
+    float lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+
+    if (saturation != 0.0) {
+        float satGain = max(1.0 + saturation / 100.0, 0.0);
+        c = lum + (c - lum) * satGain;
+    }
+
+    if (vibrance != 0.0) {
+        float maxC = max(max(c.r, c.g), c.b);
+        float minC = min(min(c.r, c.g), c.b);
+        float chroma = maxC - minC;
+
+        float skinProtect = 1.0;
+        if (c.r > c.g && c.g > c.b && lum > 0.05) {
+            float rg = (c.r - c.g) / max(lum, 0.1);
+            float gb = (c.g - c.b) / max(lum, 0.1);
+            float dRg = abs(rg - 0.35);
+            float dGb = abs(gb - 0.25);
+            float skinMetric = clamp(1.0 - (dRg * 3.0 + dGb * 3.0), 0.0, 1.0);
+            skinProtect = 1.0 - 0.6 * skinMetric;
+        }
+
+        float vibGain = (vibrance > 0.0)
+            ? (vibrance / 100.0) * (1.0 - chroma) * 0.8 * skinProtect
+            : (vibrance / 100.0) * 0.6;
+
+        c += (c - lum) * vibGain;
+    }
+
+    if (deepBlue != 0.0) {
+        float maxWarm = max(c.r, c.g);
+        float skySignal = max(c.b - maxWarm, 0.0);
+        if (skySignal > 0.0) {
+            float factor = deepBlue / 100.0;
+            if (factor > 0.0) {
+                c.r -= factor * skySignal * 0.30;
+                c.g -= factor * skySignal * 0.15;
+                c.b -= factor * skySignal * 0.20;
+            } else {
+                c.r -= factor * skySignal * 0.25;
+                c.g -= factor * skySignal * 0.20;
+                c.b -= factor * skySignal * 0.10;
+            }
+        }
+    }
+
+    if (foliage != 0.0) {
+        float maxRb = max(c.r, c.b);
+        float greenSignal = max(c.g - maxRb, 0.0);
+        if (greenSignal > 0.0) {
+            float factor = foliage / 100.0;
+            c.r -= factor * greenSignal * 0.30;
+            c.b -= factor * greenSignal * 0.15;
+            c.g += factor * greenSignal * 0.10;
+        }
+    }
+
+    return clamp(c, 0.0, 1.0);
+}
+
 // MARK: - Fragment Shader (Linear RAW Pipeline)
 fragment float4 fragmentShader(
     VertexOutput in [[stage_in]],
@@ -816,6 +973,14 @@ fragment float4 fragmentShader(
                           (abs(uniforms.temperature - 5500.0) < 1.0) && 
                           (uniforms.tint == 0.0) && 
                           (uniforms.contrast == 0.0) &&
+                          (uniforms.highlights == 0.0) &&
+                          (uniforms.shadows == 0.0) &&
+                          (uniforms.whites == 0.0) &&
+                          (uniforms.blacks == 0.0) &&
+                          (uniforms.vibrance == 0.0) &&
+                          (uniforms.saturation == 0.0) &&
+                          (uniforms.deepBlue == 0.0) &&
+                          (uniforms.foliage == 0.0) &&
                           (uniforms.lutEnabled == 0);
     
     if (uniforms.isLinearRaw == 0 && isNeutralEdits) {
@@ -826,6 +991,14 @@ fragment float4 fragmentShader(
     float editTemp = (uniforms.isOriginal > 0.5) ? 5500.0 : uniforms.temperature;
     float editTint = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.tint;
     float editContrast = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.contrast;
+    float editHighlights = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.highlights;
+    float editShadows = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.shadows;
+    float editWhites = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.whites;
+    float editBlacks = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.blacks;
+    float editVibrance = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.vibrance;
+    float editSaturation = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.saturation;
+    float editDeepBlue = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.deepBlue;
+    float editFoliage = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.foliage;
     
     // 2. Decode texture to Linear Rec.2020 working space
     float3 rec2020Color;
@@ -859,6 +1032,9 @@ fragment float4 fragmentShader(
     if (totalExposure != 0.0) {
         rec2020Color *= pow(2.0, totalExposure);
     }
+    
+    // Apply Selective Tone Recovery (Highlights, Shadows, Whites, Blacks)
+    rec2020Color = applyToneRecovery(rec2020Color, editHighlights, editShadows, editWhites, editBlacks);
     
     // 5. AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles
     float3 srgbLinearOut;
@@ -904,6 +1080,9 @@ fragment float4 fragmentShader(
         finalColor = linearToSrgbGamma3(srgbLinearOut);
     }
     
+    // Apply Color & Vibrance Adjustment
+    finalColor = applyColorAdjustments(finalColor, editVibrance, editSaturation, editDeepBlue, editFoliage);
+    
     // 7. Creative 3D Look-Up Table (Post-Tone-Mapping)
     if (uniforms.lutEnabled != 0 && uniforms.lutIntensity > 0.0 && uniforms.isOriginal < 0.5) {
         float size = max(uniforms.lutSize, 2.0);
@@ -915,4 +1094,3 @@ fragment float4 fragmentShader(
     return float4(finalColor, sampledColor.a);
 }
 """
-

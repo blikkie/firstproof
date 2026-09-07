@@ -11,6 +11,10 @@ public struct MetalCanvasView: NSViewRepresentable {
     let shadows: Float
     let whites: Float
     let blacks: Float
+    let vibrance: Float
+    let saturation: Float
+    let deepBlue: Float
+    let foliage: Float
     let temperature: Float
     let tint: Float
     let straightenAngle: Float
@@ -33,6 +37,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         shadows: Float,
         whites: Float,
         blacks: Float,
+        vibrance: Float,
+        saturation: Float,
+        deepBlue: Float,
+        foliage: Float,
         temperature: Float,
         tint: Float,
         straightenAngle: Float,
@@ -54,6 +62,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         self.shadows = shadows
         self.whites = whites
         self.blacks = blacks
+        self.vibrance = vibrance
+        self.saturation = saturation
+        self.deepBlue = deepBlue
+        self.foliage = foliage
         self.temperature = temperature
         self.tint = tint
         self.straightenAngle = straightenAngle
@@ -123,7 +135,7 @@ public struct MetalCanvasView: NSViewRepresentable {
     }
     
     public func updateNSView(_ nsView: CanvasMTKView, context: Context) {
-        if let metalLayer = nsView.layer as? CAMetalLayer, metalLayer.colorspace == nil {
+        if let metalLayer = nsView.layer as? CAMetalLayer {
             metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
         }
         guard let renderer = context.coordinator.renderer else { return }
@@ -160,6 +172,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         renderer.uniforms.shadows = shadows
         renderer.uniforms.whites = whites
         renderer.uniforms.blacks = blacks
+        renderer.uniforms.vibrance = vibrance
+        renderer.uniforms.saturation = saturation
+        renderer.uniforms.deepBlue = deepBlue
+        renderer.uniforms.foliage = foliage
         renderer.uniforms.straightenAngle = straightenAngle * (.pi / 180.0)
         renderer.uniforms.lensCorrectionEnabled = lensCorrectionEnabled ? 1 : 0
         renderer.uniforms.isOriginal = isShowingOriginal ? 1.0 : 0.0
@@ -290,6 +306,13 @@ public final class CanvasMTKView: MTKView {
     
     public override var acceptsFirstResponder: Bool { true }
     
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let metalLayer = self.layer as? CAMetalLayer {
+            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+        }
+    }
+    
     public override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         if let coordinator = coordinator, let renderer = coordinator.renderer {
@@ -321,6 +344,13 @@ public final class CanvasMTKView: MTKView {
     }
     
     public override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { // Escape: cancel eyedropper
+            if coordinator?.viewModel?.isEyedropperActive == true {
+                coordinator?.viewModel?.isEyedropperActive = false
+                updateCursor()
+                return
+            }
+        }
         if event.keyCode == 49 { // Spacebar
             isSpacePressed = true
             updateCursor()
@@ -347,6 +377,10 @@ public final class CanvasMTKView: MTKView {
             NSCursor.arrow.set()
             return
         }
+        if coordinator.viewModel?.isEyedropperActive == true {
+            NSCursor.crosshair.set()
+            return
+        }
         if isDragging {
             NSCursor.closedHand.set()
         } else if renderer.zoomScale > 1.05 || isSpacePressed {
@@ -360,6 +394,18 @@ public final class CanvasMTKView: MTKView {
         guard let coordinator = coordinator, let renderer = coordinator.renderer else {
             super.mouseDown(with: event)
             return
+        }
+        
+        if let vm = coordinator.viewModel, vm.isEyedropperActive {
+            let loc = convert(event.locationInWindow, from: nil)
+            let ndcX = Float((loc.x / max(bounds.width, 1.0)) * 2.0 - 1.0)
+            let ndcY = Float((loc.y / max(bounds.height, 1.0)) * 2.0 - 1.0)
+            if let uv = renderer.normalizedTextureCoordinates(atNDC: CGPoint(x: CGFloat(ndcX), y: CGFloat(ndcY))) {
+                vm.applyEyedropperSample(atNormalizedUV: uv)
+                vm.isEyedropperActive = false
+                updateCursor()
+                return
+            }
         }
         
         if event.clickCount == 2 {

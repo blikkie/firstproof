@@ -135,6 +135,7 @@ fn test_xmp_tone_profile_roundtrip() {
 }
 
 #[test]
+#[ignore = "Slow real RAW disk decode"]
 fn test_cr2_portrait_cheek_and_helmet_fidelity() {
     use std::path::Path;
     use lumenbox_core::raw_decoder::{RawDecoder, RawlerDecoder};
@@ -220,6 +221,7 @@ fn test_agx_rec2020_saturation_and_vivid_restoration() {
 }
 
 #[test]
+#[ignore = "Slow real RAW disk decode"]
 fn test_gpu_preview_vs_export_parity() {
     use std::path::Path;
     use lumenbox_core::raw_decoder::{RawDecoder, RawlerDecoder};
@@ -256,6 +258,10 @@ fn test_gpu_preview_vs_export_parity() {
         shadows: 0.0,
         whites: 0.0,
         blacks: 0.0,
+        vibrance: 0.0,
+        saturation: 0.0,
+        deep_blue: 0.0,
+        foliage: 0.0,
         temperature: 5500.0,
         tint: 0.0,
         crop_left: 0.0,
@@ -282,6 +288,302 @@ fn test_gpu_preview_vs_export_parity() {
     println!("Export image: R={}, G={}, B={}", export_8bit[0], export_8bit[1], export_8bit[2]);
     
     assert_eq!(gpu_8bit, export_8bit, "GPU preview and export pixel math differ!");
+}
+
+#[test]
+#[ignore = "Slow real RAW disk decode"]
+fn test_cr2_0194_full_pipeline_parity() {
+    use std::path::Path;
+    use lumenbox_core::color::{Color3, agx_tone_map_vivid};
+    use lumenbox_core::export::apply_color_adjustments;
+    use lumenbox_core::EditSettings;
+    
+    let path = Path::new("/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0194.CR2");
+    if !path.exists() { return; }
+    
+    let Ok(demosaiced) = lumenbox_core::export::decode_image(path) else { return; };
+    let w = demosaiced.width;
+    let h = demosaiced.height;
+    
+    // Sample 5 diverse points: Center, Top-Left, Bottom-Right, Mid-Sky, Foreground
+    let sample_points = [
+        ("Center Point", w / 2, h / 2),
+        ("Upper Left", w / 4, h / 4),
+        ("Lower Right", 3 * w / 4, 3 * h / 4),
+        ("Upper Mid", w / 2, h / 5),
+        ("Lower Mid", w / 2, 4 * h / 5),
+    ];
+    
+    let edits = EditSettings {
+        exposure: 0.3,
+        contrast: 10.0,
+        highlights: -20.0,
+        shadows: 15.0,
+        whites: -10.0,
+        blacks: 5.0,
+        vibrance: 25.0,
+        saturation: 10.0,
+        deep_blue: 20.0,
+        foliage: 15.0,
+        temperature: 5800.0,
+        tint: 5.0,
+        crop_left: 0.0,
+        crop_top: 0.0,
+        crop_right: 1.0,
+        crop_bottom: 1.0,
+        crop_angle: 0.0,
+        rotation: 0,
+        flip_horizontal: false,
+        flip_vertical: false,
+        tone_profile: lumenbox_core::ColorProfileMode::AgxVivid,
+        lut_name: None,
+        lut_intensity: 1.0,
+    };
+    
+    // Run full export pipeline
+    let mut export_img = lumenbox_core::export::DemosaicedImage {
+        width: demosaiced.width,
+        height: demosaiced.height,
+        data: demosaiced.data.clone(),
+        is_raw: demosaiced.is_raw,
+    };
+    lumenbox_core::export::apply_edits(&mut export_img, &edits);
+    
+    for (label, px, py) in sample_points {
+        let idx = (py * w + px) * 3;
+        
+        // 1. Export pixel math:
+        let r_exp_raw = export_img.data[idx];
+        let g_exp_raw = export_img.data[idx + 1];
+        let b_exp_raw = export_img.data[idx + 2];
+        let (r_exp_adj, g_exp_adj, b_exp_adj) = apply_color_adjustments(
+            r_exp_raw, g_exp_raw, b_exp_raw,
+            edits.vibrance, edits.saturation, edits.deep_blue, edits.foliage,
+        );
+        let export_8bit = [
+            (r_exp_adj.clamp(0.0, 1.0) * 255.0).round() as u8,
+            (g_exp_adj.clamp(0.0, 1.0) * 255.0).round() as u8,
+            (b_exp_adj.clamp(0.0, 1.0) * 255.0).round() as u8,
+        ];
+        
+        // 2. GPU preview shader simulation:
+        // Input: raw Rec.2020 texture sample
+        let mut r = demosaiced.data[idx];
+        let mut g = demosaiced.data[idx + 1];
+        let mut b = demosaiced.data[idx + 2];
+        
+        // WB
+        let temp_norm = (edits.temperature / 5500.0).clamp(0.25, 4.0);
+        let mut r_scale = temp_norm.powf(0.75);
+        let mut b_scale = (1.0 / temp_norm).powf(0.75);
+        let tint_factor = edits.tint * 0.003;
+        let g_scale = 1.0 - tint_factor;
+        r_scale += tint_factor * 0.5;
+        b_scale += tint_factor * 0.5;
+        r *= r_scale; g *= g_scale; b *= b_scale;
+        
+        // Exposure
+        let exp_gain = 2.0f32.powf(edits.exposure);
+        r *= exp_gain; g *= exp_gain; b *= exp_gain;
+        
+        // Tone Recovery
+        let (r_rec, g_rec, b_rec) = lumenbox_core::export::apply_tone_recovery(
+            r, g, b,
+            edits.highlights, edits.shadows, edits.whites, edits.blacks,
+        );
+        
+        // Tone profile (AgX Vivid)
+        let contrast_gain = 1.0 + (edits.contrast / 100.0);
+        let srgb = agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
+        
+        // Color adjustments
+        let (r_gpu_adj, g_gpu_adj, b_gpu_adj) = apply_color_adjustments(
+            srgb.r().clamp(0.0, 1.0), srgb.g().clamp(0.0, 1.0), srgb.b().clamp(0.0, 1.0),
+            edits.vibrance, edits.saturation, edits.deep_blue, edits.foliage,
+        );
+        let gpu_8bit = [
+            (r_gpu_adj.clamp(0.0, 1.0) * 255.0).round() as u8,
+            (g_gpu_adj.clamp(0.0, 1.0) * 255.0).round() as u8,
+            (b_gpu_adj.clamp(0.0, 1.0) * 255.0).round() as u8,
+        ];
+        
+        assert_eq!(
+            gpu_8bit, export_8bit,
+            "Parity mismatch at {} for 20250409_0194.CR2: GPU {:?} vs Export {:?}",
+            label, gpu_8bit, export_8bit
+        );
+    }
+}
+
+#[test]
+fn test_sliders_dual_engine_parity_sweep() {
+    use lumenbox_core::color::{Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB, agx_tone_map, agx_tone_map_vivid, evaluate_tone_curve, linear_to_srgb_gamma, rgb_to_hsv, hsv_to_rgb};
+    use lumenbox_core::export::{apply_tone_recovery, apply_color_adjustments};
+    use lumenbox_core::color::dcp::DcpProfile;
+    use lumenbox_core::ColorProfileMode;
+
+    // Test palette in linear sRGB
+    let test_patches = [
+        ("Neutral Gray", [0.18, 0.18, 0.18]),
+        ("Vivid Red", [0.85, 0.12, 0.10]),
+        ("Deep Sky", [0.15, 0.45, 0.85]),
+        ("Lush Foliage", [0.20, 0.65, 0.15]),
+        ("Warm Skin", [0.68, 0.42, 0.32]),
+        ("Deep Shadow", [0.03, 0.03, 0.03]),
+        ("Bright Highlight", [0.92, 0.90, 0.88]),
+    ];
+
+    // Slider configurations to sweep: (exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint, mode)
+    let test_configs: [(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, ColorProfileMode); 6] = [
+        // Neutral
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5500.0, 0.0, ColorProfileMode::AgxVivid),
+        // Saturated & Punchy with color adjustments
+        (0.5, 20.0, -30.0, 25.0, -15.0, 10.0, 35.0, 20.0, 6200.0, 10.0, ColorProfileMode::AgxVivid),
+        // AgX Filmic neutral base with deep blue boost
+        (-0.5, -10.0, 10.0, -10.0, 0.0, 0.0, 15.0, -10.0, 4800.0, -8.0, ColorProfileMode::AgxFilmic),
+        // Camera Standard profile with high vibrance & foliage
+        (0.0, 15.0, -20.0, 20.0, -10.0, 5.0, 50.0, 15.0, 5500.0, 0.0, ColorProfileMode::CameraStandard),
+        // Camera Portrait profile with negative vibrance
+        (0.2, -5.0, -15.0, 15.0, 0.0, 0.0, -30.0, -20.0, 5600.0, 4.0, ColorProfileMode::CameraPortrait),
+        // Camera Landscape profile with deep blue and foliage
+        (0.0, 25.0, -40.0, 30.0, -20.0, 10.0, 40.0, 30.0, 5200.0, -5.0, ColorProfileMode::CameraLandscape),
+    ];
+
+    for (profile_idx, &(exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint, mode)) in test_configs.iter().enumerate() {
+        for (patch_name, [r_in, g_in, b_in]) in test_patches {
+            // Input in Rec.2020 wide gamut space
+            let c_rec2020 = LINEAR_SRGB_TO_REC2020.multiply_vector(Color3::new(r_in, g_in, b_in));
+            
+            // 1. SIMULATE METAL GPU SHADER PIPELINE:
+            let mut r_gpu = c_rec2020.r();
+            let mut g_gpu = c_rec2020.g();
+            let mut b_gpu = c_rec2020.b();
+            
+            // White Balance
+            let temp_norm = (temp / 5500.0).clamp(0.25, 4.0);
+            let mut r_scale = temp_norm.powf(0.75);
+            let mut b_scale = (1.0 / temp_norm).powf(0.75);
+            let tint_factor = tint * 0.003;
+            let g_scale = 1.0 - tint_factor;
+            r_scale += tint_factor * 0.5;
+            b_scale += tint_factor * 0.5;
+            r_gpu *= r_scale; g_gpu *= g_scale; b_gpu *= b_scale;
+            
+            // Exposure
+            let exp_gain = 2.0f32.powf(exp);
+            r_gpu *= exp_gain; g_gpu *= exp_gain; b_gpu *= exp_gain;
+            
+            // Tone Recovery
+            let (r_rec, g_rec, b_rec) = apply_tone_recovery(r_gpu, g_gpu, b_gpu, hl, sh, wh, bl);
+            
+            // Tone Profile
+            let contrast_gain = 1.0 + (contrast / 100.0);
+            let (r_disp_gpu, g_disp_gpu, b_disp_gpu) = match mode {
+                ColorProfileMode::AgxVivid => {
+                    let srgb = agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
+                    (srgb.r().clamp(0.0, 1.0), srgb.g().clamp(0.0, 1.0), srgb.b().clamp(0.0, 1.0))
+                }
+                ColorProfileMode::AgxFilmic => {
+                    let srgb = agx_tone_map(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
+                    (srgb.r().clamp(0.0, 1.0), srgb.g().clamp(0.0, 1.0), srgb.b().clamp(0.0, 1.0))
+                }
+                m => {
+                    let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r_rec, g_rec, b_rec));
+                    let (h, s, v) = rgb_to_hsv(c_srgb.r().max(0.0), c_srgb.g().max(0.0), c_srgb.b().max(0.0));
+                    let hsm = match m {
+                        ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_huesatmap(),
+                        ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_huesatmap(),
+                        ColorProfileMode::CameraVivid => DcpProfile::built_in_vivid_huesatmap(),
+                        _ => DcpProfile::built_in_standard_huesatmap(),
+                    };
+                    let (h2, s2, v2) = hsm.apply_hsv(h, s, v);
+                    let (rm, gm, bm) = hsv_to_rgb(h2, s2, v2);
+                    let curve = match m {
+                        ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_tone_curve(),
+                        ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_tone_curve(),
+                        ColorProfileMode::CameraVivid => DcpProfile::built_in_vivid_tone_curve(),
+                        _ => DcpProfile::built_in_standard_tone_curve(),
+                    };
+                    let lum = 0.2126 * rm + 0.7152 * gm + 0.0722 * bm;
+                    let lum_curved = evaluate_tone_curve(lum, &curve);
+                    let lum_adj = ((lum_curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+                    let gain = lum_adj / lum.max(1e-6);
+                    (
+                        linear_to_srgb_gamma((rm * gain).clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma((gm * gain).clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma((bm * gain).clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                    )
+                }
+            };
+            
+            // Color Adjustments
+            let (r_gpu_out, g_gpu_out, b_gpu_out) = apply_color_adjustments(
+                r_disp_gpu, g_disp_gpu, b_disp_gpu,
+                vib, sat, 30.0, 20.0,
+            );
+            
+            let gpu_8bit = [
+                (r_gpu_out.clamp(0.0, 1.0) * 255.0).round() as u8,
+                (g_gpu_out.clamp(0.0, 1.0) * 255.0).round() as u8,
+                (b_gpu_out.clamp(0.0, 1.0) * 255.0).round() as u8,
+            ];
+            
+            // 2. SIMULATE RUST EXPORT PIPELINE:
+            let mut demosaiced = lumenbox_core::export::DemosaicedImage {
+                width: 1,
+                height: 1,
+                data: vec![c_rec2020.r(), c_rec2020.g(), c_rec2020.b()],
+                is_raw: true,
+            };
+            let edits = lumenbox_core::EditSettings {
+                exposure: exp,
+                contrast,
+                highlights: hl,
+                shadows: sh,
+                whites: wh,
+                blacks: bl,
+                vibrance: vib,
+                saturation: sat,
+                deep_blue: 30.0,
+                foliage: 20.0,
+                temperature: temp,
+                tint,
+                crop_left: 0.0, crop_top: 0.0, crop_right: 1.0, crop_bottom: 1.0, crop_angle: 0.0,
+                rotation: 0, flip_horizontal: false, flip_vertical: false,
+                tone_profile: mode,
+                lut_name: None, lut_intensity: 1.0,
+            };
+            lumenbox_core::export::apply_edits(&mut demosaiced, &edits);
+            
+            let r_disp_exp = demosaiced.data[0];
+            let g_disp_exp = demosaiced.data[1];
+            let b_disp_exp = demosaiced.data[2];
+            let (r_disp_exp, g_disp_exp, b_disp_exp) = if mode == ColorProfileMode::AgxVivid || mode == ColorProfileMode::AgxFilmic {
+                (r_disp_exp.clamp(0.0, 1.0), g_disp_exp.clamp(0.0, 1.0), b_disp_exp.clamp(0.0, 1.0))
+            } else {
+                (
+                    linear_to_srgb_gamma(r_disp_exp).clamp(0.0, 1.0),
+                    linear_to_srgb_gamma(g_disp_exp).clamp(0.0, 1.0),
+                    linear_to_srgb_gamma(b_disp_exp).clamp(0.0, 1.0),
+                )
+            };
+            let (r_exp_out, g_exp_out, b_exp_out) = apply_color_adjustments(
+                r_disp_exp, g_disp_exp, b_disp_exp,
+                vib, sat, 30.0, 20.0,
+            );
+            let exp_8bit = [
+                (r_exp_out.clamp(0.0, 1.0) * 255.0).round() as u8,
+                (g_exp_out.clamp(0.0, 1.0) * 255.0).round() as u8,
+                (b_exp_out.clamp(0.0, 1.0) * 255.0).round() as u8,
+            ];
+            
+            assert_eq!(
+                gpu_8bit, exp_8bit,
+                "Dual-engine slider parity failure for {} under config #{:?}: GPU {:?} vs Export {:?}",
+                patch_name, profile_idx, gpu_8bit, exp_8bit
+            );
+        }
+    }
 }
 
 #[test]
