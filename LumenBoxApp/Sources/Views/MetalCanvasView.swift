@@ -5,115 +5,25 @@ import LumenBoxBridge
 
 public struct MetalCanvasView: NSViewRepresentable {
     @Bindable var viewModel: AppViewModel
-    let exposure: Float
-    let contrast: Float
-    let highlights: Float
-    let shadows: Float
-    let whites: Float
-    let blacks: Float
-    let vibrance: Float
-    let saturation: Float
-    let deepBlue: Float
-    let foliage: Float
-    let sharpeningAmount: Float
-    let sharpeningRadius: Float
-    let sharpeningMasking: Float
-    let noiseReduction: Float
-    let temperature: Float
-    let tint: Float
-    let straightenAngle: Float
-    let lensCorrectionEnabled: Bool
-    let selectedLutName: String?
-    let lutIntensity: Float
-    let toneProfile: ColorProfileMode
-    let rotationDegrees: Int
-    let flipHorizontal: Bool
-    let flipVertical: Bool
+    let edits: EditSettings
     let zoomScale: Float
     let panOffset: CGPoint
     let isShowingOriginal: Bool
-    let cropLeft: Float
-    let cropTop: Float
-    let cropRight: Float
-    let cropBottom: Float
-    let perspectiveVertical: Float
-    let perspectiveHorizontal: Float
-    let cropConstrain: Bool
     let isCropToolActive: Bool
     
     public init(
         viewModel: AppViewModel,
-        exposure: Float,
-        contrast: Float,
-        highlights: Float,
-        shadows: Float,
-        whites: Float,
-        blacks: Float,
-        vibrance: Float,
-        saturation: Float,
-        deepBlue: Float,
-        foliage: Float,
-        sharpeningAmount: Float,
-        sharpeningRadius: Float,
-        sharpeningMasking: Float,
-        noiseReduction: Float,
-        temperature: Float,
-        tint: Float,
-        straightenAngle: Float,
-        lensCorrectionEnabled: Bool,
-        selectedLutName: String?,
-        lutIntensity: Float,
-        toneProfile: ColorProfileMode,
-        rotationDegrees: Int,
-        flipHorizontal: Bool,
-        flipVertical: Bool,
+        edits: EditSettings,
         zoomScale: Float,
         panOffset: CGPoint,
         isShowingOriginal: Bool,
-        cropLeft: Float = 0.0,
-        cropTop: Float = 0.0,
-        cropRight: Float = 1.0,
-        cropBottom: Float = 1.0,
-        perspectiveVertical: Float = 0.0,
-        perspectiveHorizontal: Float = 0.0,
-        cropConstrain: Bool = true,
         isCropToolActive: Bool = false
     ) {
         self.viewModel = viewModel
-        self.exposure = exposure
-        self.contrast = contrast
-        self.highlights = highlights
-        self.shadows = shadows
-        self.whites = whites
-        self.blacks = blacks
-        self.vibrance = vibrance
-        self.saturation = saturation
-        self.deepBlue = deepBlue
-        self.foliage = foliage
-        self.sharpeningAmount = sharpeningAmount
-        self.sharpeningRadius = sharpeningRadius
-        self.sharpeningMasking = sharpeningMasking
-        self.noiseReduction = noiseReduction
-        self.temperature = temperature
-        self.tint = tint
-        self.straightenAngle = straightenAngle
-        self.lensCorrectionEnabled = lensCorrectionEnabled
-        self.selectedLutName = selectedLutName
-        self.lutIntensity = lutIntensity
-        self.toneProfile = toneProfile
-        self.rotationDegrees = rotationDegrees
-        self.flipHorizontal = flipHorizontal
-        self.flipVertical = flipVertical
+        self.edits = edits
         self.zoomScale = zoomScale
         self.panOffset = panOffset
         self.isShowingOriginal = isShowingOriginal
-        self.cropLeft = cropLeft
-        self.cropTop = cropTop
-        self.cropRight = cropRight
-        self.cropBottom = cropBottom
-        self.perspectiveVertical = perspectiveVertical
-        self.perspectiveHorizontal = perspectiveHorizontal
-        self.cropConstrain = cropConstrain
         self.isCropToolActive = isCropToolActive
     }
     
@@ -160,7 +70,7 @@ public struct MetalCanvasView: NSViewRepresentable {
                 renderer.updateTexture(with: image)
             }
             
-            if let lutName = selectedLutName {
+            if let lutName = edits.lutName {
                 let lutRecord = viewModel.resolveLutRecord(for: lutName)
                 renderer.updateLutTexture(with: lutRecord)
                 context.coordinator.lastLutName = lutName
@@ -203,67 +113,25 @@ public struct MetalCanvasView: NSViewRepresentable {
         }
         
         // 2. Transmit Slider & Lensfun Uniforms to GPU
-        renderer.uniforms.exposure = exposure
-        renderer.uniforms.temperature = temperature
-        renderer.uniforms.tint = tint
-        renderer.uniforms.contrast = contrast
-        renderer.uniforms.highlights = highlights
-        renderer.uniforms.shadows = shadows
-        renderer.uniforms.whites = whites
-        renderer.uniforms.blacks = blacks
-        renderer.uniforms.vibrance = vibrance
-        renderer.uniforms.saturation = saturation
-        renderer.uniforms.deepBlue = deepBlue
-        renderer.uniforms.foliage = foliage
-        renderer.uniforms.sharpeningAmount = sharpeningAmount
-        renderer.uniforms.sharpeningRadius = sharpeningRadius
-        renderer.uniforms.sharpeningMasking = sharpeningMasking
-        renderer.uniforms.noiseReduction = noiseReduction
-        renderer.uniforms.straightenAngle = straightenAngle * (.pi / 180.0)
-        renderer.uniforms.lensCorrectionEnabled = lensCorrectionEnabled ? 1 : 0
-        renderer.uniforms.isOriginal = isShowingOriginal ? 1.0 : 0.0
-        renderer.uniforms.cropLeft = cropLeft
-        renderer.uniforms.cropTop = cropTop
-        renderer.uniforms.cropRight = cropRight
-        renderer.uniforms.cropBottom = cropBottom
-        renderer.uniforms.perspectiveVertical = perspectiveVertical
-        renderer.uniforms.perspectiveHorizontal = perspectiveHorizontal
-        renderer.uniforms.cropConstrain = cropConstrain ? 1 : 0
-        renderer.uniforms.cropModeActive = isCropToolActive ? 1 : 0
+        let imageW = Float(viewModel.previewImage?.size.width ?? 4000.0)
+        let imageH = Float(viewModel.previewImage?.size.height ?? 3000.0)
+        let imageAspect = imageW / max(imageH, 1.0)
         
-        switch toneProfile {
-        case .agxVivid:
-            renderer.uniforms.toneProfileMode = 0
-        case .agxFilmic:
-            renderer.uniforms.toneProfileMode = 1
-        case .cameraStandard:
-            renderer.uniforms.toneProfileMode = 2
-        case .cameraPortrait:
-            renderer.uniforms.toneProfileMode = 3
-        case .cameraLandscape:
-            renderer.uniforms.toneProfileMode = 4
-        case .cameraVivid:
-            renderer.uniforms.toneProfileMode = 5
-        }
-        
-        if let coeff = viewModel.lensCoefficients, coeff.hasDistortion {
-            renderer.uniforms.distortionModel = (coeff.distortionModel == "ptlens") ? 1 : 0
-            renderer.uniforms.k1 = coeff.distortion.indices.contains(0) ? coeff.distortion[0] : 0.0
-            renderer.uniforms.k2 = coeff.distortion.indices.contains(1) ? coeff.distortion[1] : 0.0
-            renderer.uniforms.k3 = coeff.distortion.indices.contains(2) ? coeff.distortion[2] : 0.0
-            renderer.uniforms.k4 = coeff.distortion.indices.contains(3) ? coeff.distortion[3] : 0.0
-        } else {
-            renderer.uniforms.k1 = 0.0
-            renderer.uniforms.k2 = 0.0
-            renderer.uniforms.k3 = 0.0
-            renderer.uniforms.k4 = 0.0
-        }
+        renderer.updateUniforms(
+            from: edits,
+            imageAspect: imageAspect,
+            isLinearRaw: viewModel.rawPreviewRecord != nil,
+            isOriginal: isShowingOriginal,
+            isCropToolActive: isCropToolActive,
+            lensCorrectionEnabled: viewModel.lensCorrectionEnabled,
+            lensCoefficients: viewModel.lensCoefficients
+        )
         
         // 3. Update 3D LUT texture if LUT selection changed
-        let lutChanged = context.coordinator.lastLutName != selectedLutName
+        let lutChanged = context.coordinator.lastLutName != edits.lutName
         if lutChanged {
-            context.coordinator.lastLutName = selectedLutName
-            if let lutName = selectedLutName {
+            context.coordinator.lastLutName = edits.lutName
+            if let lutName = edits.lutName {
                 let lutRecord = viewModel.resolveLutRecord(for: lutName)
                 renderer.updateLutTexture(with: lutRecord)
             } else {
@@ -271,13 +139,7 @@ public struct MetalCanvasView: NSViewRepresentable {
             }
         }
         
-        renderer.uniforms.lutEnabled = (selectedLutName != nil) ? 1 : 0
-        renderer.uniforms.lutIntensity = lutIntensity
-        
-        // 4. Viewport Geometry, Zoom & Pan
-        renderer.rotationDegrees = rotationDegrees
-        renderer.flipHorizontal = flipHorizontal
-        renderer.flipVertical = flipVertical
+        // 4. Viewport Zoom & Pan
         renderer.zoomScale = zoomScale
         renderer.panOffset = SIMD2<Float>(Float(panOffset.x), Float(panOffset.y))
         renderer.updateQuad(viewSize: nsView.drawableSize)
@@ -296,37 +158,19 @@ public struct MetalCanvasView: NSViewRepresentable {
     private static func setupCaptureClosure(for viewModel: AppViewModel, renderer: MetalRenderer) {
         viewModel.captureThumbnailSnapshot = { [weak renderer, weak viewModel] in
             guard let renderer = renderer, let vm = viewModel else { return nil }
-            renderer.uniforms.exposure = vm.exposure
-            renderer.uniforms.temperature = vm.temperature
-            renderer.uniforms.tint = vm.tint
-            renderer.uniforms.contrast = vm.contrast
-            renderer.uniforms.highlights = vm.highlights
-            renderer.uniforms.shadows = vm.shadows
-            renderer.uniforms.whites = vm.whites
-            renderer.uniforms.blacks = vm.blacks
-            renderer.uniforms.vibrance = vm.vibrance
-            renderer.uniforms.saturation = vm.saturation
-            renderer.uniforms.deepBlue = vm.deepBlue
-            renderer.uniforms.foliage = vm.foliage
-            renderer.uniforms.sharpeningAmount = vm.sharpeningAmount
-            renderer.uniforms.sharpeningRadius = vm.sharpeningRadius
-            renderer.uniforms.sharpeningMasking = vm.sharpeningMasking
-            renderer.uniforms.noiseReduction = vm.noiseReduction
-            renderer.uniforms.straightenAngle = vm.straightenAngle * (.pi / 180.0)
-            renderer.uniforms.lensCorrectionEnabled = vm.lensCorrectionEnabled ? 1 : 0
-            renderer.uniforms.isOriginal = 0.0
-            renderer.uniforms.lutEnabled = (vm.selectedLutName != nil) ? 1 : 0
-            renderer.uniforms.cropLeft = vm.cropLeft
-            renderer.uniforms.cropTop = vm.cropTop
-            renderer.uniforms.cropRight = vm.cropRight
-            renderer.uniforms.cropBottom = vm.cropBottom
-            renderer.uniforms.perspectiveVertical = vm.perspectiveVertical
-            renderer.uniforms.perspectiveHorizontal = vm.perspectiveHorizontal
-            renderer.uniforms.cropConstrain = vm.cropConstrain ? 1 : 0
-            renderer.uniforms.cropModeActive = 0
-            renderer.rotationDegrees = vm.rotationDegrees
-            renderer.flipHorizontal = vm.flipHorizontal
-            renderer.flipVertical = vm.flipVertical
+            let imageW = Float(vm.previewImage?.size.width ?? 4000.0)
+            let imageH = Float(vm.previewImage?.size.height ?? 3000.0)
+            let imageAspect = imageW / max(imageH, 1.0)
+            
+            renderer.updateUniforms(
+                from: vm.currentEdits,
+                imageAspect: imageAspect,
+                isLinearRaw: vm.rawPreviewRecord != nil,
+                isOriginal: false,
+                isCropToolActive: false,
+                lensCorrectionEnabled: vm.lensCorrectionEnabled,
+                lensCoefficients: vm.lensCoefficients
+            )
             return renderer.renderThumbnailSnapshot(maxDimension: 320)
         }
     }

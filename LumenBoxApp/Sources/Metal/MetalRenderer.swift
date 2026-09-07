@@ -68,6 +68,82 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     
     public var uniforms = ShaderUniforms()
     
+    // MARK: - Centralized Uniforms & Geometry Update
+    public func updateUniforms(
+        from edits: EditSettings,
+        imageAspect: Float,
+        isLinearRaw: Bool,
+        isOriginal: Bool = false,
+        isCropToolActive: Bool = false,
+        lensCorrectionEnabled: Bool = true,
+        lensCoefficients: LensCorrectionCoefficientsRecord? = nil
+    ) {
+        uniforms.exposure = edits.exposure
+        uniforms.temperature = edits.temperature
+        uniforms.tint = edits.tint
+        uniforms.contrast = edits.contrast
+        uniforms.highlights = edits.highlights
+        uniforms.shadows = edits.shadows
+        uniforms.whites = edits.whites
+        uniforms.blacks = edits.blacks
+        uniforms.vibrance = edits.vibrance
+        uniforms.saturation = edits.saturation
+        uniforms.deepBlue = edits.deepBlue
+        uniforms.foliage = edits.foliage
+        uniforms.straightenAngle = edits.cropAngle * (.pi / 180.0)
+        uniforms.aspectRatio = imageAspect
+        uniforms.lensCorrectionEnabled = lensCorrectionEnabled ? 1 : 0
+        uniforms.isOriginal = isOriginal ? 1.0 : 0.0
+        uniforms.isLinearRaw = isLinearRaw ? 1 : 0
+        uniforms.lutEnabled = (edits.lutName != nil) ? 1 : 0
+        uniforms.lutIntensity = edits.lutIntensity
+        uniforms.sharpeningAmount = edits.sharpeningAmount
+        uniforms.sharpeningRadius = edits.sharpeningRadius
+        uniforms.sharpeningMasking = edits.sharpeningMasking
+        uniforms.noiseReduction = edits.noiseReduction
+        uniforms.cropLeft = edits.cropLeft
+        uniforms.cropTop = edits.cropTop
+        uniforms.cropRight = edits.cropRight
+        uniforms.cropBottom = edits.cropBottom
+        uniforms.perspectiveVertical = edits.perspectiveVertical
+        uniforms.perspectiveHorizontal = edits.perspectiveHorizontal
+        uniforms.cropConstrain = edits.cropConstrain ? 1 : 0
+        uniforms.cropModeActive = isCropToolActive ? 1 : 0
+        
+        switch edits.toneProfile {
+        case .agxVivid:
+            uniforms.toneProfileMode = 0
+        case .agxFilmic:
+            uniforms.toneProfileMode = 1
+        case .cameraStandard:
+            uniforms.toneProfileMode = 2
+        case .cameraPortrait:
+            uniforms.toneProfileMode = 3
+        case .cameraLandscape:
+            uniforms.toneProfileMode = 4
+        case .cameraVivid:
+            uniforms.toneProfileMode = 5
+        }
+        
+        if let coeff = lensCoefficients, coeff.hasDistortion {
+            uniforms.distortionModel = (coeff.distortionModel == "ptlens") ? 1 : 0
+            uniforms.k1 = coeff.distortion.indices.contains(0) ? coeff.distortion[0] : 0.0
+            uniforms.k2 = coeff.distortion.indices.contains(1) ? coeff.distortion[1] : 0.0
+            uniforms.k3 = coeff.distortion.indices.contains(2) ? coeff.distortion[2] : 0.0
+            uniforms.k4 = coeff.distortion.indices.contains(3) ? coeff.distortion[3] : 0.0
+        } else {
+            uniforms.distortionModel = 0
+            uniforms.k1 = 0.0
+            uniforms.k2 = 0.0
+            uniforms.k3 = 0.0
+            uniforms.k4 = 0.0
+        }
+        
+        self.rotationDegrees = Int(edits.rotation)
+        self.flipHorizontal = edits.flipHorizontal
+        self.flipVertical = edits.flipVertical
+    }
+    
     // MARK: - Viewport Zoom, Pan & Hit-Testing
     public var zoomScale: Float = 1.0
     public var panOffset: SIMD2<Float> = SIMD2<Float>(0.0, 0.0)

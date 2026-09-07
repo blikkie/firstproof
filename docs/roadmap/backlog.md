@@ -49,15 +49,10 @@ Camera optical low-pass filters (OLPF) and 2x2 Bayer demosaic reconstruction inh
 *   **Chrominance Denoising (Color Noise Reduction)**:
     A fast bilateral or median filter on \(Cb / Cr\) chroma channels that eliminates speckled color noise at high ISO while leaving luminance edge sharpness intact.
 
-### Eyedropper & Selection Tools (P2)
-*   **White Balance Picker**:
-    1. The user clicks a point or small pixel region (e.g., 5x5 average) in the viewport.
-    2. Read the RGB values of this region from the raw demosaiced texture buffer.
-    3. Calculate the multipliers needed to make the red, green, and blue values equal:
-       \(w_r = G_{avg} / R_{avg}, \quad w_b = G_{avg} / B_{avg}\)
-    4. Apply these multipliers as the new white balance coefficients.
-*   **White/Black Point Selectors**:
-    *   Let users click absolute highlights/shadows. Map the selected pixel's luminance to 1.0 (white point) or 0.0 (black point) in the tone curve shader.
+### Point-Selection Tools (P2)
+*   **White Balance Picker**: ✅ *Completed in Story 6.4* (5×5 neighborhood sampling in Metal canvas viewport, Planckian Kelvin / Tint computation, and XMP persistence).
+*   **White/Black Point Selectors (Tone Curves)**:
+    *   Let users click absolute highlights/shadows in the image to pin luminance 1.0 (white point) or 0.0 (black point) when editing tone curves.
 
 ---
 

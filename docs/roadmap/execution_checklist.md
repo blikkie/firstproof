@@ -54,12 +54,25 @@
     - `[x]` 13.4 Story 6.4: Smart Vibrance, Saturation & White Balance Eyedropper
     - `[x]` 13.5 Story 6.5: Luminance Sharpening, Edge Masking & Clarity (Detail Workspace Tab)
     - `[x]` 13.6 Persistent Disk Thumbnail Cache & Real-Time GPU Invalidation Engine
-- `[ ]` 14. Core Refactoring & Library Modernization Audit (P2 Tech Debt)
-    - `[ ]` 14.1 Migrate hand-rolled CIEDE2000 & color conversions to `palette` crate
-    - `[ ]` 14.2 Replace hand-rolled 3x3 matrix math with `glam` SIMD (`Mat3`, `Vec3`)
-    - `[ ]` 14.3 Adopt `xmp-writer` for type-safe RDF/XMP sidecar generation
-    - `[ ]` 14.4 Upgrade export demosaicing from naive bilinear to directional (RCD / VNG)
-    - `[ ]` 14.5 Factor `lensfun.rs` into an isolated sub-crate and establish data pack licensing boundaries
-
-
-
+- `[x]` 14. Epic 7: Unified Crop, Geometry & Perspective Keystone Engine (P1)
+    - `[x]` 14.1 Interactive CropOverlayView with rule-of-thirds grid, corner brackets, and edge pills
+    - `[x]` 14.2 Aspect ratio presets with long-side photo auto-matching and Flip (X) support
+    - `[x]` 14.3 Strict aspect ratio lock across all 8 handles with boundary expansion limits
+    - `[x]` 14.4 Inscribed 4-corner homography auto-crop envelope for keystone perspective correction
+    - `[x]` 14.5 Automated editsCacheSignature derivation and non-destructive XMP roundtripping
+- `[ ]` 15. Epic 8: Architecture Modernization & Refactoring (Phased Plan)
+    - `[ ]` 15.1 Phase 1: Swift State & Uniform Plumbing Encapsulation (`EditSettings` unification, eliminate 30-field copying)
+    - `[ ]` 15.2 Phase 2: Rust Core Modernization (`glam` SIMD NEON matrices, `xmp-writer` type-safe RDF, `palette` CIE)
+    - `[ ]` 15.3 Phase 3: SwiftUI View Decomposition & ViewModel Decoupling (Inspector panels, Library/Editor separation)
+    - `[ ]` 15.4 Phase 4: Single-Key Professional Muscle Memory & First-Responder Input Filter
+- `[ ]` 16. Epic 9: Interactive RGB & Tone Curves Engine (P1)
+    - `[ ]` 16.1 Monotone Cubic Spline (Fritsch-Carlson) transfer function curve widget
+    - `[ ]` 16.2 RGB Master & Individual Red/Green/Blue split-toning channels
+    - `[ ]` 16.3 1D Metal texture LUT evaluation (`MTLTextureType1D`) with dual-engine Rust CPU parity
+- `[ ]` 17. Epic 10: Multi-Selection Parallel Multi-Core Batch Export Engine (P1)
+    - `[ ]` 17.1 Multi-photo selection in Grid (`Cmd+A`, `Shift+Click`, `Cmd+Click`)
+    - `[ ]` 17.2 Rayon multi-core thread pool in Rust core (`rayon::par_iter`)
+    - `[ ]` 17.3 Background export queue with progress bar and Notification Center banner
+- `[ ]` 18. Epic 11: Apple EDR & Ultra HDR Gain Map Pipeline (P1)
+    - `[ ]` 18.1 16-bit float Metal canvas layer (`.rgba16Float`) for 1,600-nit Liquid Retina XDR displays
+    - `[ ]` 18.2 ISO 21496-1 gain map JPEG export and Google Pixel gain map ingestion

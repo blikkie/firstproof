@@ -903,68 +903,42 @@ public final class AppViewModel {
         
         // Sync XMP edit sliders if sidecar exists
         if let xmp = readXmp(path: photo.filePath) {
-            self.exposure = xmp.edits.exposure
-            self.contrast = xmp.edits.contrast
-            self.highlights = xmp.edits.highlights
-            self.shadows = xmp.edits.shadows
-            self.whites = xmp.edits.whites
-            self.blacks = xmp.edits.blacks
-            self.vibrance = xmp.edits.vibrance
-            self.saturation = xmp.edits.saturation
-            self.deepBlue = xmp.edits.deepBlue
-            self.foliage = xmp.edits.foliage
-            self.sharpeningAmount = xmp.edits.sharpeningAmount
-            self.sharpeningRadius = xmp.edits.sharpeningRadius
-            self.sharpeningMasking = xmp.edits.sharpeningMasking
-            self.noiseReduction = xmp.edits.noiseReduction
-            self.temperature = xmp.edits.temperature
-            self.tint = xmp.edits.tint
-            self.cropLeft = xmp.edits.cropLeft
-            self.cropTop = xmp.edits.cropTop
-            self.cropRight = xmp.edits.cropRight
-            self.cropBottom = xmp.edits.cropBottom
-            self.straightenAngle = xmp.edits.cropAngle
-            self.perspectiveVertical = xmp.edits.perspectiveVertical
-            self.perspectiveHorizontal = xmp.edits.perspectiveHorizontal
-            self.cropConstrain = xmp.edits.cropConstrain
-            self.rotationDegrees = Int(xmp.edits.rotation)
-            self.flipHorizontal = xmp.edits.flipHorizontal
-            self.flipVertical = xmp.edits.flipVertical
-            self.toneProfile = xmp.edits.toneProfile
-            self.selectedLutName = xmp.edits.lutName
-            self.lutIntensity = xmp.edits.lutIntensity
+            self.applyEdits(xmp.edits)
         } else {
-            self.exposure = 0.0
-            self.contrast = 0.0
-            self.highlights = 0.0
-            self.shadows = 0.0
-            self.whites = 0.0
-            self.blacks = 0.0
-            self.vibrance = 0.0
-            self.saturation = 0.0
-            self.deepBlue = 0.0
-            self.foliage = 0.0
-            self.sharpeningAmount = photo.isRaw ? 20.0 : 0.0
-            self.sharpeningRadius = 1.0
-            self.sharpeningMasking = photo.isRaw ? 15.0 : 0.0
-            self.noiseReduction = 0.0
-            self.temperature = 5500.0
-            self.tint = 0.0
-            self.cropLeft = 0.0
-            self.cropTop = 0.0
-            self.cropRight = 1.0
-            self.cropBottom = 1.0
-            self.straightenAngle = 0.0
-            self.perspectiveVertical = 0.0
-            self.perspectiveHorizontal = 0.0
-            self.cropConstrain = true
+            let defaultEdits = EditSettings(
+                exposure: 0.0,
+                contrast: 0.0,
+                highlights: 0.0,
+                shadows: 0.0,
+                whites: 0.0,
+                blacks: 0.0,
+                vibrance: 0.0,
+                saturation: 0.0,
+                deepBlue: 0.0,
+                foliage: 0.0,
+                temperature: 5500.0,
+                tint: 0.0,
+                cropLeft: 0.0,
+                cropTop: 0.0,
+                cropRight: 1.0,
+                cropBottom: 1.0,
+                cropAngle: 0.0,
+                perspectiveVertical: 0.0,
+                perspectiveHorizontal: 0.0,
+                cropConstrain: true,
+                rotation: Int32(self.defaultExifRotation),
+                flipHorizontal: self.defaultExifFlipH,
+                flipVertical: self.defaultExifFlipV,
+                toneProfile: .agxVivid,
+                lutName: nil,
+                lutIntensity: 1.0,
+                sharpeningAmount: photo.isRaw ? 20.0 : 0.0,
+                sharpeningRadius: 1.0,
+                sharpeningMasking: photo.isRaw ? 15.0 : 0.0,
+                noiseReduction: 0.0
+            )
+            self.applyEdits(defaultEdits)
             self.isCropToolActive = false
-            self.rotationDegrees = self.defaultExifRotation
-            self.flipHorizontal = self.defaultExifFlipH
-            self.flipVertical = self.defaultExifFlipV
-            self.toneProfile = .agxVivid
-            self.selectedLutName = nil
-            self.lutIntensity = 1.0
         }
     }
     
@@ -1136,6 +1110,40 @@ public final class AppViewModel {
             sharpeningMasking: self.sharpeningMasking,
             noiseReduction: self.noiseReduction
         )
+    }
+    
+    // MARK: - Apply Edits Atomically
+    public func applyEdits(_ edits: EditSettings) {
+        self.exposure = edits.exposure
+        self.contrast = edits.contrast
+        self.highlights = edits.highlights
+        self.shadows = edits.shadows
+        self.whites = edits.whites
+        self.blacks = edits.blacks
+        self.vibrance = edits.vibrance
+        self.saturation = edits.saturation
+        self.deepBlue = edits.deepBlue
+        self.foliage = edits.foliage
+        self.temperature = edits.temperature
+        self.tint = edits.tint
+        self.cropLeft = edits.cropLeft
+        self.cropTop = edits.cropTop
+        self.cropRight = edits.cropRight
+        self.cropBottom = edits.cropBottom
+        self.straightenAngle = edits.cropAngle
+        self.perspectiveVertical = edits.perspectiveVertical
+        self.perspectiveHorizontal = edits.perspectiveHorizontal
+        self.cropConstrain = edits.cropConstrain
+        self.rotationDegrees = Int(edits.rotation)
+        self.flipHorizontal = edits.flipHorizontal
+        self.flipVertical = edits.flipVertical
+        self.toneProfile = edits.toneProfile
+        self.selectedLutName = edits.lutName
+        self.lutIntensity = edits.lutIntensity
+        self.sharpeningAmount = edits.sharpeningAmount
+        self.sharpeningRadius = edits.sharpeningRadius
+        self.sharpeningMasking = edits.sharpeningMasking
+        self.noiseReduction = edits.noiseReduction
     }
     
     private func syncXmp(for filePath: String, rating: Int32??, status: String?, edits: EditSettings? = nil) {
