@@ -275,6 +275,10 @@ fn test_gpu_preview_vs_export_parity() {
         tone_profile: lumenbox_core::ColorProfileMode::AgxVivid,
         lut_name: None,
         lut_intensity: 1.0,
+        sharpening_amount: 0.0,
+        sharpening_radius: 1.0,
+        sharpening_masking: 0.0,
+        noise_reduction: 0.0,
     };
     lumenbox_core::export::apply_edits(&mut export_img, &edits);
     let export_srgb = Color3::new(export_img.data[idx], export_img.data[idx + 1], export_img.data[idx + 2]);
@@ -338,6 +342,10 @@ fn test_cr2_0194_full_pipeline_parity() {
         tone_profile: lumenbox_core::ColorProfileMode::AgxVivid,
         lut_name: None,
         lut_intensity: 1.0,
+        sharpening_amount: 0.0,
+        sharpening_radius: 1.0,
+        sharpening_masking: 0.0,
+        noise_reduction: 0.0,
     };
     
     // Run full export pipeline
@@ -552,6 +560,7 @@ fn test_sliders_dual_engine_parity_sweep() {
                 rotation: 0, flip_horizontal: false, flip_vertical: false,
                 tone_profile: mode,
                 lut_name: None, lut_intensity: 1.0,
+                sharpening_amount: 0.0, sharpening_radius: 1.0, sharpening_masking: 0.0, noise_reduction: 0.0,
             };
             lumenbox_core::export::apply_edits(&mut demosaiced, &edits);
             
@@ -630,5 +639,84 @@ fn test_lensfun_export_distortion_math() {
 
     assert!((rust_sx - metal_sx).abs() < 1e-4, "X coord mismatch: rust={}, metal={}", rust_sx, metal_sx);
     assert!((rust_sy - metal_sy).abs() < 1e-4, "Y coord mismatch: rust={}, metal={}", rust_sy, metal_sy);
+}
+
+#[test]
+fn test_sharpening_and_masking_parity() {
+    // Metal shader detail function simulation
+    fn metal_apply_detail(
+        color: (f32, f32, f32),
+        y_c: f32, y_l: f32, y_r: f32, y_t: f32, y_b: f32,
+        amount: f32, masking: f32, nr: f32,
+    ) -> (f32, f32, f32) {
+        if amount <= 0.0 && nr <= 0.0 {
+            return color;
+        }
+        let y_neighbors = 0.25 * (y_l + y_r + y_t + y_b);
+        let delta_y = y_c - y_neighbors;
+        let gx = (y_r - y_l) * 0.5;
+        let gy = (y_b - y_t) * 0.5;
+        let grad_mag = (gx * gx + gy * gy).sqrt();
+        let w_edge = if masking <= 0.0 {
+            1.0
+        } else {
+            let m = (masking / 100.0).clamp(0.0, 1.0);
+            let threshold = m.powf(1.5) * 0.08;
+            let t = (grad_mag / threshold.max(1e-4)).clamp(0.0, 1.0);
+            t * t * (3.0 - 2.0 * t)
+        };
+        let sharp_gain = (amount / 100.0) * 3.5;
+        let sharp_term = sharp_gain * w_edge * delta_y;
+        let nr_term = (nr / 100.0) * (1.0 - w_edge) * delta_y;
+        let delta_adj = sharp_term - nr_term;
+        let k = ((y_c + delta_adj) / y_c.max(1e-5)).clamp(0.0, 3.0);
+        (
+            (color.0 * k).clamp(0.0, 1.0),
+            (color.1 * k).clamp(0.0, 1.0),
+            (color.2 * k).clamp(0.0, 1.0),
+        )
+    }
+
+    // Test a sweep of detail scenarios
+    let scenarios = [
+        // (name, c_rgb, y_c, (y_l, y_r, y_t, y_b), amount, masking, nr)
+        ("neutral", (0.5, 0.4, 0.3), 0.4, (0.3, 0.5, 0.3, 0.5), 0.0, 0.0, 0.0),
+        ("step_edge_unmasked", (0.8, 0.8, 0.8), 0.8, (0.2, 0.8, 0.5, 0.5), 50.0, 0.0, 0.0),
+        ("step_edge_masked", (0.8, 0.8, 0.8), 0.8, (0.2, 0.8, 0.5, 0.5), 50.0, 30.0, 0.0),
+        ("flat_noise_unmasked", (0.505, 0.505, 0.505), 0.505, (0.5, 0.5, 0.5, 0.5), 50.0, 0.0, 0.0),
+        ("flat_noise_masked", (0.505, 0.505, 0.505), 0.505, (0.5, 0.5, 0.5, 0.5), 50.0, 30.0, 0.0),
+        ("flat_noise_nr", (0.505, 0.505, 0.505), 0.505, (0.5, 0.5, 0.5, 0.5), 0.0, 30.0, 80.0),
+        ("edge_with_nr", (0.8, 0.8, 0.8), 0.8, (0.2, 0.8, 0.5, 0.5), 40.0, 20.0, 60.0),
+    ];
+
+    for (name, color, y_c, (y_l, y_r, y_t, y_b), amount, masking, nr) in scenarios {
+        let rust_res = lumenbox_core::export::apply_detail_and_sharpening_rgb(
+            color.0, color.1, color.2,
+            y_c, y_l, y_r, y_t, y_b,
+            amount, masking, nr,
+        );
+        let metal_res = metal_apply_detail(
+            color,
+            y_c, y_l, y_r, y_t, y_b,
+            amount, masking, nr,
+        );
+
+        let rust_8bit = [
+            (rust_res.0 * 255.0).round() as u8,
+            (rust_res.1 * 255.0).round() as u8,
+            (rust_res.2 * 255.0).round() as u8,
+        ];
+        let metal_8bit = [
+            (metal_res.0 * 255.0).round() as u8,
+            (metal_res.1 * 255.0).round() as u8,
+            (metal_res.2 * 255.0).round() as u8,
+        ];
+
+        assert_eq!(
+            rust_8bit, metal_8bit,
+            "Detail & sharpening parity failed for scenario '{}': Rust {:?} vs Metal {:?}",
+            name, rust_8bit, metal_8bit
+        );
+    }
 }
 

@@ -47,12 +47,13 @@
     - `[x]` 12.3 Story 5.3: Adobe DCP Ingestion (`dcp.rs`) & Dual-Illuminant Planckian WB interpolation
     - `[x]` 12.4 Story 5.4: Camera-Matching Tone Profiles, DCP `HueSatMap` engine, and Inspector profile selector
     - `[x]` 12.5 Story 5.5: 3D LUT Engine (.cube), Metal 3D texture sampler, and Rust SIMD tetrahedral interpolator
-- `[ ]` 13. Epic 6: Essential Photo Adjustments & Viewport Engine (P1)
+- `[x]` 13. Epic 6: Essential Photo Adjustments & Viewport Engine (P1)
     - `[x]` 13.1 Story 6.1: Viewport Loupe, 1:1 Pixel Zoom & Canvas Pan
     - `[x]` 13.2 Story 6.2: 90° CW/CCW Rotation & EXIF Orientation Ingestion
     - `[x]` 13.3 Story 6.3: Selective Tone Recovery (Highlights, Shadows, Whites, Blacks)
-    - `[ ]` 13.4 Story 6.4: Smart Vibrance, Saturation & White Balance Eyedropper
-    - `[ ]` 13.5 Story 6.5: Luminance Sharpening, Edge Masking & Clarity
+    - `[x]` 13.4 Story 6.4: Smart Vibrance, Saturation & White Balance Eyedropper
+    - `[x]` 13.5 Story 6.5: Luminance Sharpening, Edge Masking & Clarity (Detail Workspace Tab)
+    - `[x]` 13.6 Persistent Disk Thumbnail Cache & Real-Time GPU Invalidation Engine
 - `[ ]` 14. Core Refactoring & Library Modernization Audit (P2 Tech Debt)
     - `[ ]` 14.1 Migrate hand-rolled CIEDE2000 & color conversions to `palette` crate
     - `[ ]` 14.2 Replace hand-rolled 3x3 matrix math with `glam` SIMD (`Mat3`, `Vec3`)

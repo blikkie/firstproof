@@ -350,7 +350,8 @@ pub fn apply_color_adjustments(
         let max_warm = r.max(g);
         let sky_signal = (b - max_warm).max(0.0);
         if sky_signal > 0.0 {
-            let factor = deep_blue / 100.0;
+            let x = deep_blue / 100.0;
+            let factor = x.signum() * x.abs().powf(1.6);
             if factor > 0.0 {
                 // Polarizing filter effect:
                 // Attenuates blue luminance, removes red haze to enrich azure saturation
@@ -374,7 +375,8 @@ pub fn apply_color_adjustments(
         let max_rb = r.max(b);
         let green_signal = (g - max_rb).max(0.0);
         if green_signal > 0.0 {
-            let factor = foliage / 100.0;
+            let x = foliage / 100.0;
+            let factor = x.signum() * x.abs().powf(1.6);
             // Shift towards emerald green (lower red, lift green, deepen blue)
             r -= factor * green_signal * 0.30;
             b -= factor * green_signal * 0.15;
@@ -383,6 +385,60 @@ pub fn apply_color_adjustments(
     }
 
     (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
+}
+
+/// Applies edge-masked high-frequency luminance unsharp masking and flat-area noise reduction.
+///
+/// Parameters:
+/// - `r, g, b`: display-referred pixel RGB in [0.0, 1.0]
+/// - `y_c`: center luminance
+/// - `y_l, y_r, y_t, y_b`: neighbor luminances sampled at distance `radius`
+/// - `amount`: sharpening strength [0.0 .. 100.0]
+/// - `masking`: edge threshold [0.0 .. 100.0]
+/// - `noise_reduction`: flat-area noise smoothing [0.0 .. 100.0]
+#[inline(always)]
+pub fn apply_detail_and_sharpening_rgb(
+    r: f32, g: f32, b: f32,
+    y_c: f32,
+    y_l: f32, y_r: f32, y_t: f32, y_b: f32,
+    amount: f32,
+    masking: f32,
+    noise_reduction: f32,
+) -> (f32, f32, f32) {
+    if amount <= 0.0 && noise_reduction <= 0.0 {
+        return (r, g, b);
+    }
+
+    // Unsharp mask: Laplacian high-frequency detail
+    let y_neighbors = 0.25 * (y_l + y_r + y_t + y_b);
+    let delta_y = y_c - y_neighbors;
+
+    // Sobel gradient magnitude
+    let gx = (y_r - y_l) * 0.5;
+    let gy = (y_b - y_t) * 0.5;
+    let grad_mag = (gx * gx + gy * gy).sqrt();
+
+    // Edge masking weight:
+    // When masking <= 0, w_edge = 1.0 (uniform sharpening across entire image).
+    // When masking > 0, flat regions (grad_mag < threshold) are smoothly suppressed towards 0.
+    let w_edge = if masking <= 0.0 {
+        1.0
+    } else {
+        let m = (masking / 100.0).clamp(0.0, 1.0);
+        let threshold = m.powf(1.5) * 0.08;
+        let t = (grad_mag / threshold.max(1e-4)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t) // smoothstep(0.0, threshold, grad_mag)
+    };
+
+    // Photographically calibrated gain: up to 3.5x boost at Amount=100 for unmistakable crispness
+    let sharp_gain = (amount / 100.0) * 3.5;
+    let sharp_term = sharp_gain * w_edge * delta_y;
+    let nr_term = (noise_reduction / 100.0) * (1.0 - w_edge) * delta_y;
+    let delta_adj = sharp_term - nr_term;
+
+    let k = ((y_c + delta_adj) / y_c.max(1e-5)).clamp(0.0, 3.0);
+
+    ((r * k).clamp(0.0, 1.0), (g * k).clamp(0.0, 1.0), (b * k).clamp(0.0, 1.0))
 }
 
 
@@ -659,6 +715,30 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                 }
             }
 
+            // 3b. Detail & Sharpening / Noise Reduction
+            if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
+                let r_step = edits.sharpening_radius.max(0.5);
+                let (rl, gl, bl) = sample_bilinear(&image, sx - r_step, sy);
+                let (rr, gr, br) = sample_bilinear(&image, sx + r_step, sy);
+                let (rt, gt, bt) = sample_bilinear(&image, sx, sy - r_step);
+                let (rb, gb, bb) = sample_bilinear(&image, sx, sy + r_step);
+                let y_c = 0.2126 * r_val + 0.7152 * g_val + 0.0722 * b_val;
+                let y_l = 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
+                let y_r = 0.2126 * rr + 0.7152 * gr + 0.0722 * br;
+                let y_t = 0.2126 * rt + 0.7152 * gt + 0.0722 * bt;
+                let y_b = 0.2126 * rb + 0.7152 * gb + 0.0722 * bb;
+                let (r_sharp, g_sharp, b_sharp) = apply_detail_and_sharpening_rgb(
+                    r_disp, g_disp, b_disp,
+                    y_c, y_l, y_r, y_t, y_b,
+                    edits.sharpening_amount,
+                    edits.sharpening_masking,
+                    edits.noise_reduction,
+                );
+                r_disp = r_sharp;
+                g_disp = g_sharp;
+                b_disp = b_sharp;
+            }
+
             let srgb8 = [
                 (r_disp.clamp(0.0, 1.0) * 255.0).round() as u8,
                 (g_disp.clamp(0.0, 1.0) * 255.0).round() as u8,
@@ -806,6 +886,10 @@ mod tests {
             tone_profile: crate::ColorProfileMode::AgxFilmic,
             lut_name: None,
             lut_intensity: 1.0,
+            sharpening_amount: 0.0,
+            sharpening_radius: 1.0,
+            sharpening_masking: 0.0,
+            noise_reduction: 0.0,
         };
         
         let res = export_photo_file(tmp_in, tmp_out, &edits, None, 90, Some(50));
@@ -852,6 +936,10 @@ mod tests {
             tone_profile: crate::ColorProfileMode::AgxFilmic,
             lut_name: None,
             lut_intensity: 1.0,
+            sharpening_amount: 0.0,
+            sharpening_radius: 1.0,
+            sharpening_masking: 0.0,
+            noise_reduction: 0.0,
         };
         apply_edits(&mut img, &edits);
         
@@ -909,6 +997,10 @@ mod tests {
             tone_profile: crate::ColorProfileMode::AgxVivid,
             lut_name: None,
             lut_intensity: 1.0,
+            sharpening_amount: 0.0,
+            sharpening_radius: 1.0,
+            sharpening_masking: 0.0,
+            noise_reduction: 0.0,
         };
         
         export_photo_file(tmp_in, tmp_out_no_lut, &edits, None, 95, None).unwrap();
@@ -969,6 +1061,10 @@ mod tests {
             tone_profile: crate::ColorProfileMode::AgxVivid,
             lut_name: None,
             lut_intensity: 1.0,
+            sharpening_amount: 0.0,
+            sharpening_radius: 1.0,
+            sharpening_masking: 0.0,
+            noise_reduction: 0.0,
         };
         
         export_photo_file(tmp_in, tmp_out, &edits, None, 95, None).unwrap();
@@ -1148,6 +1244,35 @@ mod tests {
         let (h_fol, s_fol, _) = crate::color::rgb_to_hsv(r_fol, g_fol, b_fol);
         assert!(h_fol > 85.0, "Foliage slider must rotate yellowish grass towards green: got {}", h_fol);
         assert!(s_fol > 0.6, "Foliage slider must boost grass saturation");
+    }
+
+    #[test]
+    fn test_detail_and_sharpening_math() {
+        // 1. Neutral: zero amount and zero NR must return exact identity
+        let (r0, g0, b0) = apply_detail_and_sharpening_rgb(0.5, 0.4, 0.3, 0.4, 0.3, 0.5, 0.3, 0.5, 0.0, 0.0, 0.0);
+        assert_eq!((r0, g0, b0), (0.5, 0.4, 0.3));
+
+        // 2. Step Edge: Center is brighter than neighbors (high-pass edge)
+        // Center = 0.8, Left = 0.2, Right = 0.8, Top = 0.5, Bottom = 0.5
+        let y_c = 0.8;
+        let (y_l, y_r, y_t, y_b) = (0.2, 0.8, 0.5, 0.5);
+        let (r_sharp, _g_sharp, _b_sharp) = apply_detail_and_sharpening_rgb(0.8, 0.8, 0.8, y_c, y_l, y_r, y_t, y_b, 50.0, 0.0, 0.0);
+        assert!(r_sharp > 0.8, "Sharpening must boost high-frequency peak on an edge: got {}", r_sharp);
+
+        // 3. Edge Masking: Flat region with tiny noise should be masked when masking is active
+        // Center = 0.505, neighbors = 0.500 (tiny noise of 0.005)
+        let y_flat_c = 0.505;
+        let (y_flat_l, y_flat_r, y_flat_t, y_flat_b) = (0.500, 0.500, 0.500, 0.500);
+        // With Masking = 0: noise is sharpened
+        let (r_unmasked, _, _) = apply_detail_and_sharpening_rgb(0.505, 0.505, 0.505, y_flat_c, y_flat_l, y_flat_r, y_flat_t, y_flat_b, 50.0, 0.0, 0.0);
+        // With Masking = 30: noise is suppressed (w_edge == 0)
+        let (r_masked, _, _) = apply_detail_and_sharpening_rgb(0.505, 0.505, 0.505, y_flat_c, y_flat_l, y_flat_r, y_flat_t, y_flat_b, 50.0, 30.0, 0.0);
+        assert!(r_unmasked > 0.505, "Unmasked sharpening boosts noise");
+        assert_eq!(r_masked, 0.505, "Masked sharpening must completely ignore flat noise");
+
+        // 4. Noise Reduction: In flat region, NR should smooth high frequency towards local blur
+        let (r_nr, _, _) = apply_detail_and_sharpening_rgb(0.505, 0.505, 0.505, y_flat_c, y_flat_l, y_flat_r, y_flat_t, y_flat_b, 0.0, 30.0, 80.0);
+        assert!(r_nr < 0.505, "Noise reduction must smooth peak towards neighborhood blur: got {}", r_nr);
     }
 }
 

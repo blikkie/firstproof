@@ -4,6 +4,13 @@ import AppKit
 import ImageIO
 import LumenBoxBridge
 
+extension PhotoRecord {
+    public var isRaw: Bool {
+        let ext = URL(fileURLWithPath: filePath).pathExtension.lowercased()
+        return ["cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "raf", "pef", "raw"].contains(ext)
+    }
+}
+
 public enum EditSliderType {
     case exposure
     case contrast
@@ -15,6 +22,10 @@ public enum EditSliderType {
     case saturation
     case deepBlue
     case foliage
+    case sharpeningAmount
+    case sharpeningRadius
+    case sharpeningMasking
+    case noiseReduction
     case temperature
     case tint
     case straighten
@@ -80,6 +91,7 @@ public final class AppViewModel {
     public var rawPreviewRecord: RawPreviewRecord? = nil
     public var isDemosaicing: Bool = false
     @ObservationIgnored private var activeDecodeToken: UUID = UUID()
+    @ObservationIgnored public var captureThumbnailSnapshot: (() -> NSImage?)? = nil
     public var isExportSheetPresented: Bool = false
     public var isExportPackageSheetPresented: Bool = false
     
@@ -104,6 +116,20 @@ public final class AppViewModel {
     public var saturation: Float = 0.0    // -100 .. +100
     public var deepBlue: Float = 0.0      // -100 .. +100
     public var foliage: Float = 0.0       // -100 .. +100
+    public var sharpeningAmount: Float = 0.0     // 0 .. 100
+    public var sharpeningRadius: Float = 1.0     // 0.5 .. 3.0 px
+    public var sharpeningMasking: Float = 0.0    // 0 .. 100
+    public var noiseReduction: Float = 0.0       // 0 .. 100
+
+    public var defaultSharpeningAmount: Float {
+        (selectedPhoto?.isRaw ?? false) ? 20.0 : 0.0
+    }
+    public var defaultSharpeningRadius: Float { 1.0 }
+    public var defaultSharpeningMasking: Float {
+        (selectedPhoto?.isRaw ?? false) ? 15.0 : 0.0
+    }
+    public var defaultNoiseReduction: Float { 0.0 }
+
     public var isEyedropperActive: Bool = false
     public var temperature: Float = 5500.0 // 2000K .. 50000K
     public var tint: Float = 0.0          // -150 .. +150
@@ -136,6 +162,10 @@ public final class AppViewModel {
         saturation != 0.0 ||
         deepBlue != 0.0 ||
         foliage != 0.0 ||
+        sharpeningAmount != defaultSharpeningAmount ||
+        sharpeningRadius != defaultSharpeningRadius ||
+        sharpeningMasking != defaultSharpeningMasking ||
+        noiseReduction != defaultNoiseReduction ||
         abs(temperature - asShotTemperature) >= 1.0 ||
         tint != asShotTint ||
         straightenAngle != 0.0 ||
@@ -172,7 +202,6 @@ public final class AppViewModel {
     
     private func notifyThumbnailChanged() {
         guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
-        ThumbnailCache.shared.removeImage(for: path)
         NotificationCenter.default.post(name: .thumbnailDidChange, object: path)
     }
     
@@ -742,6 +771,10 @@ public final class AppViewModel {
             self.saturation = xmp.edits.saturation
             self.deepBlue = xmp.edits.deepBlue
             self.foliage = xmp.edits.foliage
+            self.sharpeningAmount = xmp.edits.sharpeningAmount
+            self.sharpeningRadius = xmp.edits.sharpeningRadius
+            self.sharpeningMasking = xmp.edits.sharpeningMasking
+            self.noiseReduction = xmp.edits.noiseReduction
             self.temperature = xmp.edits.temperature
             self.tint = xmp.edits.tint
             self.straightenAngle = xmp.edits.cropAngle
@@ -762,6 +795,10 @@ public final class AppViewModel {
             self.saturation = 0.0
             self.deepBlue = 0.0
             self.foliage = 0.0
+            self.sharpeningAmount = photo.isRaw ? 20.0 : 0.0
+            self.sharpeningRadius = 1.0
+            self.sharpeningMasking = photo.isRaw ? 15.0 : 0.0
+            self.noiseReduction = 0.0
             self.temperature = 5500.0
             self.tint = 0.0
             self.straightenAngle = 0.0
@@ -933,7 +970,11 @@ public final class AppViewModel {
             flipVertical: self.flipVertical,
             toneProfile: self.toneProfile,
             lutName: self.selectedLutName,
-            lutIntensity: self.lutIntensity
+            lutIntensity: self.lutIntensity,
+            sharpeningAmount: self.sharpeningAmount,
+            sharpeningRadius: self.sharpeningRadius,
+            sharpeningMasking: self.sharpeningMasking,
+            noiseReduction: self.noiseReduction
         )
     }
     
@@ -972,7 +1013,11 @@ public final class AppViewModel {
             flipVertical: false,
             toneProfile: .agxVivid,
             lutName: nil,
-            lutIntensity: 1.0
+            lutIntensity: 1.0,
+            sharpeningAmount: 0.0,
+            sharpeningRadius: 1.0,
+            sharpeningMasking: 0.0,
+            noiseReduction: 0.0
         )
         
         let record = XmpDataRecord(
@@ -990,6 +1035,16 @@ public final class AppViewModel {
     public func saveCurrentEdits() {
         guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
         let editsSnapshot = currentEdits
+        
+        // Real-time sub-millisecond GPU thumbnail capture for active viewport
+        if let snapshot = captureThumbnailSnapshot?() {
+            ThumbnailCache.shared.saveEditedThumbnail(snapshot, for: path, edits: editsSnapshot)
+        } else {
+            // Fallback for edits outside active Metal canvas
+            ThumbnailCache.shared.removeImage(for: path)
+            NotificationCenter.default.post(name: .thumbnailDidChange, object: path)
+        }
+        
         DispatchQueue.global(qos: .utility).async { [weak self] in
             self?.syncXmp(for: path, rating: nil, status: nil, edits: editsSnapshot)
         }
@@ -1053,6 +1108,14 @@ public final class AppViewModel {
             deepBlue = 0.0
         case .foliage:
             foliage = 0.0
+        case .sharpeningAmount:
+            sharpeningAmount = defaultSharpeningAmount
+        case .sharpeningRadius:
+            sharpeningRadius = defaultSharpeningRadius
+        case .sharpeningMasking:
+            sharpeningMasking = defaultSharpeningMasking
+        case .noiseReduction:
+            noiseReduction = defaultNoiseReduction
         case .temperature:
             temperature = asShotTemperature
         case .tint:
@@ -1076,6 +1139,10 @@ public final class AppViewModel {
         saturation = 0.0
         deepBlue = 0.0
         foliage = 0.0
+        sharpeningAmount = defaultSharpeningAmount
+        sharpeningRadius = defaultSharpeningRadius
+        sharpeningMasking = defaultSharpeningMasking
+        noiseReduction = defaultNoiseReduction
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0

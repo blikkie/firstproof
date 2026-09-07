@@ -38,6 +38,10 @@ struct ShaderUniforms {
     int lutEnabled;          // 1 = 3D LUT active, 0 = disabled
     float lutIntensity;      // 0.0 .. 1.0
     float lutSize;           // Dimension N (e.g. 17, 33, 65)
+    float sharpeningAmount;  // 0.0 .. 100.0 (default 0.0)
+    float sharpeningRadius;  // 0.5 .. 3.0 (default 1.0)
+    float sharpeningMasking; // 0.0 .. 100.0 (default 0.0)
+    float noiseReduction;    // 0.0 .. 100.0 (default 0.0)
     int _padding;
     int _padding2;
 };
@@ -390,7 +394,8 @@ inline float3 applyColorAdjustments(
         float maxWarm = max(c.r, c.g);
         float skySignal = max(c.b - maxWarm, 0.0);
         if (skySignal > 0.0) {
-            float factor = deepBlue / 100.0;
+            float x = deepBlue / 100.0;
+            float factor = sign(x) * pow(abs(x), 1.6);
             if (factor > 0.0) {
                 // Polarizing filter effect:
                 // Attenuates blue luminance, removes red haze to enrich azure saturation
@@ -414,7 +419,8 @@ inline float3 applyColorAdjustments(
         float maxRb = max(c.r, c.b);
         float greenSignal = max(c.g - maxRb, 0.0);
         if (greenSignal > 0.0) {
-            float factor = foliage / 100.0;
+            float x = foliage / 100.0;
+            float factor = sign(x) * pow(abs(x), 1.6);
             c.r -= factor * greenSignal * 0.30;
             c.b -= factor * greenSignal * 0.15;
             c.g += factor * greenSignal * 0.10;
@@ -422,6 +428,49 @@ inline float3 applyColorAdjustments(
     }
 
     return clamp(c, 0.0, 1.0);
+}
+
+// MARK: - Detail, Sharpening & Noise Reduction (Luminance USM with Edge Masking)
+
+inline float3 applyDetailAndSharpening(
+    float3 color,
+    float y_c,
+    float y_l, float y_r, float y_t, float y_b,
+    float amount,
+    float masking,
+    float noiseReduction
+) {
+    if (amount <= 0.0 && noiseReduction <= 0.0) {
+        return color;
+    }
+
+    // Unsharp mask: Laplacian high-frequency detail
+    float y_neighbors = 0.25 * (y_l + y_r + y_t + y_b);
+    float delta_y = y_c - y_neighbors;
+
+    // Sobel gradient magnitude
+    float gx = (y_r - y_l) * 0.5;
+    float gy = (y_b - y_t) * 0.5;
+    float grad_mag = sqrt(gx * gx + gy * gy);
+
+    // Edge masking weight:
+    // When masking <= 0, w_edge = 1.0 (uniform sharpening across entire image).
+    // When masking > 0, flat regions (grad_mag < threshold) are smoothly suppressed towards 0.
+    float w_edge = 1.0;
+    if (masking > 0.0) {
+        float m = clamp(masking / 100.0, 0.0, 1.0);
+        float threshold = pow(m, 1.5) * 0.08;
+        w_edge = smoothstep(0.0, max(threshold, 1e-4), grad_mag);
+    }
+
+    // Photographically calibrated gain: up to 3.5x boost at Amount=100 for crisp, unmistakable bite
+    float sharp_gain = (amount / 100.0) * 3.5;
+    float sharp_term = sharp_gain * w_edge * delta_y;
+    float nr_term = (noiseReduction / 100.0) * (1.0 - w_edge) * delta_y;
+    float delta_adj = sharp_term - nr_term;
+
+    float k = clamp((y_c + delta_adj) / max(y_c, 1e-5), 0.0, 3.0);
+    return clamp(color * k, 0.0, 1.0);
 }
 
 // MARK: - Fragment Shader (Linear RAW Pipeline)
@@ -493,8 +542,10 @@ fragment float4 fragmentShader(
                           (uniforms.vibrance == 0.0) &&
                           (uniforms.saturation == 0.0) &&
                           (uniforms.deepBlue == 0.0) &&
-                          (uniforms.foliage == 0.0) &&
-                          (uniforms.lutEnabled == 0);
+                          (uniforms.foliage == 0.0) && 
+                          (uniforms.lutEnabled == 0) &&
+                          (uniforms.sharpeningAmount == 0.0) &&
+                          (uniforms.noiseReduction == 0.0);
     
     if (uniforms.isLinearRaw == 0 && isNeutralEdits) {
         return sampledColor;
@@ -600,6 +651,32 @@ fragment float4 fragmentShader(
         float3 lutCoord = (finalColor * (size - 1.0) + 0.5) / size;
         float3 lutSample = lutTexture.sample(lutSampler, lutCoord).rgb;
         finalColor = mix(finalColor, lutSample, clamp(uniforms.lutIntensity, 0.0, 1.0));
+    }
+
+    // 8. Detail, Sharpening & Noise Reduction
+    float editSharpening = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.sharpeningAmount;
+    float editNoiseReduction = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.noiseReduction;
+    if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
+        float2 texelSize = 1.0 / float2(texture.get_width(), texture.get_height());
+        float2 offset = texelSize * max(uniforms.sharpeningRadius, 0.5);
+        float4 leftSample   = texture.sample(textureSampler, uv - float2(offset.x, 0.0));
+        float4 rightSample  = texture.sample(textureSampler, uv + float2(offset.x, 0.0));
+        float4 topSample    = texture.sample(textureSampler, uv - float2(0.0, offset.y));
+        float4 bottomSample = texture.sample(textureSampler, uv + float2(0.0, offset.y));
+
+        float y_c = dot(sampledColor.rgb, float3(0.2126, 0.7152, 0.0722));
+        float y_l = dot(leftSample.rgb, float3(0.2126, 0.7152, 0.0722));
+        float y_r = dot(rightSample.rgb, float3(0.2126, 0.7152, 0.0722));
+        float y_t = dot(topSample.rgb, float3(0.2126, 0.7152, 0.0722));
+        float y_b = dot(bottomSample.rgb, float3(0.2126, 0.7152, 0.0722));
+
+        finalColor = applyDetailAndSharpening(
+            finalColor,
+            y_c, y_l, y_r, y_t, y_b,
+            editSharpening,
+            uniforms.sharpeningMasking,
+            editNoiseReduction
+        );
     }
     
     return float4(finalColor, sampledColor.a);

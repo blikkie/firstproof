@@ -36,6 +36,10 @@ public struct ShaderUniforms {
     public var lutEnabled: Int32 = 0
     public var lutIntensity: Float = 1.0
     public var lutSize: Float = 33.0
+    public var sharpeningAmount: Float = 0.0
+    public var sharpeningRadius: Float = 1.0
+    public var sharpeningMasking: Float = 0.0
+    public var noiseReduction: Float = 0.0
     public var _padding: Int32 = 0
     public var _padding2: Int32 = 0
 }
@@ -505,6 +509,155 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         commandBuffer.present(drawable)
         commandBuffer.commit()
     }
+    
+    // MARK: - Offscreen Real-Time Thumbnail Snapshot
+    public func renderThumbnailSnapshot(maxDimension: CGFloat = 320) -> NSImage? {
+        guard let texture = currentTexture,
+              let pipelineState = pipelineState else {
+            return nil
+        }
+        
+        let origW = texture.width
+        let origH = texture.height
+        guard origW > 0, origH > 0 else { return nil }
+        
+        let isOrthogonal = (rotationDegrees == 90 || rotationDegrees == 270)
+        let dispW = isOrthogonal ? origH : origW
+        let dispH = isOrthogonal ? origW : origH
+        
+        let targetW: Int
+        let targetH: Int
+        if dispW >= dispH {
+            targetW = Int(maxDimension)
+            targetH = max(Int((CGFloat(dispH) * maxDimension / CGFloat(dispW)).rounded()), 1)
+        } else {
+            targetH = Int(maxDimension)
+            targetW = max(Int((CGFloat(dispW) * maxDimension / CGFloat(dispH)).rounded()), 1)
+        }
+        
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: targetW,
+            height: targetH,
+            mipmapped: false
+        )
+        desc.usage = [.renderTarget, .shaderRead]
+        desc.storageMode = .shared
+        
+        guard let offscreenTexture = device.makeTexture(descriptor: desc) else { return nil }
+        
+        var tl: SIMD2<Float>, tr: SIMD2<Float>, bl: SIMD2<Float>, br: SIMD2<Float>
+        switch rotationDegrees {
+        case 90:
+            tl = SIMD2<Float>(0.0, 1.0)
+            tr = SIMD2<Float>(0.0, 0.0)
+            bl = SIMD2<Float>(1.0, 1.0)
+            br = SIMD2<Float>(1.0, 0.0)
+        case 180:
+            tl = SIMD2<Float>(1.0, 1.0)
+            tr = SIMD2<Float>(0.0, 1.0)
+            bl = SIMD2<Float>(1.0, 0.0)
+            br = SIMD2<Float>(0.0, 0.0)
+        case 270:
+            tl = SIMD2<Float>(1.0, 0.0)
+            tr = SIMD2<Float>(1.0, 1.0)
+            bl = SIMD2<Float>(0.0, 0.0)
+            br = SIMD2<Float>(0.0, 1.0)
+        default: // 0
+            tl = SIMD2<Float>(0.0, 0.0)
+            tr = SIMD2<Float>(1.0, 0.0)
+            bl = SIMD2<Float>(0.0, 1.0)
+            br = SIMD2<Float>(1.0, 1.0)
+        }
+        
+        if flipHorizontal {
+            swap(&tl, &tr)
+            swap(&bl, &br)
+        }
+        if flipVertical {
+            swap(&tl, &bl)
+            swap(&tr, &br)
+        }
+        
+        let vertices: [Vertex] = [
+            Vertex(position: SIMD2<Float>(-1.0,  1.0), texCoord: tl),
+            Vertex(position: SIMD2<Float>( 1.0,  1.0), texCoord: tr),
+            Vertex(position: SIMD2<Float>(-1.0, -1.0), texCoord: bl),
+            Vertex(position: SIMD2<Float>( 1.0, -1.0), texCoord: br),
+        ]
+        
+        guard let quadBuffer = device.makeBuffer(
+            bytes: vertices,
+            length: vertices.count * MemoryLayout<Vertex>.size,
+            options: .storageModeShared
+        ) else { return nil }
+        
+        var thumbUniforms = self.uniforms
+        thumbUniforms.isOriginal = 0.0
+        thumbUniforms.aspectRatio = Float(origW) / Float(origH)
+        
+        guard let thumbUniformsBuffer = device.makeBuffer(
+            bytes: &thumbUniforms,
+            length: MemoryLayout<ShaderUniforms>.size,
+            options: .storageModeShared
+        ) else { return nil }
+        
+        let passDesc = MTLRenderPassDescriptor()
+        passDesc.colorAttachments[0].texture = offscreenTexture
+        passDesc.colorAttachments[0].loadAction = .clear
+        passDesc.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+        passDesc.colorAttachments[0].storeAction = .store
+        
+        guard let commandBuffer = commandQueue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDesc) else {
+            return nil
+        }
+        
+        encoder.setRenderPipelineState(pipelineState)
+        encoder.setVertexBuffer(quadBuffer, offset: 0, index: 0)
+        encoder.setVertexBuffer(thumbUniformsBuffer, offset: 0, index: 1)
+        
+        encoder.setFragmentTexture(texture, index: 0)
+        encoder.setFragmentSamplerState(samplerState, index: 0)
+        let activeLut = lutTexture ?? defaultLutTexture
+        encoder.setFragmentTexture(activeLut, index: 1)
+        encoder.setFragmentSamplerState(lutSamplerState ?? samplerState, index: 1)
+        encoder.setFragmentBuffer(thumbUniformsBuffer, offset: 0, index: 1)
+        
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        encoder.endEncoding()
+        
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+        
+        let bytesPerRow = targetW * 4
+        var rawBytes = [UInt8](repeating: 0, count: bytesPerRow * targetH)
+        rawBytes.withUnsafeMutableBytes { ptr in
+            offscreenTexture.getBytes(
+                ptr.baseAddress!,
+                bytesPerRow: bytesPerRow,
+                from: MTLRegionMake2D(0, 0, targetW, targetH),
+                mipmapLevel: 0
+            )
+        }
+        
+        guard let provider = CGDataProvider(data: Data(rawBytes) as CFData) else { return nil }
+        guard let cgImg = CGImage(
+            width: targetW,
+            height: targetH,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: true,
+            intent: .defaultIntent
+        ) else { return nil }
+        
+        return NSImage(cgImage: cgImg, size: NSSize(width: targetW, height: targetH))
+    }
 }
 
 private let embeddedShaderSource = """
@@ -548,6 +701,10 @@ struct ShaderUniforms {
     int lutEnabled;          // 1 = 3D LUT active, 0 = disabled
     float lutIntensity;      // 0.0 .. 1.0
     float lutSize;           // Dimension N (e.g. 17, 33, 65)
+    float sharpeningAmount;  // 0.0 .. 100.0 (default 0.0)
+    float sharpeningRadius;  // 0.5 .. 3.0 (default 1.0)
+    float sharpeningMasking; // 0.0 .. 100.0 (default 0.0)
+    float noiseReduction;    // 0.0 .. 100.0 (default 0.0)
     int _padding;
     int _padding2;
 };
@@ -884,7 +1041,8 @@ inline float3 applyColorAdjustments(
         float maxWarm = max(c.r, c.g);
         float skySignal = max(c.b - maxWarm, 0.0);
         if (skySignal > 0.0) {
-            float factor = deepBlue / 100.0;
+            float x = deepBlue / 100.0;
+            float factor = sign(x) * pow(abs(x), 1.6);
             if (factor > 0.0) {
                 c.r -= factor * skySignal * 0.30;
                 c.g -= factor * skySignal * 0.15;
@@ -901,7 +1059,8 @@ inline float3 applyColorAdjustments(
         float maxRb = max(c.r, c.b);
         float greenSignal = max(c.g - maxRb, 0.0);
         if (greenSignal > 0.0) {
-            float factor = foliage / 100.0;
+            float x = foliage / 100.0;
+            float factor = sign(x) * pow(abs(x), 1.6);
             c.r -= factor * greenSignal * 0.30;
             c.b -= factor * greenSignal * 0.15;
             c.g += factor * greenSignal * 0.10;
@@ -909,6 +1068,49 @@ inline float3 applyColorAdjustments(
     }
 
     return clamp(c, 0.0, 1.0);
+}
+
+// MARK: - Detail, Sharpening & Noise Reduction (Luminance USM with Edge Masking)
+
+inline float3 applyDetailAndSharpening(
+    float3 color,
+    float y_c,
+    float y_l, float y_r, float y_t, float y_b,
+    float amount,
+    float masking,
+    float noiseReduction
+) {
+    if (amount <= 0.0 && noiseReduction <= 0.0) {
+        return color;
+    }
+
+    // Unsharp mask: Laplacian high-frequency detail
+    float y_neighbors = 0.25 * (y_l + y_r + y_t + y_b);
+    float delta_y = y_c - y_neighbors;
+
+    // Sobel gradient magnitude
+    float gx = (y_r - y_l) * 0.5;
+    float gy = (y_b - y_t) * 0.5;
+    float grad_mag = sqrt(gx * gx + gy * gy);
+
+    // Edge masking weight:
+    // When masking <= 0, w_edge = 1.0 (uniform sharpening across entire image).
+    // When masking > 0, flat regions (grad_mag < threshold) are smoothly suppressed towards 0.
+    float w_edge = 1.0;
+    if (masking > 0.0) {
+        float m = clamp(masking / 100.0, 0.0, 1.0);
+        float threshold = pow(m, 1.5) * 0.08;
+        w_edge = smoothstep(0.0, max(threshold, 1e-4), grad_mag);
+    }
+
+    // Photographically calibrated gain: up to 3.5x boost at Amount=100 for crisp, unmistakable bite
+    float sharp_gain = (amount / 100.0) * 3.5;
+    float sharp_term = sharp_gain * w_edge * delta_y;
+    float nr_term = (noiseReduction / 100.0) * (1.0 - w_edge) * delta_y;
+    float delta_adj = sharp_term - nr_term;
+
+    float k = clamp((y_c + delta_adj) / max(y_c, 1e-5), 0.0, 3.0);
+    return clamp(color * k, 0.0, 1.0);
 }
 
 // MARK: - Fragment Shader (Linear RAW Pipeline)
@@ -979,9 +1181,11 @@ fragment float4 fragmentShader(
                           (uniforms.blacks == 0.0) &&
                           (uniforms.vibrance == 0.0) &&
                           (uniforms.saturation == 0.0) &&
-                          (uniforms.deepBlue == 0.0) &&
-                          (uniforms.foliage == 0.0) &&
-                          (uniforms.lutEnabled == 0);
+                          (uniforms.deepBlue == 0.0) && 
+                          (uniforms.foliage == 0.0) && 
+                          (uniforms.lutEnabled == 0) &&
+                          (uniforms.sharpeningAmount == 0.0) &&
+                          (uniforms.noiseReduction == 0.0);
     
     if (uniforms.isLinearRaw == 0 && isNeutralEdits) {
         return sampledColor;
@@ -1089,6 +1293,32 @@ fragment float4 fragmentShader(
         float3 lutCoord = (finalColor * (size - 1.0) + 0.5) / size;
         float3 lutSample = lutTexture.sample(lutSampler, lutCoord).rgb;
         finalColor = mix(finalColor, lutSample, clamp(uniforms.lutIntensity, 0.0, 1.0));
+    }
+
+    // 8. Detail, Sharpening & Noise Reduction
+    float editSharpening = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.sharpeningAmount;
+    float editNoiseReduction = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.noiseReduction;
+    if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
+        float2 texelSize = 1.0 / float2(texture.get_width(), texture.get_height());
+        float2 offset = texelSize * max(uniforms.sharpeningRadius, 0.5);
+        float4 leftSample   = texture.sample(textureSampler, uv - float2(offset.x, 0.0));
+        float4 rightSample  = texture.sample(textureSampler, uv + float2(offset.x, 0.0));
+        float4 topSample    = texture.sample(textureSampler, uv - float2(0.0, offset.y));
+        float4 bottomSample = texture.sample(textureSampler, uv + float2(0.0, offset.y));
+
+        float y_c = dot(sampledColor.rgb, float3(0.2126, 0.7152, 0.0722));
+        float y_l = dot(leftSample.rgb, float3(0.2126, 0.7152, 0.0722));
+        float y_r = dot(rightSample.rgb, float3(0.2126, 0.7152, 0.0722));
+        float y_t = dot(topSample.rgb, float3(0.2126, 0.7152, 0.0722));
+        float y_b = dot(bottomSample.rgb, float3(0.2126, 0.7152, 0.0722));
+
+        finalColor = applyDetailAndSharpening(
+            finalColor,
+            y_c, y_l, y_r, y_t, y_b,
+            editSharpening,
+            uniforms.sharpeningMasking,
+            editNoiseReduction
+        );
     }
     
     return float4(finalColor, sampledColor.a);

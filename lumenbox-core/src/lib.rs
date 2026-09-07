@@ -67,6 +67,10 @@ pub struct EditSettings {
     pub tone_profile: ColorProfileMode,
     pub lut_name: Option<String>,
     pub lut_intensity: f32,
+    pub sharpening_amount: f32,
+    pub sharpening_radius: f32,
+    pub sharpening_masking: f32,
+    pub noise_reduction: f32,
 }
 
 impl Default for EditSettings {
@@ -95,6 +99,10 @@ impl Default for EditSettings {
             tone_profile: ColorProfileMode::AgxVivid,
             lut_name: None,
             lut_intensity: 1.0,
+            sharpening_amount: 0.0,
+            sharpening_radius: 1.0,
+            sharpening_masking: 0.0,
+            noise_reduction: 0.0,
         }
     }
 }

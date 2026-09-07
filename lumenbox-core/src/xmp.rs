@@ -168,6 +168,10 @@ pub fn generate_xmp(data: &XmpData) -> String {
     pm:saturation="{saturation:.4}"
     pm:deepBlue="{deep_blue:.4}"
     pm:foliage="{foliage:.4}"
+    pm:sharpeningAmount="{sharpening_amount:.4}"
+    pm:sharpeningRadius="{sharpening_radius:.4}"
+    pm:sharpeningMasking="{sharpening_masking:.4}"
+    pm:noiseReduction="{noise_reduction:.4}"
     pm:temperature="{temperature:.4}"
     pm:tint="{tint:.4}"
     pm:cropLeft="{crop_left:.4}"
@@ -193,6 +197,10 @@ pub fn generate_xmp(data: &XmpData) -> String {
         saturation = data.edits.saturation,
         deep_blue = data.edits.deep_blue,
         foliage = data.edits.foliage,
+        sharpening_amount = data.edits.sharpening_amount,
+        sharpening_radius = data.edits.sharpening_radius,
+        sharpening_masking = data.edits.sharpening_masking,
+        noise_reduction = data.edits.noise_reduction,
         temperature = data.edits.temperature,
         tint = data.edits.tint,
         crop_left = data.edits.crop_left,
@@ -310,6 +318,26 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
     if let Some(fol_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "foliage" )) {
         if let Ok(val) = fol_str.parse::<f32>() {
             data.edits.foliage = val;
+        }
+    }
+    if let Some(s_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "sharpeningAmount" )) {
+        if let Ok(val) = s_str.parse::<f32>() {
+            data.edits.sharpening_amount = val;
+        }
+    }
+    if let Some(r_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "sharpeningRadius" )) {
+        if let Ok(val) = r_str.parse::<f32>() {
+            data.edits.sharpening_radius = val;
+        }
+    }
+    if let Some(m_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "sharpeningMasking" )) {
+        if let Ok(val) = m_str.parse::<f32>() {
+            data.edits.sharpening_masking = val;
+        }
+    }
+    if let Some(nr_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "noiseReduction" )) {
+        if let Ok(val) = nr_str.parse::<f32>() {
+            data.edits.noise_reduction = val;
         }
     }
     if let Some(temp_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "temperature" )) {
@@ -451,6 +479,34 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         if let Some(tint_str) = desc.attribute(( crs_ns, "Tint" )) {
             if let Ok(val) = tint_str.parse::<f32>() {
                 data.edits.tint = val;
+            }
+        }
+    }
+    if data.edits.sharpening_amount == 0.0 {
+        if let Some(s_str) = desc.attribute(( crs_ns, "SharpenAmount" )).or_else(|| desc.attribute(( crs_ns, "Sharpness" ))) {
+            if let Ok(val) = s_str.parse::<f32>() {
+                data.edits.sharpening_amount = val;
+            }
+        }
+    }
+    if data.edits.sharpening_radius == 1.0 {
+        if let Some(r_str) = desc.attribute(( crs_ns, "SharpenRadius" )) {
+            if let Ok(val) = r_str.parse::<f32>() {
+                data.edits.sharpening_radius = val;
+            }
+        }
+    }
+    if data.edits.sharpening_masking == 0.0 {
+        if let Some(m_str) = desc.attribute(( crs_ns, "SharpenEdgeMasking" )).or_else(|| desc.attribute(( crs_ns, "Masking" ))) {
+            if let Ok(val) = m_str.parse::<f32>() {
+                data.edits.sharpening_masking = val;
+            }
+        }
+    }
+    if data.edits.noise_reduction == 0.0 {
+        if let Some(nr_str) = desc.attribute(( crs_ns, "LuminanceSmoothing" )) {
+            if let Ok(val) = nr_str.parse::<f32>() {
+                data.edits.noise_reduction = val;
             }
         }
     }
@@ -602,6 +658,10 @@ mod tests {
         data.edits.saturation = -10.0;
         data.edits.deep_blue = 40.0;
         data.edits.foliage = 30.0;
+        data.edits.sharpening_amount = 45.0;
+        data.edits.sharpening_radius = 1.5;
+        data.edits.sharpening_masking = 25.0;
+        data.edits.noise_reduction = 10.0;
         data.edits.temperature = 5800.0;
         data.edits.tint = -12.0;
         data.edits.crop_left = 0.05;
@@ -638,6 +698,10 @@ mod tests {
         assert_eq!(parsed.edits.saturation, -10.0);
         assert_eq!(parsed.edits.deep_blue, 40.0);
         assert_eq!(parsed.edits.foliage, 30.0);
+        assert_eq!(parsed.edits.sharpening_amount, 45.0);
+        assert_eq!(parsed.edits.sharpening_radius, 1.5);
+        assert_eq!(parsed.edits.sharpening_masking, 25.0);
+        assert_eq!(parsed.edits.noise_reduction, 10.0);
         assert_eq!(parsed.edits.temperature, 5800.0);
         assert_eq!(parsed.edits.tint, -12.0);
         assert_eq!(parsed.edits.crop_angle, -0.5);
@@ -680,6 +744,26 @@ mod tests {
         let parsed = parse_xmp(adobe_xmp).unwrap();
         assert_eq!(parsed.edits.vibrance, 35.0);
         assert_eq!(parsed.edits.saturation, -15.0);
+    }
+
+    #[test]
+    fn test_xmp_adobe_detail_sliders_ingestion() {
+        let adobe_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:SharpenAmount="40"
+    crs:SharpenRadius="1.2"
+    crs:SharpenEdgeMasking="20"
+    crs:LuminanceSmoothing="15">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+        let parsed = parse_xmp(adobe_xmp).unwrap();
+        assert_eq!(parsed.edits.sharpening_amount, 40.0);
+        assert_eq!(parsed.edits.sharpening_radius, 1.2);
+        assert_eq!(parsed.edits.sharpening_masking, 20.0);
+        assert_eq!(parsed.edits.noise_reduction, 15.0);
     }
 
     #[test]

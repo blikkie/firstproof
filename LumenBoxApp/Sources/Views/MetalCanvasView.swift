@@ -15,6 +15,10 @@ public struct MetalCanvasView: NSViewRepresentable {
     let saturation: Float
     let deepBlue: Float
     let foliage: Float
+    let sharpeningAmount: Float
+    let sharpeningRadius: Float
+    let sharpeningMasking: Float
+    let noiseReduction: Float
     let temperature: Float
     let tint: Float
     let straightenAngle: Float
@@ -41,6 +45,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         saturation: Float,
         deepBlue: Float,
         foliage: Float,
+        sharpeningAmount: Float,
+        sharpeningRadius: Float,
+        sharpeningMasking: Float,
+        noiseReduction: Float,
         temperature: Float,
         tint: Float,
         straightenAngle: Float,
@@ -66,6 +74,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         self.saturation = saturation
         self.deepBlue = deepBlue
         self.foliage = foliage
+        self.sharpeningAmount = sharpeningAmount
+        self.sharpeningRadius = sharpeningRadius
+        self.sharpeningMasking = sharpeningMasking
+        self.noiseReduction = noiseReduction
         self.temperature = temperature
         self.tint = tint
         self.straightenAngle = straightenAngle
@@ -129,6 +141,8 @@ public struct MetalCanvasView: NSViewRepresentable {
                 renderer.updateLutTexture(with: lutRecord)
                 context.coordinator.lastLutName = lutName
             }
+            
+            MetalCanvasView.setupCaptureClosure(for: viewModel, renderer: renderer)
         }
         
         return mtkView
@@ -140,6 +154,7 @@ public struct MetalCanvasView: NSViewRepresentable {
         }
         guard let renderer = context.coordinator.renderer else { return }
         context.coordinator.viewModel = viewModel
+        MetalCanvasView.setupCaptureClosure(for: viewModel, renderer: renderer)
         
         // 1. Update Texture if photo selection, raw record, or preview image changed
         let photoChanged = context.coordinator.lastPhotoPath != viewModel.selectedPhoto?.filePath
@@ -176,6 +191,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         renderer.uniforms.saturation = saturation
         renderer.uniforms.deepBlue = deepBlue
         renderer.uniforms.foliage = foliage
+        renderer.uniforms.sharpeningAmount = sharpeningAmount
+        renderer.uniforms.sharpeningRadius = sharpeningRadius
+        renderer.uniforms.sharpeningMasking = sharpeningMasking
+        renderer.uniforms.noiseReduction = noiseReduction
         renderer.uniforms.straightenAngle = straightenAngle * (.pi / 180.0)
         renderer.uniforms.lensCorrectionEnabled = lensCorrectionEnabled ? 1 : 0
         renderer.uniforms.isOriginal = isShowingOriginal ? 1.0 : 0.0
@@ -240,6 +259,37 @@ public struct MetalCanvasView: NSViewRepresentable {
         
         // Trigger immediate synchronous draw call on MTKView
         nsView.draw()
+    }
+    
+    private static func setupCaptureClosure(for viewModel: AppViewModel, renderer: MetalRenderer) {
+        viewModel.captureThumbnailSnapshot = { [weak renderer, weak viewModel] in
+            guard let renderer = renderer, let vm = viewModel else { return nil }
+            renderer.uniforms.exposure = vm.exposure
+            renderer.uniforms.temperature = vm.temperature
+            renderer.uniforms.tint = vm.tint
+            renderer.uniforms.contrast = vm.contrast
+            renderer.uniforms.highlights = vm.highlights
+            renderer.uniforms.shadows = vm.shadows
+            renderer.uniforms.whites = vm.whites
+            renderer.uniforms.blacks = vm.blacks
+            renderer.uniforms.vibrance = vm.vibrance
+            renderer.uniforms.saturation = vm.saturation
+            renderer.uniforms.deepBlue = vm.deepBlue
+            renderer.uniforms.foliage = vm.foliage
+            renderer.uniforms.sharpeningAmount = vm.sharpeningAmount
+            renderer.uniforms.sharpeningRadius = vm.sharpeningRadius
+            renderer.uniforms.sharpeningMasking = vm.sharpeningMasking
+            renderer.uniforms.noiseReduction = vm.noiseReduction
+            renderer.uniforms.straightenAngle = vm.straightenAngle * (.pi / 180.0)
+            renderer.uniforms.lensCorrectionEnabled = vm.lensCorrectionEnabled ? 1 : 0
+            renderer.uniforms.isOriginal = 0.0
+            renderer.uniforms.lutEnabled = (vm.selectedLutName != nil) ? 1 : 0
+            renderer.uniforms.lutIntensity = vm.lutIntensity
+            renderer.rotationDegrees = vm.rotationDegrees
+            renderer.flipHorizontal = vm.flipHorizontal
+            renderer.flipVertical = vm.flipVertical
+            return renderer.renderThumbnailSnapshot(maxDimension: 320)
+        }
     }
     
     public class Coordinator {

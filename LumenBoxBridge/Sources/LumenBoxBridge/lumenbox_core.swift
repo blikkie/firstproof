@@ -1061,10 +1061,14 @@ public struct EditSettings {
     public var toneProfile: ColorProfileMode
     public var lutName: String?
     public var lutIntensity: Float
+    public var sharpeningAmount: Float
+    public var sharpeningRadius: Float
+    public var sharpeningMasking: Float
+    public var noiseReduction: Float
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -1088,6 +1092,10 @@ public struct EditSettings {
         self.toneProfile = toneProfile
         self.lutName = lutName
         self.lutIntensity = lutIntensity
+        self.sharpeningAmount = sharpeningAmount
+        self.sharpeningRadius = sharpeningRadius
+        self.sharpeningMasking = sharpeningMasking
+        self.noiseReduction = noiseReduction
     }
 }
 
@@ -1164,6 +1172,18 @@ extension EditSettings: Equatable, Hashable {
         if lhs.lutIntensity != rhs.lutIntensity {
             return false
         }
+        if lhs.sharpeningAmount != rhs.sharpeningAmount {
+            return false
+        }
+        if lhs.sharpeningRadius != rhs.sharpeningRadius {
+            return false
+        }
+        if lhs.sharpeningMasking != rhs.sharpeningMasking {
+            return false
+        }
+        if lhs.noiseReduction != rhs.noiseReduction {
+            return false
+        }
         return true
     }
 
@@ -1191,6 +1211,10 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(toneProfile)
         hasher.combine(lutName)
         hasher.combine(lutIntensity)
+        hasher.combine(sharpeningAmount)
+        hasher.combine(sharpeningRadius)
+        hasher.combine(sharpeningMasking)
+        hasher.combine(noiseReduction)
     }
 }
 
@@ -1224,7 +1248,11 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 flipVertical: FfiConverterBool.read(from: &buf), 
                 toneProfile: FfiConverterTypeColorProfileMode.read(from: &buf), 
                 lutName: FfiConverterOptionString.read(from: &buf), 
-                lutIntensity: FfiConverterFloat.read(from: &buf)
+                lutIntensity: FfiConverterFloat.read(from: &buf), 
+                sharpeningAmount: FfiConverterFloat.read(from: &buf), 
+                sharpeningRadius: FfiConverterFloat.read(from: &buf), 
+                sharpeningMasking: FfiConverterFloat.read(from: &buf), 
+                noiseReduction: FfiConverterFloat.read(from: &buf)
         )
     }
 
@@ -1252,6 +1280,10 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterTypeColorProfileMode.write(value.toneProfile, into: &buf)
         FfiConverterOptionString.write(value.lutName, into: &buf)
         FfiConverterFloat.write(value.lutIntensity, into: &buf)
+        FfiConverterFloat.write(value.sharpeningAmount, into: &buf)
+        FfiConverterFloat.write(value.sharpeningRadius, into: &buf)
+        FfiConverterFloat.write(value.sharpeningMasking, into: &buf)
+        FfiConverterFloat.write(value.noiseReduction, into: &buf)
     }
 }
 
