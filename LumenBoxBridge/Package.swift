@@ -12,10 +12,15 @@ let package = Package(
     products: [
         .library(
             name: "LumenBoxBridge",
-            targets: ["LumenBoxBridge"]
+            targets: ["LumenBoxBridge", "LumenBoxShaderTypes"]
         )
     ],
     targets: [
+        .target(
+            name: "LumenBoxShaderTypes",
+            path: "Sources/LumenBoxShaderTypes",
+            publicHeadersPath: "include"
+        ),
         .target(
             name: "LumenBoxCoreFFI",
             path: "Sources/LumenBoxCoreFFI",
@@ -23,7 +28,7 @@ let package = Package(
         ),
         .target(
             name: "LumenBoxBridge",
-            dependencies: ["LumenBoxCoreFFI"],
+            dependencies: ["LumenBoxCoreFFI", "LumenBoxShaderTypes"],
             path: "Sources/LumenBoxBridge",
             linkerSettings: [
                 .unsafeFlags([

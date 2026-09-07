@@ -18,7 +18,10 @@ let package = Package(
             dependencies: [
                 .product(name: "LumenBoxBridge", package: "LumenBoxBridge")
             ],
-            path: "Sources"
+            path: "Sources",
+            exclude: [
+                "Shaders"
+            ]
         )
     ]
 )
