@@ -64,7 +64,7 @@
     - `[x]` 15.1 Phase 1: Swift State & Uniform Plumbing Encapsulation (`EditSettings` unification, eliminate 30-field copying)
     - `[x]` 15.2 Phase 2: Metal GPU Pipeline Modernization (Unified `ShaderTypes.h` bridging C/Swift/Metal, modular MSL headers, remove 700-line duplicate string)
     - `[x]` 15.3 Phase 3: Rust Core Modernization (`glam` SIMD NEON matrices, `xmp-writer` type-safe RDF, `palette` CIE)
-    - `[ ]` 15.4 Phase 4: SwiftUI View Decomposition & ViewModel Decoupling (Inspector panels, Library/Editor separation)
+    - `[x]` 15.4 Phase 4: SwiftUI View Decomposition & ViewModel Decoupling (Inspector panels, Library/Editor separation)
     - `[ ]` 15.5 Phase 5: Single-Key Professional Muscle Memory & First-Responder Input Filter
 - `[ ]` 16. Epic 9: Interactive RGB & Tone Curves Engine (P1)
     - `[ ]` 16.1 Monotone Cubic Spline (Fritsch-Carlson) transfer function curve widget
