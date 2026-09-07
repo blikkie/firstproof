@@ -98,6 +98,11 @@ public struct LightWorkspaceView: View {
                     if !isEditing { viewModel.saveCurrentEdits() }
                 }
             )
+            
+            Divider()
+                .padding(.vertical, 2)
+            
+            ToneCurveView(viewModel: viewModel)
         }
         .padding(.top, 4)
     }

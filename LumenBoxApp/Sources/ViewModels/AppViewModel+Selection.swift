@@ -337,7 +337,8 @@ extension AppViewModel {
                 sharpeningAmount: photo.isRaw ? 20.0 : 0.0,
                 sharpeningRadius: 1.0,
                 sharpeningMasking: photo.isRaw ? 15.0 : 0.0,
-                noiseReduction: 0.0
+                noiseReduction: 0.0,
+                curves: .defaultIdentity
             )
             self.applyEdits(defaultEdits)
             self.isCropToolActive = false
@@ -457,7 +458,8 @@ extension AppViewModel {
             sharpeningAmount: 0.0,
             sharpeningRadius: 1.0,
             sharpeningMasking: 0.0,
-            noiseReduction: 0.0
+            noiseReduction: 0.0,
+            curves: .defaultIdentity
         )
         
         let record = XmpDataRecord(

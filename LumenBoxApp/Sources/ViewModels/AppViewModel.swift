@@ -11,6 +11,17 @@ extension PhotoRecord {
     }
 }
 
+extension ToneCurvesRecord {
+    public static var defaultIdentity: ToneCurvesRecord {
+        ToneCurvesRecord(
+            master: [CurvePointRecord(x: 0.0, y: 0.0), CurvePointRecord(x: 1.0, y: 1.0)],
+            red: [CurvePointRecord(x: 0.0, y: 0.0), CurvePointRecord(x: 1.0, y: 1.0)],
+            green: [CurvePointRecord(x: 0.0, y: 0.0), CurvePointRecord(x: 1.0, y: 1.0)],
+            blue: [CurvePointRecord(x: 0.0, y: 0.0), CurvePointRecord(x: 1.0, y: 1.0)]
+        )
+    }
+}
+
 public enum EditSliderType {
     case exposure
     case contrast
@@ -171,6 +182,7 @@ public final class AppViewModel {
     public var lutIntensity: Float = 1.0
     public var availableLutTitles: [String] = []
     public var customLuts: [CubeLutRecord] = []
+    public var curves: ToneCurvesRecord = .defaultIdentity
     
     // MARK: - Workspace Navigation & Tabs
     public var selectedInspectorTab: InspectorTab = .light

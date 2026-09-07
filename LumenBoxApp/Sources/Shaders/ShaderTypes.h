@@ -56,8 +56,10 @@ struct ShaderUniforms {
     float perspectiveHorizontal; // -100.0 .. +100.0 (default 0.0)
     int32_t cropConstrain;   // 1 = auto-crop inscribed scale, 0 = free
     int32_t cropModeActive;  // 1 = interactive crop mode (show full image with overlay), 0 = normal framed crop
+    int32_t hasCurves;       // 1 = tone curves active, 0 = bypass
+    int32_t hasMasterCurve;  // 1 = master curve active, 0 = identity
+    int32_t hasRgbCurves;    // 1 = per-channel RGB curves active, 0 = identity
     int32_t _padding;
-    int32_t _padding2;
 };
 
 #endif /* ShaderTypes_h */

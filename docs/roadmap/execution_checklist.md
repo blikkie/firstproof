@@ -66,10 +66,10 @@
     - `[x]` 15.3 Phase 3: Rust Core Modernization (`glam` SIMD NEON matrices, `xmp-writer` type-safe RDF, `palette` CIE)
     - `[x]` 15.4 Phase 4: SwiftUI View Decomposition & ViewModel Decoupling (Inspector panels, Library/Editor separation)
     - `[x]` 15.5 Phase 5: Single-Key Professional Muscle Memory & First-Responder Input Filter
-- `[ ]` 16. Epic 9: Interactive RGB & Tone Curves Engine (P1)
-    - `[ ]` 16.1 Monotone Cubic Spline (Fritsch-Carlson) transfer function curve widget
-    - `[ ]` 16.2 RGB Master & Individual Red/Green/Blue split-toning channels
-    - `[ ]` 16.3 1D Metal texture LUT evaluation (`MTLTextureType1D`) with dual-engine Rust CPU parity
+- `[x]` 16. Epic 9: Interactive RGB & Tone Curves Engine (P1)
+    - `[x]` 16.1 Monotone Cubic Spline (Fritsch-Carlson) transfer function curve widget
+    - `[x]` 16.2 RGB Master & Individual Red/Green/Blue split-toning channels
+    - `[x]` 16.3 1D Metal texture LUT evaluation (`MTLTextureType1D`) with dual-engine Rust CPU parity
 - `[ ]` 17. Epic 10: Multi-Selection Parallel Multi-Core Batch Export Engine (P1)
     - `[ ]` 17.1 Multi-photo selection in Grid (`Cmd+A`, `Shift+Click`, `Cmd+Click`)
     - `[ ]` 17.2 Rayon multi-core thread pool in Rust core (`rayon::par_iter`)

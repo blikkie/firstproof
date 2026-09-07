@@ -282,6 +282,7 @@ fn test_gpu_preview_vs_export_parity() {
         sharpening_radius: 1.0,
         sharpening_masking: 0.0,
         noise_reduction: 0.0,
+        curves: Default::default(),
     };
     lumenbox_core::export::apply_edits(&mut export_img, &edits);
     let export_srgb = Color3::new(export_img.data[idx], export_img.data[idx + 1], export_img.data[idx + 2]);
@@ -352,6 +353,7 @@ fn test_cr2_0194_full_pipeline_parity() {
         sharpening_radius: 1.0,
         sharpening_masking: 0.0,
         noise_reduction: 0.0,
+        curves: Default::default(),
     };
     
     // Run full export pipeline
@@ -568,6 +570,7 @@ fn test_sliders_dual_engine_parity_sweep() {
                 tone_profile: mode,
                 lut_name: None, lut_intensity: 1.0,
                 sharpening_amount: 0.0, sharpening_radius: 1.0, sharpening_masking: 0.0, noise_reduction: 0.0,
+                curves: Default::default(),
             };
             lumenbox_core::export::apply_edits(&mut demosaiced, &edits);
             

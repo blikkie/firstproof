@@ -12,6 +12,9 @@ pub mod export;
 pub mod color;
 pub mod auto;
 pub mod lut;
+pub mod curve;
+
+pub use curve::{evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, CurvePointRecord, ToneCurvesRecord};
 
 #[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ColorProfileMode {
@@ -74,6 +77,7 @@ pub struct EditSettings {
     pub sharpening_radius: f32,
     pub sharpening_masking: f32,
     pub noise_reduction: f32,
+    pub curves: ToneCurvesRecord,
 }
 
 impl Default for EditSettings {
@@ -109,6 +113,7 @@ impl Default for EditSettings {
             sharpening_radius: 1.0,
             sharpening_masking: 0.0,
             noise_reduction: 0.0,
+            curves: ToneCurvesRecord::default(),
         }
     }
 }

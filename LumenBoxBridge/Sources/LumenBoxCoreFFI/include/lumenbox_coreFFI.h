@@ -368,6 +368,16 @@ RustBuffer uniffi_lumenbox_core_fn_func_edits_cache_signature(RustBuffer edits, 
 int8_t uniffi_lumenbox_core_fn_func_edits_has_modifications(RustBuffer edits, RustBuffer as_shot_temp, RustBuffer as_shot_tint, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EVALUATE_ALL_CURVES_LUT
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EVALUATE_ALL_CURVES_LUT
+RustBuffer uniffi_lumenbox_core_fn_func_evaluate_all_curves_lut(RustBuffer curves, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EVALUATE_CURVE_LUT
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EVALUATE_CURVE_LUT
+RustBuffer uniffi_lumenbox_core_fn_func_evaluate_curve_lut(RustBuffer points, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
 int8_t uniffi_lumenbox_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, RustBuffer lens_coeffs, uint32_t quality, RustBuffer max_dimension, RustCallStatus *_Nonnull out_status
@@ -759,6 +769,18 @@ uint16_t uniffi_lumenbox_core_checksum_func_edits_cache_signature(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EDITS_HAS_MODIFICATIONS
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EDITS_HAS_MODIFICATIONS
 uint16_t uniffi_lumenbox_core_checksum_func_edits_has_modifications(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EVALUATE_ALL_CURVES_LUT
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EVALUATE_ALL_CURVES_LUT
+uint16_t uniffi_lumenbox_core_checksum_func_evaluate_all_curves_lut(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EVALUATE_CURVE_LUT
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EVALUATE_CURVE_LUT
+uint16_t uniffi_lumenbox_core_checksum_func_evaluate_curve_lut(void
     
 );
 #endif

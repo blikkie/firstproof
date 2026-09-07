@@ -35,6 +35,9 @@ fragment float4 fragmentShader(
     sampler textureSampler [[sampler(0)]],
     texture3d<float> lutTexture [[texture(1)]],
     sampler lutSampler [[sampler(1)]],
+    texture1d<float> curveMasterTexture [[texture(2)]],
+    texture1d<float> curveRgbTexture [[texture(3)]],
+    sampler curveSampler [[sampler(2)]],
     constant ShaderUniforms &uniforms [[buffer(1)]]
 ) {
     // 1. Geometry, Perspective & Crop Homography
@@ -164,6 +167,23 @@ fragment float4 fragmentShader(
     
     // 6b. Color & Vibrance Adjustments
     finalColor = applyColorAdjustments(finalColor, editVibrance, editSaturation, editDeepBlue, editFoliage);
+    
+    // 6c. RGB Tone Curves (Master + R + G + B)
+    if (uniforms.hasCurves != 0 && uniforms.isOriginal < 0.5) {
+        if (uniforms.hasMasterCurve != 0) {
+            finalColor.r = curveMasterTexture.sample(curveSampler, clamp(finalColor.r, 0.0, 1.0)).r;
+            finalColor.g = curveMasterTexture.sample(curveSampler, clamp(finalColor.g, 0.0, 1.0)).r;
+            finalColor.b = curveMasterTexture.sample(curveSampler, clamp(finalColor.b, 0.0, 1.0)).r;
+        }
+        if (uniforms.hasRgbCurves != 0) {
+            float3 rgbCurved = float3(
+                curveRgbTexture.sample(curveSampler, clamp(finalColor.r, 0.0, 1.0)).r,
+                curveRgbTexture.sample(curveSampler, clamp(finalColor.g, 0.0, 1.0)).g,
+                curveRgbTexture.sample(curveSampler, clamp(finalColor.b, 0.0, 1.0)).b
+            );
+            finalColor = rgbCurved;
+        }
+    }
     
     // 7. Creative 3D Look-Up Table (Post-Tone-Mapping)
     if (uniforms.lutEnabled != 0 && uniforms.lutIntensity > 0.0 && uniforms.isOriginal < 0.5) {

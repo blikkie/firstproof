@@ -28,12 +28,18 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     private var pipelineState: MTLRenderPipelineState?
     private var samplerState: MTLSamplerState?
     private var lutSamplerState: MTLSamplerState?
+    private var curveSamplerState: MTLSamplerState?
     private var vertexBuffer: MTLBuffer?
     private var uniformsBuffer: MTLBuffer?
     
     private var currentTexture: MTLTexture?
     private var lutTexture: MTLTexture?
     private var defaultLutTexture: MTLTexture?
+    private var curveMasterTexture: MTLTexture?
+    private var curveRgbTexture: MTLTexture?
+    private var defaultCurveMasterTexture: MTLTexture?
+    private var defaultCurveRgbTexture: MTLTexture?
+    private var lastCurves: ToneCurvesRecord?
     private var textureLoader: MTKTextureLoader
     
     public var uniforms = ShaderUniforms()
@@ -112,6 +118,21 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         self.rotationDegrees = Int(edits.rotation)
         self.flipHorizontal = edits.flipHorizontal
         self.flipVertical = edits.flipVertical
+        
+        let isMasterActive = edits.curves.master.count > 2 || (edits.curves.master.count == 2 && (edits.curves.master[0].y != 0.0 || edits.curves.master[1].y != 1.0))
+        let isRedActive = edits.curves.red.count > 2 || (edits.curves.red.count == 2 && (edits.curves.red[0].y != 0.0 || edits.curves.red[1].y != 1.0))
+        let isGreenActive = edits.curves.green.count > 2 || (edits.curves.green.count == 2 && (edits.curves.green[0].y != 0.0 || edits.curves.green[1].y != 1.0))
+        let isBlueActive = edits.curves.blue.count > 2 || (edits.curves.blue.count == 2 && (edits.curves.blue[0].y != 0.0 || edits.curves.blue[1].y != 1.0))
+        let hasRgb = isRedActive || isGreenActive || isBlueActive
+        let hasCurves = isMasterActive || hasRgb
+        uniforms.hasMasterCurve = isMasterActive ? 1 : 0
+        uniforms.hasRgbCurves = hasRgb ? 1 : 0
+        uniforms.hasCurves = hasCurves ? 1 : 0
+        
+        if lastCurves != edits.curves {
+            lastCurves = edits.curves
+            updateCurves(curves: edits.curves)
+        }
     }
     
     // MARK: - Viewport Zoom, Pan & Hit-Testing
@@ -271,6 +292,7 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         self.lutSamplerState = device.makeSamplerState(descriptor: lutSamplerDescriptor)
         
         setupDefaultLutTexture()
+        setupCurveTexturesAndSampler()
     }
     
     private func setupDefaultLutTexture() {
@@ -306,6 +328,93 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
             )
         }
         self.defaultLutTexture = tex
+    }
+    
+    private func setupCurveTexturesAndSampler() {
+        let samplerDesc = MTLSamplerDescriptor()
+        samplerDesc.minFilter = .linear
+        samplerDesc.magFilter = .linear
+        samplerDesc.sAddressMode = .clampToEdge
+        self.curveSamplerState = device.makeSamplerState(descriptor: samplerDesc)
+
+        let masterDesc = MTLTextureDescriptor()
+        masterDesc.textureType = .type1D
+        masterDesc.pixelFormat = .r32Float
+        masterDesc.width = 256
+        masterDesc.height = 1
+        masterDesc.depth = 1
+        masterDesc.usage = [.shaderRead]
+        self.defaultCurveMasterTexture = device.makeTexture(descriptor: masterDesc)
+        self.curveMasterTexture = device.makeTexture(descriptor: masterDesc)
+
+        var linearRamp = [Float](repeating: 0, count: 256)
+        for i in 0..<256 {
+            linearRamp[i] = Float(i) / 255.0
+        }
+        defaultCurveMasterTexture?.replace(
+            region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: 256, height: 1, depth: 1)),
+            mipmapLevel: 0,
+            withBytes: linearRamp,
+            bytesPerRow: 256 * MemoryLayout<Float>.size
+        )
+        curveMasterTexture?.replace(
+            region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: 256, height: 1, depth: 1)),
+            mipmapLevel: 0,
+            withBytes: linearRamp,
+            bytesPerRow: 256 * MemoryLayout<Float>.size
+        )
+
+        let rgbDesc = MTLTextureDescriptor()
+        rgbDesc.textureType = .type1D
+        rgbDesc.pixelFormat = .rgba32Float
+        rgbDesc.width = 256
+        rgbDesc.height = 1
+        rgbDesc.depth = 1
+        rgbDesc.usage = [.shaderRead]
+        self.defaultCurveRgbTexture = device.makeTexture(descriptor: rgbDesc)
+        self.curveRgbTexture = device.makeTexture(descriptor: rgbDesc)
+
+        var rgbRamp = [SIMD4<Float>](repeating: .zero, count: 256)
+        for i in 0..<256 {
+            let v = Float(i) / 255.0
+            rgbRamp[i] = SIMD4<Float>(v, v, v, 1.0)
+        }
+        defaultCurveRgbTexture?.replace(
+            region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: 256, height: 1, depth: 1)),
+            mipmapLevel: 0,
+            withBytes: rgbRamp,
+            bytesPerRow: 256 * MemoryLayout<SIMD4<Float>>.stride
+        )
+        curveRgbTexture?.replace(
+            region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: 256, height: 1, depth: 1)),
+            mipmapLevel: 0,
+            withBytes: rgbRamp,
+            bytesPerRow: 256 * MemoryLayout<SIMD4<Float>>.stride
+        )
+    }
+
+    public func updateCurves(curves: ToneCurvesRecord) {
+        let lut = evaluateAllCurvesLut(curves: curves)
+        if let masterTex = curveMasterTexture {
+            masterTex.replace(
+                region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: 256, height: 1, depth: 1)),
+                mipmapLevel: 0,
+                withBytes: lut.master,
+                bytesPerRow: 256 * MemoryLayout<Float>.size
+            )
+        }
+        if let rgbTex = curveRgbTexture {
+            var rgba = [SIMD4<Float>](repeating: .zero, count: 256)
+            for i in 0..<256 {
+                rgba[i] = SIMD4<Float>(lut.red[i], lut.green[i], lut.blue[i], 1.0)
+            }
+            rgbTex.replace(
+                region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: 256, height: 1, depth: 1)),
+                mipmapLevel: 0,
+                withBytes: rgba,
+                bytesPerRow: 256 * MemoryLayout<SIMD4<Float>>.stride
+            )
+        }
     }
     
     public func updateLutTexture(with lutRecord: CubeLutRecord?) {
@@ -581,6 +690,11 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         let activeLut = lutTexture ?? defaultLutTexture
         encoder.setFragmentTexture(activeLut, index: 1)
         encoder.setFragmentSamplerState(lutSamplerState ?? samplerState, index: 1)
+        let activeMaster = curveMasterTexture ?? defaultCurveMasterTexture
+        let activeRgb = curveRgbTexture ?? defaultCurveRgbTexture
+        encoder.setFragmentTexture(activeMaster, index: 2)
+        encoder.setFragmentTexture(activeRgb, index: 3)
+        encoder.setFragmentSamplerState(curveSamplerState ?? samplerState, index: 2)
         encoder.setFragmentBuffer(uniformsBuffer, offset: 0, index: 1)
         
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
@@ -707,6 +821,11 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         let activeLut = lutTexture ?? defaultLutTexture
         encoder.setFragmentTexture(activeLut, index: 1)
         encoder.setFragmentSamplerState(lutSamplerState ?? samplerState, index: 1)
+        let activeMaster = curveMasterTexture ?? defaultCurveMasterTexture
+        let activeRgb = curveRgbTexture ?? defaultCurveRgbTexture
+        encoder.setFragmentTexture(activeMaster, index: 2)
+        encoder.setFragmentTexture(activeRgb, index: 3)
+        encoder.setFragmentSamplerState(curveSamplerState ?? samplerState, index: 2)
         encoder.setFragmentBuffer(thumbUniformsBuffer, offset: 0, index: 1)
         
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)

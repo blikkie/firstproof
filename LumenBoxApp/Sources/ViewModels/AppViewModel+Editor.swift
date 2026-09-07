@@ -37,7 +37,8 @@ extension AppViewModel {
             sharpeningAmount: self.sharpeningAmount,
             sharpeningRadius: self.sharpeningRadius,
             sharpeningMasking: self.sharpeningMasking,
-            noiseReduction: self.noiseReduction
+            noiseReduction: self.noiseReduction,
+            curves: self.curves
         )
     }
     
@@ -73,6 +74,7 @@ extension AppViewModel {
         self.sharpeningRadius = edits.sharpeningRadius
         self.sharpeningMasking = edits.sharpeningMasking
         self.noiseReduction = edits.noiseReduction
+        self.curves = edits.curves
     }
     
     public func saveCurrentEdits() {
@@ -381,6 +383,7 @@ extension AppViewModel {
         toneProfile = .agxVivid
         selectedLutName = nil
         lutIntensity = 1.0
+        curves = .defaultIdentity
         saveCurrentEdits()
         notifyThumbnailChanged()
     }

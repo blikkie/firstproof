@@ -84,6 +84,23 @@ fn parse_gps_xmp(s: &str) -> Option<f64> {
     Some(val)
 }
 
+use crate::curve::CurvePointRecord;
+
+fn serialize_curve_points(pts: &[CurvePointRecord]) -> String {
+    pts.iter().map(|p| format!("{:.4},{:.4}", p.x, p.y)).collect::<Vec<_>>().join(";")
+}
+
+fn parse_curve_points(s: &str) -> Vec<CurvePointRecord> {
+    s.split(';')
+        .filter_map(|pair| {
+            let mut parts = pair.split(',');
+            let x = parts.next()?.trim().parse::<f32>().ok()?;
+            let y = parts.next()?.trim().parse::<f32>().ok()?;
+            Some(CurvePointRecord { x, y })
+        })
+        .collect()
+}
+
 use xmp_writer::{CustomNamespace, Namespace, XmpWriter};
 
 /// Generates XMP XML sidecar string using type-safe XmpWriter.
@@ -163,7 +180,20 @@ pub fn generate_xmp(data: &XmpData) -> String {
 
     if let Some(name) = &data.edits.lut_name {
         writer.element("lutName", pm_ns.clone()).value(name.as_str());
-        writer.element("lutIntensity", pm_ns).value(format!("{:.4}", data.edits.lut_intensity).as_str());
+        writer.element("lutIntensity", pm_ns.clone()).value(format!("{:.4}", data.edits.lut_intensity).as_str());
+    }
+
+    if !data.edits.curves.master.is_empty() {
+        writer.element("curveMaster", pm_ns.clone()).value(serialize_curve_points(&data.edits.curves.master).as_str());
+    }
+    if !data.edits.curves.red.is_empty() {
+        writer.element("curveRed", pm_ns.clone()).value(serialize_curve_points(&data.edits.curves.red).as_str());
+    }
+    if !data.edits.curves.green.is_empty() {
+        writer.element("curveGreen", pm_ns.clone()).value(serialize_curve_points(&data.edits.curves.green).as_str());
+    }
+    if !data.edits.curves.blue.is_empty() {
+        writer.element("curveBlue", pm_ns.clone()).value(serialize_curve_points(&data.edits.curves.blue).as_str());
     }
 
     // Adobe Camera Raw Settings (CRS) namespace for compatibility with Lightroom / Camera Raw
@@ -405,6 +435,31 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
     if let Some(lut_intensity_str) = get(pm, "lutIntensity") {
         if let Ok(val) = lut_intensity_str.parse::<f32>() {
             data.edits.lut_intensity = val;
+        }
+    }
+
+    if let Some(pts_str) = get(pm, "curveMaster") {
+        let pts = parse_curve_points(pts_str);
+        if !pts.is_empty() {
+            data.edits.curves.master = pts;
+        }
+    }
+    if let Some(pts_str) = get(pm, "curveRed") {
+        let pts = parse_curve_points(pts_str);
+        if !pts.is_empty() {
+            data.edits.curves.red = pts;
+        }
+    }
+    if let Some(pts_str) = get(pm, "curveGreen") {
+        let pts = parse_curve_points(pts_str);
+        if !pts.is_empty() {
+            data.edits.curves.green = pts;
+        }
+    }
+    if let Some(pts_str) = get(pm, "curveBlue") {
+        let pts = parse_curve_points(pts_str);
+        if !pts.is_empty() {
+            data.edits.curves.blue = pts;
         }
     }
     
@@ -874,5 +929,34 @@ mod tests {
         let parsed_mirror = parse_xmp(mirror_xmp).unwrap();
         assert_eq!(parsed_mirror.edits.rotation, 270);
         assert_eq!(parsed_mirror.edits.flip_horizontal, true);
+    }
+
+    #[test]
+    fn test_xmp_curves_roundtrip() {
+        let mut data = XmpData::default();
+        data.edits.curves.master = vec![
+            CurvePointRecord { x: 0.0, y: 0.05 },
+            CurvePointRecord { x: 0.25, y: 0.20 },
+            CurvePointRecord { x: 0.75, y: 0.85 },
+            CurvePointRecord { x: 1.0, y: 0.98 },
+        ];
+        data.edits.curves.red = vec![
+            CurvePointRecord { x: 0.0, y: 0.0 },
+            CurvePointRecord { x: 0.5, y: 0.6 },
+            CurvePointRecord { x: 1.0, y: 1.0 },
+        ];
+
+        let xml = generate_xmp(&data);
+        assert!(xml.contains("curveMaster"));
+        assert!(xml.contains("curveRed"));
+
+        let parsed = parse_xmp(&xml).unwrap();
+        assert_eq!(parsed.edits.curves.master.len(), 4);
+        assert!((parsed.edits.curves.master[0].y - 0.05).abs() < 1e-3);
+        assert!((parsed.edits.curves.master[2].y - 0.85).abs() < 1e-3);
+        assert_eq!(parsed.edits.curves.red.len(), 3);
+        assert!((parsed.edits.curves.red[1].y - 0.6).abs() < 1e-3);
+        assert_eq!(parsed.edits.curves.green.len(), 2);
+        assert_eq!(parsed.edits.curves.blue.len(), 2);
     }
 }

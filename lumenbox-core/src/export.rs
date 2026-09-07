@@ -387,6 +387,26 @@ pub fn apply_color_adjustments(
     (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
 }
 
+/// Samples a 256-entry 1D curve LUT with linear interpolation matching hardware sampler.
+#[inline(always)]
+pub fn sample_curve_lut(lut: &[f32], v: f32) -> f32 {
+    let len = lut.len();
+    if len == 0 {
+        return v;
+    }
+    if len == 1 {
+        return lut[0];
+    }
+    let scaled = v.clamp(0.0, 1.0) * (len - 1) as f32;
+    let idx = scaled.floor() as usize;
+    let frac = scaled - idx as f32;
+    if idx + 1 < len {
+        lut[idx] * (1.0 - frac) + lut[idx + 1] * frac
+    } else {
+        lut[len - 1]
+    }
+}
+
 /// Applies edge-masked high-frequency luminance unsharp masking and flat-area noise reduction.
 ///
 /// Parameters:
@@ -671,6 +691,13 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     };
     let lut_intensity = edits.lut_intensity.clamp(0.0, 1.0);
 
+    let curve_lut = crate::curve::evaluate_curves_lut_ref(&edits.curves);
+    let has_master_curve = edits.curves.master.len() > 1;
+    let has_red_curve = edits.curves.red.len() > 1;
+    let has_green_curve = edits.curves.green.len() > 1;
+    let has_blue_curve = edits.curves.blue.len() > 1;
+    let has_any_curve = has_master_curve || has_red_curve || has_green_curve || has_blue_curve;
+
     for ty in 0..target_h {
         for tx in 0..target_w {
             let u = (tx as f32 + 0.5) / (target_w as f32);
@@ -744,6 +771,24 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             r_disp = r_adj;
             g_disp = g_adj;
             b_disp = b_adj;
+
+            // 2c. RGB Tone Curves (Master + R + G + B)
+            if has_any_curve {
+                if has_master_curve {
+                    r_disp = sample_curve_lut(&curve_lut.master, r_disp);
+                    g_disp = sample_curve_lut(&curve_lut.master, g_disp);
+                    b_disp = sample_curve_lut(&curve_lut.master, b_disp);
+                }
+                if has_red_curve {
+                    r_disp = sample_curve_lut(&curve_lut.red, r_disp);
+                }
+                if has_green_curve {
+                    g_disp = sample_curve_lut(&curve_lut.green, g_disp);
+                }
+                if has_blue_curve {
+                    b_disp = sample_curve_lut(&curve_lut.blue, b_disp);
+                }
+            }
 
             // 3. 3D Look-Up Table (display-referred stage post-tone-mapping)
             if let Some(ref lut) = active_lut {
@@ -933,6 +978,7 @@ mod tests {
             sharpening_radius: 1.0,
             sharpening_masking: 0.0,
             noise_reduction: 0.0,
+            curves: Default::default(),
         };
         
         let res = export_photo_file(tmp_in, tmp_out, &edits, None, 90, Some(50));
@@ -986,6 +1032,7 @@ mod tests {
             sharpening_radius: 1.0,
             sharpening_masking: 0.0,
             noise_reduction: 0.0,
+            curves: Default::default(),
         };
         apply_edits(&mut img, &edits);
         
@@ -1050,6 +1097,7 @@ mod tests {
             sharpening_radius: 1.0,
             sharpening_masking: 0.0,
             noise_reduction: 0.0,
+            curves: Default::default(),
         };
         
         export_photo_file(tmp_in, tmp_out_no_lut, &edits, None, 95, None).unwrap();
@@ -1117,6 +1165,7 @@ mod tests {
             sharpening_radius: 1.0,
             sharpening_masking: 0.0,
             noise_reduction: 0.0,
+            curves: Default::default(),
         };
         
         export_photo_file(tmp_in, tmp_out, &edits, None, 95, None).unwrap();
@@ -1325,6 +1374,39 @@ mod tests {
         // 4. Noise Reduction: In flat region, NR should smooth high frequency towards local blur
         let (r_nr, _, _) = apply_detail_and_sharpening_rgb(0.505, 0.505, 0.505, y_flat_c, y_flat_l, y_flat_r, y_flat_t, y_flat_b, 0.0, 30.0, 80.0);
         assert!(r_nr < 0.505, "Noise reduction must smooth peak towards neighborhood blur: got {}", r_nr);
+    }
+
+    #[test]
+    fn test_tone_curves_export() {
+        let tmp_in = "test_curve_in.jpg";
+        let tmp_out_flat = "test_curve_flat.jpg";
+        let tmp_out_curved = "test_curve_curved.jpg";
+
+        let img = RgbImage::from_fn(20, 20, |_x, _y| {
+            Rgb([128, 128, 128])
+        });
+        img.save(tmp_in).unwrap();
+
+        let edits_flat = EditSettings::default();
+        export_photo_file(tmp_in, tmp_out_flat, &edits_flat, None, 95, None).unwrap();
+
+        // Apply a master curve that boosts midtones: (0, 0), (0.5, 0.8), (1, 1)
+        let mut edits_curved = EditSettings::default();
+        edits_curved.curves.master = vec![
+            crate::curve::CurvePointRecord { x: 0.0, y: 0.0 },
+            crate::curve::CurvePointRecord { x: 0.5, y: 0.8 },
+            crate::curve::CurvePointRecord { x: 1.0, y: 1.0 },
+        ];
+        export_photo_file(tmp_in, tmp_out_curved, &edits_curved, None, 95, None).unwrap();
+
+        let flat_px = image::open(tmp_out_flat).unwrap().to_rgb8().get_pixel(10, 10)[0];
+        let curved_px = image::open(tmp_out_curved).unwrap().to_rgb8().get_pixel(10, 10)[0];
+
+        assert!(curved_px > flat_px + 20, "Boosted midtone curve must brighten pixels: flat={}, curved={}", flat_px, curved_px);
+
+        let _ = std::fs::remove_file(tmp_in);
+        let _ = std::fs::remove_file(tmp_out_flat);
+        let _ = std::fs::remove_file(tmp_out_curved);
     }
 }
 

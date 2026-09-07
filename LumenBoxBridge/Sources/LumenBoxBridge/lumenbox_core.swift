@@ -897,6 +897,88 @@ public func FfiConverterTypeLumenBoxLensfun_lower(_ value: LumenBoxLensfun) -> U
 }
 
 
+public struct AllCurvesLutRecord {
+    public var master: [Float]
+    public var red: [Float]
+    public var green: [Float]
+    public var blue: [Float]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(master: [Float], red: [Float], green: [Float], blue: [Float]) {
+        self.master = master
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+}
+
+
+
+extension AllCurvesLutRecord: Equatable, Hashable {
+    public static func ==(lhs: AllCurvesLutRecord, rhs: AllCurvesLutRecord) -> Bool {
+        if lhs.master != rhs.master {
+            return false
+        }
+        if lhs.red != rhs.red {
+            return false
+        }
+        if lhs.green != rhs.green {
+            return false
+        }
+        if lhs.blue != rhs.blue {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(master)
+        hasher.combine(red)
+        hasher.combine(green)
+        hasher.combine(blue)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAllCurvesLutRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllCurvesLutRecord {
+        return
+            try AllCurvesLutRecord(
+                master: FfiConverterSequenceFloat.read(from: &buf), 
+                red: FfiConverterSequenceFloat.read(from: &buf), 
+                green: FfiConverterSequenceFloat.read(from: &buf), 
+                blue: FfiConverterSequenceFloat.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AllCurvesLutRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceFloat.write(value.master, into: &buf)
+        FfiConverterSequenceFloat.write(value.red, into: &buf)
+        FfiConverterSequenceFloat.write(value.green, into: &buf)
+        FfiConverterSequenceFloat.write(value.blue, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllCurvesLutRecord_lift(_ buf: RustBuffer) throws -> AllCurvesLutRecord {
+    return try FfiConverterTypeAllCurvesLutRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAllCurvesLutRecord_lower(_ value: AllCurvesLutRecord) -> RustBuffer {
+    return FfiConverterTypeAllCurvesLutRecord.lower(value)
+}
+
+
 public struct AutoAdjustments {
     public var exposure: Float
     public var contrast: Float
@@ -1037,6 +1119,72 @@ public func FfiConverterTypeCubeLutRecord_lower(_ value: CubeLutRecord) -> RustB
 }
 
 
+public struct CurvePointRecord {
+    public var x: Float
+    public var y: Float
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(x: Float, y: Float) {
+        self.x = x
+        self.y = y
+    }
+}
+
+
+
+extension CurvePointRecord: Equatable, Hashable {
+    public static func ==(lhs: CurvePointRecord, rhs: CurvePointRecord) -> Bool {
+        if lhs.x != rhs.x {
+            return false
+        }
+        if lhs.y != rhs.y {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(x)
+        hasher.combine(y)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCurvePointRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurvePointRecord {
+        return
+            try CurvePointRecord(
+                x: FfiConverterFloat.read(from: &buf), 
+                y: FfiConverterFloat.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CurvePointRecord, into buf: inout [UInt8]) {
+        FfiConverterFloat.write(value.x, into: &buf)
+        FfiConverterFloat.write(value.y, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurvePointRecord_lift(_ buf: RustBuffer) throws -> CurvePointRecord {
+    return try FfiConverterTypeCurvePointRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurvePointRecord_lower(_ value: CurvePointRecord) -> RustBuffer {
+    return FfiConverterTypeCurvePointRecord.lower(value)
+}
+
+
 public struct EditSettings {
     public var exposure: Float
     public var contrast: Float
@@ -1068,10 +1216,11 @@ public struct EditSettings {
     public var sharpeningRadius: Float
     public var sharpeningMasking: Float
     public var noiseReduction: Float
+    public var curves: ToneCurvesRecord
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, curves: ToneCurvesRecord) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -1102,6 +1251,7 @@ public struct EditSettings {
         self.sharpeningRadius = sharpeningRadius
         self.sharpeningMasking = sharpeningMasking
         self.noiseReduction = noiseReduction
+        self.curves = curves
     }
 }
 
@@ -1199,6 +1349,9 @@ extension EditSettings: Equatable, Hashable {
         if lhs.noiseReduction != rhs.noiseReduction {
             return false
         }
+        if lhs.curves != rhs.curves {
+            return false
+        }
         return true
     }
 
@@ -1233,6 +1386,7 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(sharpeningRadius)
         hasher.combine(sharpeningMasking)
         hasher.combine(noiseReduction)
+        hasher.combine(curves)
     }
 }
 
@@ -1273,7 +1427,8 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 sharpeningAmount: FfiConverterFloat.read(from: &buf), 
                 sharpeningRadius: FfiConverterFloat.read(from: &buf), 
                 sharpeningMasking: FfiConverterFloat.read(from: &buf), 
-                noiseReduction: FfiConverterFloat.read(from: &buf)
+                noiseReduction: FfiConverterFloat.read(from: &buf), 
+                curves: FfiConverterTypeToneCurvesRecord.read(from: &buf)
         )
     }
 
@@ -1308,6 +1463,7 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.sharpeningRadius, into: &buf)
         FfiConverterFloat.write(value.sharpeningMasking, into: &buf)
         FfiConverterFloat.write(value.noiseReduction, into: &buf)
+        FfiConverterTypeToneCurvesRecord.write(value.curves, into: &buf)
     }
 }
 
@@ -2223,6 +2379,88 @@ public func FfiConverterTypeTakeoutMetadataRecord_lower(_ value: TakeoutMetadata
 }
 
 
+public struct ToneCurvesRecord {
+    public var master: [CurvePointRecord]
+    public var red: [CurvePointRecord]
+    public var green: [CurvePointRecord]
+    public var blue: [CurvePointRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(master: [CurvePointRecord], red: [CurvePointRecord], green: [CurvePointRecord], blue: [CurvePointRecord]) {
+        self.master = master
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+}
+
+
+
+extension ToneCurvesRecord: Equatable, Hashable {
+    public static func ==(lhs: ToneCurvesRecord, rhs: ToneCurvesRecord) -> Bool {
+        if lhs.master != rhs.master {
+            return false
+        }
+        if lhs.red != rhs.red {
+            return false
+        }
+        if lhs.green != rhs.green {
+            return false
+        }
+        if lhs.blue != rhs.blue {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(master)
+        hasher.combine(red)
+        hasher.combine(green)
+        hasher.combine(blue)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeToneCurvesRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ToneCurvesRecord {
+        return
+            try ToneCurvesRecord(
+                master: FfiConverterSequenceTypeCurvePointRecord.read(from: &buf), 
+                red: FfiConverterSequenceTypeCurvePointRecord.read(from: &buf), 
+                green: FfiConverterSequenceTypeCurvePointRecord.read(from: &buf), 
+                blue: FfiConverterSequenceTypeCurvePointRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ToneCurvesRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCurvePointRecord.write(value.master, into: &buf)
+        FfiConverterSequenceTypeCurvePointRecord.write(value.red, into: &buf)
+        FfiConverterSequenceTypeCurvePointRecord.write(value.green, into: &buf)
+        FfiConverterSequenceTypeCurvePointRecord.write(value.blue, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeToneCurvesRecord_lift(_ buf: RustBuffer) throws -> ToneCurvesRecord {
+    return try FfiConverterTypeToneCurvesRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeToneCurvesRecord_lower(_ value: ToneCurvesRecord) -> RustBuffer {
+    return FfiConverterTypeToneCurvesRecord.lower(value)
+}
+
+
 public struct WhiteBalanceResult {
     public var temperature: Float
     public var tint: Float
@@ -2954,6 +3192,31 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCurvePointRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [CurvePointRecord]
+
+    public static func write(_ value: [CurvePointRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCurvePointRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CurvePointRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CurvePointRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCurvePointRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypePhotoRecord: FfiConverterRustBuffer {
     typealias SwiftType = [PhotoRecord]
 
@@ -3069,6 +3332,27 @@ public func editsHasModifications(edits: EditSettings, asShotTemp: Float?, asSho
         FfiConverterTypeEditSettings.lower(edits),
         FfiConverterOptionFloat.lower(asShotTemp),
         FfiConverterOptionFloat.lower(asShotTint),$0
+    )
+})
+}
+/**
+ * Evaluates the 4 channels of ToneCurvesRecord into four 256-sample LUTs (Master, Red, Green, Blue).
+ */
+public func evaluateAllCurvesLut(curves: ToneCurvesRecord) -> AllCurvesLutRecord {
+    return try!  FfiConverterTypeAllCurvesLutRecord.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_evaluate_all_curves_lut(
+        FfiConverterTypeToneCurvesRecord.lower(curves),$0
+    )
+})
+}
+/**
+ * Evaluates an arbitrary set of curve control points into a 256-sample lookup table (LUT)
+ * using the Fritsch-Carlson monotone cubic hermite spline algorithm.
+ */
+public func evaluateCurveLut(points: [CurvePointRecord]) -> [Float] {
+    return try!  FfiConverterSequenceFloat.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_evaluate_curve_lut(
+        FfiConverterSequenceTypeCurvePointRecord.lower(points),$0
     )
 })
 }
@@ -3210,6 +3494,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_edits_has_modifications() != 32652) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_evaluate_all_curves_lut() != 44769) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_evaluate_curve_lut() != 36204) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_export_photo() != 3529) {
