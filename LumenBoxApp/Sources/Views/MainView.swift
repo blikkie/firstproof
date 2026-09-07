@@ -97,10 +97,11 @@ struct MainView: View {
     private func setupKeyboardMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { event in
-            // Skip hotkeys if user is editing in a text field or text area
-            if let responder = NSApp.keyWindow?.firstResponder,
-               responder is NSTextView || responder is NSTextField {
-                return event
+            // Skip hotkeys if user is editing in a text field, search box, or any text editor
+            if let responder = NSApp.keyWindow?.firstResponder {
+                if responder is NSTextInputClient || responder is NSTextView || responder is NSTextField || responder is NSSearchField {
+                    return event
+                }
             }
             
             // Allow system commands (Cmd+A, Cmd+E, Cmd+W, etc.) to pass through
@@ -194,9 +195,20 @@ struct MainView: View {
                 break
             }
             
-            // Single-key culling & tool hotkeys (1-5, 0, P, X, U, C)
+            // Single-key professional muscle memory & culling (G, E, D, C, Z, 1-5, 0, P, X, U)
             if let chars = event.charactersIgnoringModifiers {
                 switch chars {
+                case "g", "G":
+                    viewModel.enterGridMode()
+                    return nil
+                case "e", "E", "d", "D":
+                    viewModel.enterDetailMode()
+                    return nil
+                case "z", "Z":
+                    if viewModel.canvasMode == .detail {
+                        viewModel.toggleZoom()
+                        return nil
+                    }
                 case "c", "C":
                     if viewModel.canvasMode == .detail {
                         viewModel.toggleCropTool()

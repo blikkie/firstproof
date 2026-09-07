@@ -130,13 +130,17 @@ struct LumenBoxApp: App {
             }
             
             CommandMenu("View") {
-                Button(viewModel.canvasMode == .detail ? "Show Grid View" : "Show Detail View") {
-                    if viewModel.canvasMode == .detail {
-                        viewModel.enterGridMode()
-                    } else {
-                        viewModel.enterDetailMode()
-                    }
+                Button("Show Grid View") {
+                    viewModel.enterGridMode()
                 }
+                .keyboardShortcut("g", modifiers: [])
+                .disabled(viewModel.canvasMode == .grid)
+                
+                Button("Show Detail View") {
+                    viewModel.enterDetailMode()
+                }
+                .keyboardShortcut("e", modifiers: [])
+                .disabled(viewModel.canvasMode == .detail && viewModel.selectedPhoto == nil)
                 
                 Divider()
                 

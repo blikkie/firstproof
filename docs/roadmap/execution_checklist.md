@@ -60,12 +60,12 @@
     - `[x]` 14.3 Strict aspect ratio lock across all 8 handles with boundary expansion limits
     - `[x]` 14.4 Inscribed 4-corner homography auto-crop envelope for keystone perspective correction
     - `[x]` 14.5 Automated editsCacheSignature derivation and non-destructive XMP roundtripping
-- `[ ]` 15. Epic 8: Architecture Modernization & Refactoring (Phased Plan)
+- `[x]` 15. Epic 8: Architecture Modernization & Refactoring (Phased Plan)
     - `[x]` 15.1 Phase 1: Swift State & Uniform Plumbing Encapsulation (`EditSettings` unification, eliminate 30-field copying)
     - `[x]` 15.2 Phase 2: Metal GPU Pipeline Modernization (Unified `ShaderTypes.h` bridging C/Swift/Metal, modular MSL headers, remove 700-line duplicate string)
     - `[x]` 15.3 Phase 3: Rust Core Modernization (`glam` SIMD NEON matrices, `xmp-writer` type-safe RDF, `palette` CIE)
     - `[x]` 15.4 Phase 4: SwiftUI View Decomposition & ViewModel Decoupling (Inspector panels, Library/Editor separation)
-    - `[ ]` 15.5 Phase 5: Single-Key Professional Muscle Memory & First-Responder Input Filter
+    - `[x]` 15.5 Phase 5: Single-Key Professional Muscle Memory & First-Responder Input Filter
 - `[ ]` 16. Epic 9: Interactive RGB & Tone Curves Engine (P1)
     - `[ ]` 16.1 Monotone Cubic Spline (Fritsch-Carlson) transfer function curve widget
     - `[ ]` 16.2 RGB Master & Individual Red/Green/Blue split-toning channels
