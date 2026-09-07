@@ -14,6 +14,10 @@ public struct ShaderUniforms {
     public var temperature: Float = 5500.0
     public var tint: Float = 0.0
     public var contrast: Float = 0.0
+    public var highlights: Float = 0.0
+    public var shadows: Float = 0.0
+    public var whites: Float = 0.0
+    public var blacks: Float = 0.0
     public var straightenAngle: Float = 0.0
     public var aspectRatio: Float = 1.5
     public var lensCorrectionEnabled: Int32 = 1

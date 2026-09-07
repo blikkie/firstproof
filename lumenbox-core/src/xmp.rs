@@ -160,6 +160,10 @@ pub fn generate_xmp(data: &XmpData) -> String {
     pm:status="{status}"
     pm:exposure="{exposure:.4}"
     pm:contrast="{contrast:.4}"
+    pm:highlights="{highlights:.4}"
+    pm:shadows="{shadows:.4}"
+    pm:whites="{whites:.4}"
+    pm:blacks="{blacks:.4}"
     pm:temperature="{temperature:.4}"
     pm:tint="{tint:.4}"
     pm:cropLeft="{crop_left:.4}"
@@ -177,6 +181,10 @@ pub fn generate_xmp(data: &XmpData) -> String {
         status = data.status,
         exposure = data.edits.exposure,
         contrast = data.edits.contrast,
+        highlights = data.edits.highlights,
+        shadows = data.edits.shadows,
+        whites = data.edits.whites,
+        blacks = data.edits.blacks,
         temperature = data.edits.temperature,
         tint = data.edits.tint,
         crop_left = data.edits.crop_left,
@@ -254,6 +262,26 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
     if let Some(con_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "contrast" )) {
         if let Ok(val) = con_str.parse::<f32>() {
             data.edits.contrast = val;
+        }
+    }
+    if let Some(hl_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "highlights" )) {
+        if let Ok(val) = hl_str.parse::<f32>() {
+            data.edits.highlights = val;
+        }
+    }
+    if let Some(sh_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "shadows" )) {
+        if let Ok(val) = sh_str.parse::<f32>() {
+            data.edits.shadows = val;
+        }
+    }
+    if let Some(wh_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "whites" )) {
+        if let Ok(val) = wh_str.parse::<f32>() {
+            data.edits.whites = val;
+        }
+    }
+    if let Some(bl_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "blacks" )) {
+        if let Ok(val) = bl_str.parse::<f32>() {
+            data.edits.blacks = val;
         }
     }
     if let Some(temp_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "temperature" )) {
@@ -339,6 +367,34 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         if let Some(con_str) = desc.attribute(( crs_ns, "Contrast2012" )) {
             if let Ok(val) = con_str.parse::<f32>() {
                 data.edits.contrast = val;
+            }
+        }
+    }
+    if data.edits.highlights == 0.0 {
+        if let Some(hl_str) = desc.attribute(( crs_ns, "Highlights2012" )).or_else(|| desc.attribute(( crs_ns, "Highlights" ))) {
+            if let Ok(val) = hl_str.parse::<f32>() {
+                data.edits.highlights = val;
+            }
+        }
+    }
+    if data.edits.shadows == 0.0 {
+        if let Some(sh_str) = desc.attribute(( crs_ns, "Shadows2012" )).or_else(|| desc.attribute(( crs_ns, "Shadows" ))) {
+            if let Ok(val) = sh_str.parse::<f32>() {
+                data.edits.shadows = val;
+            }
+        }
+    }
+    if data.edits.whites == 0.0 {
+        if let Some(wh_str) = desc.attribute(( crs_ns, "Whites2012" )).or_else(|| desc.attribute(( crs_ns, "Whites" ))) {
+            if let Ok(val) = wh_str.parse::<f32>() {
+                data.edits.whites = val;
+            }
+        }
+    }
+    if data.edits.blacks == 0.0 {
+        if let Some(bl_str) = desc.attribute(( crs_ns, "Blacks2012" )).or_else(|| desc.attribute(( crs_ns, "Blacks" ))) {
+            if let Ok(val) = bl_str.parse::<f32>() {
+                data.edits.blacks = val;
             }
         }
     }
@@ -496,6 +552,10 @@ mod tests {
         
         data.edits.exposure = 0.85;
         data.edits.contrast = 25.0;
+        data.edits.highlights = -40.0;
+        data.edits.shadows = 35.0;
+        data.edits.whites = 15.0;
+        data.edits.blacks = -20.0;
         data.edits.temperature = 5800.0;
         data.edits.tint = -12.0;
         data.edits.crop_left = 0.05;
@@ -524,12 +584,36 @@ mod tests {
         
         assert_eq!(parsed.edits.exposure, 0.85);
         assert_eq!(parsed.edits.contrast, 25.0);
+        assert_eq!(parsed.edits.highlights, -40.0);
+        assert_eq!(parsed.edits.shadows, 35.0);
+        assert_eq!(parsed.edits.whites, 15.0);
+        assert_eq!(parsed.edits.blacks, -20.0);
         assert_eq!(parsed.edits.temperature, 5800.0);
         assert_eq!(parsed.edits.tint, -12.0);
         assert_eq!(parsed.edits.crop_angle, -0.5);
         assert_eq!(parsed.edits.rotation, 90);
         assert_eq!(parsed.edits.flip_horizontal, true);
         assert_eq!(parsed.edits.flip_vertical, false);
+    }
+
+    #[test]
+    fn test_xmp_adobe_tone_recovery_ingestion() {
+        let adobe_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:Highlights2012="-65"
+    crs:Shadows2012="+45"
+    crs:Whites2012="+20"
+    crs:Blacks2012="-15">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+        let parsed = parse_xmp(adobe_xmp).unwrap();
+        assert_eq!(parsed.edits.highlights, -65.0);
+        assert_eq!(parsed.edits.shadows, 45.0);
+        assert_eq!(parsed.edits.whites, 20.0);
+        assert_eq!(parsed.edits.blacks, -15.0);
     }
 
     #[test]

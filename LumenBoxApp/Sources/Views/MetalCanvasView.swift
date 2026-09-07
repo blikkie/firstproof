@@ -7,6 +7,10 @@ public struct MetalCanvasView: NSViewRepresentable {
     @Bindable var viewModel: AppViewModel
     let exposure: Float
     let contrast: Float
+    let highlights: Float
+    let shadows: Float
+    let whites: Float
+    let blacks: Float
     let temperature: Float
     let tint: Float
     let straightenAngle: Float
@@ -25,6 +29,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         viewModel: AppViewModel,
         exposure: Float,
         contrast: Float,
+        highlights: Float,
+        shadows: Float,
+        whites: Float,
+        blacks: Float,
         temperature: Float,
         tint: Float,
         straightenAngle: Float,
@@ -42,6 +50,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         self.viewModel = viewModel
         self.exposure = exposure
         self.contrast = contrast
+        self.highlights = highlights
+        self.shadows = shadows
+        self.whites = whites
+        self.blacks = blacks
         self.temperature = temperature
         self.tint = tint
         self.straightenAngle = straightenAngle
@@ -144,6 +156,10 @@ public struct MetalCanvasView: NSViewRepresentable {
         renderer.uniforms.temperature = temperature
         renderer.uniforms.tint = tint
         renderer.uniforms.contrast = contrast
+        renderer.uniforms.highlights = highlights
+        renderer.uniforms.shadows = shadows
+        renderer.uniforms.whites = whites
+        renderer.uniforms.blacks = blacks
         renderer.uniforms.straightenAngle = straightenAngle * (.pi / 180.0)
         renderer.uniforms.lensCorrectionEnabled = lensCorrectionEnabled ? 1 : 0
         renderer.uniforms.isOriginal = isShowingOriginal ? 1.0 : 0.0
@@ -308,6 +324,8 @@ public final class CanvasMTKView: MTKView {
         if event.keyCode == 49 { // Spacebar
             isSpacePressed = true
             updateCursor()
+        } else if event.keyCode == 42 || event.characters == "\\" { // Backslash: Hold for Original
+            coordinator?.viewModel?.isShowingOriginal = true
         } else {
             super.keyDown(with: event)
         }
@@ -317,6 +335,8 @@ public final class CanvasMTKView: MTKView {
         if event.keyCode == 49 { // Spacebar
             isSpacePressed = false
             updateCursor()
+        } else if event.keyCode == 42 || event.characters == "\\" { // Backslash: Release Original
+            coordinator?.viewModel?.isShowingOriginal = false
         } else {
             super.keyUp(with: event)
         }

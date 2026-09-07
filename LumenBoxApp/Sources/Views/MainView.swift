@@ -96,7 +96,7 @@ struct MainView: View {
     
     private func setupKeyboardMonitor() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { event in
             // Skip hotkeys if user is editing in a text field or text area
             if let responder = NSApp.keyWindow?.firstResponder,
                responder is NSTextView || responder is NSTextField {
@@ -105,6 +105,24 @@ struct MainView: View {
             
             // Allow system commands (Cmd+A, Cmd+E, Cmd+W, etc.) to pass through
             if event.modifierFlags.contains(.command) {
+                return event
+            }
+            
+            // Backslash (\): Hold for Original in Detail mode
+            if event.keyCode == 42 || event.characters == "\\" {
+                if viewModel.canvasMode == .detail {
+                    if event.type == .keyDown {
+                        if !event.isARepeat {
+                            viewModel.isShowingOriginal = true
+                        }
+                    } else if event.type == .keyUp {
+                        viewModel.isShowingOriginal = false
+                    }
+                    return nil
+                }
+            }
+            
+            if event.type == .keyUp {
                 return event
             }
             

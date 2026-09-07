@@ -4,7 +4,6 @@ import LumenBoxBridge
 
 struct CanvasView: View {
     @Bindable var viewModel: AppViewModel
-    @State private var isShowingOriginal: Bool = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -179,11 +178,11 @@ struct CanvasView: View {
                                     .edgesIgnoringSafeArea(.all)
                                 
                                 if viewModel.previewImage != nil {
-                                    DetailMetalCanvasContainer(viewModel: viewModel, isShowingOriginal: isShowingOriginal)
+                                    DetailMetalCanvasContainer(viewModel: viewModel, isShowingOriginal: viewModel.isShowingOriginal)
                                         .padding(16)
                                         .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
                                         .overlay(
-                                            isShowingOriginal ?
+                                            viewModel.isShowingOriginal ?
                                             VStack {
                                                 Text("ORIGINAL RAW (AS SHOT)")
                                                     .font(.caption)
@@ -429,8 +428,8 @@ struct CanvasView: View {
             .controlSize(.small)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 0)
-                    .onChanged { _ in isShowingOriginal = true }
-                    .onEnded { _ in isShowingOriginal = false }
+                    .onChanged { _ in viewModel.isShowingOriginal = true }
+                    .onEnded { _ in viewModel.isShowingOriginal = false }
             )
             
             // 4. Quick Reset All Edits
@@ -584,6 +583,10 @@ struct DetailMetalCanvasContainer: View {
             viewModel: viewModel,
             exposure: viewModel.exposure,
             contrast: viewModel.contrast,
+            highlights: viewModel.highlights,
+            shadows: viewModel.shadows,
+            whites: viewModel.whites,
+            blacks: viewModel.blacks,
             temperature: viewModel.temperature,
             tint: viewModel.tint,
             straightenAngle: viewModel.straightenAngle,

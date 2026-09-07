@@ -16,6 +16,10 @@ struct ShaderUniforms {
     float temperature;       // 2000K .. 50000K (default 5500K)
     float tint;              // -150 .. +150 (default 0.0)
     float contrast;          // -100 .. +100 (default 0.0)
+    float highlights;        // -100 .. +100 (default 0.0)
+    float shadows;           // -100 .. +100 (default 0.0)
+    float whites;            // -100 .. +100 (default 0.0)
+    float blacks;            // -100 .. +100 (default 0.0)
     float straightenAngle;   // Radians
     float aspectRatio;       // width / height
     int lensCorrectionEnabled;
@@ -276,6 +280,57 @@ vertex VertexOutput vertexShader(
     return out;
 }
 
+// MARK: - Selective Tone Recovery (Highlights, Shadows, Whites, Blacks)
+inline float3 applyToneRecovery(float3 color, float highlights, float shadows, float whites, float blacks) {
+    if (highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0) {
+        return color;
+    }
+    
+    float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+    if (lum <= 1e-6) {
+        return color;
+    }
+    
+    // Log-luminance EV relative to photographic middle gray (0.18)
+    float ev = log2(max(lum, 1e-5) / 0.18);
+    float delta_ev = 0.0;
+    
+    // 1. Blacks: Anchor deep shadows (ev <= -1.0)
+    if (blacks != 0.0) {
+        float u = clamp((-ev - 1.0) / 3.0, 0.0, 1.0);
+        float w_blacks = u * u * (3.0 - 2.0 * u);
+        delta_ev += (blacks / 100.0) * 1.5 * w_blacks;
+    }
+    
+    // 2. Shadows: Lift lower midtones and shadow textures (ev in [-4.0, 0.0])
+    if (shadows != 0.0) {
+        float u = clamp((ev + 4.0) / 4.0, 0.0, 1.0);
+        float w_shadows = sin(3.141592653589793 * u);
+        delta_ev += (shadows / 100.0) * 1.75 * w_shadows;
+    }
+    
+    // 3. Highlights: Recover or boost bright areas and skies (ev in [0.0, 4.0])
+    if (highlights != 0.0) {
+        float u = clamp(ev / 4.0, 0.0, 1.0);
+        float w_highlights = sin(3.141592653589793 * u);
+        delta_ev += (highlights / 100.0) * 2.0 * w_highlights;
+    }
+    
+    // 4. Whites: Adjust specular highlight threshold and ceiling (ev >= 1.0)
+    if (whites != 0.0) {
+        float u = clamp((ev - 1.0) / 3.0, 0.0, 1.0);
+        float w_whites = u * u * (3.0 - 2.0 * u);
+        delta_ev += (whites / 100.0) * 1.5 * w_whites;
+    }
+    
+    if (delta_ev == 0.0) {
+        return color;
+    }
+    
+    float gain = exp2(delta_ev);
+    return color * gain;
+}
+
 // MARK: - Fragment Shader (Linear RAW Pipeline)
 fragment float4 fragmentShader(
     VertexOutput in [[stage_in]],
@@ -338,6 +393,10 @@ fragment float4 fragmentShader(
                           (abs(uniforms.temperature - 5500.0) < 1.0) && 
                           (uniforms.tint == 0.0) && 
                           (uniforms.contrast == 0.0) &&
+                          (uniforms.highlights == 0.0) &&
+                          (uniforms.shadows == 0.0) &&
+                          (uniforms.whites == 0.0) &&
+                          (uniforms.blacks == 0.0) &&
                           (uniforms.lutEnabled == 0);
     
     if (uniforms.isLinearRaw == 0 && isNeutralEdits) {
@@ -348,6 +407,10 @@ fragment float4 fragmentShader(
     float editTemp = (uniforms.isOriginal > 0.5) ? 5500.0 : uniforms.temperature;
     float editTint = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.tint;
     float editContrast = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.contrast;
+    float editHighlights = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.highlights;
+    float editShadows = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.shadows;
+    float editWhites = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.whites;
+    float editBlacks = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.blacks;
     
     // 2. Decode texture to Linear Rec.2020 working space
     float3 rec2020Color;
@@ -379,6 +442,9 @@ fragment float4 fragmentShader(
     if (totalExposure != 0.0) {
         rec2020Color *= pow(2.0, totalExposure);
     }
+    
+    // 4b. Selective Tone Recovery (Highlights, Shadows, Whites, Blacks)
+    rec2020Color = applyToneRecovery(rec2020Color, editHighlights, editShadows, editWhites, editBlacks);
     
     // 5. AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles
     float3 srgbLinearOut;

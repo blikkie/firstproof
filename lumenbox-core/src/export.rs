@@ -150,11 +150,20 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
         g *= exposure_gain;
         b *= exposure_gain;
         
+        // 2b. Selective Tone Recovery (Highlights, Shadows, Whites, Blacks)
+        let (r_rec, g_rec, b_rec) = apply_tone_recovery(
+            r, g, b,
+            edits.highlights, edits.shadows, edits.whites, edits.blacks,
+        );
+        r = r_rec;
+        g = g_rec;
+        b = b_rec;
+        
         // 3. AgX Filmic or Camera-Matching Tone Profiles
         // Tone profiles output sRGB (display-referred for AgX, linear sRGB for camera profiles / raw passthrough).
         // Outputting sRGB directly avoids matrix inversion back into Rec.2020 and eliminates channel cross-talk
         // or clamping discrepancies prior to bilinear interpolation.
-        if image.is_raw || edits.contrast != 0.0 || edits.tone_profile != crate::ColorProfileMode::AgxFilmic {
+        if image.is_raw || edits.contrast != 0.0 || edits.highlights != 0.0 || edits.shadows != 0.0 || edits.whites != 0.0 || edits.blacks != 0.0 || edits.tone_profile != crate::ColorProfileMode::AgxFilmic {
             match edits.tone_profile {
                 crate::ColorProfileMode::AgxVivid => {
                     let c_rec2020 = Color3::new(r, g, b);
@@ -216,6 +225,64 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
         image.data[idx + 1] = g.max(0.0);
         image.data[idx + 2] = b.max(0.0);
     }
+}
+
+/// Applies photographic four-zone tone recovery (Highlights, Shadows, Whites, Blacks)
+/// to scene-referred linear RGB values using chromaticity-preserving luminance scaling.
+/// Each adjustment slider is in the range -100.0 .. +100.0.
+#[inline(always)]
+pub fn apply_tone_recovery(
+    r: f32, g: f32, b: f32,
+    highlights: f32, shadows: f32, whites: f32, blacks: f32,
+) -> (f32, f32, f32) {
+    if highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0 {
+        return (r, g, b);
+    }
+    
+    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    if lum <= 1e-6 {
+        return (r, g, b);
+    }
+    
+    // Log-luminance EV relative to photographic middle gray (0.18)
+    let ev = (lum.max(1e-5) / 0.18).log2();
+    
+    let mut delta_ev = 0.0f32;
+    
+    // 1. Blacks: Anchor deep shadows (ev <= -1.0)
+    if blacks != 0.0 {
+        let u = ((-ev - 1.0) / 3.0).clamp(0.0, 1.0);
+        let w_blacks = u * u * (3.0 - 2.0 * u);
+        delta_ev += (blacks / 100.0) * 1.5 * w_blacks;
+    }
+    
+    // 2. Shadows: Lift lower midtones and shadow textures (ev in [-4.0, 0.0])
+    if shadows != 0.0 {
+        let u = ((ev + 4.0) / 4.0).clamp(0.0, 1.0);
+        let w_shadows = (std::f32::consts::PI * u).sin();
+        delta_ev += (shadows / 100.0) * 1.75 * w_shadows;
+    }
+    
+    // 3. Highlights: Recover or boost bright areas and skies (ev in [0.0, 4.0])
+    if highlights != 0.0 {
+        let u = (ev / 4.0).clamp(0.0, 1.0);
+        let w_highlights = (std::f32::consts::PI * u).sin();
+        delta_ev += (highlights / 100.0) * 2.0 * w_highlights;
+    }
+    
+    // 4. Whites: Adjust specular highlight threshold and ceiling (ev >= 1.0)
+    if whites != 0.0 {
+        let u = ((ev - 1.0) / 3.0).clamp(0.0, 1.0);
+        let w_whites = u * u * (3.0 - 2.0 * u);
+        delta_ev += (whites / 100.0) * 1.5 * w_whites;
+    }
+    
+    if delta_ev == 0.0 {
+        return (r, g, b);
+    }
+    
+    let gain = 2.0f32.powf(delta_ev);
+    (r * gain, g * gain, b * gain)
 }
 
 #[inline(always)]
@@ -608,6 +675,10 @@ mod tests {
         let edits = EditSettings {
             exposure: 1.0,
             contrast: 20.0,
+            highlights: 0.0,
+            shadows: 0.0,
+            whites: 0.0,
+            blacks: 0.0,
             temperature: 6500.0,
             tint: 10.0,
             crop_left: 0.0,
@@ -646,6 +717,10 @@ mod tests {
         let edits = EditSettings {
             exposure: 0.0,
             contrast: 0.0,
+            highlights: 0.0,
+            shadows: 0.0,
+            whites: 0.0,
+            blacks: 0.0,
             temperature: 5500.0,
             tint: 0.0,
             crop_left: 0.0,
@@ -672,7 +747,7 @@ mod tests {
                 (c_srgb.b().clamp(0.0, 1.0) * 255.0).round() as u8,
             ]
         } else {
-            linear_rgb_to_srgb8(c_srgb)
+            crate::color::linear_rgb_to_srgb8(c_srgb)
         };
         
         // Mid-gray 0.18 -> filmic S-curve -> ~0.51085 display-referred -> ~130/255 (RapidRAW target median is 127-130)
@@ -695,6 +770,10 @@ mod tests {
         let mut edits = EditSettings {
             exposure: 0.0,
             contrast: 0.0,
+            highlights: 0.0,
+            shadows: 0.0,
+            whites: 0.0,
+            blacks: 0.0,
             temperature: 5500.0,
             tint: 0.0,
             crop_left: 0.0,
@@ -747,6 +826,10 @@ mod tests {
         let edits = EditSettings {
             exposure: 0.0,
             contrast: 0.0,
+            highlights: 0.0,
+            shadows: 0.0,
+            whites: 0.0,
+            blacks: 0.0,
             temperature: 5500.0,
             tint: 0.0,
             crop_left: 0.0,
@@ -829,6 +912,37 @@ mod tests {
         let _ = std::fs::remove_file(tmp_in);
         let _ = std::fs::remove_file(tmp_out_90);
         let _ = std::fs::remove_file(tmp_out_flip);
+    }
+
+    #[test]
+    fn test_tone_recovery_math() {
+        // 1. Identity when sliders are 0
+        let (r0, g0, b0) = apply_tone_recovery(0.5, 0.4, 0.3, 0.0, 0.0, 0.0, 0.0);
+        assert_eq!(r0, 0.5);
+        assert_eq!(g0, 0.4);
+        assert_eq!(b0, 0.3);
+
+        // 2. Chromaticity preservation: ratio R/G and B/G must remain invariant
+        let (r_in, g_in, b_in) = (0.6, 0.4, 0.2);
+        let orig_ratio_rg = r_in / g_in;
+        let orig_ratio_bg = b_in / g_in;
+
+        let (r_hl, g_hl, b_hl) = apply_tone_recovery(r_in, g_in, b_in, -50.0, 0.0, 0.0, 0.0);
+        assert!((r_hl / g_hl - orig_ratio_rg).abs() < 1e-5);
+        assert!((b_hl / g_hl - orig_ratio_bg).abs() < 1e-5);
+        // Highlights pulled down (-50) must reduce luminance
+        assert!(g_hl < g_in);
+
+        // 3. Shadow lifting (+50) on dark tones must increase luminance
+        let (r_sh_in, g_sh_in, b_sh_in) = (0.04, 0.03, 0.02);
+        let (r_sh, g_sh, _b_sh) = apply_tone_recovery(r_sh_in, g_sh_in, b_sh_in, 0.0, 50.0, 0.0, 0.0);
+        assert!(g_sh > g_sh_in);
+        assert!((r_sh / g_sh - (r_sh_in / g_sh_in)).abs() < 1e-5);
+
+        // 4. Blacks pull down (-50) must deepen deep blacks
+        let (r_bl_in, g_bl_in, b_bl_in) = (0.008, 0.008, 0.008);
+        let (_, g_bl, _) = apply_tone_recovery(r_bl_in, g_bl_in, b_bl_in, 0.0, 0.0, 0.0, -50.0);
+        assert!(g_bl < g_bl_in);
     }
 }
 

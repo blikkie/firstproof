@@ -252,6 +252,10 @@ fn test_gpu_preview_vs_export_parity() {
     let edits = EditSettings {
         exposure: 0.0,
         contrast: 0.0,
+        highlights: 0.0,
+        shadows: 0.0,
+        whites: 0.0,
+        blacks: 0.0,
         temperature: 5500.0,
         tint: 0.0,
         crop_left: 0.0,

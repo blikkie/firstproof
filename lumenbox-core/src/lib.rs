@@ -40,6 +40,10 @@ pub struct CubeLutRecord {
 pub struct EditSettings {
     pub exposure: f32,
     pub contrast: f32,
+    pub highlights: f32,
+    pub shadows: f32,
+    pub whites: f32,
+    pub blacks: f32,
     pub temperature: f32,
     pub tint: f32,
     pub crop_left: f32,
@@ -60,6 +64,10 @@ impl Default for EditSettings {
         Self {
             exposure: 0.0,
             contrast: 0.0,
+            highlights: 0.0,
+            shadows: 0.0,
+            whites: 0.0,
+            blacks: 0.0,
             temperature: 5000.0,
             tint: 0.0,
             crop_left: 0.0,

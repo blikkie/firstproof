@@ -1040,6 +1040,10 @@ public func FfiConverterTypeCubeLutRecord_lower(_ value: CubeLutRecord) -> RustB
 public struct EditSettings {
     public var exposure: Float
     public var contrast: Float
+    public var highlights: Float
+    public var shadows: Float
+    public var whites: Float
+    public var blacks: Float
     public var temperature: Float
     public var tint: Float
     public var cropLeft: Float
@@ -1056,9 +1060,13 @@ public struct EditSettings {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float) {
         self.exposure = exposure
         self.contrast = contrast
+        self.highlights = highlights
+        self.shadows = shadows
+        self.whites = whites
+        self.blacks = blacks
         self.temperature = temperature
         self.tint = tint
         self.cropLeft = cropLeft
@@ -1083,6 +1091,18 @@ extension EditSettings: Equatable, Hashable {
             return false
         }
         if lhs.contrast != rhs.contrast {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.shadows != rhs.shadows {
+            return false
+        }
+        if lhs.whites != rhs.whites {
+            return false
+        }
+        if lhs.blacks != rhs.blacks {
             return false
         }
         if lhs.temperature != rhs.temperature {
@@ -1130,6 +1150,10 @@ extension EditSettings: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(exposure)
         hasher.combine(contrast)
+        hasher.combine(highlights)
+        hasher.combine(shadows)
+        hasher.combine(whites)
+        hasher.combine(blacks)
         hasher.combine(temperature)
         hasher.combine(tint)
         hasher.combine(cropLeft)
@@ -1156,6 +1180,10 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
             try EditSettings(
                 exposure: FfiConverterFloat.read(from: &buf), 
                 contrast: FfiConverterFloat.read(from: &buf), 
+                highlights: FfiConverterFloat.read(from: &buf), 
+                shadows: FfiConverterFloat.read(from: &buf), 
+                whites: FfiConverterFloat.read(from: &buf), 
+                blacks: FfiConverterFloat.read(from: &buf), 
                 temperature: FfiConverterFloat.read(from: &buf), 
                 tint: FfiConverterFloat.read(from: &buf), 
                 cropLeft: FfiConverterFloat.read(from: &buf), 
@@ -1175,6 +1203,10 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
     public static func write(_ value: EditSettings, into buf: inout [UInt8]) {
         FfiConverterFloat.write(value.exposure, into: &buf)
         FfiConverterFloat.write(value.contrast, into: &buf)
+        FfiConverterFloat.write(value.highlights, into: &buf)
+        FfiConverterFloat.write(value.shadows, into: &buf)
+        FfiConverterFloat.write(value.whites, into: &buf)
+        FfiConverterFloat.write(value.blacks, into: &buf)
         FfiConverterFloat.write(value.temperature, into: &buf)
         FfiConverterFloat.write(value.tint, into: &buf)
         FfiConverterFloat.write(value.cropLeft, into: &buf)

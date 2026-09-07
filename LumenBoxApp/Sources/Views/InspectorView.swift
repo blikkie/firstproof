@@ -331,6 +331,57 @@ struct InspectorView: View {
                     if !isEditing { viewModel.saveCurrentEdits() }
                 }
             )
+            
+            Divider()
+                .padding(.vertical, 2)
+            
+            Text("TONAL RECOVERY")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.secondary)
+            
+            SliderRow(
+                label: "Highlights",
+                value: $viewModel.highlights,
+                range: -100.0...100.0,
+                format: "%.0f",
+                onReset: { viewModel.resetSlider(.highlights) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
+            
+            SliderRow(
+                label: "Shadows",
+                value: $viewModel.shadows,
+                range: -100.0...100.0,
+                format: "%.0f",
+                onReset: { viewModel.resetSlider(.shadows) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
+            
+            SliderRow(
+                label: "Whites",
+                value: $viewModel.whites,
+                range: -100.0...100.0,
+                format: "%.0f",
+                onReset: { viewModel.resetSlider(.whites) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
+            
+            SliderRow(
+                label: "Blacks",
+                value: $viewModel.blacks,
+                range: -100.0...100.0,
+                format: "%.0f",
+                onReset: { viewModel.resetSlider(.blacks) },
+                onEditingChanged: { isEditing in
+                    if !isEditing { viewModel.saveCurrentEdits() }
+                }
+            )
         }
         .padding(.top, 4)
     }

@@ -7,6 +7,10 @@ import LumenBoxBridge
 public enum EditSliderType {
     case exposure
     case contrast
+    case highlights
+    case shadows
+    case whites
+    case blacks
     case temperature
     case tint
     case straighten
@@ -88,6 +92,10 @@ public final class AppViewModel {
     // MARK: - Edit Sliders (P0 + Lens Corrections)
     public var exposure: Float = 0.0      // -5.0 .. +5.0 EV
     public var contrast: Float = 0.0      // -100 .. +100
+    public var highlights: Float = 0.0    // -100 .. +100
+    public var shadows: Float = 0.0       // -100 .. +100
+    public var whites: Float = 0.0        // -100 .. +100
+    public var blacks: Float = 0.0        // -100 .. +100
     public var temperature: Float = 5500.0 // 2000K .. 50000K
     public var tint: Float = 0.0          // -150 .. +150
     public var straightenAngle: Float = 0.0 // -45 .. +45 deg
@@ -106,10 +114,15 @@ public final class AppViewModel {
     public var defaultExifRotation: Int = 0
     public var defaultExifFlipH: Bool = false
     public var defaultExifFlipV: Bool = false
+    public var isShowingOriginal: Bool = false
     
     public var hasCustomEdits: Bool {
         exposure != 0.0 ||
         contrast != 0.0 ||
+        highlights != 0.0 ||
+        shadows != 0.0 ||
+        whites != 0.0 ||
+        blacks != 0.0 ||
         abs(temperature - asShotTemperature) >= 1.0 ||
         tint != asShotTint ||
         straightenAngle != 0.0 ||
@@ -708,6 +721,10 @@ public final class AppViewModel {
         if let xmp = readXmp(path: photo.filePath) {
             self.exposure = xmp.edits.exposure
             self.contrast = xmp.edits.contrast
+            self.highlights = xmp.edits.highlights
+            self.shadows = xmp.edits.shadows
+            self.whites = xmp.edits.whites
+            self.blacks = xmp.edits.blacks
             self.temperature = xmp.edits.temperature
             self.tint = xmp.edits.tint
             self.straightenAngle = xmp.edits.cropAngle
@@ -720,6 +737,10 @@ public final class AppViewModel {
         } else {
             self.exposure = 0.0
             self.contrast = 0.0
+            self.highlights = 0.0
+            self.shadows = 0.0
+            self.whites = 0.0
+            self.blacks = 0.0
             self.temperature = 5500.0
             self.tint = 0.0
             self.straightenAngle = 0.0
@@ -871,6 +892,10 @@ public final class AppViewModel {
         EditSettings(
             exposure: self.exposure,
             contrast: self.contrast,
+            highlights: self.highlights,
+            shadows: self.shadows,
+            whites: self.whites,
+            blacks: self.blacks,
             temperature: self.temperature,
             tint: self.tint,
             cropLeft: 0.0,
@@ -902,6 +927,10 @@ public final class AppViewModel {
         let finalEdits = edits ?? existingXmp?.edits ?? EditSettings(
             exposure: 0.0,
             contrast: 0.0,
+            highlights: 0.0,
+            shadows: 0.0,
+            whites: 0.0,
+            blacks: 0.0,
             temperature: 5500.0,
             tint: 0.0,
             cropLeft: 0.0,
@@ -979,6 +1008,14 @@ public final class AppViewModel {
             exposure = 0.0
         case .contrast:
             contrast = 0.0
+        case .highlights:
+            highlights = 0.0
+        case .shadows:
+            shadows = 0.0
+        case .whites:
+            whites = 0.0
+        case .blacks:
+            blacks = 0.0
         case .temperature:
             temperature = asShotTemperature
         case .tint:
@@ -994,6 +1031,10 @@ public final class AppViewModel {
     public func resetAllSliders() {
         exposure = 0.0
         contrast = 0.0
+        highlights = 0.0
+        shadows = 0.0
+        whites = 0.0
+        blacks = 0.0
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0
