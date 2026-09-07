@@ -152,6 +152,7 @@ struct MainView: View {
                 }
             case 123: // Left Arrow
                 if viewModel.canvasMode == .detail {
+                    viewModel.resetFilmstripFollow()
                     viewModel.selectPreviousPhoto()
                     return nil
                 } else {
@@ -160,6 +161,7 @@ struct MainView: View {
                 }
             case 124: // Right Arrow
                 if viewModel.canvasMode == .detail {
+                    viewModel.resetFilmstripFollow()
                     viewModel.selectNextPhoto()
                     return nil
                 } else {
@@ -170,10 +172,16 @@ struct MainView: View {
                 if viewModel.canvasMode == .grid {
                     viewModel.moveGridSelection(deltaX: 0, deltaY: 1)
                     return nil
+                } else {
+                    viewModel.resetFilmstripFollow()
+                    return nil
                 }
             case 126: // Up Arrow (Grid row up)
                 if viewModel.canvasMode == .grid {
                     viewModel.moveGridSelection(deltaX: 0, deltaY: -1)
+                    return nil
+                } else {
+                    viewModel.resetFilmstripFollow()
                     return nil
                 }
             default:

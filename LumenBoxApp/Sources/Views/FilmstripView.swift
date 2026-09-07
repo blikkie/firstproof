@@ -26,10 +26,29 @@ struct FilmstripView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
+                    .background(FilmstripScrollListener {
+                        viewModel.isFilmstripFollowingSelection = false
+                    })
+                }
+                .onAppear {
+                    viewModel.isFilmstripFollowingSelection = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        scrollToSelected(proxy: proxy, animated: false)
+                    }
                 }
                 .onChange(of: viewModel.selectedPhoto?.filePath) { _, newPath in
-                    if let target = newPath {
-                        proxy.scrollTo(target, anchor: .center)
+                    if viewModel.isFilmstripFollowingSelection, newPath != nil {
+                        scrollToSelected(proxy: proxy, animated: true)
+                    }
+                }
+                .onChange(of: viewModel.filmstripScrollTrigger) { _, _ in
+                    scrollToSelected(proxy: proxy, animated: true)
+                }
+                .onChange(of: viewModel.filteredPhotos.count) { _, count in
+                    if count > 0 && viewModel.isFilmstripFollowingSelection {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            scrollToSelected(proxy: proxy, animated: false)
+                        }
                     }
                 }
             }
@@ -38,7 +57,19 @@ struct FilmstripView: View {
         }
     }
     
+    private func scrollToSelected(proxy: ScrollViewProxy, animated: Bool) {
+        guard let target = viewModel.selectedPhoto?.filePath else { return }
+        if animated {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                proxy.scrollTo(target, anchor: .center)
+            }
+        } else {
+            proxy.scrollTo(target, anchor: .center)
+        }
+    }
+    
     private func handleCellClick(for photo: PhotoRecord) {
+        viewModel.resetFilmstripFollow()
         let flags = NSEvent.modifierFlags
         if flags.contains(.command) {
             viewModel.togglePhotoSelection(photo)
@@ -46,6 +77,51 @@ struct FilmstripView: View {
             viewModel.selectPhotoRange(to: photo)
         } else {
             viewModel.selectPhoto(photo)
+        }
+    }
+}
+
+// MARK: - AppKit Live Scroll Listener
+struct FilmstripScrollListener: NSViewRepresentable {
+    var onUserScroll: () -> Void
+    
+    func makeNSView(context: Context) -> NSView {
+        let view = ScrollListenerView()
+        view.onUserScroll = onUserScroll
+        return view
+    }
+    
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if let v = nsView as? ScrollListenerView {
+            v.onUserScroll = onUserScroll
+        }
+    }
+    
+    class ScrollListenerView: NSView {
+        var onUserScroll: (() -> Void)?
+        private var observer: Any?
+        
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let obs = observer {
+                NotificationCenter.default.removeObserver(obs)
+                observer = nil
+            }
+            if let scrollView = enclosingScrollView {
+                observer = NotificationCenter.default.addObserver(
+                    forName: NSScrollView.didLiveScrollNotification,
+                    object: scrollView,
+                    queue: .main
+                ) { [weak self] _ in
+                    self?.onUserScroll?()
+                }
+            }
+        }
+        
+        deinit {
+            if let obs = observer {
+                NotificationCenter.default.removeObserver(obs)
+            }
         }
     }
 }

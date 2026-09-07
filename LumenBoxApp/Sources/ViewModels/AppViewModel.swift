@@ -94,6 +94,13 @@ public final class AppViewModel {
     @ObservationIgnored public var captureThumbnailSnapshot: (() -> NSImage?)? = nil
     public var isExportSheetPresented: Bool = false
     public var isExportPackageSheetPresented: Bool = false
+    public var isFilmstripFollowingSelection: Bool = true
+    public var filmstripScrollTrigger: UUID = UUID()
+    
+    public func resetFilmstripFollow() {
+        self.isFilmstripFollowingSelection = true
+        self.filmstripScrollTrigger = UUID()
+    }
     
     public var selectedPhotoIsRaw: Bool {
         guard let path = selectedPhoto?.filePath else { return false }
@@ -579,6 +586,7 @@ public final class AppViewModel {
     public var gridColumnCount: Int = 4
     
     public func enterDetailMode() {
+        resetFilmstripFollow()
         if selectedPhoto == nil, let first = filteredPhotos.first {
             selectPhoto(first)
         }
@@ -590,6 +598,7 @@ public final class AppViewModel {
     }
     
     public func selectNextPhoto() {
+        resetFilmstripFollow()
         let list = filteredPhotos
         guard !list.isEmpty else { return }
         guard let current = selectedPhoto, let idx = list.firstIndex(where: { $0.filePath == current.filePath }) else {
@@ -601,6 +610,7 @@ public final class AppViewModel {
     }
     
     public func selectPreviousPhoto() {
+        resetFilmstripFollow()
         let list = filteredPhotos
         guard !list.isEmpty else { return }
         guard let current = selectedPhoto, let idx = list.firstIndex(where: { $0.filePath == current.filePath }) else {
