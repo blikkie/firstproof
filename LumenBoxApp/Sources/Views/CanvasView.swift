@@ -4,6 +4,7 @@ import LumenBoxBridge
 
 struct CanvasView: View {
     @Bindable var viewModel: AppViewModel
+    @State private var showHdrUnavailablePopover: Bool = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -43,13 +44,106 @@ struct CanvasView: View {
                             .foregroundColor(.accentColor)
                             .fontWeight(.medium)
                     } else {
-                        Text("(\(viewModel.filteredPhotos.count))")
+                        Text("(\(viewModel.filteredPhotos.count) Photos)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
                 
                 Spacer()
+                
+                if viewModel.canvasMode == .detail {
+                    // Apple EDR & HDR Radiance Toggle (Story 18.1 - Detail / Loupe View only)
+                    Button {
+                        if viewModel.edrHeadroom > 1.0 {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                viewModel.isHdrEnabled.toggle()
+                            }
+                        } else {
+                            showHdrUnavailablePopover = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                                showHdrUnavailablePopover = false
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: (viewModel.isHdrEnabled && viewModel.edrHeadroom > 1.0) ? "sun.max.trianglebadge.exclamationmark.fill" : "sun.max.fill")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor((viewModel.isHdrEnabled && viewModel.edrHeadroom > 1.0) ? .yellow : .secondary)
+                            
+                            if viewModel.edrHeadroom > 1.0 {
+                                Text(viewModel.isHdrEnabled ? String(format: "HDR %.1fx", viewModel.edrHeadroom) : "SDR")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundColor(viewModel.isHdrEnabled ? .primary : .secondary)
+                            } else {
+                                Text("SDR (1.0x)")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill((viewModel.isHdrEnabled && viewModel.edrHeadroom > 1.0) ? Color.yellow.opacity(0.18) : Color.secondary.opacity(0.12))
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke((viewModel.isHdrEnabled && viewModel.edrHeadroom > 1.0) ? Color.yellow.opacity(0.4) : Color.clear, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help(viewModel.edrHeadroom > 1.0 
+                        ? (viewModel.isHdrEnabled ? "HDR Radiance active (\(String(format: "%.1fx", viewModel.edrHeadroom)) headroom). Click for SDR soft-proofing." : "SDR soft-proofing mode. Click for HDR Radiance.")
+                        : "Current display is SDR (headroom: 1.0x). Click for info on unlocking HDR.")
+                    .popover(isPresented: $showHdrUnavailablePopover, arrowEdge: .bottom) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "sun.max.trianglebadge.exclamationmark.fill")
+                                    .foregroundColor(.yellow)
+                                    .font(.headline)
+                                Text("HDR Unavailable on This Display")
+                                    .font(.headline)
+                            }
+                            
+                            Text("Your current display is running in Standard Dynamic Range (1.0× headroom), so highlights cannot physically illuminate beyond standard SDR white.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            
+                            Divider()
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("To experience HDR / EDR:")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                
+                                HStack(alignment: .top, spacing: 5) {
+                                    Text("•").foregroundColor(.secondary)
+                                    Text("Connect an Apple Liquid Retina XDR (MacBook Pro), Studio Display, or HDR10 monitor.")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                HStack(alignment: .top, spacing: 5) {
+                                    Text("•").foregroundColor(.secondary)
+                                    Text("Dimming display brightness in macOS Control Center can unlock EDR headroom relative to SDR white.")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                HStack(alignment: .top, spacing: 5) {
+                                    Text("•").foregroundColor(.secondary)
+                                    Text("Export with \"Ultra HDR (ISO 21496-1)\" to view the gain map on iPhone, Android, and HDR browsers.")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .padding(14)
+                        .frame(width: 320)
+                    }
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)

@@ -699,6 +699,7 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     max_dimension: Option<u32>,
     color_space: ExportColorSpace,
     rendering_intent: ExportRenderingIntent,
+    ultra_hdr: bool,
 ) -> Result<(), String> {
     let input_path = input_path.as_ref();
     let output_path = output_path.as_ref();
@@ -740,6 +741,8 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     
     // Build 8-bit RGB image buffer with geometric warp and bilinear filtering
     let mut rgb_img: RgbImage = ImageBuffer::new(target_w, target_h);
+    let mut sdr_luma = if ultra_hdr { Vec::with_capacity((target_w * target_h) as usize) } else { Vec::new() };
+    let mut hdr_luma = if ultra_hdr { Vec::with_capacity((target_w * target_h) as usize) } else { Vec::new() };
     
     let aspect_ratio = (orig_width as f32) / (orig_height as f32);
     let angle_rad = edits.crop_angle * std::f32::consts::PI / 180.0;
@@ -936,6 +939,13 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             ];
             
             rgb_img.put_pixel(tx, ty, Rgb(srgb8));
+
+            if ultra_hdr {
+                let y_sdr = 0.2126 * r_disp.clamp(0.0, 1.0) + 0.7152 * g_disp.clamp(0.0, 1.0) + 0.0722 * b_disp.clamp(0.0, 1.0);
+                let y_hdr = 0.2126 * r_val.max(0.0) + 0.7152 * g_val.max(0.0) + 0.0722 * b_val.max(0.0);
+                sdr_luma.push(y_sdr);
+                hdr_luma.push(y_hdr);
+            }
         }
     }
     
@@ -1013,8 +1023,22 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
             
         let tagged_jpeg = inject_icc_profile_into_jpeg(&jpeg_buf, &icc_to_embed);
+        let final_jpeg_bytes = if ultra_hdr && !sdr_luma.is_empty() {
+            let meta = crate::gainmap::GainMapMetadata::default();
+            let (_gm_img, gm_jpeg) = crate::gainmap::generate_gain_map(
+                &sdr_luma,
+                &hdr_luma,
+                target_w as usize,
+                target_h as usize,
+                &meta,
+            );
+            crate::gainmap::package_ultra_hdr_jpeg(&tagged_jpeg, &gm_jpeg, &meta)
+                .unwrap_or(tagged_jpeg)
+        } else {
+            tagged_jpeg
+        };
         let mut file = File::create(output_path).map_err(|e| format!("Failed to create output file: {}", e))?;
-        file.write_all(&tagged_jpeg).map_err(|e| format!("Failed to write JPEG: {}", e))?;
+        file.write_all(&final_jpeg_bytes).map_err(|e| format!("Failed to write JPEG: {}", e))?;
     }
     
     Ok(())
@@ -1061,6 +1085,7 @@ pub fn export_batch_photos(
                 item.max_dimension,
                 item.color_space,
                 item.rendering_intent,
+                item.ultra_hdr,
             ) {
                 Ok(()) => BatchExportResultRecord {
                     input_path: item.input_path,
@@ -1136,6 +1161,7 @@ mod tests {
             Some(50),
             ExportColorSpace::Srgb,
             ExportRenderingIntent::RelativeColorimetric,
+            false,
         );
         assert!(res.is_ok());
         
@@ -1255,12 +1281,12 @@ mod tests {
             curves: Default::default(),
         };
         
-        export_photo_file(tmp_in, tmp_out_no_lut, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
+        export_photo_file(tmp_in, tmp_out_no_lut, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
         
         // Now apply B&W Tri-X LUT
         edits.lut_name = Some("Film - B&W High Contrast (Tri-X)".to_string());
         edits.lut_intensity = 1.0;
-        export_photo_file(tmp_in, tmp_out_lut, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
+        export_photo_file(tmp_in, tmp_out_lut, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
         
         let img_no_lut = image::open(tmp_out_no_lut).unwrap().to_rgb8();
         let img_lut = image::open(tmp_out_lut).unwrap().to_rgb8();
@@ -1280,7 +1306,7 @@ mod tests {
     }
 
     #[test]
-    fn test_jpeg_icc_profile_embedding() {
+    fn test_export_icc_injection() {
         let tmp_in = "test_icc_in.jpg";
         let tmp_out = "test_icc_out.jpg";
         
@@ -1323,7 +1349,7 @@ mod tests {
             curves: Default::default(),
         };
         
-        export_photo_file(tmp_in, tmp_out, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
+        export_photo_file(tmp_in, tmp_out, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
         
         let bytes = std::fs::read(tmp_out).unwrap();
         // Verify APP2 ICC marker presence: 0xFF, 0xE2 followed by "ICC_PROFILE\0"
@@ -1371,7 +1397,7 @@ mod tests {
         // 1. Test 90-degree CW rotation (60x40 -> 40x60 portrait)
         let mut edits = EditSettings::default();
         edits.rotation = 90;
-        export_photo_file(tmp_in, tmp_out_90, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
+        export_photo_file(tmp_in, tmp_out_90, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
         let rotated = image::open(tmp_out_90).unwrap().to_rgb8();
         assert_eq!(rotated.width(), 40);
         assert_eq!(rotated.height(), 60);
@@ -1379,7 +1405,7 @@ mod tests {
         // 2. Test horizontal flip (left red becomes right red)
         let mut edits_flip = EditSettings::default();
         edits_flip.flip_horizontal = true;
-        export_photo_file(tmp_in, tmp_out_flip, &edits_flip, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
+        export_photo_file(tmp_in, tmp_out_flip, &edits_flip, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
         let flipped = image::open(tmp_out_flip).unwrap().to_rgb8();
         assert_eq!(flipped.width(), 60);
         assert_eq!(flipped.height(), 40);
@@ -1543,7 +1569,7 @@ mod tests {
         img.save(tmp_in).unwrap();
 
         let edits_flat = EditSettings::default();
-        export_photo_file(tmp_in, tmp_out_flat, &edits_flat, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
+        export_photo_file(tmp_in, tmp_out_flat, &edits_flat, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
 
         // Apply a master curve that boosts midtones: (0, 0), (0.5, 0.8), (1, 1)
         let mut edits_curved = EditSettings::default();
@@ -1552,7 +1578,7 @@ mod tests {
             crate::curve::CurvePointRecord { x: 0.5, y: 0.8 },
             crate::curve::CurvePointRecord { x: 1.0, y: 1.0 },
         ];
-        export_photo_file(tmp_in, tmp_out_curved, &edits_curved, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
+        export_photo_file(tmp_in, tmp_out_curved, &edits_curved, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
 
         let flat_px = image::open(tmp_out_flat).unwrap().to_rgb8().get_pixel(10, 10)[0];
         let curved_px = image::open(tmp_out_curved).unwrap().to_rgb8().get_pixel(10, 10)[0];
@@ -1584,6 +1610,7 @@ mod tests {
             None,
             ExportColorSpace::DisplayP3,
             ExportRenderingIntent::Perceptual,
+            false,
         ).unwrap();
 
         let bytes = std::fs::read(tmp_out).unwrap();
@@ -1631,6 +1658,7 @@ mod tests {
                 max_dimension: Some(40),
                 color_space: if i % 2 == 0 { ExportColorSpace::Srgb } else { ExportColorSpace::DisplayP3 },
                 rendering_intent: ExportRenderingIntent::RelativeColorimetric,
+                ultra_hdr: false,
             });
         }
 
@@ -1642,6 +1670,40 @@ mod tests {
             let _ = std::fs::remove_file(&res.input_path);
             let _ = std::fs::remove_file(&res.output_path);
         }
+    }
+
+    #[test]
+    fn test_ultra_hdr_export_pipeline() {
+        let tmp_in = "test_uhdr_in.jpg";
+        let tmp_out = "test_uhdr_out.jpg";
+
+        let img = RgbImage::from_fn(30, 30, |_x, _y| {
+            Rgb([240, 240, 255])
+        });
+        img.save(tmp_in).unwrap();
+
+        let mut edits = EditSettings::default();
+        edits.exposure = 2.0;
+
+        export_photo_file(
+            tmp_in,
+            tmp_out,
+            &edits,
+            None,
+            90,
+            None,
+            ExportColorSpace::Srgb,
+            ExportRenderingIntent::RelativeColorimetric,
+            true, // ultra_hdr = true
+        ).unwrap();
+
+        let bytes = std::fs::read(tmp_out).unwrap();
+        assert!(crate::gainmap::has_gain_map(&bytes), "Exported JPEG must contain gain map markers");
+        let extracted = crate::gainmap::extract_gain_map(&bytes);
+        assert!(extracted.is_some(), "Must be able to extract gain map from exported Ultra HDR file");
+
+        let _ = std::fs::remove_file(tmp_in);
+        let _ = std::fs::remove_file(tmp_out);
     }
 }
 

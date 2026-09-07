@@ -13,6 +13,7 @@ public struct ExportSheetView: View {
     @State private var customDimension: String = "2048"
     @State private var colorSpaceChoice: String = "sRGB" // "sRGB" or "DisplayP3"
     @State private var renderingIntentChoice: String = "RelativeColorimetric" // "RelativeColorimetric" or "Perceptual"
+    @State private var isUltraHdrEnabled: Bool = false
     @State private var isExporting: Bool = false
     @State private var exportResultMessage: String? = nil
     
@@ -91,6 +92,28 @@ public struct ExportSheetView: View {
                         Slider(value: $quality, in: 50...100, step: 1)
                     }
                     .padding(.top, 4)
+                    
+                    Toggle(isOn: $isUltraHdrEnabled) {
+                        HStack(spacing: 5) {
+                            Text("Ultra HDR (ISO 21496-1)")
+                                .font(.subheadline)
+                            Text("HDR")
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.accentColor.opacity(0.2))
+                                .foregroundColor(.accentColor)
+                                .cornerRadius(4)
+                        }
+                    }
+                    .toggleStyle(.checkbox)
+                    .padding(.top, 4)
+                    
+                    if isUltraHdrEnabled {
+                        Text("Embeds a backward-compatible ISO 21496-1 gain map for Apple XDR displays, Android Ultra HDR, and Chrome/Safari.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             
@@ -239,7 +262,8 @@ public struct ExportSheetView: View {
                     quality: UInt32(quality),
                     maxDimension: maxDim,
                     colorSpace: cs,
-                    renderingIntent: ri
+                    renderingIntent: ri,
+                    ultraHdr: (exportFormat == "JPEG") && isUltraHdrEnabled
                 )
                 
                 DispatchQueue.main.async {
@@ -274,7 +298,8 @@ public struct ExportSheetView: View {
                     quality: UInt32(quality),
                     maxDimension: maxDim,
                     colorSpace: cs,
-                    renderingIntent: ri
+                    renderingIntent: ri,
+                    ultraHdr: (exportFormat == "JPEG") && isUltraHdrEnabled
                 ))
             }
             

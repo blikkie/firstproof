@@ -1054,10 +1054,11 @@ public struct BatchExportItemRecord {
     public var maxDimension: UInt32?
     public var colorSpace: ExportColorSpace
     public var renderingIntent: ExportRenderingIntent
+    public var ultraHdr: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace, renderingIntent: ExportRenderingIntent) {
+    public init(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace, renderingIntent: ExportRenderingIntent, ultraHdr: Bool) {
         self.inputPath = inputPath
         self.outputPath = outputPath
         self.edits = edits
@@ -1066,6 +1067,7 @@ public struct BatchExportItemRecord {
         self.maxDimension = maxDimension
         self.colorSpace = colorSpace
         self.renderingIntent = renderingIntent
+        self.ultraHdr = ultraHdr
     }
 }
 
@@ -1097,6 +1099,9 @@ extension BatchExportItemRecord: Equatable, Hashable {
         if lhs.renderingIntent != rhs.renderingIntent {
             return false
         }
+        if lhs.ultraHdr != rhs.ultraHdr {
+            return false
+        }
         return true
     }
 
@@ -1109,6 +1114,7 @@ extension BatchExportItemRecord: Equatable, Hashable {
         hasher.combine(maxDimension)
         hasher.combine(colorSpace)
         hasher.combine(renderingIntent)
+        hasher.combine(ultraHdr)
     }
 }
 
@@ -1127,7 +1133,8 @@ public struct FfiConverterTypeBatchExportItemRecord: FfiConverterRustBuffer {
                 quality: FfiConverterUInt32.read(from: &buf), 
                 maxDimension: FfiConverterOptionUInt32.read(from: &buf), 
                 colorSpace: FfiConverterTypeExportColorSpace.read(from: &buf), 
-                renderingIntent: FfiConverterTypeExportRenderingIntent.read(from: &buf)
+                renderingIntent: FfiConverterTypeExportRenderingIntent.read(from: &buf), 
+                ultraHdr: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -1140,6 +1147,7 @@ public struct FfiConverterTypeBatchExportItemRecord: FfiConverterRustBuffer {
         FfiConverterOptionUInt32.write(value.maxDimension, into: &buf)
         FfiConverterTypeExportColorSpace.write(value.colorSpace, into: &buf)
         FfiConverterTypeExportRenderingIntent.write(value.renderingIntent, into: &buf)
+        FfiConverterBool.write(value.ultraHdr, into: &buf)
     }
 }
 
@@ -1840,6 +1848,194 @@ public func FfiConverterTypeExportPackageReport_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeExportPackageReport_lower(_ value: ExportPackageReport) -> RustBuffer {
     return FfiConverterTypeExportPackageReport.lower(value)
+}
+
+
+public struct GainMapMetadataRecord {
+    public var minGain: Float
+    public var maxGain: Float
+    public var gamma: Float
+    public var offsetSdr: Float
+    public var offsetHdr: Float
+    public var hdrCapacityMin: Float
+    public var hdrCapacityMax: Float
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(minGain: Float, maxGain: Float, gamma: Float, offsetSdr: Float, offsetHdr: Float, hdrCapacityMin: Float, hdrCapacityMax: Float) {
+        self.minGain = minGain
+        self.maxGain = maxGain
+        self.gamma = gamma
+        self.offsetSdr = offsetSdr
+        self.offsetHdr = offsetHdr
+        self.hdrCapacityMin = hdrCapacityMin
+        self.hdrCapacityMax = hdrCapacityMax
+    }
+}
+
+
+
+extension GainMapMetadataRecord: Equatable, Hashable {
+    public static func ==(lhs: GainMapMetadataRecord, rhs: GainMapMetadataRecord) -> Bool {
+        if lhs.minGain != rhs.minGain {
+            return false
+        }
+        if lhs.maxGain != rhs.maxGain {
+            return false
+        }
+        if lhs.gamma != rhs.gamma {
+            return false
+        }
+        if lhs.offsetSdr != rhs.offsetSdr {
+            return false
+        }
+        if lhs.offsetHdr != rhs.offsetHdr {
+            return false
+        }
+        if lhs.hdrCapacityMin != rhs.hdrCapacityMin {
+            return false
+        }
+        if lhs.hdrCapacityMax != rhs.hdrCapacityMax {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(minGain)
+        hasher.combine(maxGain)
+        hasher.combine(gamma)
+        hasher.combine(offsetSdr)
+        hasher.combine(offsetHdr)
+        hasher.combine(hdrCapacityMin)
+        hasher.combine(hdrCapacityMax)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGainMapMetadataRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GainMapMetadataRecord {
+        return
+            try GainMapMetadataRecord(
+                minGain: FfiConverterFloat.read(from: &buf), 
+                maxGain: FfiConverterFloat.read(from: &buf), 
+                gamma: FfiConverterFloat.read(from: &buf), 
+                offsetSdr: FfiConverterFloat.read(from: &buf), 
+                offsetHdr: FfiConverterFloat.read(from: &buf), 
+                hdrCapacityMin: FfiConverterFloat.read(from: &buf), 
+                hdrCapacityMax: FfiConverterFloat.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GainMapMetadataRecord, into buf: inout [UInt8]) {
+        FfiConverterFloat.write(value.minGain, into: &buf)
+        FfiConverterFloat.write(value.maxGain, into: &buf)
+        FfiConverterFloat.write(value.gamma, into: &buf)
+        FfiConverterFloat.write(value.offsetSdr, into: &buf)
+        FfiConverterFloat.write(value.offsetHdr, into: &buf)
+        FfiConverterFloat.write(value.hdrCapacityMin, into: &buf)
+        FfiConverterFloat.write(value.hdrCapacityMax, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGainMapMetadataRecord_lift(_ buf: RustBuffer) throws -> GainMapMetadataRecord {
+    return try FfiConverterTypeGainMapMetadataRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGainMapMetadataRecord_lower(_ value: GainMapMetadataRecord) -> RustBuffer {
+    return FfiConverterTypeGainMapMetadataRecord.lower(value)
+}
+
+
+public struct GainMapRecord {
+    public var metadata: GainMapMetadataRecord
+    public var jpegBytes: Data
+    public var width: UInt32
+    public var height: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(metadata: GainMapMetadataRecord, jpegBytes: Data, width: UInt32, height: UInt32) {
+        self.metadata = metadata
+        self.jpegBytes = jpegBytes
+        self.width = width
+        self.height = height
+    }
+}
+
+
+
+extension GainMapRecord: Equatable, Hashable {
+    public static func ==(lhs: GainMapRecord, rhs: GainMapRecord) -> Bool {
+        if lhs.metadata != rhs.metadata {
+            return false
+        }
+        if lhs.jpegBytes != rhs.jpegBytes {
+            return false
+        }
+        if lhs.width != rhs.width {
+            return false
+        }
+        if lhs.height != rhs.height {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(metadata)
+        hasher.combine(jpegBytes)
+        hasher.combine(width)
+        hasher.combine(height)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGainMapRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GainMapRecord {
+        return
+            try GainMapRecord(
+                metadata: FfiConverterTypeGainMapMetadataRecord.read(from: &buf), 
+                jpegBytes: FfiConverterData.read(from: &buf), 
+                width: FfiConverterUInt32.read(from: &buf), 
+                height: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GainMapRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeGainMapMetadataRecord.write(value.metadata, into: &buf)
+        FfiConverterData.write(value.jpegBytes, into: &buf)
+        FfiConverterUInt32.write(value.width, into: &buf)
+        FfiConverterUInt32.write(value.height, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGainMapRecord_lift(_ buf: RustBuffer) throws -> GainMapRecord {
+    return try FfiConverterTypeGainMapRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGainMapRecord_lower(_ value: GainMapRecord) -> RustBuffer {
+    return FfiConverterTypeGainMapRecord.lower(value)
 }
 
 
@@ -3226,6 +3422,30 @@ fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterBool.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterBool.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -3314,6 +3534,30 @@ fileprivate struct FfiConverterOptionTypeCubeLutRecord: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeCubeLutRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeGainMapRecord: FfiConverterRustBuffer {
+    typealias SwiftType = GainMapRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeGainMapRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeGainMapRecord.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -3785,7 +4029,7 @@ public func exportBatchPhotos(items: [BatchExportItemRecord]) -> [BatchExportRes
     )
 })
 }
-public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace?, renderingIntent: ExportRenderingIntent?) -> Bool {
+public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace?, renderingIntent: ExportRenderingIntent?, ultraHdr: Bool?) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_export_photo(
         FfiConverterString.lower(inputPath),
@@ -3795,7 +4039,8 @@ public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettin
         FfiConverterUInt32.lower(quality),
         FfiConverterOptionUInt32.lower(maxDimension),
         FfiConverterOptionTypeExportColorSpace.lower(colorSpace),
-        FfiConverterOptionTypeExportRenderingIntent.lower(renderingIntent),$0
+        FfiConverterOptionTypeExportRenderingIntent.lower(renderingIntent),
+        FfiConverterOptionBool.lower(ultraHdr),$0
     )
 })
 }
@@ -3822,6 +4067,13 @@ public func extractPreview(path: String) -> Data? {
     )
 })
 }
+public func extractUltraHdrGainMap(filePath: String) -> GainMapRecord? {
+    return try!  FfiConverterOptionTypeGainMapRecord.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_extract_ultra_hdr_gain_map(
+        FfiConverterString.lower(filePath),$0
+    )
+})
+}
 public func getBuiltinCubeLut(title: String, size: UInt32) -> CubeLutRecord? {
     return try!  FfiConverterOptionTypeCubeLutRecord.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_get_builtin_cube_lut(
@@ -3833,6 +4085,13 @@ public func getBuiltinCubeLut(title: String, size: UInt32) -> CubeLutRecord? {
 public func getBuiltinCubeLutTitles() -> [String] {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_get_builtin_cube_lut_titles($0
+    )
+})
+}
+public func hasUltraHdrGainMap(filePath: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_has_ultra_hdr_gain_map(
+        FfiConverterString.lower(filePath),$0
     )
 })
 }
@@ -3936,7 +4195,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_lumenbox_core_checksum_func_export_batch_photos() != 655) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_lumenbox_core_checksum_func_export_photo() != 39002) {
+    if (uniffi_lumenbox_core_checksum_func_export_photo() != 13249) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_export_portable_package() != 6715) {
@@ -3948,10 +4207,16 @@ private var initializationResult: InitializationResult = {
     if (uniffi_lumenbox_core_checksum_func_extract_preview() != 59048) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_lumenbox_core_checksum_func_extract_ultra_hdr_gain_map() != 48614) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_lumenbox_core_checksum_func_get_builtin_cube_lut() != 28917) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_get_builtin_cube_lut_titles() != 54667) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_has_ultra_hdr_gain_map() != 61701) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_load_cube_lut() != 49573) {

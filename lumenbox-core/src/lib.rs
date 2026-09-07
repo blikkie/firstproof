@@ -13,6 +13,7 @@ pub mod color;
 pub mod auto;
 pub mod lut;
 pub mod curve;
+pub mod gainmap;
 
 pub use curve::{evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, CurvePointRecord, ToneCurvesRecord};
 
@@ -66,6 +67,7 @@ pub struct BatchExportItemRecord {
     pub max_dimension: Option<u32>,
     pub color_space: ExportColorSpace,
     pub rendering_intent: ExportRenderingIntent,
+    pub ultra_hdr: bool,
 }
 
 #[derive(uniffi::Record, Clone, Debug)]
@@ -386,6 +388,54 @@ pub fn write_xmp(path: String, record: XmpDataRecord) -> bool {
     xmp::write_xmp_file(&path, &data).is_ok()
 }
 
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct GainMapMetadataRecord {
+    pub min_gain: f32,
+    pub max_gain: f32,
+    pub gamma: f32,
+    pub offset_sdr: f32,
+    pub offset_hdr: f32,
+    pub hdr_capacity_min: f32,
+    pub hdr_capacity_max: f32,
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct GainMapRecord {
+    pub metadata: GainMapMetadataRecord,
+    pub jpeg_bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[uniffi::export]
+pub fn has_ultra_hdr_gain_map(file_path: String) -> bool {
+    if let Ok(bytes) = std::fs::read(&file_path) {
+        gainmap::has_gain_map(&bytes)
+    } else {
+        false
+    }
+}
+
+#[uniffi::export]
+pub fn extract_ultra_hdr_gain_map(file_path: String) -> Option<GainMapRecord> {
+    let bytes = std::fs::read(&file_path).ok()?;
+    let (meta, jpeg_bytes, width, height) = gainmap::extract_gain_map(&bytes)?;
+    Some(GainMapRecord {
+        metadata: GainMapMetadataRecord {
+            min_gain: meta.min_gain,
+            max_gain: meta.max_gain,
+            gamma: meta.gamma,
+            offset_sdr: meta.offset_sdr,
+            offset_hdr: meta.offset_hdr,
+            hdr_capacity_min: meta.hdr_capacity_min,
+            hdr_capacity_max: meta.hdr_capacity_max,
+        },
+        jpeg_bytes,
+        width,
+        height,
+    })
+}
+
 #[uniffi::export]
 pub fn export_photo(
     input_path: String,
@@ -396,6 +446,7 @@ pub fn export_photo(
     max_dimension: Option<u32>,
     color_space: Option<ExportColorSpace>,
     rendering_intent: Option<ExportRenderingIntent>,
+    ultra_hdr: Option<bool>,
 ) -> bool {
     let dist_tuple = lens_coeffs.as_ref().and_then(|c| {
         if c.has_distortion {
@@ -407,6 +458,7 @@ pub fn export_photo(
     
     let cs = color_space.unwrap_or_default();
     let ri = rendering_intent.unwrap_or_default();
+    let uhdr = ultra_hdr.unwrap_or(false);
     
     match export::export_photo_file(
         &input_path,
@@ -417,6 +469,7 @@ pub fn export_photo(
         max_dimension,
         cs,
         ri,
+        uhdr,
     ) {
         Ok(_) => true,
         Err(e) => {

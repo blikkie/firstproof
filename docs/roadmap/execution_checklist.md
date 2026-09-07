@@ -77,6 +77,6 @@
     - `[x]` 17.4 Zero-copy ICC & metadata injection via `img-parts` (Story 8.6) replacing raw byte-scanning loops
     - `[x]` 17.5 Colorimetric rendering intents & LittleCMS soft-proofing via `lcms2` (Story 8.7 & 5.6)
     - `[x]` 17.6 High-fidelity directional Bayer demosaicing (RCD / VNG via `bayer`, Story 8.4)
-- `[ ]` 18. Epic 11: Apple EDR & Ultra HDR Gain Map Pipeline (P1)
-    - `[ ]` 18.1 16-bit float Metal canvas layer (`.rgba16Float`) for 1,600-nit Liquid Retina XDR displays
-    - `[ ]` 18.2 ISO 21496-1 gain map JPEG export and Google Pixel gain map ingestion
+- `[x]` 18. Epic 11: Apple EDR & Ultra HDR Gain Map Pipeline (P1)
+    - `[x]` 18.1 16-bit float Metal canvas layer (`.rgba16Float`) for 1,600-nit Liquid Retina XDR displays
+    - `[x]` 18.2 ISO 21496-1 gain map JPEG export and Google Pixel gain map ingestion

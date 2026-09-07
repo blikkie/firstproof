@@ -114,6 +114,13 @@ constant float3x3 REC2020_TO_LINEAR_SRGB = float3x3(
     float3(-0.0728499, -0.0083494,  1.1187297)
 );
 
+// Linear sRGB -> Linear Display P3 Matrix (columns in Metal MSL)
+constant float3x3 LINEAR_SRGB_TO_DISPLAY_P3 = float3x3(
+    float3(0.8224621, 0.0331941, 0.0170827),
+    float3(0.1775380, 0.9668058, 0.0723974),
+    float3(0.0000000, 0.0000000, 0.9105199)
+);
+
 // MARK: - AgX Filmic Tone Mapping Engine Constants & Operators
 constant float3x3 AGX_INSET_MATRIX = float3x3(
     float3( 1.4096986,   0.13136263,  0.16151477),

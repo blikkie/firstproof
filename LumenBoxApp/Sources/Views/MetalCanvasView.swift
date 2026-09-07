@@ -37,7 +37,7 @@ public struct MetalCanvasView: NSViewRepresentable {
         }
         
         let mtkView = CanvasMTKView(frame: .zero, device: device)
-        mtkView.colorPixelFormat = .bgra8Unorm
+        mtkView.colorPixelFormat = .rgba16Float
         mtkView.clearColor = MTLClearColor(red: 0.08, green: 0.08, blue: 0.08, alpha: 1.0)
         mtkView.enableSetNeedsDisplay = true
         mtkView.isPaused = true // Event-driven rendering: only redraws when sliders, gestures, or image change!
@@ -46,7 +46,8 @@ public struct MetalCanvasView: NSViewRepresentable {
         context.coordinator.viewModel = viewModel
         
         if let metalLayer = mtkView.layer as? CAMetalLayer {
-            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+            metalLayer.wantsExtendedDynamicRangeContent = true
+            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
         }
         
         if let renderer = MetalRenderer(device: device) {
@@ -76,6 +77,11 @@ public struct MetalCanvasView: NSViewRepresentable {
                 context.coordinator.lastLutName = lutName
             }
             
+            if let gainMap = viewModel.currentGainMapRecord {
+                renderer.updateGainMap(record: gainMap)
+                context.coordinator.lastGainMapRecord = gainMap
+            }
+            
             MetalCanvasView.setupCaptureClosure(for: viewModel, renderer: renderer)
         }
         
@@ -84,8 +90,22 @@ public struct MetalCanvasView: NSViewRepresentable {
     
     public func updateNSView(_ nsView: CanvasMTKView, context: Context) {
         if let metalLayer = nsView.layer as? CAMetalLayer {
-            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+            metalLayer.wantsExtendedDynamicRangeContent = true
+            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
         }
+        
+        // Query dynamic EDR headroom from display
+        if let screen = nsView.window?.screen ?? NSScreen.main {
+            let headroom = Float(screen.maximumExtendedDynamicRangeColorComponentValue)
+            let isHdr = headroom > 1.0
+            if viewModel.edrHeadroom != headroom || viewModel.isScreenHdrCapable != isHdr {
+                DispatchQueue.main.async {
+                    viewModel.edrHeadroom = headroom
+                    viewModel.isScreenHdrCapable = isHdr
+                }
+            }
+        }
+        
         guard let renderer = context.coordinator.renderer else { return }
         context.coordinator.viewModel = viewModel
         MetalCanvasView.setupCaptureClosure(for: viewModel, renderer: renderer)
@@ -124,7 +144,9 @@ public struct MetalCanvasView: NSViewRepresentable {
             isOriginal: isShowingOriginal,
             isCropToolActive: isCropToolActive,
             lensCorrectionEnabled: viewModel.lensCorrectionEnabled,
-            lensCoefficients: viewModel.lensCoefficients
+            lensCoefficients: viewModel.lensCoefficients,
+            edrHeadroom: viewModel.edrHeadroom,
+            edrEnabled: viewModel.isHdrEnabled
         )
         
         // 3. Update 3D LUT texture if LUT selection changed
@@ -139,7 +161,14 @@ public struct MetalCanvasView: NSViewRepresentable {
             }
         }
         
-        // 4. Viewport Zoom & Pan
+        // 4. Update Ultra HDR Gain Map if changed
+        let gainMapChanged = context.coordinator.lastGainMapRecord != viewModel.currentGainMapRecord
+        if gainMapChanged {
+            renderer.updateGainMap(record: viewModel.currentGainMapRecord)
+            context.coordinator.lastGainMapRecord = viewModel.currentGainMapRecord
+        }
+        
+        // 5. Viewport Zoom & Pan
         renderer.zoomScale = zoomScale
         renderer.panOffset = SIMD2<Float>(Float(panOffset.x), Float(panOffset.y))
         renderer.updateQuad(viewSize: nsView.drawableSize)
@@ -183,6 +212,7 @@ public struct MetalCanvasView: NSViewRepresentable {
         var lastPreviewImage: NSImage?
         var lastRawKey: String?
         var lastLutName: String?
+        var lastGainMapRecord: GainMapRecord?
         
         func handleDoubleTap(at pointInNDC: CGPoint) {
             guard let vm = viewModel, let renderer = renderer, let view = nsView else { return }

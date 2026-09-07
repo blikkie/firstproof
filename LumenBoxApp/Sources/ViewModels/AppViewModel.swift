@@ -113,6 +113,7 @@ public final class AppViewModel {
     public var isBulkSelectionMode: Bool = false
     public var previewImage: NSImage? = nil
     public var rawPreviewRecord: RawPreviewRecord? = nil
+    public var currentGainMapRecord: GainMapRecord? = nil
     public var isDemosaicing: Bool = false
     @ObservationIgnored var activeDecodeToken: UUID = UUID()
     @ObservationIgnored public var captureThumbnailSnapshot: (() -> NSImage?)? = nil
@@ -141,6 +142,11 @@ public final class AppViewModel {
         }
         return []
     }
+    
+    // MARK: - EDR & HDR Display State (Story 18.1)
+    public var isHdrEnabled: Bool = true
+    public var edrHeadroom: Float = 1.0
+    public var isScreenHdrCapable: Bool = false
     
     public func cancelBatchExport() {
         self.isBatchExportCancelled = true

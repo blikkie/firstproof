@@ -18,6 +18,8 @@ extension ShaderUniforms {
         u.cropRight = 1.0
         u.cropBottom = 1.0
         u.cropConstrain = 1
+        u.edrHeadroom = 1.0
+        u.edrEnabled = 1
         return u
     }
 }
@@ -26,6 +28,7 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     public let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private var pipelineState: MTLRenderPipelineState?
+    private var thumbnailPipelineState: MTLRenderPipelineState?
     private var samplerState: MTLSamplerState?
     private var lutSamplerState: MTLSamplerState?
     private var curveSamplerState: MTLSamplerState?
@@ -39,6 +42,9 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     private var curveRgbTexture: MTLTexture?
     private var defaultCurveMasterTexture: MTLTexture?
     private var defaultCurveRgbTexture: MTLTexture?
+    private var gainMapTexture: MTLTexture?
+    private var defaultGainMapTexture: MTLTexture?
+    private var gainMapSamplerState: MTLSamplerState?
     private var lastCurves: ToneCurvesRecord?
     private var textureLoader: MTKTextureLoader
     
@@ -52,12 +58,16 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         isOriginal: Bool = false,
         isCropToolActive: Bool = false,
         lensCorrectionEnabled: Bool = true,
-        lensCoefficients: LensCorrectionCoefficientsRecord? = nil
+        lensCoefficients: LensCorrectionCoefficientsRecord? = nil,
+        edrHeadroom: Float = 1.0,
+        edrEnabled: Bool = true
     ) {
         uniforms.exposure = edits.exposure
         uniforms.temperature = edits.temperature
         uniforms.tint = edits.tint
         uniforms.contrast = edits.contrast
+        uniforms.edrHeadroom = edrHeadroom
+        uniforms.edrEnabled = edrEnabled ? 1 : 0
         uniforms.highlights = edits.highlights
         uniforms.shadows = edits.shadows
         uniforms.whites = edits.whites
@@ -213,12 +223,23 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
-        pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        pipelineDescriptor.colorAttachments[0].pixelFormat = .rgba16Float
         
         do {
             self.pipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         } catch {
             print("Failed to create Metal render pipeline state: \(error)")
+        }
+        
+        let thumbPipelineDescriptor = MTLRenderPipelineDescriptor()
+        thumbPipelineDescriptor.vertexFunction = vertexFunction
+        thumbPipelineDescriptor.fragmentFunction = fragmentFunction
+        thumbPipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        
+        do {
+            self.thumbnailPipelineState = try device.makeRenderPipelineState(descriptor: thumbPipelineDescriptor)
+        } catch {
+            print("Failed to create Metal thumbnail render pipeline state: \(error)")
         }
     }
     
@@ -291,8 +312,26 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         lutSamplerDescriptor.tAddressMode = .clampToEdge
         self.lutSamplerState = device.makeSamplerState(descriptor: lutSamplerDescriptor)
         
+        let gmSamplerDescriptor = MTLSamplerDescriptor()
+        gmSamplerDescriptor.minFilter = .linear
+        gmSamplerDescriptor.magFilter = .linear
+        gmSamplerDescriptor.sAddressMode = .clampToEdge
+        gmSamplerDescriptor.tAddressMode = .clampToEdge
+        self.gainMapSamplerState = device.makeSamplerState(descriptor: gmSamplerDescriptor)
+        
         setupDefaultLutTexture()
         setupCurveTexturesAndSampler()
+        setupDefaultGainMapTexture()
+    }
+    
+    private func setupDefaultGainMapTexture() {
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r8Unorm, width: 1, height: 1, mipmapped: false)
+        desc.usage = [.shaderRead]
+        if let tex = device.makeTexture(descriptor: desc) {
+            var zero: UInt8 = 0
+            tex.replace(region: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 0, withBytes: &zero, bytesPerRow: 1)
+            self.defaultGainMapTexture = tex
+        }
     }
     
     private func setupDefaultLutTexture() {
@@ -448,6 +487,65 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         self.lutTexture = tex
         self.uniforms.lutEnabled = 1
         self.uniforms.lutSize = Float(size)
+    }
+    
+    // MARK: - Ultra HDR Gain Map Upload
+    public func updateGainMap(record: GainMapRecord?) {
+        guard let record = record,
+              let imageSource = CGImageSourceCreateWithData(record.jpegBytes as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+            self.gainMapTexture = nil
+            self.uniforms.hasGainMap = 0
+            return
+        }
+        
+        let width = cgImage.width
+        let height = cgImage.height
+        guard width > 0, height > 0 else { return }
+        
+        let bytesPerRow = width
+        let totalBytes = bytesPerRow * height
+        guard let pixelBuffer = malloc(totalBytes) else { return }
+        defer { free(pixelBuffer) }
+        
+        let colorSpace = CGColorSpaceCreateDeviceGray()
+        if let ctx = CGContext(
+            data: pixelBuffer,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) {
+            ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            
+            let texDesc = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .r8Unorm,
+                width: width,
+                height: height,
+                mipmapped: false
+            )
+            texDesc.usage = [.shaderRead]
+            if let texture = device.makeTexture(descriptor: texDesc) {
+                texture.replace(
+                    region: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0,
+                    withBytes: pixelBuffer,
+                    bytesPerRow: bytesPerRow
+                )
+                self.gainMapTexture = texture
+                self.uniforms.hasGainMap = 1
+                self.uniforms.gainMapMin = record.metadata.minGain
+                self.uniforms.gainMapMax = record.metadata.maxGain
+                self.uniforms.gainMapGamma = record.metadata.gamma
+                self.uniforms.gainMapCapacityMax = record.metadata.hdrCapacityMax
+                return
+            }
+        }
+        
+        self.gainMapTexture = nil
+        self.uniforms.hasGainMap = 0
     }
     
     // MARK: - Aspect-Fit, Zoom & Pan Quad Update
@@ -657,7 +755,13 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     
     public func draw(in view: MTKView) {
         if let metalLayer = view.layer as? CAMetalLayer {
-            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+            if uniforms.edrEnabled != 0 && uniforms.edrHeadroom > 1.001 {
+                metalLayer.wantsExtendedDynamicRangeContent = true
+                metalLayer.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
+            } else {
+                metalLayer.wantsExtendedDynamicRangeContent = false
+                metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+            }
         }
         
         guard let drawable = view.currentDrawable,
@@ -695,6 +799,9 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         encoder.setFragmentTexture(activeMaster, index: 2)
         encoder.setFragmentTexture(activeRgb, index: 3)
         encoder.setFragmentSamplerState(curveSamplerState ?? samplerState, index: 2)
+        let activeGainMap = gainMapTexture ?? defaultGainMapTexture
+        encoder.setFragmentTexture(activeGainMap, index: 4)
+        encoder.setFragmentSamplerState(gainMapSamplerState ?? samplerState, index: 3)
         encoder.setFragmentBuffer(uniformsBuffer, offset: 0, index: 1)
         
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
@@ -794,6 +901,8 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         thumbUniforms.isOriginal = 0.0
         thumbUniforms.cropModeActive = 0
         thumbUniforms.aspectRatio = Float(origW) / Float(origH)
+        thumbUniforms.edrEnabled = 0
+        thumbUniforms.edrHeadroom = 1.0
         
         guard let thumbUniformsBuffer = device.makeBuffer(
             bytes: &thumbUniforms,
@@ -812,7 +921,8 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
             return nil
         }
         
-        encoder.setRenderPipelineState(pipelineState)
+        let pState = thumbnailPipelineState ?? pipelineState
+        encoder.setRenderPipelineState(pState)
         encoder.setVertexBuffer(quadBuffer, offset: 0, index: 0)
         encoder.setVertexBuffer(thumbUniformsBuffer, offset: 0, index: 1)
         
@@ -826,6 +936,9 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         encoder.setFragmentTexture(activeMaster, index: 2)
         encoder.setFragmentTexture(activeRgb, index: 3)
         encoder.setFragmentSamplerState(curveSamplerState ?? samplerState, index: 2)
+        let activeGainMap = gainMapTexture ?? defaultGainMapTexture
+        encoder.setFragmentTexture(activeGainMap, index: 4)
+        encoder.setFragmentSamplerState(gainMapSamplerState ?? samplerState, index: 3)
         encoder.setFragmentBuffer(thumbUniformsBuffer, offset: 0, index: 1)
         
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)

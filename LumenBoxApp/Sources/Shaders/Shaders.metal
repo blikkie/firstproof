@@ -38,6 +38,8 @@ fragment float4 fragmentShader(
     texture1d<float> curveMasterTexture [[texture(2)]],
     texture1d<float> curveRgbTexture [[texture(3)]],
     sampler curveSampler [[sampler(2)]],
+    texture2d<float> gainMapTexture [[texture(4)]],
+    sampler gainMapSampler [[sampler(3)]],
     constant ShaderUniforms &uniforms [[buffer(1)]]
 ) {
     // 1. Geometry, Perspective & Crop Homography
@@ -75,7 +77,7 @@ fragment float4 fragmentShader(
                           (uniforms.sharpeningAmount == 0.0) &&
                           (uniforms.noiseReduction == 0.0);
     
-    if (uniforms.isLinearRaw == 0 && isNeutralEdits) {
+    if (uniforms.isLinearRaw == 0 && isNeutralEdits && uniforms.hasGainMap == 0) {
         return sampledColor;
     }
     
@@ -157,13 +159,8 @@ fragment float4 fragmentShader(
         srgbLinearOut = clamp(rgbAdjusted * gain, 0.0, 1.0);
     }
     
-    // 6. Display Target Transform
-    float3 finalColor;
-    if (uniforms.toneProfileMode <= 1) {
-        finalColor = clamp(srgbLinearOut, 0.0, 1.0);
-    } else {
-        finalColor = linearToSrgbGamma3(srgbLinearOut);
-    }
+    // 6. Display Target Transform (Linear wide-gamut output for extended linear display)
+    float3 finalColor = srgbLinearOut;
     
     // 6b. Color & Vibrance Adjustments
     finalColor = applyColorAdjustments(finalColor, editVibrance, editSaturation, editDeepBlue, editFoliage);
@@ -219,5 +216,49 @@ fragment float4 fragmentShader(
         );
     }
     
-    return float4(finalColor, sampledColor.a);
+    // 9. Apple EDR Radiance & Dynamic Range Expansion
+    if (uniforms.edrEnabled != 0 && uniforms.edrHeadroom > 1.0) {
+        float headroom = clamp(uniforms.edrHeadroom, 1.0, 4.0);
+        
+        if (uniforms.hasGainMap != 0) {
+            // Secondary ISO 21496-1 / Google Ultra HDR Gain Map
+            float g = gainMapTexture.sample(gainMapSampler, uv).r;
+            float gainLog2 = uniforms.gainMapMin + g * (uniforms.gainMapMax - uniforms.gainMapMin);
+            float gamma = max(uniforms.gainMapGamma, 0.01);
+            float gainFactor = pow(2.0, gainLog2 / gamma);
+            
+            float maxCap = max(uniforms.gainMapCapacityMax, 1.01);
+            float weight = clamp((headroom - 1.0) / (maxCap - 1.0), 0.0, 1.0);
+            float effectiveGain = 1.0 + (gainFactor - 1.0) * weight;
+            finalColor = min(finalColor * effectiveGain, float3(headroom));
+        } else {
+            // Scene-referred RAW dynamic range expansion
+            // Sensor linear luminance before tone compression:
+            float sceneLum = dot(rec2020Color, float3(0.2627, 0.6780, 0.0593));
+            // Output tone-mapped luminance:
+            float outLum = dot(finalColor, float3(0.2126, 0.7152, 0.0722));
+            
+            // Smoothly transition highlights from SDR diffuse white into available EDR headroom.
+            // Midtones (<= 0.55) remain completely untouched (SDR standard reference white),
+            // while upper highlights (0.55..1.0) gracefully uncompress up to available display headroom.
+            float highlightFactor = smoothstep(0.55, 1.0, max(outLum, sceneLum));
+            if (highlightFactor > 0.0) {
+                float edrBoost = 1.0 + (headroom - 1.0) * pow(highlightFactor, 1.5);
+                finalColor = min(finalColor * edrBoost, float3(headroom));
+            }
+        }
+        // 10. Convert to Display P3 primaries for CAMetalLayer in extended linear Display P3
+        finalColor = max(LINEAR_SRGB_TO_DISPLAY_P3 * finalColor, float3(0.0));
+        return float4(finalColor, sampledColor.a);
+    } else {
+        // Standard Dynamic Range (SDR) / Thumbnail mode
+        finalColor = clamp(finalColor, 0.0, 1.0);
+        
+        // Match standard display target transform for sRGB layer and thumbnail capture
+        if (uniforms.toneProfileMode <= 1) {
+            return float4(finalColor, sampledColor.a);
+        } else {
+            return float4(linearToSrgbGamma3(finalColor), sampledColor.a);
+        }
+    }
 }

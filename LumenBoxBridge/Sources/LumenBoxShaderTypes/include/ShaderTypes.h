@@ -59,6 +59,13 @@ struct ShaderUniforms {
     int32_t hasCurves;       // 1 = tone curves active, 0 = bypass
     int32_t hasMasterCurve;  // 1 = master curve active, 0 = identity
     int32_t hasRgbCurves;    // 1 = per-channel RGB curves active, 0 = identity
+    float edrHeadroom;       // 1.0 .. 4.0+ (current display max brightness multiplier)
+    int32_t edrEnabled;      // 1 = HDR mode active, 0 = SDR mode (clamp to 1.0)
+    int32_t hasGainMap;      // 1 = secondary gain map active, 0 = disabled
+    float gainMapMin;        // e.g. 0.0
+    float gainMapMax;        // e.g. 3.0 (8x boost)
+    float gainMapGamma;      // standard 1.0
+    float gainMapCapacityMax;// e.g. 3.0
     int32_t _padding;
 };
 

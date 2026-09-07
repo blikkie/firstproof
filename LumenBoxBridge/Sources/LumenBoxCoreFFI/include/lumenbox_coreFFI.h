@@ -385,7 +385,7 @@ RustBuffer uniffi_lumenbox_core_fn_func_export_batch_photos(RustBuffer items, Ru
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
-int8_t uniffi_lumenbox_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, RustBuffer lens_coeffs, uint32_t quality, RustBuffer max_dimension, RustBuffer color_space, RustBuffer rendering_intent, RustCallStatus *_Nonnull out_status
+int8_t uniffi_lumenbox_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, RustBuffer lens_coeffs, uint32_t quality, RustBuffer max_dimension, RustBuffer color_space, RustBuffer rendering_intent, RustBuffer ultra_hdr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PORTABLE_PACKAGE
@@ -403,6 +403,11 @@ RustBuffer uniffi_lumenbox_core_fn_func_extract_metadata(RustBuffer path, RustCa
 RustBuffer uniffi_lumenbox_core_fn_func_extract_preview(RustBuffer path, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXTRACT_ULTRA_HDR_GAIN_MAP
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXTRACT_ULTRA_HDR_GAIN_MAP
+RustBuffer uniffi_lumenbox_core_fn_func_extract_ultra_hdr_gain_map(RustBuffer file_path, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_GET_BUILTIN_CUBE_LUT
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_GET_BUILTIN_CUBE_LUT
 RustBuffer uniffi_lumenbox_core_fn_func_get_builtin_cube_lut(RustBuffer title, uint32_t size, RustCallStatus *_Nonnull out_status
@@ -412,6 +417,11 @@ RustBuffer uniffi_lumenbox_core_fn_func_get_builtin_cube_lut(RustBuffer title, u
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_GET_BUILTIN_CUBE_LUT_TITLES
 RustBuffer uniffi_lumenbox_core_fn_func_get_builtin_cube_lut_titles(RustCallStatus *_Nonnull out_status
     
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_HAS_ULTRA_HDR_GAIN_MAP
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_HAS_ULTRA_HDR_GAIN_MAP
+int8_t uniffi_lumenbox_core_fn_func_has_ultra_hdr_gain_map(RustBuffer file_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_LOAD_CUBE_LUT
@@ -819,6 +829,12 @@ uint16_t uniffi_lumenbox_core_checksum_func_extract_preview(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXTRACT_ULTRA_HDR_GAIN_MAP
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXTRACT_ULTRA_HDR_GAIN_MAP
+uint16_t uniffi_lumenbox_core_checksum_func_extract_ultra_hdr_gain_map(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_GET_BUILTIN_CUBE_LUT
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_GET_BUILTIN_CUBE_LUT
 uint16_t uniffi_lumenbox_core_checksum_func_get_builtin_cube_lut(void
@@ -828,6 +844,12 @@ uint16_t uniffi_lumenbox_core_checksum_func_get_builtin_cube_lut(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_GET_BUILTIN_CUBE_LUT_TITLES
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_GET_BUILTIN_CUBE_LUT_TITLES
 uint16_t uniffi_lumenbox_core_checksum_func_get_builtin_cube_lut_titles(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_HAS_ULTRA_HDR_GAIN_MAP
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_HAS_ULTRA_HDR_GAIN_MAP
+uint16_t uniffi_lumenbox_core_checksum_func_has_ultra_hdr_gain_map(void
     
 );
 #endif

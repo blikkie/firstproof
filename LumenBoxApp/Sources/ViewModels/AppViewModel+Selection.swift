@@ -212,6 +212,7 @@ extension AppViewModel {
         self.isDemosaicing = true
         
         self.rawPreviewRecord = nil
+        self.currentGainMapRecord = nil
         
         // Fast switch: immediately present cached thumbnail so user can scrub instantly
         if let cached = ThumbnailCache.shared.image(for: photo.filePath) {
@@ -226,6 +227,16 @@ extension AppViewModel {
             guard self.activeDecodeToken == token else { return }
             
             var preview: NSImage? = nil
+            var gainMap: GainMapRecord? = nil
+            
+            if !self.selectedPhotoIsRaw {
+                let ext = (photo.filePath as NSString).pathExtension.lowercased()
+                if ext == "jpg" || ext == "jpeg" {
+                    if hasUltraHdrGainMap(filePath: photo.filePath) {
+                        gainMap = extractUltraHdrGainMap(filePath: photo.filePath)
+                    }
+                }
+            }
             
             // 1. Fast Embedded Camera JPEG Preview (<15ms, exact camera color profile)
             if let previewData = extractPreview(path: photo.filePath) {
@@ -254,6 +265,7 @@ extension AppViewModel {
             
             DispatchQueue.main.async {
                 if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
+                    self.currentGainMapRecord = gainMap
                     if let finalImage = preview {
                         if !(self.selectedPhotoIsRaw && !self.isDemosaicing) {
                             self.previewImage = finalImage

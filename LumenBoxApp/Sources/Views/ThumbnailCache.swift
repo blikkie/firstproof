@@ -347,7 +347,8 @@ public struct AsyncThumbnailView: View {
                     quality: 80,
                     maxDimension: 320,
                     colorSpace: nil,
-                    renderingIntent: nil
+                    renderingIntent: nil,
+                    ultraHdr: false
                 )
                 
                 guard !renderOp.isCancelled else { return }
