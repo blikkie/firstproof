@@ -32,6 +32,50 @@ impl Default for ColorProfileMode {
     }
 }
 
+#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ExportColorSpace {
+    Srgb,
+    DisplayP3,
+}
+
+impl Default for ExportColorSpace {
+    fn default() -> Self {
+        Self::Srgb
+    }
+}
+
+#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ExportRenderingIntent {
+    Perceptual,
+    RelativeColorimetric,
+}
+
+impl Default for ExportRenderingIntent {
+    fn default() -> Self {
+        Self::RelativeColorimetric
+    }
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct BatchExportItemRecord {
+    pub input_path: String,
+    pub output_path: String,
+    pub edits: EditSettings,
+    pub lens_coeffs: Option<LensCorrectionCoefficientsRecord>,
+    pub quality: u32,
+    pub max_dimension: Option<u32>,
+    pub color_space: ExportColorSpace,
+    pub rendering_intent: ExportRenderingIntent,
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct BatchExportResultRecord {
+    pub input_path: String,
+    pub output_path: String,
+    pub success: bool,
+    pub error_message: Option<String>,
+}
+
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct CubeLutRecord {
     pub title: String,
@@ -350,6 +394,8 @@ pub fn export_photo(
     lens_coeffs: Option<LensCorrectionCoefficientsRecord>,
     quality: u32,
     max_dimension: Option<u32>,
+    color_space: Option<ExportColorSpace>,
+    rendering_intent: Option<ExportRenderingIntent>,
 ) -> bool {
     let dist_tuple = lens_coeffs.as_ref().and_then(|c| {
         if c.has_distortion {
@@ -359,6 +405,9 @@ pub fn export_photo(
         }
     });
     
+    let cs = color_space.unwrap_or_default();
+    let ri = rendering_intent.unwrap_or_default();
+    
     match export::export_photo_file(
         &input_path,
         &output_path,
@@ -366,6 +415,8 @@ pub fn export_photo(
         dist_tuple,
         quality as u8,
         max_dimension,
+        cs,
+        ri,
     ) {
         Ok(_) => true,
         Err(e) => {
@@ -373,6 +424,13 @@ pub fn export_photo(
             false
         }
     }
+}
+
+#[uniffi::export]
+pub fn export_batch_photos(
+    items: Vec<BatchExportItemRecord>,
+) -> Vec<BatchExportResultRecord> {
+    export::export_batch_photos(items)
 }
 
 #[derive(uniffi::Record)]

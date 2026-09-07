@@ -378,9 +378,14 @@ RustBuffer uniffi_lumenbox_core_fn_func_evaluate_all_curves_lut(RustBuffer curve
 RustBuffer uniffi_lumenbox_core_fn_func_evaluate_curve_lut(RustBuffer points, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_BATCH_PHOTOS
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_BATCH_PHOTOS
+RustBuffer uniffi_lumenbox_core_fn_func_export_batch_photos(RustBuffer items, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
-int8_t uniffi_lumenbox_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, RustBuffer lens_coeffs, uint32_t quality, RustBuffer max_dimension, RustCallStatus *_Nonnull out_status
+int8_t uniffi_lumenbox_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, RustBuffer lens_coeffs, uint32_t quality, RustBuffer max_dimension, RustBuffer color_space, RustBuffer rendering_intent, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PORTABLE_PACKAGE
@@ -781,6 +786,12 @@ uint16_t uniffi_lumenbox_core_checksum_func_evaluate_all_curves_lut(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EVALUATE_CURVE_LUT
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EVALUATE_CURVE_LUT
 uint16_t uniffi_lumenbox_core_checksum_func_evaluate_curve_lut(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXPORT_BATCH_PHOTOS
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EXPORT_BATCH_PHOTOS
+uint16_t uniffi_lumenbox_core_checksum_func_export_batch_photos(void
     
 );
 #endif

@@ -70,13 +70,13 @@
     - `[x]` 16.1 Monotone Cubic Spline (Fritsch-Carlson) transfer function curve widget
     - `[x]` 16.2 RGB Master & Individual Red/Green/Blue split-toning channels
     - `[x]` 16.3 1D Metal texture LUT evaluation (`MTLTextureType1D`) with dual-engine Rust CPU parity
-- `[ ]` 17. Epic 10: Multi-Selection Parallel Multi-Core Batch Export Engine (P1)
-    - `[ ]` 17.1 Multi-photo selection in Grid (`Cmd+A`, `Shift+Click`, `Cmd+Click`)
-    - `[ ]` 17.2 Rayon multi-core thread pool in Rust core (`rayon::par_iter`)
-    - `[ ]` 17.3 Background export queue with progress bar and Notification Center banner
-    - `[ ]` 17.4 Zero-copy ICC & metadata injection via `img-parts` (Story 8.6) replacing raw byte-scanning loops
-    - `[ ]` 17.5 Colorimetric rendering intents & LittleCMS soft-proofing via `lcms2` (Story 8.7 & 5.6)
-    - `[ ]` 17.6 High-fidelity directional Bayer demosaicing (RCD / VNG via `bayer`, Story 8.4)
+- `[x]` 17. Epic 10: Multi-Selection Parallel Multi-Core Batch Export Engine (P1)
+    - `[x]` 17.1 Multi-photo selection in Grid (`Cmd+A`, `Shift+Click`, `Cmd+Click`)
+    - `[x]` 17.2 Rayon multi-core thread pool in Rust core (`rayon::par_iter`)
+    - `[x]` 17.3 Background export queue with progress bar and Notification Center banner
+    - `[x]` 17.4 Zero-copy ICC & metadata injection via `img-parts` (Story 8.6) replacing raw byte-scanning loops
+    - `[x]` 17.5 Colorimetric rendering intents & LittleCMS soft-proofing via `lcms2` (Story 8.7 & 5.6)
+    - `[x]` 17.6 High-fidelity directional Bayer demosaicing (RCD / VNG via `bayer`, Story 8.4)
 - `[ ]` 18. Epic 11: Apple EDR & Ultra HDR Gain Map Pipeline (P1)
     - `[ ]` 18.1 16-bit float Metal canvas layer (`.rgba16Float`) for 1,600-nit Liquid Retina XDR displays
     - `[ ]` 18.2 ISO 21496-1 gain map JPEG export and Google Pixel gain map ingestion

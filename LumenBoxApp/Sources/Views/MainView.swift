@@ -104,6 +104,22 @@ struct MainView: View {
                 }
             }
             
+            // If an export sheet is presented, let Escape dismiss it and don't trigger canvas hotkeys
+            if viewModel.isExportSheetPresented {
+                if event.keyCode == 53 && event.type == .keyDown {
+                    viewModel.isExportSheetPresented = false
+                    return nil
+                }
+                return event
+            }
+            if viewModel.isExportPackageSheetPresented {
+                if event.keyCode == 53 && event.type == .keyDown {
+                    viewModel.isExportPackageSheetPresented = false
+                    return nil
+                }
+                return event
+            }
+            
             // Allow system commands (Cmd+A, Cmd+E, Cmd+W, etc.) to pass through
             if event.modifierFlags.contains(.command) {
                 return event

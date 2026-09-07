@@ -11,6 +11,8 @@ public struct ExportSheetView: View {
     @State private var quality: Double = 90.0
     @State private var sizeOption: String = "Original"
     @State private var customDimension: String = "2048"
+    @State private var colorSpaceChoice: String = "sRGB" // "sRGB" or "DisplayP3"
+    @State private var renderingIntentChoice: String = "RelativeColorimetric" // "RelativeColorimetric" or "Perceptual"
     @State private var isExporting: Bool = false
     @State private var exportResultMessage: String? = nil
     
@@ -18,15 +20,26 @@ public struct ExportSheetView: View {
         self.viewModel = viewModel
     }
     
+    private var targetPhotos: [PhotoRecord] {
+        viewModel.selectedPhotosList
+    }
+    
     public var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 18) {
             // Header
             HStack {
                 Image(systemName: "square.and.arrow.up.fill")
                     .foregroundColor(.accentColor)
                     .font(.title2)
-                Text("Export Photo")
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(targetPhotos.count > 1 ? "Batch Export (\(targetPhotos.count) Photos)" : "Export Photo")
+                        .font(.headline)
+                    if targetPhotos.count > 1 {
+                        Text("Multi-core parallel processing via Rayon engine")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
                 Spacer()
                 Button("Cancel") {
                     dismiss()
@@ -81,6 +94,38 @@ public struct ExportSheetView: View {
                 }
             }
             
+            // Color Space & Rendering Intent (LittleCMS2 Engine)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Color Space & ICC Profile:")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                HStack(spacing: 20) {
+                    Picker("", selection: $colorSpaceChoice) {
+                        Text("sRGB").tag("sRGB")
+                        Text("Display P3").tag("DisplayP3")
+                    }
+                    .pickerStyle(.radioGroup)
+                    .horizontalRadioGroupLayout()
+                    .labelsHidden()
+                    
+                    if colorSpaceChoice == "DisplayP3" {
+                        HStack(spacing: 6) {
+                            Text("Intent:")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Picker("", selection: $renderingIntentChoice) {
+                                Text("Relative Colorimetric").tag("RelativeColorimetric")
+                                Text("Perceptual").tag("Perceptual")
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                            .controlSize(.small)
+                        }
+                    }
+                }
+            }
+            
             // Sizing
             VStack(alignment: .leading, spacing: 6) {
                 Text("Image Sizing:")
@@ -124,22 +169,29 @@ public struct ExportSheetView: View {
                         .padding(.trailing, 8)
                 }
                 
-                Button("Export") {
+                Button(targetPhotos.count > 1 ? "Export \(targetPhotos.count) Photos" : "Export") {
                     performExport()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(isExporting || viewModel.selectedPhoto == nil)
+                .disabled(isExporting || targetPhotos.isEmpty)
             }
         }
         .padding(24)
-        .frame(width: 440)
+        .frame(width: 480)
+        .onAppear {
+            NotificationService.shared.requestAuthorization()
+        }
+        .onExitCommand {
+            dismiss()
+        }
     }
     
     private func selectDestinationFolder() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Choose Export Folder"
         if panel.runModal() == .OK, let url = panel.url {
@@ -148,7 +200,9 @@ public struct ExportSheetView: View {
     }
     
     private func performExport() {
-        guard let photo = viewModel.selectedPhoto else { return }
+        let photos = targetPhotos
+        guard !photos.isEmpty else { return }
+        
         isExporting = true
         exportResultMessage = nil
         
@@ -162,33 +216,116 @@ public struct ExportSheetView: View {
         }()
         
         let ext = (exportFormat == "TIFF") ? "tiff" : "jpg"
-        let baseName = URL(fileURLWithPath: photo.filePath).deletingPathExtension().lastPathComponent
-        let outputPath = URL(fileURLWithPath: selectedDestination)
-            .appendingPathComponent("\(baseName)_LumenBox.\(ext)")
-            .path
+        let destination = selectedDestination
+        let cs: ExportColorSpace = (colorSpaceChoice == "DisplayP3") ? .displayP3 : .srgb
+        let ri: ExportRenderingIntent = (renderingIntentChoice == "Perceptual") ? .perceptual : .relativeColorimetric
         
-        let edits = viewModel.currentEdits
-        let lensCoeffs = viewModel.lensCorrectionEnabled ? viewModel.lensCoefficients : nil
-        
-        DispatchQueue.global(qos: .userInitiated).async {
-            let success = exportPhoto(
-                inputPath: photo.filePath,
-                outputPath: outputPath,
-                edits: edits,
-                lensCoeffs: lensCoeffs,
-                quality: UInt32(quality),
-                maxDimension: maxDim
-            )
+        // Single photo export: can perform and wait or dock
+        if photos.count == 1, let photo = photos.first {
+            let baseName = URL(fileURLWithPath: photo.filePath).deletingPathExtension().lastPathComponent
+            let outputPath = URL(fileURLWithPath: destination)
+                .appendingPathComponent("\(baseName)_LumenBox.\(ext)")
+                .path
             
-            DispatchQueue.main.async {
-                self.isExporting = false
-                if success {
-                    self.exportResultMessage = "Successfully exported to \(outputPath)"
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        self.dismiss()
+            let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits ?? .defaultIdentity)
+            let lensCoeffs = (photo.filePath == viewModel.selectedPhoto?.filePath && viewModel.lensCorrectionEnabled) ? viewModel.lensCoefficients : nil
+            
+            DispatchQueue.global(qos: .userInitiated).async {
+                let success = exportPhoto(
+                    inputPath: photo.filePath,
+                    outputPath: outputPath,
+                    edits: edits,
+                    lensCoeffs: lensCoeffs,
+                    quality: UInt32(quality),
+                    maxDimension: maxDim,
+                    colorSpace: cs,
+                    renderingIntent: ri
+                )
+                
+                DispatchQueue.main.async {
+                    self.isExporting = false
+                    if success {
+                        self.exportResultMessage = "Successfully exported to \(outputPath)"
+                        NotificationService.shared.postBatchExportCompletedNotification(count: 1, destination: destination)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                            self.dismiss()
+                        }
+                    } else {
+                        self.exportResultMessage = "Export failed. Please check folder permissions."
                     }
-                } else {
-                    self.exportResultMessage = "Export failed. Please check folder permissions."
+                }
+            }
+        } else {
+            // Batch export (Story 17.2 & 17.3): Dismiss sheet immediately and run in background queue with docked progress bar!
+            var items: [BatchExportItemRecord] = []
+            for photo in photos {
+                let baseName = URL(fileURLWithPath: photo.filePath).deletingPathExtension().lastPathComponent
+                let outputPath = URL(fileURLWithPath: destination)
+                    .appendingPathComponent("\(baseName)_LumenBox.\(ext)")
+                    .path
+                let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits ?? .defaultIdentity)
+                let lensCoeffs = (photo.filePath == viewModel.selectedPhoto?.filePath && viewModel.lensCorrectionEnabled) ? viewModel.lensCoefficients : nil
+                
+                items.append(BatchExportItemRecord(
+                    inputPath: photo.filePath,
+                    outputPath: outputPath,
+                    edits: edits,
+                    lensCoeffs: lensCoeffs,
+                    quality: UInt32(quality),
+                    maxDimension: maxDim,
+                    colorSpace: cs,
+                    renderingIntent: ri
+                ))
+            }
+            
+            // Set up background queue state
+            viewModel.isBatchExporting = true
+            viewModel.isBatchExportCancelled = false
+            viewModel.batchExportTotalCount = items.count
+            viewModel.batchExportCompletedCount = 0
+            viewModel.batchExportProgress = 0.0
+            viewModel.batchExportStatusText = "Exporting \(items.count) photos in parallel..."
+            
+            dismiss()
+            
+            DispatchQueue.global(qos: .userInitiated).async { [weak viewModel] in
+                guard let vm = viewModel else { return }
+                
+                // Chunk items into slices of 4 so we can provide real-time animated UI progress
+                let chunkSize = 4
+                var allResults: [BatchExportResultRecord] = []
+                let total = items.count
+                var completed = 0
+                
+                for i in stride(from: 0, to: items.count, by: chunkSize) {
+                    if vm.isBatchExportCancelled { break }
+                    let chunk = Array(items[i..<min(i + chunkSize, items.count)])
+                    let chunkResults = exportBatchPhotos(items: chunk)
+                    allResults.append(contentsOf: chunkResults)
+                    completed += chunk.count
+                    
+                    let prog = Double(completed) / Double(total)
+                    DispatchQueue.main.async {
+                        vm.batchExportCompletedCount = completed
+                        vm.batchExportProgress = prog
+                        vm.batchExportStatusText = "Exporting \(completed) of \(total)..."
+                    }
+                }
+                
+                let successCount = allResults.filter { $0.success }.count
+                DispatchQueue.main.async {
+                    vm.lastBatchExportResults = allResults
+                    vm.batchExportStatusText = "Finished exporting \(successCount) of \(total) photos"
+                    
+                    if !vm.isBatchExportCancelled {
+                        NotificationService.shared.postBatchExportCompletedNotification(count: successCount, destination: destination)
+                    }
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        if !vm.isBatchExportCancelled {
+                            vm.isBatchExporting = false
+                        }
+                    }
                 }
             }
         }

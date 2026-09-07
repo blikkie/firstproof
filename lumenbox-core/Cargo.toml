@@ -22,5 +22,8 @@ walkdir = "2.5"
 glam = "0.27"
 palette = "0.7"
 xmp-writer = "0.3"
+img-parts = "0.4.0"
+bayer = "0.1.5"
+lcms2 = { version = "6.2.0", features = ["static"] }
 
 

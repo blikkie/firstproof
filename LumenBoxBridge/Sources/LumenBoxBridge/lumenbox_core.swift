@@ -1045,6 +1045,202 @@ public func FfiConverterTypeAutoAdjustments_lower(_ value: AutoAdjustments) -> R
 }
 
 
+public struct BatchExportItemRecord {
+    public var inputPath: String
+    public var outputPath: String
+    public var edits: EditSettings
+    public var lensCoeffs: LensCorrectionCoefficientsRecord?
+    public var quality: UInt32
+    public var maxDimension: UInt32?
+    public var colorSpace: ExportColorSpace
+    public var renderingIntent: ExportRenderingIntent
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace, renderingIntent: ExportRenderingIntent) {
+        self.inputPath = inputPath
+        self.outputPath = outputPath
+        self.edits = edits
+        self.lensCoeffs = lensCoeffs
+        self.quality = quality
+        self.maxDimension = maxDimension
+        self.colorSpace = colorSpace
+        self.renderingIntent = renderingIntent
+    }
+}
+
+
+
+extension BatchExportItemRecord: Equatable, Hashable {
+    public static func ==(lhs: BatchExportItemRecord, rhs: BatchExportItemRecord) -> Bool {
+        if lhs.inputPath != rhs.inputPath {
+            return false
+        }
+        if lhs.outputPath != rhs.outputPath {
+            return false
+        }
+        if lhs.edits != rhs.edits {
+            return false
+        }
+        if lhs.lensCoeffs != rhs.lensCoeffs {
+            return false
+        }
+        if lhs.quality != rhs.quality {
+            return false
+        }
+        if lhs.maxDimension != rhs.maxDimension {
+            return false
+        }
+        if lhs.colorSpace != rhs.colorSpace {
+            return false
+        }
+        if lhs.renderingIntent != rhs.renderingIntent {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(inputPath)
+        hasher.combine(outputPath)
+        hasher.combine(edits)
+        hasher.combine(lensCoeffs)
+        hasher.combine(quality)
+        hasher.combine(maxDimension)
+        hasher.combine(colorSpace)
+        hasher.combine(renderingIntent)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBatchExportItemRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BatchExportItemRecord {
+        return
+            try BatchExportItemRecord(
+                inputPath: FfiConverterString.read(from: &buf), 
+                outputPath: FfiConverterString.read(from: &buf), 
+                edits: FfiConverterTypeEditSettings.read(from: &buf), 
+                lensCoeffs: FfiConverterOptionTypeLensCorrectionCoefficientsRecord.read(from: &buf), 
+                quality: FfiConverterUInt32.read(from: &buf), 
+                maxDimension: FfiConverterOptionUInt32.read(from: &buf), 
+                colorSpace: FfiConverterTypeExportColorSpace.read(from: &buf), 
+                renderingIntent: FfiConverterTypeExportRenderingIntent.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BatchExportItemRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.inputPath, into: &buf)
+        FfiConverterString.write(value.outputPath, into: &buf)
+        FfiConverterTypeEditSettings.write(value.edits, into: &buf)
+        FfiConverterOptionTypeLensCorrectionCoefficientsRecord.write(value.lensCoeffs, into: &buf)
+        FfiConverterUInt32.write(value.quality, into: &buf)
+        FfiConverterOptionUInt32.write(value.maxDimension, into: &buf)
+        FfiConverterTypeExportColorSpace.write(value.colorSpace, into: &buf)
+        FfiConverterTypeExportRenderingIntent.write(value.renderingIntent, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBatchExportItemRecord_lift(_ buf: RustBuffer) throws -> BatchExportItemRecord {
+    return try FfiConverterTypeBatchExportItemRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBatchExportItemRecord_lower(_ value: BatchExportItemRecord) -> RustBuffer {
+    return FfiConverterTypeBatchExportItemRecord.lower(value)
+}
+
+
+public struct BatchExportResultRecord {
+    public var inputPath: String
+    public var outputPath: String
+    public var success: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(inputPath: String, outputPath: String, success: Bool, errorMessage: String?) {
+        self.inputPath = inputPath
+        self.outputPath = outputPath
+        self.success = success
+        self.errorMessage = errorMessage
+    }
+}
+
+
+
+extension BatchExportResultRecord: Equatable, Hashable {
+    public static func ==(lhs: BatchExportResultRecord, rhs: BatchExportResultRecord) -> Bool {
+        if lhs.inputPath != rhs.inputPath {
+            return false
+        }
+        if lhs.outputPath != rhs.outputPath {
+            return false
+        }
+        if lhs.success != rhs.success {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(inputPath)
+        hasher.combine(outputPath)
+        hasher.combine(success)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBatchExportResultRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BatchExportResultRecord {
+        return
+            try BatchExportResultRecord(
+                inputPath: FfiConverterString.read(from: &buf), 
+                outputPath: FfiConverterString.read(from: &buf), 
+                success: FfiConverterBool.read(from: &buf), 
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BatchExportResultRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.inputPath, into: &buf)
+        FfiConverterString.write(value.outputPath, into: &buf)
+        FfiConverterBool.write(value.success, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBatchExportResultRecord_lift(_ buf: RustBuffer) throws -> BatchExportResultRecord {
+    return try FfiConverterTypeBatchExportResultRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBatchExportResultRecord_lower(_ value: BatchExportResultRecord) -> RustBuffer {
+    return FfiConverterTypeBatchExportResultRecord.lower(value)
+}
+
+
 public struct CubeLutRecord {
     public var title: String
     public var size: UInt32
@@ -2724,6 +2920,134 @@ extension ColorProfileMode: Equatable, Hashable {}
 
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ExportColorSpace {
+    
+    case srgb
+    case displayP3
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExportColorSpace: FfiConverterRustBuffer {
+    typealias SwiftType = ExportColorSpace
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExportColorSpace {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .srgb
+        
+        case 2: return .displayP3
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ExportColorSpace, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .srgb:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .displayP3:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExportColorSpace_lift(_ buf: RustBuffer) throws -> ExportColorSpace {
+    return try FfiConverterTypeExportColorSpace.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExportColorSpace_lower(_ value: ExportColorSpace) -> RustBuffer {
+    return FfiConverterTypeExportColorSpace.lower(value)
+}
+
+
+
+extension ExportColorSpace: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ExportRenderingIntent {
+    
+    case perceptual
+    case relativeColorimetric
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExportRenderingIntent: FfiConverterRustBuffer {
+    typealias SwiftType = ExportRenderingIntent
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExportRenderingIntent {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .perceptual
+        
+        case 2: return .relativeColorimetric
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ExportRenderingIntent, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .perceptual:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .relativeColorimetric:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExportRenderingIntent_lift(_ buf: RustBuffer) throws -> ExportRenderingIntent {
+    return try FfiConverterTypeExportRenderingIntent.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExportRenderingIntent_lower(_ value: ExportRenderingIntent) -> RustBuffer {
+    return FfiConverterTypeExportRenderingIntent.lower(value)
+}
+
+
+
+extension ExportRenderingIntent: Equatable, Hashable {}
+
+
+
 
 public enum LumenBoxError {
 
@@ -3142,6 +3466,54 @@ fileprivate struct FfiConverterOptionTypeXmpDataRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeExportColorSpace: FfiConverterRustBuffer {
+    typealias SwiftType = ExportColorSpace?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeExportColorSpace.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeExportColorSpace.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeExportRenderingIntent: FfiConverterRustBuffer {
+    typealias SwiftType = ExportRenderingIntent?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeExportRenderingIntent.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeExportRenderingIntent.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceFloat: FfiConverterRustBuffer {
     typealias SwiftType = [Float]
 
@@ -3184,6 +3556,56 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeBatchExportItemRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [BatchExportItemRecord]
+
+    public static func write(_ value: [BatchExportItemRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBatchExportItemRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BatchExportItemRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BatchExportItemRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBatchExportItemRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeBatchExportResultRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [BatchExportResultRecord]
+
+    public static func write(_ value: [BatchExportResultRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBatchExportResultRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BatchExportResultRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BatchExportResultRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBatchExportResultRecord.read(from: &buf))
         }
         return seq
     }
@@ -3356,7 +3778,14 @@ public func evaluateCurveLut(points: [CurvePointRecord]) -> [Float] {
     )
 })
 }
-public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?) -> Bool {
+public func exportBatchPhotos(items: [BatchExportItemRecord]) -> [BatchExportResultRecord] {
+    return try!  FfiConverterSequenceTypeBatchExportResultRecord.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_export_batch_photos(
+        FfiConverterSequenceTypeBatchExportItemRecord.lower(items),$0
+    )
+})
+}
+public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace?, renderingIntent: ExportRenderingIntent?) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_export_photo(
         FfiConverterString.lower(inputPath),
@@ -3364,7 +3793,9 @@ public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettin
         FfiConverterTypeEditSettings.lower(edits),
         FfiConverterOptionTypeLensCorrectionCoefficientsRecord.lower(lensCoeffs),
         FfiConverterUInt32.lower(quality),
-        FfiConverterOptionUInt32.lower(maxDimension),$0
+        FfiConverterOptionUInt32.lower(maxDimension),
+        FfiConverterOptionTypeExportColorSpace.lower(colorSpace),
+        FfiConverterOptionTypeExportRenderingIntent.lower(renderingIntent),$0
     )
 })
 }
@@ -3502,7 +3933,10 @@ private var initializationResult: InitializationResult = {
     if (uniffi_lumenbox_core_checksum_func_evaluate_curve_lut() != 36204) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_lumenbox_core_checksum_func_export_photo() != 3529) {
+    if (uniffi_lumenbox_core_checksum_func_export_batch_photos() != 655) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_export_photo() != 39002) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_export_portable_package() != 6715) {

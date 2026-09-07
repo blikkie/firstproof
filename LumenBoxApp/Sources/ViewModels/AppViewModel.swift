@@ -123,6 +123,31 @@ public final class AppViewModel {
     public var gridColumnCount: Int = 4
     var currentlyLoadedPhotoPath: String? = nil
     
+    // MARK: - Batch Export Engine State
+    public var isBatchExporting: Bool = false
+    public var batchExportTotalCount: Int = 0
+    public var batchExportCompletedCount: Int = 0
+    public var batchExportStatusText: String = ""
+    public var batchExportProgress: Double = 0.0
+    public var lastBatchExportResults: [BatchExportResultRecord] = []
+    @ObservationIgnored public var isBatchExportCancelled: Bool = false
+    
+    public var selectedPhotosList: [PhotoRecord] {
+        if !selectedPhotoPaths.isEmpty {
+            let set = selectedPhotoPaths
+            return photos.filter { set.contains($0.filePath) }
+        } else if let current = selectedPhoto {
+            return [current]
+        }
+        return []
+    }
+    
+    public func cancelBatchExport() {
+        self.isBatchExportCancelled = true
+        self.isBatchExporting = false
+        self.batchExportStatusText = "Export cancelled"
+    }
+    
     public func resetFilmstripFollow() {
         self.isFilmstripFollowingSelection = true
         self.filmstripScrollTrigger = UUID()

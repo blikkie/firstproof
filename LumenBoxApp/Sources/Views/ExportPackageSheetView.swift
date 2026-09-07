@@ -204,6 +204,9 @@ public struct ExportPackageSheetView: View {
         }
         .padding(24)
         .frame(width: 520)
+        .onExitCommand {
+            dismiss()
+        }
     }
     
     private func chooseDestination() {

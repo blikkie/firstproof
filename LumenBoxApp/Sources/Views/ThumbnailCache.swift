@@ -345,7 +345,9 @@ public struct AsyncThumbnailView: View {
                     edits: edits,
                     lensCoeffs: nil,
                     quality: 80,
-                    maxDimension: 320
+                    maxDimension: 320,
+                    colorSpace: nil,
+                    renderingIntent: nil
                 )
                 
                 guard !renderOp.isCancelled else { return }

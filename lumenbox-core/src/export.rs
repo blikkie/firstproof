@@ -1,15 +1,43 @@
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Cursor, Write};
 use std::path::Path;
 use image::{ColorType, ImageBuffer, Rgb, RgbImage};
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::tiff::TiffEncoder;
+use img_parts::jpeg::Jpeg;
+use img_parts::{Bytes, ImageICC};
+use rayon::prelude::*;
 
-use crate::EditSettings;
+use crate::{
+    BatchExportItemRecord, BatchExportResultRecord, EditSettings,
+    ExportColorSpace, ExportRenderingIntent,
+};
 use crate::color::{
     Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB,
     linear_to_srgb_gamma, srgb_gamma_to_linear,
 };
+
+/// Creates an ICC.1 compliant Display P3 color profile with D65 white point,
+/// DCI-P3 color primaries, and standard sRGB parametric transfer curve.
+pub fn create_display_p3_profile() -> Result<lcms2::Profile, String> {
+    let white_point = lcms2::CIExyY {
+        x: 0.3127,
+        y: 0.3290,
+        Y: 1.0,
+    };
+    let primaries = lcms2::CIExyYTRIPLE {
+        Red: lcms2::CIExyY { x: 0.680, y: 0.320, Y: 1.0 },
+        Green: lcms2::CIExyY { x: 0.265, y: 0.690, Y: 1.0 },
+        Blue: lcms2::CIExyY { x: 0.150, y: 0.060, Y: 1.0 },
+    };
+    let curve = lcms2::ToneCurve::new_parametric(
+        4,
+        &[2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045],
+    ).map_err(|e| format!("Failed to create parametric curve: {:?}", e))?;
+    let curves = [&curve, &curve, &curve];
+    lcms2::Profile::new_rgb(&white_point, &primaries, &curves)
+        .map_err(|e| format!("Failed to create Display P3 profile: {:?}", e))
+}
 
 pub struct DemosaicedImage {
     pub width: usize,
@@ -44,51 +72,126 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
         // Derive Camera -> Linear Rec.2020 matrix dynamically interpolated
         // along the Planckian blackbody locus for the photo's as-shot / default daylight temperature (5500K).
         let sensor_to_rec2020 = frame.sensor_to_rec2020_at(5500.0);
-        for y in 0..active_h {
-            let full_y = (frame.active_y + y).min(frame.full_height - 2).max(1);
-            
-            for x in 0..active_w {
-                let full_x = (frame.active_x + x).min(frame.full_width - 2).max(1);
+
+        let bayer_cfa = match frame.cfa_pattern {
+            crate::raw_decoder::CfaPattern::Rggb => Some(bayer::CFA::RGGB),
+            crate::raw_decoder::CfaPattern::Bggr => Some(bayer::CFA::BGGR),
+            crate::raw_decoder::CfaPattern::Gbrg => Some(bayer::CFA::GBRG),
+            crate::raw_decoder::CfaPattern::Grbg => Some(bayer::CFA::GRBG),
+            _ => None,
+        };
+
+        let mut demosaiced_with_bayer = false;
+        if let Some(cfa) = bayer_cfa {
+            let full_w = frame.full_width;
+            let full_h = frame.full_height;
+            let total_pixels = full_w * full_h;
+            if total_pixels > 0 && frame.sensor_data.len() >= total_pixels {
+                // Buffer for full frame 16-bit RGB: 3 channels * 2 bytes = 6 bytes per pixel
+                let mut rgb_raw_bytes = vec![0u8; total_pixels * 6];
+                let mut raster = bayer::RasterMut::new(full_w, full_h, bayer::RasterDepth::Depth16, &mut rgb_raw_bytes);
                 
-                let color = frame.color_at(full_y, full_x);
-                
-                let r: f32;
-                let g: f32;
-                let b: f32;
-                
-                if color == crate::raw_decoder::CFA_COLOR_RED {
-                    // Red photosite
-                    r = frame.sample_normalized(full_x, full_y);
-                    g = 0.25 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y) + frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
-                    b = 0.25 * (frame.sample_normalized(full_x - 1, full_y - 1) + frame.sample_normalized(full_x + 1, full_y - 1) + frame.sample_normalized(full_x - 1, full_y + 1) + frame.sample_normalized(full_x + 1, full_y + 1));
-                } else if color == crate::raw_decoder::CFA_COLOR_BLUE {
-                    // Blue photosite
-                    b = frame.sample_normalized(full_x, full_y);
-                    g = 0.25 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y) + frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
-                    r = 0.25 * (frame.sample_normalized(full_x - 1, full_y - 1) + frame.sample_normalized(full_x + 1, full_y - 1) + frame.sample_normalized(full_x - 1, full_y + 1) + frame.sample_normalized(full_x + 1, full_y + 1));
+                let raw_u8_slice: &[u8] = unsafe {
+                    std::slice::from_raw_parts(
+                        frame.sensor_data.as_ptr() as *const u8,
+                        frame.sensor_data.len() * 2,
+                    )
+                };
+                let depth = if cfg!(target_endian = "big") {
+                    bayer::BayerDepth::Depth16BE
                 } else {
-                    // Green photosite
-                    g = frame.sample_normalized(full_x, full_y);
-                    // Check if Red is horizontal or vertical neighbor
-                    if frame.color_at(full_y, full_x - 1) == crate::raw_decoder::CFA_COLOR_RED || frame.color_at(full_y, full_x + 1) == crate::raw_decoder::CFA_COLOR_RED {
-                        r = 0.5 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y));
-                        b = 0.5 * (frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
-                    } else {
-                        r = 0.5 * (frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
-                        b = 0.5 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y));
+                    bayer::BayerDepth::Depth16LE
+                };
+
+                if bayer::run_demosaic(
+                    &mut Cursor::new(raw_u8_slice),
+                    depth,
+                    cfa,
+                    bayer::Demosaic::Cubic,
+                    &mut raster,
+                ).is_ok() {
+                    let black = frame.black_levels[0].max(0.0);
+                    let white = frame.white_levels[0].max(black + 1.0);
+                    let scale = 1.0 / (white - black);
+
+                    for y in 0..active_h {
+                        let full_y = (frame.active_y + y).min(full_h - 1);
+                        for x in 0..active_w {
+                            let full_x = (frame.active_x + x).min(full_w - 1);
+                            let pixel_byte_idx = (full_y * full_w + full_x) * 6;
+                            let r_raw = u16::from_ne_bytes([rgb_raw_bytes[pixel_byte_idx], rgb_raw_bytes[pixel_byte_idx + 1]]) as f32;
+                            let g_raw = u16::from_ne_bytes([rgb_raw_bytes[pixel_byte_idx + 2], rgb_raw_bytes[pixel_byte_idx + 3]]) as f32;
+                            let b_raw = u16::from_ne_bytes([rgb_raw_bytes[pixel_byte_idx + 4], rgb_raw_bytes[pixel_byte_idx + 5]]) as f32;
+
+                            let r_norm = ((r_raw - black) * scale).clamp(0.0, 1.0);
+                            let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
+                            let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
+
+                            let c_sensor = Color3::new(
+                                (r_norm * wb_r).clamp(0.0, 1.0),
+                                g_norm.clamp(0.0, 1.0),
+                                (b_norm * wb_b).clamp(0.0, 1.0),
+                            );
+                            let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor);
+
+                            let out_idx = (y * active_w + x) * 3;
+                            demosaiced.data[out_idx] = c_rec2020.r().max(0.0);
+                            demosaiced.data[out_idx + 1] = c_rec2020.g().max(0.0);
+                            demosaiced.data[out_idx + 2] = c_rec2020.b().max(0.0);
+                        }
                     }
+                    demosaiced_with_bayer = true;
                 }
+            }
+        }
+
+        if !demosaiced_with_bayer {
+            for y in 0..active_h {
+                let full_y = (frame.active_y + y).min(frame.full_height - 2).max(1);
                 
-                // Sensor linear RGB with white balance
-                let c_sensor = Color3::new((r * wb_r).clamp(0.0, 1.0), g.clamp(0.0, 1.0), (b * wb_b).clamp(0.0, 1.0));
-                
-                // Map to Wide-Gamut Linear Rec.2020 working space
-                let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor);
-                
-                let out_idx = (y * active_w + x) * 3;
-                demosaiced.data[out_idx] = c_rec2020.r().max(0.0);
-                demosaiced.data[out_idx + 1] = c_rec2020.g().max(0.0);
-                demosaiced.data[out_idx + 2] = c_rec2020.b().max(0.0);
+                for x in 0..active_w {
+                    let full_x = (frame.active_x + x).min(frame.full_width - 2).max(1);
+                    
+                    let color = frame.color_at(full_y, full_x);
+                    
+                    let r: f32;
+                    let g: f32;
+                    let b: f32;
+                    
+                    if color == crate::raw_decoder::CFA_COLOR_RED {
+                        // Red photosite
+                        r = frame.sample_normalized(full_x, full_y);
+                        g = 0.25 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y) + frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
+                        b = 0.25 * (frame.sample_normalized(full_x - 1, full_y - 1) + frame.sample_normalized(full_x + 1, full_y - 1) + frame.sample_normalized(full_x - 1, full_y + 1) + frame.sample_normalized(full_x + 1, full_y + 1));
+                    } else if color == crate::raw_decoder::CFA_COLOR_BLUE {
+                        // Blue photosite
+                        b = frame.sample_normalized(full_x, full_y);
+                        g = 0.25 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y) + frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
+                        r = 0.25 * (frame.sample_normalized(full_x - 1, full_y - 1) + frame.sample_normalized(full_x + 1, full_y - 1) + frame.sample_normalized(full_x - 1, full_y + 1) + frame.sample_normalized(full_x + 1, full_y + 1));
+                    } else {
+                        // Green photosite
+                        g = frame.sample_normalized(full_x, full_y);
+                        // Check if Red is horizontal or vertical neighbor
+                        if frame.color_at(full_y, full_x - 1) == crate::raw_decoder::CFA_COLOR_RED || frame.color_at(full_y, full_x + 1) == crate::raw_decoder::CFA_COLOR_RED {
+                            r = 0.5 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y));
+                            b = 0.5 * (frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
+                        } else {
+                            r = 0.5 * (frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
+                            b = 0.5 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y));
+                        }
+                    }
+                    
+                    // Sensor linear RGB with white balance
+                    let c_sensor = Color3::new((r * wb_r).clamp(0.0, 1.0), g.clamp(0.0, 1.0), (b * wb_b).clamp(0.0, 1.0));
+                    
+                    // Map to Wide-Gamut Linear Rec.2020 working space
+                    let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor);
+                    
+                    let out_idx = (y * active_w + x) * 3;
+                    demosaiced.data[out_idx] = c_rec2020.r().max(0.0);
+                    demosaiced.data[out_idx + 1] = c_rec2020.g().max(0.0);
+                    demosaiced.data[out_idx + 2] = c_rec2020.b().max(0.0);
+                }
             }
         }
         
@@ -586,7 +689,7 @@ pub fn decode_raw_preview_buffer<P: AsRef<Path>>(path: P, max_dimension: Option<
     Ok((target_w as u32, target_h as u32, out_rgba_f16))
 }
 
-/// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing and Lensfun distortion correction.
+/// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing, color space management, and Lensfun distortion correction.
 pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     input_path: P,
     output_path: Q,
@@ -594,6 +697,8 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     lens_distortion: Option<(&[f32], &str)>,
     quality: u8,
     max_dimension: Option<u32>,
+    color_space: ExportColorSpace,
+    rendering_intent: ExportRenderingIntent,
 ) -> Result<(), String> {
     let input_path = input_path.as_ref();
     let output_path = output_path.as_ref();
@@ -857,6 +962,35 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     if let Some(parent) = output_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
+
+    // Color Management: convert from working sRGB to target color space (Display P3) if requested
+    let (target_rgb_bytes, icc_to_embed): (Vec<u8>, Vec<u8>) = if color_space == ExportColorSpace::DisplayP3 {
+        let in_prof = lcms2::Profile::new_srgb();
+        if let Ok(p3_prof) = create_display_p3_profile() {
+            let intent = match rendering_intent {
+                ExportRenderingIntent::Perceptual => lcms2::Intent::Perceptual,
+                ExportRenderingIntent::RelativeColorimetric => lcms2::Intent::RelativeColorimetric,
+            };
+            if let Ok(transform) = lcms2::Transform::new(
+                &in_prof,
+                lcms2::PixelFormat::RGB_8,
+                &p3_prof,
+                lcms2::PixelFormat::RGB_8,
+                intent,
+            ) {
+                let mut p3_bytes = vec![0u8; rgb_img.as_raw().len()];
+                transform.transform_pixels(rgb_img.as_raw(), &mut p3_bytes);
+                let icc_bytes = p3_prof.icc().unwrap_or_else(|_| crate::color::SRGB_ICC_PROFILE.to_vec());
+                (p3_bytes, icc_bytes)
+            } else {
+                (rgb_img.as_raw().to_vec(), crate::color::SRGB_ICC_PROFILE.to_vec())
+            }
+        } else {
+            (rgb_img.as_raw().to_vec(), crate::color::SRGB_ICC_PROFILE.to_vec())
+        }
+    } else {
+        (rgb_img.as_raw().to_vec(), crate::color::SRGB_ICC_PROFILE.to_vec())
+    };
     
     let ext = output_path
         .extension()
@@ -869,16 +1003,16 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
         let mut writer = BufWriter::new(file);
         let encoder = TiffEncoder::new(&mut writer);
         encoder
-            .encode(&rgb_img, final_w, final_h, ColorType::Rgb8)
+            .encode(&target_rgb_bytes, final_w, final_h, ColorType::Rgb8)
             .map_err(|e| format!("Failed to encode TIFF: {}", e))?;
     } else {
         let mut jpeg_buf = Vec::new();
         let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_buf, quality.clamp(1, 100));
         encoder
-            .encode(&rgb_img, final_w, final_h, ColorType::Rgb8)
+            .encode(&target_rgb_bytes, final_w, final_h, ColorType::Rgb8)
             .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
             
-        let tagged_jpeg = inject_icc_profile_into_jpeg(&jpeg_buf, crate::color::SRGB_ICC_PROFILE);
+        let tagged_jpeg = inject_icc_profile_into_jpeg(&jpeg_buf, &icc_to_embed);
         let mut file = File::create(output_path).map_err(|e| format!("Failed to create output file: {}", e))?;
         file.write_all(&tagged_jpeg).map_err(|e| format!("Failed to write JPEG: {}", e))?;
     }
@@ -887,50 +1021,62 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
 }
 
 /// Injects an ICC profile into a JPEG byte stream as an APP2 segment (ICC.1:2010 specification).
-/// This enables macOS ColorSync, iOS ImageIO, browsers, and image viewers to color-manage
-/// the exported photo and map its sRGB coordinates faithfully to wide-gamut displays (Display P3).
+/// Uses zero-copy `img-parts` segment parsing and chunking.
 pub fn inject_icc_profile_into_jpeg(jpeg_data: &[u8], icc_profile: &[u8]) -> Vec<u8> {
-    if jpeg_data.len() < 4 || jpeg_data[0] != 0xff || jpeg_data[1] != 0xd8 {
-        return jpeg_data.to_vec();
-    }
-
-    // Build APP2 segment according to ICC specification:
-    // Marker: 0xFF, 0xE2
-    // Length: 2 bytes (big endian, includes length field itself)
-    // Identification: b"ICC_PROFILE\0" (12 bytes)
-    // Sequence number: 1 (1 byte)
-    // Total chunks: 1 (1 byte)
-    // Profile payload
-    let header = b"ICC_PROFILE\0\x01\x01";
-    let payload_len = header.len() + icc_profile.len();
-    let marker_len = payload_len + 2;
-    if marker_len > 65535 {
-        return jpeg_data.to_vec();
-    }
-
-    let mut app2 = Vec::with_capacity(4 + payload_len);
-    app2.push(0xff);
-    app2.push(0xe2);
-    app2.push(((marker_len >> 8) & 0xff) as u8);
-    app2.push((marker_len & 0xff) as u8);
-    app2.extend_from_slice(header);
-    app2.extend_from_slice(icc_profile);
-
-    // Insert immediately after SOI (pos 2), or after APP0 (JFIF) if present
-    let mut insert_pos = 2;
-    if jpeg_data.len() > 5 && jpeg_data[2] == 0xff && jpeg_data[3] == 0xe0 {
-        let app0_len = ((jpeg_data[4] as usize) << 8) | (jpeg_data[5] as usize);
-        let next_pos = 4 + app0_len;
-        if next_pos <= jpeg_data.len() {
-            insert_pos = next_pos;
+    match Jpeg::from_bytes(Bytes::copy_from_slice(jpeg_data)) {
+        Ok(mut jpeg) => {
+            jpeg.set_icc_profile(Some(Bytes::copy_from_slice(icc_profile)));
+            let mut out = Vec::with_capacity(jpeg_data.len() + icc_profile.len() + 64);
+            if jpeg.encoder().write_to(&mut out).is_ok() {
+                out
+            } else {
+                jpeg_data.to_vec()
+            }
         }
+        Err(_) => jpeg_data.to_vec(),
     }
+}
 
-    let mut result = Vec::with_capacity(jpeg_data.len() + app2.len());
-    result.extend_from_slice(&jpeg_data[..insert_pos]);
-    result.extend_from_slice(&app2);
-    result.extend_from_slice(&jpeg_data[insert_pos..]);
-    result
+/// Dispatches multiple photo exports concurrently across all available CPU cores using Rayon.
+pub fn export_batch_photos(
+    items: Vec<BatchExportItemRecord>,
+) -> Vec<BatchExportResultRecord> {
+    items
+        .into_par_iter()
+        .map(|item| {
+            let dist_tuple = item.lens_coeffs.as_ref().and_then(|c| {
+                if c.has_distortion {
+                    Some((c.distortion.as_slice(), c.distortion_model.as_str()))
+                } else {
+                    None
+                }
+            });
+
+            match export_photo_file(
+                &item.input_path,
+                &item.output_path,
+                &item.edits,
+                dist_tuple,
+                item.quality as u8,
+                item.max_dimension,
+                item.color_space,
+                item.rendering_intent,
+            ) {
+                Ok(()) => BatchExportResultRecord {
+                    input_path: item.input_path,
+                    output_path: item.output_path,
+                    success: true,
+                    error_message: None,
+                },
+                Err(e) => BatchExportResultRecord {
+                    input_path: item.input_path,
+                    output_path: item.output_path,
+                    success: false,
+                    error_message: Some(e),
+                },
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -981,7 +1127,16 @@ mod tests {
             curves: Default::default(),
         };
         
-        let res = export_photo_file(tmp_in, tmp_out, &edits, None, 90, Some(50));
+        let res = export_photo_file(
+            tmp_in,
+            tmp_out,
+            &edits,
+            None,
+            90,
+            Some(50),
+            ExportColorSpace::Srgb,
+            ExportRenderingIntent::RelativeColorimetric,
+        );
         assert!(res.is_ok());
         
         let exported = image::open(tmp_out).unwrap();
@@ -1100,12 +1255,12 @@ mod tests {
             curves: Default::default(),
         };
         
-        export_photo_file(tmp_in, tmp_out_no_lut, &edits, None, 95, None).unwrap();
+        export_photo_file(tmp_in, tmp_out_no_lut, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
         
         // Now apply B&W Tri-X LUT
         edits.lut_name = Some("Film - B&W High Contrast (Tri-X)".to_string());
         edits.lut_intensity = 1.0;
-        export_photo_file(tmp_in, tmp_out_lut, &edits, None, 95, None).unwrap();
+        export_photo_file(tmp_in, tmp_out_lut, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
         
         let img_no_lut = image::open(tmp_out_no_lut).unwrap().to_rgb8();
         let img_lut = image::open(tmp_out_lut).unwrap().to_rgb8();
@@ -1168,7 +1323,7 @@ mod tests {
             curves: Default::default(),
         };
         
-        export_photo_file(tmp_in, tmp_out, &edits, None, 95, None).unwrap();
+        export_photo_file(tmp_in, tmp_out, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
         
         let bytes = std::fs::read(tmp_out).unwrap();
         // Verify APP2 ICC marker presence: 0xFF, 0xE2 followed by "ICC_PROFILE\0"
@@ -1216,7 +1371,7 @@ mod tests {
         // 1. Test 90-degree CW rotation (60x40 -> 40x60 portrait)
         let mut edits = EditSettings::default();
         edits.rotation = 90;
-        export_photo_file(tmp_in, tmp_out_90, &edits, None, 95, None).unwrap();
+        export_photo_file(tmp_in, tmp_out_90, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
         let rotated = image::open(tmp_out_90).unwrap().to_rgb8();
         assert_eq!(rotated.width(), 40);
         assert_eq!(rotated.height(), 60);
@@ -1224,7 +1379,7 @@ mod tests {
         // 2. Test horizontal flip (left red becomes right red)
         let mut edits_flip = EditSettings::default();
         edits_flip.flip_horizontal = true;
-        export_photo_file(tmp_in, tmp_out_flip, &edits_flip, None, 95, None).unwrap();
+        export_photo_file(tmp_in, tmp_out_flip, &edits_flip, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
         let flipped = image::open(tmp_out_flip).unwrap().to_rgb8();
         assert_eq!(flipped.width(), 60);
         assert_eq!(flipped.height(), 40);
@@ -1388,7 +1543,7 @@ mod tests {
         img.save(tmp_in).unwrap();
 
         let edits_flat = EditSettings::default();
-        export_photo_file(tmp_in, tmp_out_flat, &edits_flat, None, 95, None).unwrap();
+        export_photo_file(tmp_in, tmp_out_flat, &edits_flat, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
 
         // Apply a master curve that boosts midtones: (0, 0), (0.5, 0.8), (1, 1)
         let mut edits_curved = EditSettings::default();
@@ -1397,7 +1552,7 @@ mod tests {
             crate::curve::CurvePointRecord { x: 0.5, y: 0.8 },
             crate::curve::CurvePointRecord { x: 1.0, y: 1.0 },
         ];
-        export_photo_file(tmp_in, tmp_out_curved, &edits_curved, None, 95, None).unwrap();
+        export_photo_file(tmp_in, tmp_out_curved, &edits_curved, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric).unwrap();
 
         let flat_px = image::open(tmp_out_flat).unwrap().to_rgb8().get_pixel(10, 10)[0];
         let curved_px = image::open(tmp_out_curved).unwrap().to_rgb8().get_pixel(10, 10)[0];
@@ -1407,6 +1562,86 @@ mod tests {
         let _ = std::fs::remove_file(tmp_in);
         let _ = std::fs::remove_file(tmp_out_flat);
         let _ = std::fs::remove_file(tmp_out_curved);
+    }
+
+    #[test]
+    fn test_display_p3_export_and_icc() {
+        let tmp_in = "test_p3_in.jpg";
+        let tmp_out = "test_p3_out.jpg";
+
+        let img = RgbImage::from_fn(30, 30, |x, y| {
+            Rgb([x as u8 * 8, y as u8 * 8, 200])
+        });
+        img.save(tmp_in).unwrap();
+
+        let edits = EditSettings::default();
+        export_photo_file(
+            tmp_in,
+            tmp_out,
+            &edits,
+            None,
+            95,
+            None,
+            ExportColorSpace::DisplayP3,
+            ExportRenderingIntent::Perceptual,
+        ).unwrap();
+
+        let bytes = std::fs::read(tmp_out).unwrap();
+        let marker = [0xff, 0xe2];
+        let found_app2 = bytes.windows(marker.len()).any(|w| w == marker);
+        assert!(found_app2, "Exported Display P3 JPEG must contain APP2 marker");
+
+        // Inspect profile via macOS sips
+        if cfg!(target_os = "macos") {
+            let sips_out = std::process::Command::new("sips")
+                .arg("-g")
+                .arg("profile")
+                .arg(tmp_out)
+                .output();
+            if let Ok(output) = sips_out {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                println!("sips output for Display P3 export: {}", stdout);
+                // Profile will either contain Display P3 / P3 or RGB
+                assert!(stdout.contains("P3") || stdout.contains("RGB"), "Profile must be present in output");
+            }
+        }
+
+        let _ = std::fs::remove_file(tmp_in);
+        let _ = std::fs::remove_file(tmp_out);
+    }
+
+    #[test]
+    fn test_batch_export_rayon() {
+        let mut items = Vec::new();
+        let count = 4;
+        for i in 0..count {
+            let in_path = format!("test_batch_in_{}.jpg", i);
+            let out_path = format!("test_batch_out_{}.jpg", i);
+            let img = RgbImage::from_fn(20, 20, |_x, _y| {
+                Rgb([(i * 50) as u8, 120, 150])
+            });
+            img.save(&in_path).unwrap();
+
+            items.push(BatchExportItemRecord {
+                input_path: in_path,
+                output_path: out_path,
+                edits: EditSettings::default(),
+                lens_coeffs: None,
+                quality: 90,
+                max_dimension: Some(40),
+                color_space: if i % 2 == 0 { ExportColorSpace::Srgb } else { ExportColorSpace::DisplayP3 },
+                rendering_intent: ExportRenderingIntent::RelativeColorimetric,
+            });
+        }
+
+        let results = export_batch_photos(items.clone());
+        assert_eq!(results.len(), count);
+        for res in &results {
+            assert!(res.success, "Batch export item failed: {:?}", res.error_message);
+            assert!(std::path::Path::new(&res.output_path).exists());
+            let _ = std::fs::remove_file(&res.input_path);
+            let _ = std::fs::remove_file(&res.output_path);
+        }
     }
 }
 

@@ -41,8 +41,47 @@ extension AppViewModel {
             curves: self.curves
         )
     }
-    
-    // MARK: - Apply Edits Atomically
+}
+
+extension EditSettings {
+    public static var defaultIdentity: EditSettings {
+        EditSettings(
+            exposure: 0.0,
+            contrast: 0.0,
+            highlights: 0.0,
+            shadows: 0.0,
+            whites: 0.0,
+            blacks: 0.0,
+            vibrance: 0.0,
+            saturation: 0.0,
+            deepBlue: 0.0,
+            foliage: 0.0,
+            temperature: 5000.0,
+            tint: 0.0,
+            cropLeft: 0.0,
+            cropTop: 0.0,
+            cropRight: 1.0,
+            cropBottom: 1.0,
+            cropAngle: 0.0,
+            perspectiveVertical: 0.0,
+            perspectiveHorizontal: 0.0,
+            cropConstrain: true,
+            rotation: 0,
+            flipHorizontal: false,
+            flipVertical: false,
+            toneProfile: .agxVivid,
+            lutName: nil,
+            lutIntensity: 1.0,
+            sharpeningAmount: 0.0,
+            sharpeningRadius: 1.0,
+            sharpeningMasking: 0.0,
+            noiseReduction: 0.0,
+            curves: ToneCurvesRecord.defaultIdentity
+        )
+    }
+}
+
+extension AppViewModel {
     public func applyEdits(_ edits: EditSettings) {
         self.exposure = edits.exposure
         self.contrast = edits.contrast

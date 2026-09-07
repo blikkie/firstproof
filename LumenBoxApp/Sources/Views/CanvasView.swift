@@ -278,6 +278,50 @@ struct CanvasView: View {
                         }
                         .allowsHitTesting(true)
                     }
+                    
+                    // 4. Docked Background Batch Export Progress Indicator
+                    if viewModel.isBatchExporting {
+                        VStack {
+                            Spacer()
+                            HStack(spacing: 14) {
+                                ProgressView(value: viewModel.batchExportProgress)
+                                    .progressViewStyle(.linear)
+                                    .frame(width: 120)
+                                
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(viewModel.batchExportStatusText)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(.white)
+                                    Text("\(viewModel.batchExportCompletedCount) of \(viewModel.batchExportTotalCount) completed")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.white.opacity(0.7))
+                                }
+                                
+                                Button {
+                                    viewModel.cancelBatchExport()
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.white.opacity(0.7))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Cancel Batch Export")
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(.ultraThinMaterial)
+                            .background(Color.black.opacity(0.75))
+                            .cornerRadius(16)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                            .shadow(color: .black.opacity(0.4), radius: 10, x: 0, y: 4)
+                            .padding(.bottom, viewModel.isBulkSelectionMode ? 64 : 20)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                        .allowsHitTesting(true)
+                    }
                 }
             }
         }
