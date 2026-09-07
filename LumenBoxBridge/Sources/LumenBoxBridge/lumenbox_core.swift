@@ -1055,6 +1055,9 @@ public struct EditSettings {
     public var cropRight: Float
     public var cropBottom: Float
     public var cropAngle: Float
+    public var perspectiveVertical: Float
+    public var perspectiveHorizontal: Float
+    public var cropConstrain: Bool
     public var rotation: Int32
     public var flipHorizontal: Bool
     public var flipVertical: Bool
@@ -1068,7 +1071,7 @@ public struct EditSettings {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -1086,6 +1089,9 @@ public struct EditSettings {
         self.cropRight = cropRight
         self.cropBottom = cropBottom
         self.cropAngle = cropAngle
+        self.perspectiveVertical = perspectiveVertical
+        self.perspectiveHorizontal = perspectiveHorizontal
+        self.cropConstrain = cropConstrain
         self.rotation = rotation
         self.flipHorizontal = flipHorizontal
         self.flipVertical = flipVertical
@@ -1154,6 +1160,15 @@ extension EditSettings: Equatable, Hashable {
         if lhs.cropAngle != rhs.cropAngle {
             return false
         }
+        if lhs.perspectiveVertical != rhs.perspectiveVertical {
+            return false
+        }
+        if lhs.perspectiveHorizontal != rhs.perspectiveHorizontal {
+            return false
+        }
+        if lhs.cropConstrain != rhs.cropConstrain {
+            return false
+        }
         if lhs.rotation != rhs.rotation {
             return false
         }
@@ -1205,6 +1220,9 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(cropRight)
         hasher.combine(cropBottom)
         hasher.combine(cropAngle)
+        hasher.combine(perspectiveVertical)
+        hasher.combine(perspectiveHorizontal)
+        hasher.combine(cropConstrain)
         hasher.combine(rotation)
         hasher.combine(flipHorizontal)
         hasher.combine(flipVertical)
@@ -1243,6 +1261,9 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 cropRight: FfiConverterFloat.read(from: &buf), 
                 cropBottom: FfiConverterFloat.read(from: &buf), 
                 cropAngle: FfiConverterFloat.read(from: &buf), 
+                perspectiveVertical: FfiConverterFloat.read(from: &buf), 
+                perspectiveHorizontal: FfiConverterFloat.read(from: &buf), 
+                cropConstrain: FfiConverterBool.read(from: &buf), 
                 rotation: FfiConverterInt32.read(from: &buf), 
                 flipHorizontal: FfiConverterBool.read(from: &buf), 
                 flipVertical: FfiConverterBool.read(from: &buf), 
@@ -1274,6 +1295,9 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.cropRight, into: &buf)
         FfiConverterFloat.write(value.cropBottom, into: &buf)
         FfiConverterFloat.write(value.cropAngle, into: &buf)
+        FfiConverterFloat.write(value.perspectiveVertical, into: &buf)
+        FfiConverterFloat.write(value.perspectiveHorizontal, into: &buf)
+        FfiConverterBool.write(value.cropConstrain, into: &buf)
         FfiConverterInt32.write(value.rotation, into: &buf)
         FfiConverterBool.write(value.flipHorizontal, into: &buf)
         FfiConverterBool.write(value.flipVertical, into: &buf)
@@ -3025,6 +3049,29 @@ public func decodeRawPreview(path: String, maxDimension: UInt32?) -> RawPreviewR
     )
 })
 }
+/**
+ * Returns a deterministic signature of all edit settings for cache keying and invalidation.
+ * Automatically serializes all current and future fields without manual tracking.
+ */
+public func editsCacheSignature(edits: EditSettings) -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_edits_cache_signature(
+        FfiConverterTypeEditSettings.lower(edits),$0
+    )
+})
+}
+/**
+ * Checks whether an EditSettings instance differs from default/as-shot settings.
+ */
+public func editsHasModifications(edits: EditSettings, asShotTemp: Float?, asShotTint: Float?) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_func_edits_has_modifications(
+        FfiConverterTypeEditSettings.lower(edits),
+        FfiConverterOptionFloat.lower(asShotTemp),
+        FfiConverterOptionFloat.lower(asShotTint),$0
+    )
+})
+}
 public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_func_export_photo(
@@ -3157,6 +3204,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_decode_raw_preview() != 62888) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_edits_cache_signature() != 45516) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_func_edits_has_modifications() != 32652) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_func_export_photo() != 3529) {

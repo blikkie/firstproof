@@ -108,6 +108,18 @@ Google Pixel phones (Pixel 3 through Pixel 9 Pro) capture computational RAWs in 
     Enable `NSWindow` frame auto-saving (`window.setFrameAutosaveName`) and configure flexible min/max split pane constraints.
 *   **App Bundle Packaging (`LumenBox.app`)**:
     Add `make bundle` target to package the Swift executable, `Info.plist`, Metal libraries, and `AppIcon.icns` into a distributable `LumenBox.app` bundle.
+*   **Single-Key Professional Muscle Memory & Modifier Harmonization (P2)**:
+    Transition standard viewing, triage, and editing tools to single keypresses (no `Cmd` modifier) matching industry-standard photographer muscle memory (Lightroom, Capture One, Photo Mechanic):
+    *   `C`: Crop & Rotate tool toggle
+    *   `G`: Grid view mode
+    *   `E` / `D`: Detail / Loupe view mode
+    *   `1` .. `5`: Star ratings
+    *   `6` .. `9`: Color label assignments
+    *   `P` / `X` / `U`: Pick, Reject, and Unflag triage flags
+    *   `X` (while in Crop tool): Toggle aspect ratio orientation (Landscape \(\leftrightarrow\) Portrait)
+    *   `\`: Before / After toggle
+    *   `Z`: 100% 1:1 zoom toggle
+    *   *Implementation requirement*: Install an active responder filter (`NSView` / SwiftUI focused state) ensuring single-key shortcuts do not trigger when the user is typing into text search boxes, EXIF title fields, or numerical slider inputs.
 
 ---
 

@@ -584,23 +584,33 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     let orig_width = image.width as u32;
     let orig_height = image.height as u32;
     
+    let crop_l = edits.crop_left.clamp(0.0, 0.99);
+    let crop_t = edits.crop_top.clamp(0.0, 0.99);
+    let crop_r = edits.crop_right.clamp(crop_l + 0.01, 1.0);
+    let crop_b = edits.crop_bottom.clamp(crop_t + 0.01, 1.0);
+    let crop_w_frac = crop_r - crop_l;
+    let crop_h_frac = crop_b - crop_t;
+
+    let effective_orig_w = ((orig_width as f32) * crop_w_frac).round().max(1.0) as u32;
+    let effective_orig_h = ((orig_height as f32) * crop_h_frac).round().max(1.0) as u32;
+
     // Calculate target dimensions
     let (target_w, target_h) = if let Some(max_dim) = max_dimension {
-        if max_dim > 0 && (orig_width > max_dim || orig_height > max_dim) {
-            if orig_width >= orig_height {
+        if max_dim > 0 && (effective_orig_w > max_dim || effective_orig_h > max_dim) {
+            if effective_orig_w >= effective_orig_h {
                 let w = max_dim;
-                let h = ((orig_height as f32 * max_dim as f32) / orig_width as f32).round() as u32;
+                let h = ((effective_orig_h as f32 * max_dim as f32) / effective_orig_w as f32).round() as u32;
                 (w, h.max(1))
             } else {
                 let h = max_dim;
-                let w = ((orig_width as f32 * max_dim as f32) / orig_height as f32).round() as u32;
+                let w = ((effective_orig_w as f32 * max_dim as f32) / effective_orig_h as f32).round() as u32;
                 (w.max(1), h)
             }
         } else {
-            (orig_width, orig_height)
+            (effective_orig_w, effective_orig_h)
         }
     } else {
-        (orig_width, orig_height)
+        (effective_orig_w, effective_orig_h)
     };
     
     // Build 8-bit RGB image buffer with geometric warp and bilinear filtering
@@ -611,8 +621,26 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     let cos_theta = angle_rad.cos();
     let sin_theta = angle_rad.sin();
     
-    let max_r = aspect_ratio.max(1.0 / aspect_ratio);
-    let auto_crop_scale = (cos_theta.abs() + sin_theta.abs() * max_r).max(1.0);
+    let c_v = edits.perspective_vertical * 0.005;
+    let c_h = edits.perspective_horizontal * 0.005;
+    
+    let mut auto_crop_scale = 1.0f32;
+    if edits.crop_constrain {
+        let corners = [
+            (aspect_ratio, 1.0),
+            (aspect_ratio, -1.0),
+            (-aspect_ratio, -1.0),
+            (-aspect_ratio, 1.0),
+        ];
+        for (px, py) in corners {
+            let rx = px * cos_theta - py * sin_theta;
+            let ry = px * sin_theta + py * cos_theta;
+            let req = (rx.abs() / aspect_ratio).max(ry.abs()) - (c_v * ry + c_h * rx);
+            if req > auto_crop_scale {
+                auto_crop_scale = req;
+            }
+        }
+    }
     
     let (has_dist, k1, k2, k3, is_ptlens) = if let Some((coeffs, model)) = lens_distortion {
         if !coeffs.is_empty() {
@@ -648,17 +676,25 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             let u = (tx as f32 + 0.5) / (target_w as f32);
             let v = (ty as f32 + 0.5) / (target_h as f32);
             
-            // 1. Straighten and auto-crop zoom (normalized to Lensfun standard coordinates)
-            // Lensfun defines r=1.0 at half height (v=1.0), and norm.x = aspect_ratio at half width (u=1.0)
-            let centered_x = (u - 0.5) * 2.0 * aspect_ratio / auto_crop_scale;
-            let centered_y = (v - 0.5) * 2.0 / auto_crop_scale;
+            // Map output (u, v) into cropped sub-box of the composition
+            let u_crop = crop_l + u * crop_w_frac;
+            let v_crop = crop_t + v * crop_h_frac;
             
-            let mut rot_x = centered_x * cos_theta - centered_y * sin_theta;
-            let mut rot_y = centered_x * sin_theta + centered_y * cos_theta;
+            // 1. Straighten and auto-crop zoom (normalized to Lensfun standard coordinates)
+            let centered_x = (u_crop - 0.5) * 2.0 * aspect_ratio / auto_crop_scale;
+            let centered_y = (v_crop - 0.5) * 2.0 / auto_crop_scale;
+            
+            let rot_x = centered_x * cos_theta - centered_y * sin_theta;
+            let rot_y = centered_x * sin_theta + centered_y * cos_theta;
+            
+            // Perspective keystone (backward projective homography)
+            let denom = (1.0 + c_v * rot_y + c_h * rot_x).max(0.1);
+            let mut geom_x = rot_x / denom;
+            let mut geom_y = rot_y / denom;
             
             // 2. Lensfun distortion model
             if has_dist {
-                let r2 = rot_x * rot_x + rot_y * rot_y;
+                let r2 = geom_x * geom_x + geom_y * geom_y;
                 let r = r2.sqrt();
                 if r > 0.0001 {
                     let rd = if is_ptlens {
@@ -675,15 +711,19 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                         r * (1.0 + k1 * r2 + k2 * r4)
                     };
                     let scale_factor = rd / r;
-                    rot_x *= scale_factor;
-                    rot_y *= scale_factor;
+                    geom_x *= scale_factor;
+                    geom_y *= scale_factor;
                 }
             }
             
-            let sx = (rot_x / (2.0 * aspect_ratio) + 0.5) * (orig_width as f32);
-            let sy = (rot_y / 2.0 + 0.5) * (orig_height as f32);
+            let sx = (geom_x / (2.0 * aspect_ratio) + 0.5) * (orig_width as f32);
+            let sy = (geom_y / 2.0 + 0.5) * (orig_height as f32);
             
-            let (r_val, g_val, b_val) = sample_bilinear(&image, sx, sy);
+            let (r_val, g_val, b_val) = if !edits.crop_constrain && (sx < 0.0 || sx >= (orig_width - 1) as f32 || sy < 0.0 || sy >= (orig_height - 1) as f32) {
+                (0.0, 0.0, 0.0)
+            } else {
+                sample_bilinear(&image, sx, sy)
+            };
             let (mut r_disp, mut g_disp, mut b_disp) = if edits.tone_profile == crate::ColorProfileMode::AgxVivid
                 || edits.tone_profile == crate::ColorProfileMode::AgxFilmic
             {
@@ -880,6 +920,9 @@ mod tests {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            perspective_vertical: 0.0,
+            perspective_horizontal: 0.0,
+            crop_constrain: true,
             rotation: 0,
             flip_horizontal: false,
             flip_vertical: false,
@@ -930,6 +973,9 @@ mod tests {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            perspective_vertical: 0.0,
+            perspective_horizontal: 0.0,
+            crop_constrain: true,
             rotation: 0,
             flip_horizontal: false,
             flip_vertical: false,
@@ -991,6 +1037,9 @@ mod tests {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            perspective_vertical: 0.0,
+            perspective_horizontal: 0.0,
+            crop_constrain: true,
             rotation: 0,
             flip_horizontal: false,
             flip_vertical: false,
@@ -1055,6 +1104,9 @@ mod tests {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            perspective_vertical: 0.0,
+            perspective_horizontal: 0.0,
+            crop_constrain: true,
             rotation: 0,
             flip_horizontal: false,
             flip_vertical: false,

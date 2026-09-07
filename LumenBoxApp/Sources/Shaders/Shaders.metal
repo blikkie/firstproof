@@ -42,6 +42,14 @@ struct ShaderUniforms {
     float sharpeningRadius;  // 0.5 .. 3.0 (default 1.0)
     float sharpeningMasking; // 0.0 .. 100.0 (default 0.0)
     float noiseReduction;    // 0.0 .. 100.0 (default 0.0)
+    float cropLeft;          // 0.0 .. 1.0 (default 0.0)
+    float cropTop;           // 0.0 .. 1.0 (default 0.0)
+    float cropRight;         // 0.0 .. 1.0 (default 1.0)
+    float cropBottom;        // 0.0 .. 1.0 (default 1.0)
+    float perspectiveVertical;   // -100.0 .. +100.0 (default 0.0)
+    float perspectiveHorizontal; // -100.0 .. +100.0 (default 0.0)
+    int cropConstrain;       // 1 = auto-crop inscribed scale, 0 = free
+    int cropModeActive;      // 1 = interactive crop mode (show full image with overlay), 0 = normal framed crop
     int _padding;
     int _padding2;
 };
@@ -252,39 +260,8 @@ vertex VertexOutput vertexShader(
     constant ShaderUniforms &uniforms [[buffer(1)]]
 ) {
     VertexOutput out;
-    float2 pos = vertices[vertexID].position;
-    float2 uv = vertices[vertexID].texCoord;
-    
-    out.position = float4(pos, 0.0, 1.0);
-    
-    // Straighten rotation around center (0.5, 0.5) with aspect ratio correction and auto-crop
-    if (uniforms.straightenAngle != 0.0 && uniforms.isOriginal < 0.5) {
-        float angle = uniforms.straightenAngle;
-        float cosA = cos(angle);
-        float sinA = sin(angle);
-        
-        // Compute auto-crop inscribed zoom factor S(theta)
-        float absSin = abs(sinA);
-        float absCos = abs(cosA);
-        float R = max(uniforms.aspectRatio, 0.01);
-        float maxR = max(R, 1.0 / R);
-        float zoom = max(absCos + absSin * maxR, 1.0);
-        
-        float2 centered = uv - float2(0.5, 0.5);
-        centered.x *= uniforms.aspectRatio; // compensate aspect ratio
-        
-        float2 rotated = float2(
-            centered.x * cosA - centered.y * sinA,
-            centered.x * sinA + centered.y * cosA
-        );
-        rotated.x /= uniforms.aspectRatio;
-        
-        // Scale by 1.0 / zoom to eliminate black corner bars
-        out.texCoord = (rotated / zoom) + float2(0.5, 0.5);
-    } else {
-        out.texCoord = uv;
-    }
-    
+    out.position = float4(vertices[vertexID].position, 0.0, 1.0);
+    out.texCoord = vertices[vertexID].texCoord;
     return out;
 }
 
@@ -484,40 +461,89 @@ fragment float4 fragmentShader(
 ) {
     float2 uv = in.texCoord;
     
-    // Discard pixels rotated outside image bounds
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-        return float4(0.08, 0.08, 0.08, 1.0); // Neutral dark canvas background
-    }
-    
-    // 1. Optics & Lens Distortion Correction
-    if (uniforms.lensCorrectionEnabled != 0 && uniforms.isOriginal < 0.5) {
-        float2 norm = (uv - float2(0.5, 0.5)) * 2.0;
-        norm.x *= uniforms.aspectRatio;
-        float r2 = dot(norm, norm);
-        float r = sqrt(r2);
+    // 1. Geometry, Perspective & Crop Homography
+    if (uniforms.isOriginal < 0.5) {
+        float cropL = clamp(uniforms.cropLeft, 0.0, 0.99);
+        float cropT = clamp(uniforms.cropTop, 0.0, 0.99);
+        float cropR = clamp(uniforms.cropRight, cropL + 0.01, 1.0);
+        float cropB = clamp(uniforms.cropBottom, cropT + 0.01, 1.0);
         
-        if (r > 0.0001) {
-            float r_corr = r;
-            if (uniforms.distortionModel == 0) {
-                // Poly3 model: r_d = r * (1 + k1*r^2 + k2*r^4)
-                r_corr = r * (1.0 + uniforms.k1 * r2 + uniforms.k2 * (r2 * r2));
-            } else if (uniforms.distortionModel == 1) {
-                // PTLens model: r_d = a*r^4 + b*r^3 + c*r^2 + d*r
-                float a = uniforms.k1;
-                float b = uniforms.k2;
-                float c = uniforms.k3;
-                float d = 1.0 - (a + b + c);
-                r_corr = a * (r2 * r2) + b * (r2 * r) + c * r2 + d * r;
-            }
-            float factor = r_corr / r;
-            norm *= factor;
-            norm.x /= uniforms.aspectRatio;
-            uv = norm * 0.5 + float2(0.5, 0.5);
-            
-            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-                return float4(0.08, 0.08, 0.08, 1.0);
+        float2 uvc = uv;
+        if (uniforms.cropModeActive == 0) {
+            uvc.x = cropL + uv.x * (cropR - cropL);
+            uvc.y = cropT + uv.y * (cropB - cropT);
+        }
+        
+        float A = max(uniforms.aspectRatio, 0.01);
+        float angle = uniforms.straightenAngle;
+        float cosA = cos(angle);
+        float sinA = sin(angle);
+        float cV = uniforms.perspectiveVertical * 0.005;
+        float cH = uniforms.perspectiveHorizontal * 0.005;
+        
+        float autoCropScale = 1.0;
+        if (uniforms.cropConstrain != 0) {
+            float2 corners[4] = {
+                float2( A,  1.0),
+                float2( A, -1.0),
+                float2(-A, -1.0),
+                float2(-A,  1.0)
+            };
+            for (int i = 0; i < 4; i++) {
+                float2 p = corners[i];
+                float2 r = float2(
+                    p.x * cosA - p.y * sinA,
+                    p.x * sinA + p.y * cosA
+                );
+                float req = max(abs(r.x) / A, abs(r.y)) - (cV * r.y + cH * r.x);
+                if (req > autoCropScale) {
+                    autoCropScale = req;
+                }
             }
         }
+        
+        // Centered coordinates scaled by aspect ratio
+        float2 centered = (uvc - float2(0.5, 0.5)) * 2.0;
+        centered.x *= A;
+        centered /= autoCropScale;
+        
+        // Straighten rotation
+        float2 rot = float2(
+            centered.x * cosA - centered.y * sinA,
+            centered.x * sinA + centered.y * cosA
+        );
+        
+        // Perspective keystone (backward projective homography)
+        float denom = max(1.0 + cV * rot.y + cH * rot.x, 0.1);
+        float2 geom = rot / denom;
+        
+        // Lens distortion correction
+        if (uniforms.lensCorrectionEnabled != 0) {
+            float r2 = dot(geom, geom);
+            float r = sqrt(r2);
+            if (r > 0.0001) {
+                float r_corr = r;
+                if (uniforms.distortionModel == 0) {
+                    r_corr = r * (1.0 + uniforms.k1 * r2 + uniforms.k2 * (r2 * r2));
+                } else if (uniforms.distortionModel == 1) {
+                    float a = uniforms.k1;
+                    float b = uniforms.k2;
+                    float c = uniforms.k3;
+                    float d = 1.0 - (a + b + c);
+                    r_corr = a * (r2 * r2) + b * (r2 * r) + c * r2 + d * r;
+                }
+                geom *= (r_corr / r);
+            }
+        }
+        
+        geom.x /= (2.0 * A);
+        geom.y /= 2.0;
+        uv = geom + float2(0.5, 0.5);
+    }
+    
+    // Discard / letterbox pixels outside valid texture bounds
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        return float4(0.08, 0.08, 0.08, 1.0); // Neutral dark canvas background
     }
     
     // Sample texture

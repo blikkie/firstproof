@@ -32,6 +32,14 @@ public struct MetalCanvasView: NSViewRepresentable {
     let zoomScale: Float
     let panOffset: CGPoint
     let isShowingOriginal: Bool
+    let cropLeft: Float
+    let cropTop: Float
+    let cropRight: Float
+    let cropBottom: Float
+    let perspectiveVertical: Float
+    let perspectiveHorizontal: Float
+    let cropConstrain: Bool
+    let isCropToolActive: Bool
     
     public init(
         viewModel: AppViewModel,
@@ -61,7 +69,15 @@ public struct MetalCanvasView: NSViewRepresentable {
         flipVertical: Bool,
         zoomScale: Float,
         panOffset: CGPoint,
-        isShowingOriginal: Bool
+        isShowingOriginal: Bool,
+        cropLeft: Float = 0.0,
+        cropTop: Float = 0.0,
+        cropRight: Float = 1.0,
+        cropBottom: Float = 1.0,
+        perspectiveVertical: Float = 0.0,
+        perspectiveHorizontal: Float = 0.0,
+        cropConstrain: Bool = true,
+        isCropToolActive: Bool = false
     ) {
         self.viewModel = viewModel
         self.exposure = exposure
@@ -91,6 +107,14 @@ public struct MetalCanvasView: NSViewRepresentable {
         self.zoomScale = zoomScale
         self.panOffset = panOffset
         self.isShowingOriginal = isShowingOriginal
+        self.cropLeft = cropLeft
+        self.cropTop = cropTop
+        self.cropRight = cropRight
+        self.cropBottom = cropBottom
+        self.perspectiveVertical = perspectiveVertical
+        self.perspectiveHorizontal = perspectiveHorizontal
+        self.cropConstrain = cropConstrain
+        self.isCropToolActive = isCropToolActive
     }
     
     public func makeCoordinator() -> Coordinator {
@@ -198,6 +222,14 @@ public struct MetalCanvasView: NSViewRepresentable {
         renderer.uniforms.straightenAngle = straightenAngle * (.pi / 180.0)
         renderer.uniforms.lensCorrectionEnabled = lensCorrectionEnabled ? 1 : 0
         renderer.uniforms.isOriginal = isShowingOriginal ? 1.0 : 0.0
+        renderer.uniforms.cropLeft = cropLeft
+        renderer.uniforms.cropTop = cropTop
+        renderer.uniforms.cropRight = cropRight
+        renderer.uniforms.cropBottom = cropBottom
+        renderer.uniforms.perspectiveVertical = perspectiveVertical
+        renderer.uniforms.perspectiveHorizontal = perspectiveHorizontal
+        renderer.uniforms.cropConstrain = cropConstrain ? 1 : 0
+        renderer.uniforms.cropModeActive = isCropToolActive ? 1 : 0
         
         switch toneProfile {
         case .agxVivid:
@@ -284,7 +316,14 @@ public struct MetalCanvasView: NSViewRepresentable {
             renderer.uniforms.lensCorrectionEnabled = vm.lensCorrectionEnabled ? 1 : 0
             renderer.uniforms.isOriginal = 0.0
             renderer.uniforms.lutEnabled = (vm.selectedLutName != nil) ? 1 : 0
-            renderer.uniforms.lutIntensity = vm.lutIntensity
+            renderer.uniforms.cropLeft = vm.cropLeft
+            renderer.uniforms.cropTop = vm.cropTop
+            renderer.uniforms.cropRight = vm.cropRight
+            renderer.uniforms.cropBottom = vm.cropBottom
+            renderer.uniforms.perspectiveVertical = vm.perspectiveVertical
+            renderer.uniforms.perspectiveHorizontal = vm.perspectiveHorizontal
+            renderer.uniforms.cropConstrain = vm.cropConstrain ? 1 : 0
+            renderer.uniforms.cropModeActive = 0
             renderer.rotationDegrees = vm.rotationDegrees
             renderer.flipHorizontal = vm.flipHorizontal
             renderer.flipVertical = vm.flipVertical

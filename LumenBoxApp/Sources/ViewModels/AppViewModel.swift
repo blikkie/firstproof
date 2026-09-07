@@ -29,7 +29,20 @@ public enum EditSliderType {
     case temperature
     case tint
     case straighten
+    case perspectiveVertical
+    case perspectiveHorizontal
     case lutIntensity
+}
+
+public enum CropAspectRatioPreset: String, CaseIterable, Identifiable {
+    case original = "Original"
+    case square = "1:1"
+    case fourThree = "4:3"
+    case threeTwo = "3:2"
+    case sixteenNine = "16:9"
+    case freeform = "Free"
+    
+    public var id: String { rawValue }
 }
 
 public enum CanvasMode: Hashable {
@@ -141,6 +154,15 @@ public final class AppViewModel {
     public var temperature: Float = 5500.0 // 2000K .. 50000K
     public var tint: Float = 0.0          // -150 .. +150
     public var straightenAngle: Float = 0.0 // -45 .. +45 deg
+    public var cropLeft: Float = 0.0
+    public var cropTop: Float = 0.0
+    public var cropRight: Float = 1.0
+    public var cropBottom: Float = 1.0
+    public var perspectiveVertical: Float = 0.0 // -100 .. +100
+    public var perspectiveHorizontal: Float = 0.0 // -100 .. +100
+    public var cropConstrain: Bool = true
+    public var isCropToolActive: Bool = false
+    public var cropAspectRatioPreset: CropAspectRatioPreset = .original
     public var lensCorrectionEnabled: Bool = true
     public var toneProfile: ColorProfileMode = .agxVivid
     public var selectedLutName: String? = nil
@@ -159,28 +181,138 @@ public final class AppViewModel {
     public var isShowingOriginal: Bool = false
     
     public var hasCustomEdits: Bool {
-        exposure != 0.0 ||
-        contrast != 0.0 ||
-        highlights != 0.0 ||
-        shadows != 0.0 ||
-        whites != 0.0 ||
-        blacks != 0.0 ||
-        vibrance != 0.0 ||
-        saturation != 0.0 ||
-        deepBlue != 0.0 ||
-        foliage != 0.0 ||
-        sharpeningAmount != defaultSharpeningAmount ||
-        sharpeningRadius != defaultSharpeningRadius ||
-        sharpeningMasking != defaultSharpeningMasking ||
-        noiseReduction != defaultNoiseReduction ||
-        abs(temperature - asShotTemperature) >= 1.0 ||
-        tint != asShotTint ||
-        straightenAngle != 0.0 ||
-        rotationDegrees != defaultExifRotation ||
-        flipHorizontal != defaultExifFlipH ||
-        flipVertical != defaultExifFlipV ||
-        toneProfile != .agxVivid ||
-        selectedLutName != nil
+        editsHasModifications(edits: currentEdits, asShotTemp: asShotTemperature, asShotTint: asShotTint)
+    }
+    
+    public func toggleCropTool() {
+        isCropToolActive.toggle()
+    }
+    
+    public func setCropAspectRatioPreset(_ preset: CropAspectRatioPreset) {
+        self.cropAspectRatioPreset = preset
+        guard preset != .freeform else { return }
+        
+        let isOrthogonal = (rotationDegrees == 90 || rotationDegrees == 270)
+        let baseW = previewImage?.size.width ?? 4000
+        let baseH = previewImage?.size.height ?? 3000
+        let origW: CGFloat = CGFloat(isOrthogonal ? baseH : baseW)
+        let origH: CGFloat = CGFloat(isOrthogonal ? baseW : baseH)
+        let originalAspect: CGFloat = origW / max(origH, 1.0)
+        
+        let isPortrait = (origW < origH)
+        let targetAspect: CGFloat
+        switch preset {
+        case .original:
+            targetAspect = originalAspect
+        case .square:
+            targetAspect = 1.0
+        case .fourThree:
+            targetAspect = isPortrait ? (3.0 / 4.0) : (4.0 / 3.0)
+        case .threeTwo:
+            targetAspect = isPortrait ? (2.0 / 3.0) : (3.0 / 2.0)
+        case .sixteenNine:
+            targetAspect = isPortrait ? (9.0 / 16.0) : (16.0 / 9.0)
+        case .freeform:
+            return
+        }
+        
+        let normTargetAspect: CGFloat = targetAspect / originalAspect
+        let currentW: CGFloat = CGFloat(cropRight - cropLeft)
+        let currentH: CGFloat = CGFloat(cropBottom - cropTop)
+        let center = CGPoint(x: CGFloat(cropLeft + cropRight) / 2.0, y: CGFloat(cropTop + cropBottom) / 2.0)
+        
+        var newW: CGFloat = currentW
+        var newH: CGFloat = currentW / max(normTargetAspect, 0.001)
+        if newH > 1.0 || newH > currentH {
+            newH = min(currentH, 1.0)
+            newW = newH * normTargetAspect
+        }
+        if newW > 1.0 {
+            newW = 1.0
+            newH = newW / max(normTargetAspect, 0.001)
+        }
+        
+        let newLeft = max(center.x - newW / 2.0, 0.0)
+        let newRight = min(newLeft + newW, 1.0)
+        let finalLeft = max(newRight - newW, 0.0)
+        
+        let newTop = max(center.y - newH / 2.0, 0.0)
+        let newBottom = min(newTop + newH, 1.0)
+        let finalTop = max(newBottom - newH, 0.0)
+        
+        self.cropLeft = Float(finalLeft)
+        self.cropTop = Float(finalTop)
+        self.cropRight = Float(newRight)
+        self.cropBottom = Float(newBottom)
+        saveCurrentEdits()
+        notifyThumbnailChanged()
+    }
+    
+    public func flipCropOrientation() {
+        let currentW: CGFloat = CGFloat(cropRight - cropLeft)
+        let currentH: CGFloat = CGFloat(cropBottom - cropTop)
+        let center = CGPoint(x: CGFloat(cropLeft + cropRight) / 2.0, y: CGFloat(cropTop + cropBottom) / 2.0)
+        
+        let isOrthogonal = (rotationDegrees == 90 || rotationDegrees == 270)
+        let baseW = previewImage?.size.width ?? 4000
+        let baseH = previewImage?.size.height ?? 3000
+        let origW: CGFloat = CGFloat(isOrthogonal ? baseH : baseW)
+        let origH: CGFloat = CGFloat(isOrthogonal ? baseW : baseH)
+        let originalAspect: CGFloat = origW / max(origH, 1.0)
+        
+        let currentPhotoAspect: CGFloat = (currentW / max(currentH, 0.001)) * originalAspect
+        let newPhotoAspect: CGFloat = 1.0 / max(currentPhotoAspect, 0.01)
+        let newNormAspect: CGFloat = newPhotoAspect / originalAspect
+        
+        var newW: CGFloat = currentH * newNormAspect
+        var newH: CGFloat = currentH
+        if newW > 1.0 {
+            newW = 1.0
+            newH = newW / max(newNormAspect, 0.001)
+        }
+        if newH > 1.0 {
+            newH = 1.0
+            newW = newH * newNormAspect
+        }
+        
+        let newLeft = max(center.x - newW / 2.0, 0.0)
+        let newRight = min(newLeft + newW, 1.0)
+        let finalLeft = max(newRight - newW, 0.0)
+        
+        let newTop = max(center.y - newH / 2.0, 0.0)
+        let newBottom = min(newTop + newH, 1.0)
+        let finalTop = max(newBottom - newH, 0.0)
+        
+        self.cropLeft = Float(finalLeft)
+        self.cropTop = Float(finalTop)
+        self.cropRight = Float(newRight)
+        self.cropBottom = Float(newBottom)
+        saveCurrentEdits()
+        notifyThumbnailChanged()
+    }
+    
+    public func resetCrop() {
+        cropLeft = 0.0
+        cropTop = 0.0
+        cropRight = 1.0
+        cropBottom = 1.0
+        cropAspectRatioPreset = .original
+        saveCurrentEdits()
+        notifyThumbnailChanged()
+    }
+    
+    public func resetGeometry() {
+        cropLeft = 0.0
+        cropTop = 0.0
+        cropRight = 1.0
+        cropBottom = 1.0
+        straightenAngle = 0.0
+        perspectiveVertical = 0.0
+        perspectiveHorizontal = 0.0
+        cropConstrain = true
+        cropAspectRatioPreset = .original
+        saveCurrentEdits()
+        notifyThumbnailChanged()
     }
     
     public func rotateClockwise() {
@@ -207,7 +339,7 @@ public final class AppViewModel {
         notifyThumbnailChanged()
     }
     
-    private func notifyThumbnailChanged() {
+    public func notifyThumbnailChanged() {
         guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
         NotificationCenter.default.post(name: .thumbnailDidChange, object: path)
     }
@@ -787,7 +919,14 @@ public final class AppViewModel {
             self.noiseReduction = xmp.edits.noiseReduction
             self.temperature = xmp.edits.temperature
             self.tint = xmp.edits.tint
+            self.cropLeft = xmp.edits.cropLeft
+            self.cropTop = xmp.edits.cropTop
+            self.cropRight = xmp.edits.cropRight
+            self.cropBottom = xmp.edits.cropBottom
             self.straightenAngle = xmp.edits.cropAngle
+            self.perspectiveVertical = xmp.edits.perspectiveVertical
+            self.perspectiveHorizontal = xmp.edits.perspectiveHorizontal
+            self.cropConstrain = xmp.edits.cropConstrain
             self.rotationDegrees = Int(xmp.edits.rotation)
             self.flipHorizontal = xmp.edits.flipHorizontal
             self.flipVertical = xmp.edits.flipVertical
@@ -811,7 +950,15 @@ public final class AppViewModel {
             self.noiseReduction = 0.0
             self.temperature = 5500.0
             self.tint = 0.0
+            self.cropLeft = 0.0
+            self.cropTop = 0.0
+            self.cropRight = 1.0
+            self.cropBottom = 1.0
             self.straightenAngle = 0.0
+            self.perspectiveVertical = 0.0
+            self.perspectiveHorizontal = 0.0
+            self.cropConstrain = true
+            self.isCropToolActive = false
             self.rotationDegrees = self.defaultExifRotation
             self.flipHorizontal = self.defaultExifFlipH
             self.flipVertical = self.defaultExifFlipV
@@ -970,11 +1117,14 @@ public final class AppViewModel {
             foliage: self.foliage,
             temperature: self.temperature,
             tint: self.tint,
-            cropLeft: 0.0,
-            cropTop: 0.0,
-            cropRight: 1.0,
-            cropBottom: 1.0,
+            cropLeft: self.cropLeft,
+            cropTop: self.cropTop,
+            cropRight: self.cropRight,
+            cropBottom: self.cropBottom,
             cropAngle: self.straightenAngle,
+            perspectiveVertical: self.perspectiveVertical,
+            perspectiveHorizontal: self.perspectiveHorizontal,
+            cropConstrain: self.cropConstrain,
             rotation: Int32(self.rotationDegrees),
             flipHorizontal: self.flipHorizontal,
             flipVertical: self.flipVertical,
@@ -1018,6 +1168,9 @@ public final class AppViewModel {
             cropRight: 1.0,
             cropBottom: 1.0,
             cropAngle: 0.0,
+            perspectiveVertical: 0.0,
+            perspectiveHorizontal: 0.0,
+            cropConstrain: true,
             rotation: 0,
             flipHorizontal: false,
             flipVertical: false,
@@ -1132,6 +1285,10 @@ public final class AppViewModel {
             tint = asShotTint
         case .straighten:
             straightenAngle = 0.0
+        case .perspectiveVertical:
+            perspectiveVertical = 0.0
+        case .perspectiveHorizontal:
+            perspectiveHorizontal = 0.0
         case .lutIntensity:
             lutIntensity = 1.0
         }
@@ -1156,6 +1313,15 @@ public final class AppViewModel {
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0
+        cropLeft = 0.0
+        cropTop = 0.0
+        cropRight = 1.0
+        cropBottom = 1.0
+        perspectiveVertical = 0.0
+        perspectiveHorizontal = 0.0
+        cropConstrain = true
+        isCropToolActive = false
+        cropAspectRatioPreset = .original
         rotationDegrees = defaultExifRotation
         flipHorizontal = defaultExifFlipH
         flipVertical = defaultExifFlipV

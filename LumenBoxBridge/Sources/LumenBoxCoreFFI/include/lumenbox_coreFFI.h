@@ -358,6 +358,16 @@ RustBuffer uniffi_lumenbox_core_fn_func_decode_exif_orientation(uint32_t orienta
 RustBuffer uniffi_lumenbox_core_fn_func_decode_raw_preview(RustBuffer path, RustBuffer max_dimension, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EDITS_CACHE_SIGNATURE
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EDITS_CACHE_SIGNATURE
+RustBuffer uniffi_lumenbox_core_fn_func_edits_cache_signature(RustBuffer edits, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EDITS_HAS_MODIFICATIONS
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EDITS_HAS_MODIFICATIONS
+int8_t uniffi_lumenbox_core_fn_func_edits_has_modifications(RustBuffer edits, RustBuffer as_shot_temp, RustBuffer as_shot_tint, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_FN_FUNC_EXPORT_PHOTO
 int8_t uniffi_lumenbox_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, RustBuffer lens_coeffs, uint32_t quality, RustBuffer max_dimension, RustCallStatus *_Nonnull out_status
@@ -737,6 +747,18 @@ uint16_t uniffi_lumenbox_core_checksum_func_decode_exif_orientation(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_DECODE_RAW_PREVIEW
 #define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_DECODE_RAW_PREVIEW
 uint16_t uniffi_lumenbox_core_checksum_func_decode_raw_preview(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EDITS_CACHE_SIGNATURE
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EDITS_CACHE_SIGNATURE
+uint16_t uniffi_lumenbox_core_checksum_func_edits_cache_signature(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EDITS_HAS_MODIFICATIONS
+#define UNIFFI_FFIDEF_UNIFFI_LUMENBOX_CORE_CHECKSUM_FUNC_EDITS_HAS_MODIFICATIONS
+uint16_t uniffi_lumenbox_core_checksum_func_edits_has_modifications(void
     
 );
 #endif

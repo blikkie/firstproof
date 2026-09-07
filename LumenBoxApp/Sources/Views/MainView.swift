@@ -127,13 +127,19 @@ struct MainView: View {
             }
             
             switch event.keyCode {
-            case 36: // Return / Enter: switch to Detail mode
-                if viewModel.canvasMode == .grid {
+            case 36: // Return / Enter: switch to Detail mode or exit Crop mode
+                if viewModel.isCropToolActive {
+                    viewModel.isCropToolActive = false
+                    return nil
+                } else if viewModel.canvasMode == .grid {
                     viewModel.enterDetailMode()
                     return nil
                 }
-            case 53: // Escape: return to Grid mode or exit bulk selection mode
-                if viewModel.canvasMode == .detail {
+            case 53: // Escape: exit Crop mode, return to Grid mode, or exit bulk selection mode
+                if viewModel.isCropToolActive {
+                    viewModel.isCropToolActive = false
+                    return nil
+                } else if viewModel.canvasMode == .detail {
                     viewModel.enterGridMode()
                     return nil
                 } else if viewModel.isBulkSelectionMode {
@@ -188,9 +194,14 @@ struct MainView: View {
                 break
             }
             
-            // Single-key culling hotkeys (1-5, 0, P, X, U)
+            // Single-key culling & tool hotkeys (1-5, 0, P, X, U, C)
             if let chars = event.charactersIgnoringModifiers {
                 switch chars {
+                case "c", "C":
+                    if viewModel.canvasMode == .detail {
+                        viewModel.toggleCropTool()
+                        return nil
+                    }
                 case "1":
                     viewModel.setRating(1)
                     return nil
@@ -213,8 +224,13 @@ struct MainView: View {
                     viewModel.setStatus("pick")
                     return nil
                 case "x", "X":
-                    viewModel.setStatus("reject")
-                    return nil
+                    if viewModel.isCropToolActive {
+                        viewModel.flipCropOrientation()
+                        return nil
+                    } else {
+                        viewModel.setStatus("reject")
+                        return nil
+                    }
                 case "u", "U":
                     viewModel.setStatus("none")
                     return nil

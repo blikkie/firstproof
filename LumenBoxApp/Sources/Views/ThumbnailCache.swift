@@ -49,9 +49,7 @@ public final class ThumbnailCache {
             signature += "_\(modDate.timeIntervalSince1970)"
         }
         if let e = edits {
-            let toneStr = String(describing: e.toneProfile)
-            let lut = e.lutName ?? ""
-            signature += "_\(e.exposure)_\(e.temperature)_\(e.tint)_\(e.contrast)_\(e.highlights)_\(e.shadows)_\(e.whites)_\(e.blacks)_\(e.vibrance)_\(e.saturation)_\(e.deepBlue)_\(e.foliage)_\(toneStr)_\(lut)_\(e.lutIntensity)_\(e.sharpeningAmount)_\(e.sharpeningRadius)_\(e.sharpeningMasking)_\(e.noiseReduction)_\(e.rotation)_\(e.flipHorizontal)_\(e.flipVertical)"
+            signature += "_" + editsCacheSignature(edits: e)
         }
         let digest = SHA256.hash(data: Data(signature.utf8))
         return digest.compactMap { String(format: "%02x", $0) }.joined()
@@ -283,15 +281,7 @@ public struct AsyncThumbnailView: View {
     
     private func loadThumbnail() {
         let xmp = readXmp(path: filePath)
-        let hasEdits = xmp.map { x in
-            let e = x.edits
-            return abs(e.exposure) > 0.01 || abs(e.temperature - 5500.0) > 10.0 || abs(e.tint) > 1.0 ||
-                   abs(e.contrast) > 0.01 || abs(e.highlights) > 0.01 || abs(e.shadows) > 0.01 ||
-                   abs(e.whites) > 0.01 || abs(e.blacks) > 0.01 || abs(e.vibrance) > 0.01 ||
-                   abs(e.saturation) > 0.01 || abs(e.deepBlue) > 0.01 || abs(e.foliage) > 0.01 ||
-                   abs(e.sharpeningAmount) > 0.01 || abs(e.noiseReduction) > 0.01 ||
-                   e.rotation != 0 || e.flipHorizontal || e.flipVertical || e.lutName != nil
-        } ?? false
+        let hasEdits = xmp.map { editsHasModifications(edits: $0.edits, asShotTemp: 5500.0, asShotTint: 0.0) } ?? false
         
         // Exact edited thumbnail hit (RAM or Disk)
         if let cached = ThumbnailCache.shared.image(for: filePath, edits: xmp?.edits) {

@@ -13,7 +13,7 @@ pub mod color;
 pub mod auto;
 pub mod lut;
 
-#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ColorProfileMode {
     AgxVivid,
     AgxFilmic,
@@ -42,7 +42,7 @@ pub struct WhiteBalanceResult {
     pub tint: f32,
 }
 
-#[derive(uniffi::Record, Clone, Debug, PartialEq)]
+#[derive(uniffi::Record, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EditSettings {
     pub exposure: f32,
     pub contrast: f32,
@@ -61,6 +61,9 @@ pub struct EditSettings {
     pub crop_right: f32,
     pub crop_bottom: f32,
     pub crop_angle: f32,
+    pub perspective_vertical: f32,
+    pub perspective_horizontal: f32,
+    pub crop_constrain: bool,
     pub rotation: i32,
     pub flip_horizontal: bool,
     pub flip_vertical: bool,
@@ -93,6 +96,9 @@ impl Default for EditSettings {
             crop_right: 1.0,
             crop_bottom: 1.0,
             crop_angle: 0.0,
+            perspective_vertical: 0.0,
+            perspective_horizontal: 0.0,
+            crop_constrain: true,
             rotation: 0,
             flip_horizontal: false,
             flip_vertical: false,
@@ -105,6 +111,30 @@ impl Default for EditSettings {
             noise_reduction: 0.0,
         }
     }
+}
+
+/// Returns a deterministic signature of all edit settings for cache keying and invalidation.
+/// Automatically serializes all current and future fields without manual tracking.
+#[uniffi::export]
+pub fn edits_cache_signature(edits: &EditSettings) -> String {
+    serde_json::to_string(edits).unwrap_or_else(|_| format!("{:?}", edits))
+}
+
+/// Checks whether an EditSettings instance differs from default/as-shot settings.
+#[uniffi::export]
+pub fn edits_has_modifications(
+    edits: &EditSettings,
+    as_shot_temp: Option<f32>,
+    as_shot_tint: Option<f32>,
+) -> bool {
+    let mut default = EditSettings::default();
+    if let Some(temp) = as_shot_temp {
+        default.temperature = temp;
+    }
+    if let Some(tint) = as_shot_tint {
+        default.tint = tint;
+    }
+    edits != &default
 }
 
 /// Calculates photographic Kelvin temperature and tint from an unadjusted neutral pixel sample.
@@ -646,5 +676,38 @@ pub fn load_cube_lut(path: String) -> Option<CubeLutRecord> {
             data_rgba32f,
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_edits_cache_signature_and_modification_detection() {
+        let default_edits = EditSettings::default();
+        assert!(!edits_has_modifications(&default_edits, None, None));
+        assert!(!edits_has_modifications(&default_edits, Some(5000.0), Some(0.0)));
+
+        let sig1 = edits_cache_signature(&default_edits);
+        assert!(!sig1.is_empty());
+        assert!(sig1.contains("perspective_vertical"));
+        assert!(sig1.contains("crop_constrain"));
+
+        // Changing perspective alters signature and triggers modification detection
+        let mut modified = default_edits.clone();
+        modified.perspective_vertical = 12.0;
+        let sig2 = edits_cache_signature(&modified);
+        assert_ne!(sig1, sig2);
+        assert!(edits_has_modifications(&modified, None, None));
+
+        // Changing crop alters signature
+        let mut cropped = default_edits.clone();
+        cropped.crop_left = 0.1;
+        cropped.crop_right = 0.9;
+        let sig3 = edits_cache_signature(&cropped);
+        assert_ne!(sig1, sig3);
+        assert_ne!(sig2, sig3);
+        assert!(edits_has_modifications(&cropped, None, None));
+    }
 }
 

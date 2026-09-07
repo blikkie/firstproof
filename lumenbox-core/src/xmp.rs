@@ -156,7 +156,8 @@ pub fn generate_xmp(data: &XmpData) -> String {
     xmlns:xmp="http://ns.adobe.com/xap/1.0/"
     xmlns:dc="http://purl.org/dc/elements/1.1/"
     xmlns:exif="http://ns.adobe.com/exif/1.0/"
-    xmlns:pm="http://ns.lumenbox.app/pm/1.0/"{rating_attr}{gps_attrs}
+    xmlns:pm="http://ns.lumenbox.app/pm/1.0/"
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"{rating_attr}{gps_attrs}
     pm:status="{status}"
     pm:exposure="{exposure:.4}"
     pm:contrast="{contrast:.4}"
@@ -179,6 +180,12 @@ pub fn generate_xmp(data: &XmpData) -> String {
     pm:cropRight="{crop_right:.4}"
     pm:cropBottom="{crop_bottom:.4}"
     pm:cropAngle="{crop_angle:.4}"
+    pm:perspectiveVertical="{perspective_vertical:.4}"
+    pm:perspectiveHorizontal="{perspective_horizontal:.4}"
+    pm:cropConstrain="{crop_constrain}"
+    crs:PerspectiveVertical="{perspective_vertical:.4}"
+    crs:PerspectiveHorizontal="{perspective_horizontal:.4}"
+    crs:CropConstrainToWarp="{crop_constrain_int}"
     pm:rotation="{rotation}"
     pm:flipHorizontal="{flip_h}"
     pm:flipVertical="{flip_v}"
@@ -208,6 +215,10 @@ pub fn generate_xmp(data: &XmpData) -> String {
         crop_right = data.edits.crop_right,
         crop_bottom = data.edits.crop_bottom,
         crop_angle = data.edits.crop_angle,
+        perspective_vertical = data.edits.perspective_vertical,
+        perspective_horizontal = data.edits.perspective_horizontal,
+        crop_constrain = data.edits.crop_constrain,
+        crop_constrain_int = if data.edits.crop_constrain { 1 } else { 0 },
         rotation = data.edits.rotation,
         flip_h = data.edits.flip_horizontal,
         flip_v = data.edits.flip_vertical,
@@ -375,6 +386,19 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
             data.edits.crop_angle = val;
         }
     }
+    if let Some(pv_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "perspectiveVertical" )) {
+        if let Ok(val) = pv_str.parse::<f32>() {
+            data.edits.perspective_vertical = val;
+        }
+    }
+    if let Some(ph_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "perspectiveHorizontal" )) {
+        if let Ok(val) = ph_str.parse::<f32>() {
+            data.edits.perspective_horizontal = val;
+        }
+    }
+    if let Some(cc_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "cropConstrain" )) {
+        data.edits.crop_constrain = cc_str == "true" || cc_str == "1";
+    }
     if let Some(rot_str) = desc.attribute(( "http://ns.lumenbox.app/pm/1.0/", "rotation" )) {
         if let Ok(val) = rot_str.parse::<i32>() {
             data.edits.rotation = val;
@@ -538,6 +562,24 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         }
     }
     
+    if data.edits.perspective_vertical == 0.0 {
+        if let Some(pv_str) = desc.attribute(( crs_ns, "PerspectiveVertical" )) {
+            if let Ok(val) = pv_str.parse::<f32>() {
+                data.edits.perspective_vertical = val;
+            }
+        }
+    }
+    if data.edits.perspective_horizontal == 0.0 {
+        if let Some(ph_str) = desc.attribute(( crs_ns, "PerspectiveHorizontal" )) {
+            if let Ok(val) = ph_str.parse::<f32>() {
+                data.edits.perspective_horizontal = val;
+            }
+        }
+    }
+    if let Some(cc_str) = desc.attribute(( crs_ns, "CropConstrainToWarp" )) {
+        data.edits.crop_constrain = cc_str == "1" || cc_str == "true";
+    }
+    
     // Fallback: Parse Orientation hints from third-party editors (Lightroom, Capture One, Darktable, Digikam)
     if data.edits.rotation == 0 && !data.edits.flip_horizontal && !data.edits.flip_vertical {
         let tiff_ns = "http://ns.adobe.com/tiff/1.0/";
@@ -669,6 +711,9 @@ mod tests {
         data.edits.crop_right = 0.95;
         data.edits.crop_bottom = 0.95;
         data.edits.crop_angle = -0.5;
+        data.edits.perspective_vertical = -15.0;
+        data.edits.perspective_horizontal = 8.5;
+        data.edits.crop_constrain = true;
         data.edits.rotation = 90;
         data.edits.flip_horizontal = true;
         data.edits.flip_vertical = false;
@@ -705,9 +750,30 @@ mod tests {
         assert_eq!(parsed.edits.temperature, 5800.0);
         assert_eq!(parsed.edits.tint, -12.0);
         assert_eq!(parsed.edits.crop_angle, -0.5);
+        assert_eq!(parsed.edits.perspective_vertical, -15.0);
+        assert_eq!(parsed.edits.perspective_horizontal, 8.5);
+        assert_eq!(parsed.edits.crop_constrain, true);
         assert_eq!(parsed.edits.rotation, 90);
         assert_eq!(parsed.edits.flip_horizontal, true);
         assert_eq!(parsed.edits.flip_vertical, false);
+    }
+
+    #[test]
+    fn test_xmp_adobe_perspective_ingestion() {
+        let adobe_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PerspectiveVertical="+25.0"
+    crs:PerspectiveHorizontal="-12.5"
+    crs:CropConstrainToWarp="1">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+        let parsed = parse_xmp(adobe_xmp).unwrap();
+        assert_eq!(parsed.edits.perspective_vertical, 25.0);
+        assert_eq!(parsed.edits.perspective_horizontal, -12.5);
+        assert_eq!(parsed.edits.crop_constrain, true);
     }
 
     #[test]

@@ -419,6 +419,21 @@ struct CanvasView: View {
             Divider()
                 .frame(height: 16)
             
+            // Quick Crop Tool Toggle
+            Button(action: {
+                viewModel.toggleCropTool()
+            }) {
+                Label(viewModel.isCropToolActive ? "Done Crop (Return)" : "Crop (C)", systemImage: "crop")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .tint(viewModel.isCropToolActive ? .accentColor : nil)
+            .controlSize(.small)
+            .help("Toggle Crop & Straighten Tool (C)")
+            
+            Divider()
+                .frame(height: 16)
+            
             // 3. Before / After Comparison Peek
             Button(action: {}) {
                 Label("Hold for Original (\\)", systemImage: "eye.fill")
@@ -579,35 +594,49 @@ struct DetailMetalCanvasContainer: View {
     let isShowingOriginal: Bool
     
     var body: some View {
-        MetalCanvasView(
-            viewModel: viewModel,
-            exposure: viewModel.exposure,
-            contrast: viewModel.contrast,
-            highlights: viewModel.highlights,
-            shadows: viewModel.shadows,
-            whites: viewModel.whites,
-            blacks: viewModel.blacks,
-            vibrance: viewModel.vibrance,
-            saturation: viewModel.saturation,
-            deepBlue: viewModel.deepBlue,
-            foliage: viewModel.foliage,
-            sharpeningAmount: viewModel.sharpeningAmount,
-            sharpeningRadius: viewModel.sharpeningRadius,
-            sharpeningMasking: viewModel.sharpeningMasking,
-            noiseReduction: viewModel.noiseReduction,
-            temperature: viewModel.temperature,
-            tint: viewModel.tint,
-            straightenAngle: viewModel.straightenAngle,
-            lensCorrectionEnabled: viewModel.lensCorrectionEnabled,
-            selectedLutName: viewModel.selectedLutName,
-            lutIntensity: viewModel.lutIntensity,
-            toneProfile: viewModel.toneProfile,
-            rotationDegrees: viewModel.rotationDegrees,
-            flipHorizontal: viewModel.flipHorizontal,
-            flipVertical: viewModel.flipVertical,
-            zoomScale: viewModel.zoomScale,
-            panOffset: viewModel.panOffset,
-            isShowingOriginal: isShowingOriginal
-        )
+        ZStack {
+            MetalCanvasView(
+                viewModel: viewModel,
+                exposure: viewModel.exposure,
+                contrast: viewModel.contrast,
+                highlights: viewModel.highlights,
+                shadows: viewModel.shadows,
+                whites: viewModel.whites,
+                blacks: viewModel.blacks,
+                vibrance: viewModel.vibrance,
+                saturation: viewModel.saturation,
+                deepBlue: viewModel.deepBlue,
+                foliage: viewModel.foliage,
+                sharpeningAmount: viewModel.sharpeningAmount,
+                sharpeningRadius: viewModel.sharpeningRadius,
+                sharpeningMasking: viewModel.sharpeningMasking,
+                noiseReduction: viewModel.noiseReduction,
+                temperature: viewModel.temperature,
+                tint: viewModel.tint,
+                straightenAngle: viewModel.straightenAngle,
+                lensCorrectionEnabled: viewModel.lensCorrectionEnabled,
+                selectedLutName: viewModel.selectedLutName,
+                lutIntensity: viewModel.lutIntensity,
+                toneProfile: viewModel.toneProfile,
+                rotationDegrees: viewModel.rotationDegrees,
+                flipHorizontal: viewModel.flipHorizontal,
+                flipVertical: viewModel.flipVertical,
+                zoomScale: viewModel.zoomScale,
+                panOffset: viewModel.panOffset,
+                isShowingOriginal: isShowingOriginal,
+                cropLeft: viewModel.cropLeft,
+                cropTop: viewModel.cropTop,
+                cropRight: viewModel.cropRight,
+                cropBottom: viewModel.cropBottom,
+                perspectiveVertical: viewModel.perspectiveVertical,
+                perspectiveHorizontal: viewModel.perspectiveHorizontal,
+                cropConstrain: viewModel.cropConstrain,
+                isCropToolActive: viewModel.isCropToolActive
+            )
+            
+            if viewModel.isCropToolActive && !isShowingOriginal {
+                CropOverlayView(viewModel: viewModel)
+            }
+        }
     }
 }
