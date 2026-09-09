@@ -38,6 +38,10 @@ extension AppViewModel {
             sharpeningRadius: self.sharpeningRadius,
             sharpeningMasking: self.sharpeningMasking,
             noiseReduction: self.noiseReduction,
+            grainAmount: self.grainAmount,
+            grainSize: self.grainSize,
+            grainRoughness: self.grainRoughness,
+            grainChroma: self.grainChroma,
             curves: self.curves
         )
     }
@@ -76,6 +80,10 @@ extension EditSettings {
             sharpeningRadius: 1.0,
             sharpeningMasking: 0.0,
             noiseReduction: 0.0,
+            grainAmount: 0.0,
+            grainSize: 1.0,
+            grainRoughness: 50.0,
+            grainChroma: 0.0,
             curves: ToneCurvesRecord.defaultIdentity
         )
     }
@@ -113,7 +121,25 @@ extension AppViewModel {
         self.sharpeningRadius = edits.sharpeningRadius
         self.sharpeningMasking = edits.sharpeningMasking
         self.noiseReduction = edits.noiseReduction
+        self.grainAmount = edits.grainAmount
+        self.grainSize = edits.grainSize
+        self.grainRoughness = edits.grainRoughness
+        self.grainChroma = edits.grainChroma
         self.curves = edits.curves
+        
+        // Update or clear selectedGrainPresetId matching the loaded photo's grain settings
+        if edits.grainAmount <= 0.0 {
+            self.selectedGrainPresetId = nil
+        } else if let matchingPreset = FilmGrainPreset.builtInPresets.first(where: {
+            abs($0.amount - edits.grainAmount) < 0.1 &&
+            abs($0.size - edits.grainSize) < 0.05 &&
+            abs($0.roughness - edits.grainRoughness) < 0.1 &&
+            abs($0.chroma - edits.grainChroma) < 0.1
+        }) {
+            self.selectedGrainPresetId = matchingPreset.id
+        } else {
+            self.selectedGrainPresetId = nil
+        }
     }
     
     public func saveCurrentEdits() {
@@ -373,6 +399,18 @@ extension AppViewModel {
             sharpeningMasking = defaultSharpeningMasking
         case .noiseReduction:
             noiseReduction = defaultNoiseReduction
+        case .grainAmount:
+            grainAmount = defaultGrainAmount
+            selectedGrainPresetId = nil
+        case .grainSize:
+            grainSize = defaultGrainSize
+            selectedGrainPresetId = nil
+        case .grainRoughness:
+            grainRoughness = defaultGrainRoughness
+            selectedGrainPresetId = nil
+        case .grainChroma:
+            grainChroma = defaultGrainChroma
+            selectedGrainPresetId = nil
         case .temperature:
             temperature = asShotTemperature
         case .tint:
@@ -386,6 +424,24 @@ extension AppViewModel {
         case .lutIntensity:
             lutIntensity = 1.0
         }
+        saveCurrentEdits()
+    }
+    
+    public func applyGrainPreset(_ preset: FilmGrainPreset?) {
+        guard let p = preset else {
+            selectedGrainPresetId = nil
+            grainAmount = defaultGrainAmount
+            grainSize = defaultGrainSize
+            grainRoughness = defaultGrainRoughness
+            grainChroma = defaultGrainChroma
+            saveCurrentEdits()
+            return
+        }
+        selectedGrainPresetId = p.id
+        grainAmount = p.amount
+        grainSize = p.size
+        grainRoughness = p.roughness
+        grainChroma = p.chroma
         saveCurrentEdits()
     }
     
@@ -404,6 +460,11 @@ extension AppViewModel {
         sharpeningRadius = defaultSharpeningRadius
         sharpeningMasking = defaultSharpeningMasking
         noiseReduction = defaultNoiseReduction
+        grainAmount = defaultGrainAmount
+        grainSize = defaultGrainSize
+        grainRoughness = defaultGrainRoughness
+        grainChroma = defaultGrainChroma
+        selectedGrainPresetId = nil
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0

@@ -564,6 +564,107 @@ pub fn apply_detail_and_sharpening_rgb(
     ((r * k).clamp(0.0, 1.0), (g * k).clamp(0.0, 1.0), (b * k).clamp(0.0, 1.0))
 }
 
+// MARK: - Procedural Film Grain (Luminance-Dependent Silver Halide Simulation)
+
+#[inline(always)]
+fn grain_luminance_weight(lum: f32) -> f32 {
+    let bell = 4.0 * lum * (1.0 - lum);
+    (0.08 * (1.0 - lum)).max(bell)
+}
+
+#[inline(always)]
+fn pcg_hash_2d(x: i32, y: i32) -> f32 {
+    let ux = x as u32;
+    let uy = y as u32;
+    let mut h = ux.wrapping_mul(374761393).wrapping_add(uy.wrapping_mul(668265263)).wrapping_add(0x9E3779B9);
+    h = (h ^ (h >> 13)).wrapping_mul(1274126177);
+    h = h ^ (h >> 16);
+    h as f32 * (1.0 / 4294967296.0)
+}
+
+#[inline(always)]
+fn smooth_noise_2d(x: f32, y: f32) -> f32 {
+    let ix = x.floor() as i32;
+    let iy = y.floor() as i32;
+    let fx = x - x.floor();
+    let fy = y - y.floor();
+    
+    let ux = fx * fx * fx * (fx * (fx * 6.0 - 15.0) + 10.0);
+    let uy = fy * fy * fy * (fy * (fy * 6.0 - 15.0) + 10.0);
+    
+    let a = pcg_hash_2d(ix, iy);
+    let b = pcg_hash_2d(ix + 1, iy);
+    let c = pcg_hash_2d(ix, iy + 1);
+    let d = pcg_hash_2d(ix + 1, iy + 1);
+    
+    (a * (1.0 - ux) + b * ux) * (1.0 - uy) + (c * (1.0 - ux) + d * ux) * uy
+}
+
+#[inline(always)]
+fn organic_grain_noise(px: f32, py: f32, scale: f32, roughness: f32) -> f32 {
+    let fine = (pcg_hash_2d(px.floor() as i32, py.floor() as i32) - 0.5) * 2.0;
+    let clump = (smooth_noise_2d(px / scale, py / scale) - 0.5) * 2.0;
+    let micro = (smooth_noise_2d((px + 31.7) / (scale * 0.5), (py + 47.3) / (scale * 0.5)) - 0.5) * 2.0;
+    let r_factor = (roughness / 100.0).clamp(0.0, 1.0);
+    clump * 0.45 + micro * (0.25 * r_factor) + fine * (0.35 + 0.25 * r_factor)
+}
+
+/// Applies procedural organic silver halide film grain to a display-referred RGB pixel.
+///
+/// Parameters:
+/// - `r, g, b`: display-referred pixel RGB in [0.0, 1.0]
+/// - `pixel_x, pixel_y`: pixel coordinates for deterministic spatial noise evaluation
+/// - `amount`: grain intensity [0.0 .. 100.0]
+/// - `size`: grain scale factor (0.5 .. 3.0, default 1.0)
+/// - `roughness`: crystal micro-structure [0.0 .. 100.0]
+/// - `chroma`: color emulsion variation [0.0 .. 100.0]
+#[inline(always)]
+pub fn apply_film_grain_rgb(
+    r: f32, g: f32, b: f32,
+    pixel_x: f32, pixel_y: f32,
+    amount: f32,
+    size: f32,
+    roughness: f32,
+    chroma: f32,
+) -> (f32, f32, f32) {
+    if amount <= 0.0 {
+        return (r, g, b);
+    }
+    
+    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let weight = grain_luminance_weight(lum.clamp(0.0, 1.0));
+    let grain_scale = size.max(0.4);
+    
+    let mono_noise = organic_grain_noise(pixel_x, pixel_y, grain_scale, roughness);
+    
+    let (nr, ng, nb) = if chroma > 0.0 {
+        let c_t = (chroma / 100.0).clamp(0.0, 1.0);
+        // Equal-power crossfade: cos^2(theta) + sin^2(theta) = 1.0 preserves total variance
+        let theta = c_t * std::f32::consts::FRAC_PI_2;
+        let w_mono = theta.cos();
+        // 1.25x CSF gain compensates for cross-channel luminance cancellation
+        let w_color = theta.sin() * 1.25;
+
+        let r_noise = organic_grain_noise(pixel_x + 131.7, pixel_y + 71.3, grain_scale * 0.9, roughness);
+        let g_noise = organic_grain_noise(pixel_x + 291.7, pixel_y + 431.1, grain_scale * 1.0, roughness);
+        let b_noise = organic_grain_noise(pixel_x + 531.3, pixel_y + 191.9, grain_scale * 1.25, roughness);
+        (
+            mono_noise * w_mono + r_noise * w_color,
+            mono_noise * w_mono + g_noise * w_color,
+            mono_noise * w_mono + b_noise * w_color,
+        )
+    } else {
+        (mono_noise, mono_noise, mono_noise)
+    };
+    
+    let strength = (amount / 100.0) * 0.18 * weight;
+    (
+        (r + nr * strength).clamp(0.0, 1.0),
+        (g + ng * strength).clamp(0.0, 1.0),
+        (b + nb * strength).clamp(0.0, 1.0),
+    )
+}
+
 
 #[inline(always)]
 fn sample_bilinear(image: &DemosaicedImage, x: f32, y: f32) -> (f32, f32, f32) {
@@ -932,6 +1033,21 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                 b_disp = b_sharp;
             }
 
+            // 3c. Procedural Organic Film Grain
+            if edits.grain_amount > 0.0 {
+                let (rg, gg, bg) = apply_film_grain_rgb(
+                    r_disp, g_disp, b_disp,
+                    tx as f32, ty as f32,
+                    edits.grain_amount,
+                    edits.grain_size,
+                    edits.grain_roughness,
+                    edits.grain_chroma,
+                );
+                r_disp = rg;
+                g_disp = gg;
+                b_disp = bg;
+            }
+
             let srgb8 = [
                 (r_disp.clamp(0.0, 1.0) * 255.0).round() as u8,
                 (g_disp.clamp(0.0, 1.0) * 255.0).round() as u8,
@@ -1121,35 +1237,10 @@ mod tests {
         let edits = EditSettings {
             exposure: 1.0,
             contrast: 20.0,
-            highlights: 0.0,
-            shadows: 0.0,
-            whites: 0.0,
-            blacks: 0.0,
-            vibrance: 0.0,
-            saturation: 0.0,
-            deep_blue: 0.0,
-            foliage: 0.0,
             temperature: 6500.0,
             tint: 10.0,
-            crop_left: 0.0,
-            crop_top: 0.0,
-            crop_right: 1.0,
-            crop_bottom: 1.0,
-            crop_angle: 0.0,
-            perspective_vertical: 0.0,
-            perspective_horizontal: 0.0,
-            crop_constrain: true,
-            rotation: 0,
-            flip_horizontal: false,
-            flip_vertical: false,
             tone_profile: crate::ColorProfileMode::AgxFilmic,
-            lut_name: None,
-            lut_intensity: 1.0,
-            sharpening_amount: 0.0,
-            sharpening_radius: 1.0,
-            sharpening_masking: 0.0,
-            noise_reduction: 0.0,
-            curves: Default::default(),
+            ..Default::default()
         };
         
         let res = export_photo_file(
@@ -1183,37 +1274,9 @@ mod tests {
             is_raw: true,
         };
         let edits = EditSettings {
-            exposure: 0.0,
-            contrast: 0.0,
-            highlights: 0.0,
-            shadows: 0.0,
-            whites: 0.0,
-            blacks: 0.0,
-            vibrance: 0.0,
-            saturation: 0.0,
-            deep_blue: 0.0,
-            foliage: 0.0,
             temperature: 5500.0,
-            tint: 0.0,
-            crop_left: 0.0,
-            crop_top: 0.0,
-            crop_right: 1.0,
-            crop_bottom: 1.0,
-            crop_angle: 0.0,
-            perspective_vertical: 0.0,
-            perspective_horizontal: 0.0,
-            crop_constrain: true,
-            rotation: 0,
-            flip_horizontal: false,
-            flip_vertical: false,
             tone_profile: crate::ColorProfileMode::AgxFilmic,
-            lut_name: None,
-            lut_intensity: 1.0,
-            sharpening_amount: 0.0,
-            sharpening_radius: 1.0,
-            sharpening_masking: 0.0,
-            noise_reduction: 0.0,
-            curves: Default::default(),
+            ..Default::default()
         };
         apply_edits(&mut img, &edits);
         
@@ -1248,37 +1311,8 @@ mod tests {
         img.save(tmp_in).unwrap();
         
         let mut edits = EditSettings {
-            exposure: 0.0,
-            contrast: 0.0,
-            highlights: 0.0,
-            shadows: 0.0,
-            whites: 0.0,
-            blacks: 0.0,
-            vibrance: 0.0,
-            saturation: 0.0,
-            deep_blue: 0.0,
-            foliage: 0.0,
-            temperature: 5500.0,
-            tint: 0.0,
-            crop_left: 0.0,
-            crop_top: 0.0,
-            crop_right: 1.0,
-            crop_bottom: 1.0,
-            crop_angle: 0.0,
-            perspective_vertical: 0.0,
-            perspective_horizontal: 0.0,
-            crop_constrain: true,
-            rotation: 0,
-            flip_horizontal: false,
-            flip_vertical: false,
             tone_profile: crate::ColorProfileMode::AgxVivid,
-            lut_name: None,
-            lut_intensity: 1.0,
-            sharpening_amount: 0.0,
-            sharpening_radius: 1.0,
-            sharpening_masking: 0.0,
-            noise_reduction: 0.0,
-            curves: Default::default(),
+            ..Default::default()
         };
         
         export_photo_file(tmp_in, tmp_out_no_lut, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
@@ -1316,37 +1350,8 @@ mod tests {
         img.save(tmp_in).unwrap();
         
         let edits = EditSettings {
-            exposure: 0.0,
-            contrast: 0.0,
-            highlights: 0.0,
-            shadows: 0.0,
-            whites: 0.0,
-            blacks: 0.0,
-            vibrance: 0.0,
-            saturation: 0.0,
-            deep_blue: 0.0,
-            foliage: 0.0,
-            temperature: 5500.0,
-            tint: 0.0,
-            crop_left: 0.0,
-            crop_top: 0.0,
-            crop_right: 1.0,
-            crop_bottom: 1.0,
-            crop_angle: 0.0,
-            perspective_vertical: 0.0,
-            perspective_horizontal: 0.0,
-            crop_constrain: true,
-            rotation: 0,
-            flip_horizontal: false,
-            flip_vertical: false,
             tone_profile: crate::ColorProfileMode::AgxVivid,
-            lut_name: None,
-            lut_intensity: 1.0,
-            sharpening_amount: 0.0,
-            sharpening_radius: 1.0,
-            sharpening_masking: 0.0,
-            noise_reduction: 0.0,
-            curves: Default::default(),
+            ..Default::default()
         };
         
         export_photo_file(tmp_in, tmp_out, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
@@ -1704,6 +1709,40 @@ mod tests {
 
         let _ = std::fs::remove_file(tmp_in);
         let _ = std::fs::remove_file(tmp_out);
+    }
+
+    #[test]
+    fn test_film_grain_math() {
+        // 1. Amount = 0 returns identical pixel
+        let (r, g, b) = apply_film_grain_rgb(0.5, 0.5, 0.5, 10.0, 20.0, 0.0, 1.0, 50.0, 0.0);
+        assert_eq!((r, g, b), (0.5, 0.5, 0.5));
+
+        // 2. Monochromatic grain (chroma = 0) produces identical delta on all channels
+        let (r1, g1, b1) = apply_film_grain_rgb(0.5, 0.5, 0.5, 15.0, 25.0, 50.0, 1.0, 50.0, 0.0);
+        let dr = (r1 - 0.5).abs();
+        let dg = (g1 - 0.5).abs();
+        let db = (b1 - 0.5).abs();
+        assert!((dr - dg).abs() < 1e-5, "Chroma=0 must maintain equal delta across channels: dr={}, dg={}", dr, dg);
+        assert!((dg - db).abs() < 1e-5, "Chroma=0 must maintain equal delta across channels: dg={}, db={}", dg, db);
+        assert!(dr > 0.0, "Grain must modulate midtone pixel");
+
+        // 3. Luminance weighting: midtone (0.5) has significantly higher delta than extreme highlight (0.98)
+        let mut midtone_delta_sum = 0.0;
+        let mut highlight_delta_sum = 0.0;
+        for i in 0..20 {
+            let x = i as f32 * 5.0;
+            let (rm, _, _) = apply_film_grain_rgb(0.5, 0.5, 0.5, x, x, 50.0, 1.0, 50.0, 0.0);
+            let (rh, _, _) = apply_film_grain_rgb(0.98, 0.98, 0.98, x, x, 50.0, 1.0, 50.0, 0.0);
+            midtone_delta_sum += (rm - 0.5).abs();
+            highlight_delta_sum += (rh - 0.98).abs();
+        }
+        assert!(midtone_delta_sum > highlight_delta_sum * 2.0, "Midtone grain must be substantially stronger than highlight grain");
+
+        // 4. Color variation (chroma > 0) causes channels to diverge
+        let (rc, gc, bc) = apply_film_grain_rgb(0.5, 0.5, 0.5, 42.0, 84.0, 60.0, 1.0, 50.0, 50.0);
+        let d_rg = (rc - gc).abs();
+        let d_gb = (gc - bc).abs();
+        assert!(d_rg > 1e-4 || d_gb > 1e-4, "Chroma > 0 must introduce color variation between channels");
     }
 }
 

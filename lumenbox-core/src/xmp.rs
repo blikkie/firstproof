@@ -154,6 +154,10 @@ pub fn generate_xmp(data: &XmpData) -> String {
     writer.element("sharpeningRadius", pm_ns.clone()).value(format!("{:.4}", data.edits.sharpening_radius).as_str());
     writer.element("sharpeningMasking", pm_ns.clone()).value(format!("{:.4}", data.edits.sharpening_masking).as_str());
     writer.element("noiseReduction", pm_ns.clone()).value(format!("{:.4}", data.edits.noise_reduction).as_str());
+    writer.element("grainAmount", pm_ns.clone()).value(format!("{:.4}", data.edits.grain_amount).as_str());
+    writer.element("grainSize", pm_ns.clone()).value(format!("{:.4}", data.edits.grain_size).as_str());
+    writer.element("grainRoughness", pm_ns.clone()).value(format!("{:.4}", data.edits.grain_roughness).as_str());
+    writer.element("grainChroma", pm_ns.clone()).value(format!("{:.4}", data.edits.grain_chroma).as_str());
     writer.element("temperature", pm_ns.clone()).value(format!("{:.4}", data.edits.temperature).as_str());
     writer.element("tint", pm_ns.clone()).value(format!("{:.4}", data.edits.tint).as_str());
     writer.element("cropLeft", pm_ns.clone()).value(format!("{:.4}", data.edits.crop_left).as_str());
@@ -204,7 +208,10 @@ pub fn generate_xmp(data: &XmpData) -> String {
     )));
     writer.element("PerspectiveVertical", crs_ns.clone()).value(format!("{:.4}", data.edits.perspective_vertical).as_str());
     writer.element("PerspectiveHorizontal", crs_ns.clone()).value(format!("{:.4}", data.edits.perspective_horizontal).as_str());
-    writer.element("CropConstrainToWarp", crs_ns).value(if data.edits.crop_constrain { "1" } else { "0" });
+    writer.element("CropConstrainToWarp", crs_ns.clone()).value(if data.edits.crop_constrain { "1" } else { "0" });
+    writer.element("GrainAmount", crs_ns.clone()).value(format!("{:.4}", data.edits.grain_amount).as_str());
+    writer.element("GrainSize", crs_ns.clone()).value(format!("{:.4}", data.edits.grain_size).as_str());
+    writer.element("GrainFrequency", crs_ns).value(format!("{:.4}", data.edits.grain_roughness).as_str());
 
     writer.finish(None)
 }
@@ -355,6 +362,26 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
     if let Some(nr_str) = get(pm, "noiseReduction") {
         if let Ok(val) = nr_str.parse::<f32>() {
             data.edits.noise_reduction = val;
+        }
+    }
+    if let Some(ga_str) = get(pm, "grainAmount") {
+        if let Ok(val) = ga_str.parse::<f32>() {
+            data.edits.grain_amount = val;
+        }
+    }
+    if let Some(gs_str) = get(pm, "grainSize") {
+        if let Ok(val) = gs_str.parse::<f32>() {
+            data.edits.grain_size = val;
+        }
+    }
+    if let Some(gr_str) = get(pm, "grainRoughness") {
+        if let Ok(val) = gr_str.parse::<f32>() {
+            data.edits.grain_roughness = val;
+        }
+    }
+    if let Some(gc_str) = get(pm, "grainChroma") {
+        if let Ok(val) = gc_str.parse::<f32>() {
+            data.edits.grain_chroma = val;
         }
     }
     if let Some(temp_str) = get(pm, "temperature") {
@@ -562,6 +589,27 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         if let Some(nr_str) = desc.attribute(( crs_ns, "LuminanceSmoothing" )) {
             if let Ok(val) = nr_str.parse::<f32>() {
                 data.edits.noise_reduction = val;
+            }
+        }
+    }
+    if data.edits.grain_amount == 0.0 {
+        if let Some(ga_str) = desc.attribute(( crs_ns, "GrainAmount" )) {
+            if let Ok(val) = ga_str.parse::<f32>() {
+                data.edits.grain_amount = val;
+            }
+        }
+    }
+    if data.edits.grain_size == 1.0 {
+        if let Some(gs_str) = desc.attribute(( crs_ns, "GrainSize" )) {
+            if let Ok(val) = gs_str.parse::<f32>() {
+                data.edits.grain_size = val;
+            }
+        }
+    }
+    if data.edits.grain_roughness == 50.0 {
+        if let Some(gr_str) = desc.attribute(( crs_ns, "GrainFrequency" )) {
+            if let Ok(val) = gr_str.parse::<f32>() {
+                data.edits.grain_roughness = val;
             }
         }
     }

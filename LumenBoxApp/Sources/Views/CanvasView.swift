@@ -54,8 +54,11 @@ struct CanvasView: View {
                 
                 if viewModel.canvasMode == .detail {
                     // Apple EDR & HDR Radiance Toggle (Story 18.1 - Detail / Loupe View only)
+                    let isHdrReady = viewModel.isScreenHdrCapable && viewModel.edrHeadroom > 1.0
+                    let isHdrActive = isHdrReady && viewModel.isHdrEnabled
+                    
                     Button {
-                        if viewModel.edrHeadroom > 1.0 {
+                        if isHdrReady {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 viewModel.isHdrEnabled.toggle()
                             }
@@ -67,11 +70,11 @@ struct CanvasView: View {
                         }
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: (viewModel.isHdrEnabled && viewModel.edrHeadroom > 1.0) ? "sun.max.trianglebadge.exclamationmark.fill" : "sun.max.fill")
+                            Image(systemName: isHdrActive ? "sun.max.trianglebadge.exclamationmark.fill" : "sun.max.fill")
                                 .font(.system(size: 11, weight: .bold))
-                                .foregroundColor((viewModel.isHdrEnabled && viewModel.edrHeadroom > 1.0) ? .yellow : .secondary)
+                                .foregroundColor(isHdrActive ? .yellow : .secondary)
                             
-                            if viewModel.edrHeadroom > 1.0 {
+                            if isHdrReady {
                                 Text(viewModel.isHdrEnabled ? String(format: "HDR %.1fx", viewModel.edrHeadroom) : "SDR")
                                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                                     .foregroundColor(viewModel.isHdrEnabled ? .primary : .secondary)
@@ -85,15 +88,15 @@ struct CanvasView: View {
                         .padding(.vertical, 4)
                         .background(
                             Capsule()
-                                .fill((viewModel.isHdrEnabled && viewModel.edrHeadroom > 1.0) ? Color.yellow.opacity(0.18) : Color.secondary.opacity(0.12))
+                                .fill(isHdrActive ? Color.yellow.opacity(0.18) : Color.secondary.opacity(0.12))
                         )
                         .overlay(
                             Capsule()
-                                .stroke((viewModel.isHdrEnabled && viewModel.edrHeadroom > 1.0) ? Color.yellow.opacity(0.4) : Color.clear, lineWidth: 1)
+                                .stroke(isHdrActive ? Color.yellow.opacity(0.4) : Color.clear, lineWidth: 1)
                         )
                     }
                     .buttonStyle(.plain)
-                    .help(viewModel.edrHeadroom > 1.0 
+                    .help(isHdrReady 
                         ? (viewModel.isHdrEnabled ? "HDR Radiance active (\(String(format: "%.1fx", viewModel.edrHeadroom)) headroom). Click for SDR soft-proofing." : "SDR soft-proofing mode. Click for HDR Radiance.")
                         : "Current display is SDR (headroom: 1.0x). Click for info on unlocking HDR.")
                     .popover(isPresented: $showHdrUnavailablePopover, arrowEdge: .bottom) {

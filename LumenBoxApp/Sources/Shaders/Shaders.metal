@@ -77,7 +77,7 @@ fragment float4 fragmentShader(
                           (uniforms.sharpeningAmount == 0.0) &&
                           (uniforms.noiseReduction == 0.0);
     
-    if (uniforms.isLinearRaw == 0 && isNeutralEdits && uniforms.hasGainMap == 0) {
+    if (uniforms.isLinearRaw == 0 && isNeutralEdits && uniforms.hasGainMap == 0 && (uniforms.edrEnabled == 0 || uniforms.edrHeadroom <= 1.001)) {
         return sampledColor;
     }
     
@@ -215,9 +215,23 @@ fragment float4 fragmentShader(
             editNoiseReduction
         );
     }
+
+    // 8.5 Procedural Organic Film Grain
+    if (uniforms.isOriginal == 0.0 && uniforms.grainAmount > 0.0) {
+        float2 texDim = float2(texture.get_width(), texture.get_height());
+        finalColor = applyProceduralFilmGrain(
+            finalColor,
+            uv,
+            texDim,
+            uniforms.grainAmount,
+            uniforms.grainSize,
+            uniforms.grainRoughness,
+            uniforms.grainChroma
+        );
+    }
     
     // 9. Apple EDR Radiance & Dynamic Range Expansion
-    if (uniforms.edrEnabled != 0 && uniforms.edrHeadroom > 1.0) {
+    if (uniforms.edrEnabled != 0 && uniforms.edrHeadroom > 1.001) {
         float headroom = clamp(uniforms.edrHeadroom, 1.0, 4.0);
         
         if (uniforms.hasGainMap != 0) {
@@ -230,23 +244,39 @@ fragment float4 fragmentShader(
             float maxCap = max(uniforms.gainMapCapacityMax, 1.01);
             float weight = clamp((headroom - 1.0) / (maxCap - 1.0), 0.0, 1.0);
             float effectiveGain = 1.0 + (gainFactor - 1.0) * weight;
-            finalColor = min(finalColor * effectiveGain, float3(headroom));
-        } else {
+            finalColor *= effectiveGain;
+        } else if (uniforms.isLinearRaw == 1) {
             // Scene-referred RAW dynamic range expansion
             // Sensor linear luminance before tone compression:
             float sceneLum = dot(rec2020Color, float3(0.2627, 0.6780, 0.0593));
             // Output tone-mapped luminance:
             float outLum = dot(finalColor, float3(0.2126, 0.7152, 0.0722));
             
-            // Smoothly transition highlights from SDR diffuse white into available EDR headroom.
-            // Midtones (<= 0.55) remain completely untouched (SDR standard reference white),
-            // while upper highlights (0.55..1.0) gracefully uncompress up to available display headroom.
-            float highlightFactor = smoothstep(0.55, 1.0, max(outLum, sceneLum));
+            // Uncompress upper highlight shoulder (> 0.85) where AgX tone mapping compressed RAW sensor radiance.
+            // Midtones and standard whites stay anchored at 1.0 SDR diffuse white.
+            float highlightFactor = smoothstep(0.85, 1.0, max(outLum, clamp(sceneLum - 0.15, 0.0, 1.0)));
             if (highlightFactor > 0.0) {
                 float edrBoost = 1.0 + (headroom - 1.0) * pow(highlightFactor, 1.5);
-                finalColor = min(finalColor * edrBoost, float3(headroom));
+                finalColor *= edrBoost;
             }
         }
+        
+        // Preserve chromaticity on highlight limiting:
+        // Proportional scaling prevents individual channel clipping (which causes ratty yellow highlights).
+        // Any extreme specular radiance approaching or exceeding headroom smoothly desaturates towards specular white.
+        float peakC = max(finalColor.r, max(finalColor.g, finalColor.b));
+        if (peakC > headroom) {
+            float excess = (peakC - headroom) / peakC;
+            finalColor = mix(finalColor * (headroom / peakC), float3(headroom), clamp(excess * 1.5, 0.0, 1.0));
+        } else if (peakC > 1.0) {
+            // Soft specular desaturation in upper 20% of headroom
+            float desatThreshold = 1.0 + (headroom - 1.0) * 0.8;
+            if (peakC > desatThreshold) {
+                float t = (peakC - desatThreshold) / max(headroom - desatThreshold, 1e-4);
+                finalColor = mix(finalColor, float3(peakC), clamp(t * 0.4, 0.0, 0.4));
+            }
+        }
+        
         // 10. Convert to Display P3 primaries for CAMetalLayer in extended linear Display P3
         finalColor = max(LINEAR_SRGB_TO_DISPLAY_P3 * finalColor, float3(0.0));
         return float4(finalColor, sampledColor.a);

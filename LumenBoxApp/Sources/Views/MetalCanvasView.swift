@@ -46,8 +46,8 @@ public struct MetalCanvasView: NSViewRepresentable {
         context.coordinator.viewModel = viewModel
         
         if let metalLayer = mtkView.layer as? CAMetalLayer {
-            metalLayer.wantsExtendedDynamicRangeContent = true
-            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
+            metalLayer.wantsExtendedDynamicRangeContent = false
+            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
         }
         
         if let renderer = MetalRenderer(device: device) {
@@ -89,20 +89,16 @@ public struct MetalCanvasView: NSViewRepresentable {
     }
     
     public func updateNSView(_ nsView: CanvasMTKView, context: Context) {
-        if let metalLayer = nsView.layer as? CAMetalLayer {
-            metalLayer.wantsExtendedDynamicRangeContent = true
-            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
-        }
+        // Synchronize display capabilities with current window/screen
+        viewModel.updateScreenCapabilities(for: nsView.window)
         
-        // Query dynamic EDR headroom from display
-        if let screen = nsView.window?.screen ?? NSScreen.main {
-            let headroom = Float(screen.maximumExtendedDynamicRangeColorComponentValue)
-            let isHdr = headroom > 1.0
-            if viewModel.edrHeadroom != headroom || viewModel.isScreenHdrCapable != isHdr {
-                DispatchQueue.main.async {
-                    viewModel.edrHeadroom = headroom
-                    viewModel.isScreenHdrCapable = isHdr
-                }
+        let wantsEdr = viewModel.isScreenHdrCapable && viewModel.isHdrEnabled && viewModel.edrHeadroom > 1.001
+        if let metalLayer = nsView.layer as? CAMetalLayer {
+            if metalLayer.wantsExtendedDynamicRangeContent != wantsEdr {
+                metalLayer.wantsExtendedDynamicRangeContent = wantsEdr
+                metalLayer.colorspace = wantsEdr
+                    ? CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
+                    : CGColorSpace(name: CGColorSpace.sRGB)
             }
         }
         
@@ -145,8 +141,8 @@ public struct MetalCanvasView: NSViewRepresentable {
             isCropToolActive: isCropToolActive,
             lensCorrectionEnabled: viewModel.lensCorrectionEnabled,
             lensCoefficients: viewModel.lensCoefficients,
-            edrHeadroom: viewModel.edrHeadroom,
-            edrEnabled: viewModel.isHdrEnabled
+            edrHeadroom: viewModel.isScreenHdrCapable ? viewModel.edrHeadroom : 1.0,
+            edrEnabled: viewModel.isScreenHdrCapable && viewModel.isHdrEnabled
         )
         
         // 3. Update 3D LUT texture if LUT selection changed

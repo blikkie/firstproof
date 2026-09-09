@@ -123,6 +123,10 @@ pub struct EditSettings {
     pub sharpening_radius: f32,
     pub sharpening_masking: f32,
     pub noise_reduction: f32,
+    pub grain_amount: f32,
+    pub grain_size: f32,
+    pub grain_roughness: f32,
+    pub grain_chroma: f32,
     pub curves: ToneCurvesRecord,
 }
 
@@ -159,6 +163,10 @@ impl Default for EditSettings {
             sharpening_radius: 1.0,
             sharpening_masking: 0.0,
             noise_reduction: 0.0,
+            grain_amount: 0.0,
+            grain_size: 1.0,
+            grain_roughness: 50.0,
+            grain_chroma: 0.0,
             curves: ToneCurvesRecord::default(),
         }
     }

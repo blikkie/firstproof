@@ -87,6 +87,10 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         uniforms.sharpeningRadius = edits.sharpeningRadius
         uniforms.sharpeningMasking = edits.sharpeningMasking
         uniforms.noiseReduction = edits.noiseReduction
+        uniforms.grainAmount = edits.grainAmount
+        uniforms.grainSize = edits.grainSize
+        uniforms.grainRoughness = edits.grainRoughness
+        uniforms.grainChroma = edits.grainChroma
         uniforms.cropLeft = edits.cropLeft
         uniforms.cropTop = edits.cropTop
         uniforms.cropRight = edits.cropRight
@@ -755,12 +759,12 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     
     public func draw(in view: MTKView) {
         if let metalLayer = view.layer as? CAMetalLayer {
-            if uniforms.edrEnabled != 0 && uniforms.edrHeadroom > 1.001 {
-                metalLayer.wantsExtendedDynamicRangeContent = true
-                metalLayer.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
-            } else {
-                metalLayer.wantsExtendedDynamicRangeContent = false
-                metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+            let wantsEdr = uniforms.edrEnabled != 0 && uniforms.edrHeadroom > 1.001
+            if metalLayer.wantsExtendedDynamicRangeContent != wantsEdr {
+                metalLayer.wantsExtendedDynamicRangeContent = wantsEdr
+                metalLayer.colorspace = wantsEdr
+                    ? CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
+                    : CGColorSpace(name: CGColorSpace.sRGB)
             }
         }
         

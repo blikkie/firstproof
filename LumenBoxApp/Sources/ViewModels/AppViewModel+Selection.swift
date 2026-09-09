@@ -319,39 +319,12 @@ extension AppViewModel {
         if let xmp = readXmp(path: photo.filePath) {
             self.applyEdits(xmp.edits)
         } else {
-            let defaultEdits = EditSettings(
-                exposure: 0.0,
-                contrast: 0.0,
-                highlights: 0.0,
-                shadows: 0.0,
-                whites: 0.0,
-                blacks: 0.0,
-                vibrance: 0.0,
-                saturation: 0.0,
-                deepBlue: 0.0,
-                foliage: 0.0,
-                temperature: 5500.0,
-                tint: 0.0,
-                cropLeft: 0.0,
-                cropTop: 0.0,
-                cropRight: 1.0,
-                cropBottom: 1.0,
-                cropAngle: 0.0,
-                perspectiveVertical: 0.0,
-                perspectiveHorizontal: 0.0,
-                cropConstrain: true,
-                rotation: Int32(self.defaultExifRotation),
-                flipHorizontal: self.defaultExifFlipH,
-                flipVertical: self.defaultExifFlipV,
-                toneProfile: .agxVivid,
-                lutName: nil,
-                lutIntensity: 1.0,
-                sharpeningAmount: photo.isRaw ? 20.0 : 0.0,
-                sharpeningRadius: 1.0,
-                sharpeningMasking: photo.isRaw ? 15.0 : 0.0,
-                noiseReduction: 0.0,
-                curves: .defaultIdentity
-            )
+            var defaultEdits = EditSettings.defaultIdentity
+            defaultEdits.rotation = Int32(self.defaultExifRotation)
+            defaultEdits.flipHorizontal = self.defaultExifFlipH
+            defaultEdits.flipVertical = self.defaultExifFlipV
+            defaultEdits.sharpeningAmount = photo.isRaw ? 20.0 : 0.0
+            defaultEdits.sharpeningMasking = photo.isRaw ? 15.0 : 0.0
             self.applyEdits(defaultEdits)
             self.isCropToolActive = false
         }
@@ -440,39 +413,7 @@ extension AppViewModel {
         }
         let finalStatus = status ?? currentPhoto?.status ?? "none"
         
-        let finalEdits = edits ?? existingXmp?.edits ?? EditSettings(
-            exposure: 0.0,
-            contrast: 0.0,
-            highlights: 0.0,
-            shadows: 0.0,
-            whites: 0.0,
-            blacks: 0.0,
-            vibrance: 0.0,
-            saturation: 0.0,
-            deepBlue: 0.0,
-            foliage: 0.0,
-            temperature: 5500.0,
-            tint: 0.0,
-            cropLeft: 0.0,
-            cropTop: 0.0,
-            cropRight: 1.0,
-            cropBottom: 1.0,
-            cropAngle: 0.0,
-            perspectiveVertical: 0.0,
-            perspectiveHorizontal: 0.0,
-            cropConstrain: true,
-            rotation: 0,
-            flipHorizontal: false,
-            flipVertical: false,
-            toneProfile: .agxVivid,
-            lutName: nil,
-            lutIntensity: 1.0,
-            sharpeningAmount: 0.0,
-            sharpeningRadius: 1.0,
-            sharpeningMasking: 0.0,
-            noiseReduction: 0.0,
-            curves: .defaultIdentity
-        )
+        let finalEdits = edits ?? existingXmp?.edits ?? EditSettings.defaultIdentity
         
         let record = XmpDataRecord(
             rating: finalRating,

@@ -66,6 +66,10 @@ struct ShaderUniforms {
     float gainMapMax;        // e.g. 3.0 (8x boost)
     float gainMapGamma;      // standard 1.0
     float gainMapCapacityMax;// e.g. 3.0
+    float grainAmount;       // 0.0 .. 100.0 (default 0.0)
+    float grainSize;         // 0.5 .. 3.0 (default 1.0)
+    float grainRoughness;    // 0.0 .. 100.0 (default 50.0)
+    float grainChroma;       // 0.0 .. 100.0 (default 0.0)
     int32_t _padding;
 };
 

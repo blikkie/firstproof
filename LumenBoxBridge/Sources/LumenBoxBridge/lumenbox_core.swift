@@ -1420,11 +1420,15 @@ public struct EditSettings {
     public var sharpeningRadius: Float
     public var sharpeningMasking: Float
     public var noiseReduction: Float
+    public var grainAmount: Float
+    public var grainSize: Float
+    public var grainRoughness: Float
+    public var grainChroma: Float
     public var curves: ToneCurvesRecord
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, curves: ToneCurvesRecord) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, grainAmount: Float, grainSize: Float, grainRoughness: Float, grainChroma: Float, curves: ToneCurvesRecord) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -1455,6 +1459,10 @@ public struct EditSettings {
         self.sharpeningRadius = sharpeningRadius
         self.sharpeningMasking = sharpeningMasking
         self.noiseReduction = noiseReduction
+        self.grainAmount = grainAmount
+        self.grainSize = grainSize
+        self.grainRoughness = grainRoughness
+        self.grainChroma = grainChroma
         self.curves = curves
     }
 }
@@ -1553,6 +1561,18 @@ extension EditSettings: Equatable, Hashable {
         if lhs.noiseReduction != rhs.noiseReduction {
             return false
         }
+        if lhs.grainAmount != rhs.grainAmount {
+            return false
+        }
+        if lhs.grainSize != rhs.grainSize {
+            return false
+        }
+        if lhs.grainRoughness != rhs.grainRoughness {
+            return false
+        }
+        if lhs.grainChroma != rhs.grainChroma {
+            return false
+        }
         if lhs.curves != rhs.curves {
             return false
         }
@@ -1590,6 +1610,10 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(sharpeningRadius)
         hasher.combine(sharpeningMasking)
         hasher.combine(noiseReduction)
+        hasher.combine(grainAmount)
+        hasher.combine(grainSize)
+        hasher.combine(grainRoughness)
+        hasher.combine(grainChroma)
         hasher.combine(curves)
     }
 }
@@ -1632,6 +1656,10 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 sharpeningRadius: FfiConverterFloat.read(from: &buf), 
                 sharpeningMasking: FfiConverterFloat.read(from: &buf), 
                 noiseReduction: FfiConverterFloat.read(from: &buf), 
+                grainAmount: FfiConverterFloat.read(from: &buf), 
+                grainSize: FfiConverterFloat.read(from: &buf), 
+                grainRoughness: FfiConverterFloat.read(from: &buf), 
+                grainChroma: FfiConverterFloat.read(from: &buf), 
                 curves: FfiConverterTypeToneCurvesRecord.read(from: &buf)
         )
     }
@@ -1667,6 +1695,10 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.sharpeningRadius, into: &buf)
         FfiConverterFloat.write(value.sharpeningMasking, into: &buf)
         FfiConverterFloat.write(value.noiseReduction, into: &buf)
+        FfiConverterFloat.write(value.grainAmount, into: &buf)
+        FfiConverterFloat.write(value.grainSize, into: &buf)
+        FfiConverterFloat.write(value.grainRoughness, into: &buf)
+        FfiConverterFloat.write(value.grainChroma, into: &buf)
         FfiConverterTypeToneCurvesRecord.write(value.curves, into: &buf)
     }
 }

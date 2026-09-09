@@ -252,37 +252,8 @@ fn test_gpu_preview_vs_export_parity() {
     // 2. Export simulation:
     let mut export_img = lumenbox_core::export::decode_image(path).unwrap();
     let edits = EditSettings {
-        exposure: 0.0,
-        contrast: 0.0,
-        highlights: 0.0,
-        shadows: 0.0,
-        whites: 0.0,
-        blacks: 0.0,
-        vibrance: 0.0,
-        saturation: 0.0,
-        deep_blue: 0.0,
-        foliage: 0.0,
-        temperature: 5500.0,
-        tint: 0.0,
-        crop_left: 0.0,
-        crop_top: 0.0,
-        crop_right: 1.0,
-        crop_bottom: 1.0,
-        crop_angle: 0.0,
-        perspective_vertical: 0.0,
-        perspective_horizontal: 0.0,
-        crop_constrain: true,
-        rotation: 0,
-        flip_horizontal: false,
-        flip_vertical: false,
         tone_profile: lumenbox_core::ColorProfileMode::AgxVivid,
-        lut_name: None,
-        lut_intensity: 1.0,
-        sharpening_amount: 0.0,
-        sharpening_radius: 1.0,
-        sharpening_masking: 0.0,
-        noise_reduction: 0.0,
-        curves: Default::default(),
+        ..Default::default()
     };
     lumenbox_core::export::apply_edits(&mut export_img, &edits);
     let export_srgb = Color3::new(export_img.data[idx], export_img.data[idx + 1], export_img.data[idx + 2]);
@@ -335,25 +306,8 @@ fn test_cr2_0194_full_pipeline_parity() {
         foliage: 15.0,
         temperature: 5800.0,
         tint: 5.0,
-        crop_left: 0.0,
-        crop_top: 0.0,
-        crop_right: 1.0,
-        crop_bottom: 1.0,
-        crop_angle: 0.0,
-        perspective_vertical: 0.0,
-        perspective_horizontal: 0.0,
-        crop_constrain: true,
-        rotation: 0,
-        flip_horizontal: false,
-        flip_vertical: false,
         tone_profile: lumenbox_core::ColorProfileMode::AgxVivid,
-        lut_name: None,
-        lut_intensity: 1.0,
-        sharpening_amount: 0.0,
-        sharpening_radius: 1.0,
-        sharpening_masking: 0.0,
-        noise_reduction: 0.0,
-        curves: Default::default(),
+        ..Default::default()
     };
     
     // Run full export pipeline
@@ -564,13 +518,8 @@ fn test_sliders_dual_engine_parity_sweep() {
                 foliage: 20.0,
                 temperature: temp,
                 tint,
-                crop_left: 0.0, crop_top: 0.0, crop_right: 1.0, crop_bottom: 1.0, crop_angle: 0.0,
-                perspective_vertical: 0.0, perspective_horizontal: 0.0, crop_constrain: true,
-                rotation: 0, flip_horizontal: false, flip_vertical: false,
                 tone_profile: mode,
-                lut_name: None, lut_intensity: 1.0,
-                sharpening_amount: 0.0, sharpening_radius: 1.0, sharpening_masking: 0.0, noise_reduction: 0.0,
-                curves: Default::default(),
+                ..Default::default()
             };
             lumenbox_core::export::apply_edits(&mut demosaiced, &edits);
             

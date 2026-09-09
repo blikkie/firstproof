@@ -43,6 +43,10 @@ public enum EditSliderType {
     case perspectiveVertical
     case perspectiveHorizontal
     case lutIntensity
+    case grainAmount
+    case grainSize
+    case grainRoughness
+    case grainChroma
 }
 
 public enum CropAspectRatioPreset: String, CaseIterable, Identifiable {
@@ -144,9 +148,11 @@ public final class AppViewModel {
     }
     
     // MARK: - EDR & HDR Display State (Story 18.1)
-    public var isHdrEnabled: Bool = true
+    public var isHdrEnabled: Bool = false
     public var edrHeadroom: Float = 1.0
     public var isScreenHdrCapable: Bool = false
+    @ObservationIgnored private var screenChangeObserver: NSObjectProtocol?
+    @ObservationIgnored private var windowChangeObserver: NSObjectProtocol?
     
     public func cancelBatchExport() {
         self.isBatchExportCancelled = true
@@ -184,6 +190,11 @@ public final class AppViewModel {
     public var sharpeningRadius: Float = 1.0     // 0.5 .. 3.0 px
     public var sharpeningMasking: Float = 0.0    // 0 .. 100
     public var noiseReduction: Float = 0.0       // 0 .. 100
+    public var grainAmount: Float = 0.0          // 0 .. 100
+    public var grainSize: Float = 1.0            // 0.5 .. 3.0
+    public var grainRoughness: Float = 50.0      // 0 .. 100
+    public var grainChroma: Float = 0.0          // 0 .. 100
+    public var selectedGrainPresetId: String? = nil
 
     public var defaultSharpeningAmount: Float {
         (selectedPhoto?.isRaw ?? false) ? 20.0 : 0.0
@@ -193,6 +204,10 @@ public final class AppViewModel {
         (selectedPhoto?.isRaw ?? false) ? 15.0 : 0.0
     }
     public var defaultNoiseReduction: Float { 0.0 }
+    public var defaultGrainAmount: Float { 0.0 }
+    public var defaultGrainSize: Float { 1.0 }
+    public var defaultGrainRoughness: Float { 50.0 }
+    public var defaultGrainChroma: Float { 0.0 }
 
     public var isEyedropperActive: Bool = false
     public var temperature: Float = 5500.0 // 2000K .. 50000K
@@ -281,6 +296,74 @@ public final class AppViewModel {
             selectScope(.session(folderPath: firstAvailable))
         } else {
             selectScope(.mainLibrary)
+        }
+        
+        setupScreenObservers()
+    }
+    
+    deinit {
+        if let observer = screenChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = windowChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    
+    // MARK: - Display & EDR Headroom Detection
+    public func updateScreenCapabilities(for window: NSWindow? = nil) {
+        let screen = window?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        guard let screen = screen else {
+            if self.isScreenHdrCapable != false || self.edrHeadroom != 1.0 {
+                self.isScreenHdrCapable = false
+                self.edrHeadroom = 1.0
+            }
+            return
+        }
+        
+        let potentialHeadroom = screen.maximumPotentialExtendedDynamicRangeColorComponentValue
+        let referenceHeadroom = screen.maximumReferenceExtendedDynamicRangeColorComponentValue
+        let currentHeadroom = screen.maximumExtendedDynamicRangeColorComponentValue
+        
+        // True HDR displays on macOS:
+        // 1. Apple Reference displays (Liquid Retina XDR on MacBook Pro 14"/16", Pro Display XDR): reference > 1.0.
+        // 2. External HDR monitors with HDR active in macOS Display Settings: potential > 2.05 (typically 3.0 to 16.0).
+        // Standard SDR displays (like MacBook Air or SDR monitors) report potential <= 2.0 even when dimmed.
+        let isTrueHdr = referenceHeadroom > 1.0 || potentialHeadroom > 2.05
+        let headroom: Float
+        if isTrueHdr && currentHeadroom > 1.05 {
+            headroom = Float(currentHeadroom)
+        } else {
+            headroom = 1.0
+        }
+        
+        if self.isScreenHdrCapable != isTrueHdr || abs(self.edrHeadroom - headroom) > 0.01 {
+            self.isScreenHdrCapable = isTrueHdr
+            self.edrHeadroom = headroom
+            if !isTrueHdr {
+                self.isHdrEnabled = false
+            }
+        }
+    }
+    
+    private func setupScreenObservers() {
+        updateScreenCapabilities()
+        
+        screenChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.updateScreenCapabilities()
+        }
+        
+        windowChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeScreenNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let win = note.object as? NSWindow
+            self?.updateScreenCapabilities(for: win)
         }
     }
 }
