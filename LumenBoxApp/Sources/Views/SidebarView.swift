@@ -61,18 +61,18 @@ struct SidebarView: View {
                         .fontWeight(.bold)
                         .foregroundColor(.secondary)
                     Spacer()
-                    Button(action: selectFolder) {
+                    Button(action: { viewModel.promptOpenFolder() }) {
                         Image(systemName: "plus.circle.fill")
                             .font(.subheadline)
                             .foregroundColor(.accentColor)
                     }
                     .buttonStyle(.plain)
-                    .help("Open Project Folder as Portable Session")
+                    .help("Open Project Folder as Portable Session (Cmd+O)")
                 }
                 .padding(.horizontal, 12)
                 
                 if viewModel.openedFolders.isEmpty {
-                    Button(action: selectFolder) {
+                    Button(action: { viewModel.promptOpenFolder() }) {
                         HStack(spacing: 6) {
                             Image(systemName: "folder.badge.plus")
                             Text("Open Session...")
@@ -272,17 +272,5 @@ struct SidebarView: View {
         }
         .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
         .background(Color(NSColor.controlBackgroundColor))
-    }
-    
-    private func selectFolder() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.prompt = "Open Session"
-        
-        if panel.runModal() == .OK, let url = panel.url {
-            viewModel.addFolder(at: url.path)
-        }
     }
 }

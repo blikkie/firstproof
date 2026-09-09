@@ -116,6 +116,23 @@ Google Pixel phones (Pixel 3 through Pixel 9 Pro) capture computational RAWs in 
     *   `Z`: 100% 1:1 zoom toggle
     *   *Implementation requirement*: Install an active responder filter (`NSView` / SwiftUI focused state) ensuring single-key shortcuts do not trigger when the user is typing into text search boxes, EXIF title fields, or numerical slider inputs.
 
+### Comprehensive Undo/Redo & History Engine (P1)
+Photo editing presents unique requirements for undo/redo compared to document editors:
+*   **The Scrubbing Coalescing Challenge**:
+    *   Dragging a slider (e.g. Exposure, White Balance, Film Grain) emits 60–120 intermediate values per second.
+    *   *Requirement*: Coalesce rapid scrubbing into a single atomic undo action based on slider drag lifecycle (`onEditingChanged: true` snapshots the starting state; `false` commits the step).
+*   **Command Pattern with Lightweight Value-Type Snapshots**:
+    *   Because `EditSettings` is a compact value-type struct (~200 bytes), storing complete before/after snapshots has negligible memory overhead (1,000 undo steps $\approx 200\text{ KB}$).
+    *   Each undoable action records:
+        1. Target photo path
+        2. Timestamp
+        3. Human-readable action label (e.g., `"Change Exposure (+0.60 EV)"`, `"Apply Kodak Tri-X 400"`, `"Set 5 Stars"`)
+        4. Prior state snapshot & New state snapshot
+*   **Dynamic macOS Menu Integration**:
+    *   Dynamically update `Edit > Undo [Action Name]` and `Edit > Redo [Action Name]` (`Cmd+Z` / `Cmd+Shift+Z`) conforming to Apple Human Interface Guidelines.
+*   **Future History Panel**:
+    *   Expose the chronological action stack in an expandable Inspector panel allowing photographers to jump back directly to any previous state in the current session.
+
 ---
 
 ## 5. Unified Color Science & Camera Profiles Pipeline (P1)

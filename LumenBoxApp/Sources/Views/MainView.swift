@@ -68,28 +68,9 @@ struct MainView: View {
             }
         }
         .background(
-            Group {
-                Button("") { viewModel.selectAllPhotos() }.keyboardShortcut("a", modifiers: .command)
-                Button("") {
-                    if viewModel.selectedPhoto != nil {
-                        viewModel.isExportSheetPresented = true
-                    }
-                }.keyboardShortcut("e", modifiers: .command)
-                Button("") {
-                    if viewModel.selectedPhoto != nil || !viewModel.selectedPhotoPaths.isEmpty {
-                        viewModel.isExportPackageSheetPresented = true
-                    }
-                }.keyboardShortcut("e", modifiers: [.command, .shift])
-                Button("") {
-                    if viewModel.selectedPhoto != nil && viewModel.canvasMode == .detail {
-                        viewModel.applyAutoAdjustments()
-                    }
-                }.keyboardShortcut("u", modifiers: .command)
-                WindowAccessor { window in
-                    window.setFrameAutosaveName("LumenBoxMainWindow")
-                }
+            WindowAccessor { window in
+                window.setFrameAutosaveName("LumenBoxMainWindow")
             }
-            .opacity(0)
             .allowsHitTesting(false)
         )
     }
@@ -261,6 +242,12 @@ struct MainView: View {
                     }
                 case "u", "U":
                     viewModel.setStatus("none")
+                    return nil
+                case "[":
+                    viewModel.rotateCounterClockwise()
+                    return nil
+                case "]":
+                    viewModel.rotateClockwise()
                     return nil
                 default:
                     break

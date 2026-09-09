@@ -57,7 +57,39 @@ struct LumenBoxApp: App {
         .defaultSize(width: 1280, height: 800)
         .commands {
             SidebarCommands()
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button("Open Folder...") {
+                    viewModel.promptOpenFolder()
+                }
+                .keyboardShortcut("o", modifiers: [.command])
+                
+                Divider()
+                
+                Button("Export Photo...") {
+                    viewModel.isExportSheetPresented = true
+                }
+                .keyboardShortcut("e", modifiers: [.command])
+                .disabled(viewModel.selectedPhoto == nil)
+                
+                Button("Export as Portable Package...") {
+                    viewModel.isExportPackageSheetPresented = true
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
+            }
+            
+            CommandMenu("Edit") {
+                Button("Select All") {
+                    viewModel.selectAllPhotos()
+                }
+                .keyboardShortcut("a", modifiers: [.command])
+                
+                Button("Deselect All") {
+                    viewModel.clearSelection()
+                }
+                .keyboardShortcut("d", modifiers: [.command])
+                .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
+            }
             
             CommandMenu("Photo") {
                 Button("Auto Adjust Tone") {
@@ -99,34 +131,30 @@ struct LumenBoxApp: App {
                 Divider()
                 
                 Menu("Rating") {
-                    Button("5 Stars") { viewModel.setRating(5) }.keyboardShortcut("5", modifiers: [.command])
-                    Button("4 Stars") { viewModel.setRating(4) }.keyboardShortcut("4", modifiers: [.command])
-                    Button("3 Stars") { viewModel.setRating(3) }.keyboardShortcut("3", modifiers: [.command])
-                    Button("2 Stars") { viewModel.setRating(2) }.keyboardShortcut("2", modifiers: [.command])
-                    Button("1 Star")  { viewModel.setRating(1) }.keyboardShortcut("1", modifiers: [.command])
+                    Button("5 Stars")   { viewModel.setRating(5) }.keyboardShortcut("5", modifiers: [])
+                    Button("4 Stars")   { viewModel.setRating(4) }.keyboardShortcut("4", modifiers: [])
+                    Button("3 Stars")   { viewModel.setRating(3) }.keyboardShortcut("3", modifiers: [])
+                    Button("2 Stars")   { viewModel.setRating(2) }.keyboardShortcut("2", modifiers: [])
+                    Button("1 Star")    { viewModel.setRating(1) }.keyboardShortcut("1", modifiers: [])
                     Divider()
-                    Button("No Rating") { viewModel.setRating(nil) }.keyboardShortcut("0", modifiers: [.command])
+                    Button("No Rating") { viewModel.setRating(nil) }.keyboardShortcut("0", modifiers: [])
                 }
+                .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
                 
                 Menu("Flag") {
-                    Button("Pick")   { viewModel.setStatus("pick") }.keyboardShortcut("p", modifiers: [.command])
-                    Button("Reject") { viewModel.setStatus("reject") }.keyboardShortcut("x", modifiers: [.command])
-                    Button("Clear Flag") { viewModel.setStatus("none") }.keyboardShortcut("u", modifiers: [.command, .shift])
+                    Button("Pick")       { viewModel.setStatus("pick") }.keyboardShortcut("p", modifiers: [])
+                    Button("Reject")     { viewModel.setStatus("reject") }.keyboardShortcut("x", modifiers: [])
+                    Button("Clear Flag") { viewModel.setStatus("none") }.keyboardShortcut("u", modifiers: [])
                 }
+                .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
                 
                 Divider()
                 
-                Button("Export Photo...") {
-                    viewModel.isExportSheetPresented = true
+                Button(viewModel.isShowingOriginal ? "Show Edited" : "Show Original") {
+                    viewModel.isShowingOriginal.toggle()
                 }
-                .keyboardShortcut("e", modifiers: [.command])
-                .disabled(viewModel.selectedPhoto == nil)
-                
-                Button("Export as Portable Package...") {
-                    viewModel.isExportPackageSheetPresented = true
-                }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
-                .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
+                .keyboardShortcut("\\", modifiers: [])
+                .disabled(viewModel.selectedPhoto == nil || viewModel.canvasMode != .detail)
             }
             
             CommandMenu("View") {
@@ -142,6 +170,12 @@ struct LumenBoxApp: App {
                 .keyboardShortcut("e", modifiers: [])
                 .disabled(viewModel.canvasMode == .detail && viewModel.selectedPhoto == nil)
                 
+                Button("Crop & Straighten Tool") {
+                    viewModel.toggleCropTool()
+                }
+                .keyboardShortcut("c", modifiers: [])
+                .disabled(viewModel.selectedPhoto == nil || viewModel.canvasMode != .detail)
+                
                 Divider()
                 
                 Button("Zoom to Fit") {
@@ -150,10 +184,10 @@ struct LumenBoxApp: App {
                 .keyboardShortcut("0", modifiers: [.command])
                 .disabled(viewModel.canvasMode != .detail)
                 
-                Button("Zoom 100% (1:1)") {
-                    viewModel.zoomTo100()
+                Button("Zoom 100% (1:1 Loupe)") {
+                    viewModel.toggleZoom()
                 }
-                .keyboardShortcut("0", modifiers: [.command, .option])
+                .keyboardShortcut("z", modifiers: [])
                 .disabled(viewModel.canvasMode != .detail)
                 
                 Button("Zoom 200% (2:1 Loupe)") {

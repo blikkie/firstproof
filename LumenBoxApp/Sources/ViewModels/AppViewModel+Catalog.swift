@@ -24,6 +24,19 @@ extension AppViewModel {
         selectScope(.session(folderPath: folderPath))
     }
     
+    @MainActor
+    public func promptOpenFolder() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = "Open Session"
+        
+        if panel.runModal() == .OK, let url = panel.url {
+            addFolder(at: url.path)
+        }
+    }
+    
     public func removeFolder(at folderPath: String) {
         openedFolders.removeAll { $0 == folderPath }
         UserDefaults.standard.set(openedFolders, forKey: "openedFolders")
