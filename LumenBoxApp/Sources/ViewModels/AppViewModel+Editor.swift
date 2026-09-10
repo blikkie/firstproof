@@ -314,6 +314,13 @@ extension AppViewModel {
     
     // MARK: - Crop & Composition Controls
     public func toggleCropTool() {
+        if isCropToolActive {
+            if undoHistory.scrubStartEdits != nil {
+                endSliderScrub(actionName: "Crop Box")
+            }
+            saveCurrentEdits()
+            notifyThumbnailChanged()
+        }
         isCropToolActive.toggle()
     }
     

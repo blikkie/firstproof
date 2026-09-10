@@ -68,10 +68,23 @@ public struct CropOverlayView: View {
                 // 2. Crop Frame Border & Rule-of-Thirds Grid
                 cropFrameAndGrid(cropRect: cropRect)
                 
-                // 3. Interactive Handle Zones & Drag Gestures
-                handleGesturesView(imageRect: imageRect, cropRect: cropRect, imageAspect: imageAspect)
+                // 3. Visual Handles (Pure display, no competing gestures)
+                visualHandlesView(cropRect: cropRect)
                 
-                // 4. Live HUD Readout when rotating
+                // 4. Single Unified Gesture Surface covering entire view
+                Color.clear
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 1)
+                            .onChanged { value in
+                                handleDragChanged(value: value, imageRect: imageRect, cropRect: cropRect, imageAspect: imageAspect)
+                            }
+                            .onEnded { _ in
+                                handleDragEnded()
+                            }
+                    )
+                
+                // 5. Live HUD Readout when rotating
                 if isRotating {
                     VStack {
                         Spacer()
@@ -91,11 +104,18 @@ public struct CropOverlayView: View {
                     }
                 }
                 
-                // 5. Floating Bottom Action HUD Bar
+                // 6. Floating Bottom Action HUD Bar
                 VStack {
                     Spacer()
                     floatingActionBar(imageAspect: imageAspect)
                         .padding(.bottom, 24)
+                }
+            }
+            .onDisappear {
+                if activeHandle != nil {
+                    handleDragEnded()
+                } else if viewModel.undoHistory.scrubStartEdits != nil {
+                    viewModel.endSliderScrub(actionName: "Crop Box")
                 }
             }
         }
@@ -146,89 +166,136 @@ public struct CropOverlayView: View {
         .allowsHitTesting(false)
     }
     
-    // MARK: - Handles & Drag Gestures
-    private func handleGesturesView(imageRect: CGRect, cropRect: CGRect, imageAspect: CGFloat) -> some View {
+    // MARK: - Visual Handles View
+    private func visualHandlesView(cropRect: CGRect) -> some View {
         ZStack {
-            // Background rotation drag area
-            Color.clear
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 2)
-                        .onChanged { value in
-                            if activeHandle == nil {
-                                activeHandle = .rotate
-                                viewModel.beginSliderScrub()
-                                dragStartStraighten = viewModel.straightenAngle
-                                isRotating = true
-                            }
-                            guard activeHandle == .rotate else { return }
-                            let center = CGPoint(x: imageRect.midX, y: imageRect.midY)
-                            let startVector = CGPoint(x: value.startLocation.x - center.x, y: value.startLocation.y - center.y)
-                            let currentVector = CGPoint(x: value.location.x - center.x, y: value.location.y - center.y)
-                            let startAngle = atan2(startVector.y, startVector.x)
-                            let currentAngle = atan2(currentVector.y, currentVector.x)
-                            var deltaDegrees = Float((currentAngle - startAngle) * 180.0 / .pi)
-                            if deltaDegrees > 180.0 { deltaDegrees -= 360.0 }
-                            if deltaDegrees < -180.0 { deltaDegrees += 360.0 }
-                            
-                            let newStraighten = clamp(dragStartStraighten + deltaDegrees, min: -45.0, max: 45.0)
-                            viewModel.straightenAngle = newStraighten
-                        }
-                        .onEnded { _ in
-                            activeHandle = nil
-                            isRotating = false
-                            viewModel.endSliderScrub(actionName: "Straighten")
-                        }
-                )
-            
-            // Inside translate drag area
-            Rectangle()
-                .fill(Color.white.opacity(0.001)) // Invisible hit target
-                .frame(width: max(cropRect.width - 30, 10), height: max(cropRect.height - 30, 10))
-                .position(x: cropRect.midX, y: cropRect.midY)
-                .gesture(
-                    DragGesture(minimumDistance: 1)
-                        .onChanged { value in
-                            if activeHandle == nil {
-                                activeHandle = .inside
-                                viewModel.beginSliderScrub()
-                                dragStartCrop = (viewModel.cropLeft, viewModel.cropTop, viewModel.cropRight, viewModel.cropBottom)
-                            }
-                            guard activeHandle == .inside else { return }
-                            let deltaU = Float(value.translation.width / imageRect.width)
-                            let deltaV = Float(value.translation.height / imageRect.height)
-                            let width = dragStartCrop.right - dragStartCrop.left
-                            let height = dragStartCrop.bottom - dragStartCrop.top
-                            
-                            var newLeft = dragStartCrop.left + deltaU
-                            var newTop = dragStartCrop.top + deltaV
-                            
-                            newLeft = max(0.0, min(newLeft, 1.0 - width))
-                            newTop = max(0.0, min(newTop, 1.0 - height))
-                            
-                            viewModel.cropLeft = newLeft
-                            viewModel.cropRight = newLeft + width
-                            viewModel.cropTop = newTop
-                            viewModel.cropBottom = newTop + height
-                        }
-                        .onEnded { _ in
-                            activeHandle = nil
-                            viewModel.endSliderScrub(actionName: "Crop Position")
-                        }
-                )
-            
             // 4 Edge Handles
-            edgeHandle(type: .top, point: CGPoint(x: cropRect.midX, y: cropRect.minY), isHorizontal: true, imageRect: imageRect, imageAspect: imageAspect)
-            edgeHandle(type: .bottom, point: CGPoint(x: cropRect.midX, y: cropRect.maxY), isHorizontal: true, imageRect: imageRect, imageAspect: imageAspect)
-            edgeHandle(type: .left, point: CGPoint(x: cropRect.minX, y: cropRect.midY), isHorizontal: false, imageRect: imageRect, imageAspect: imageAspect)
-            edgeHandle(type: .right, point: CGPoint(x: cropRect.maxX, y: cropRect.midY), isHorizontal: false, imageRect: imageRect, imageAspect: imageAspect)
+            edgeHandleView(point: CGPoint(x: cropRect.midX, y: cropRect.minY), isHorizontal: true)
+            edgeHandleView(point: CGPoint(x: cropRect.midX, y: cropRect.maxY), isHorizontal: true)
+            edgeHandleView(point: CGPoint(x: cropRect.minX, y: cropRect.midY), isHorizontal: false)
+            edgeHandleView(point: CGPoint(x: cropRect.maxX, y: cropRect.midY), isHorizontal: false)
             
             // 4 Corner Brackets
-            cornerHandle(type: .topLeft, point: CGPoint(x: cropRect.minX, y: cropRect.minY), imageRect: imageRect, imageAspect: imageAspect)
-            cornerHandle(type: .topRight, point: CGPoint(x: cropRect.maxX, y: cropRect.minY), imageRect: imageRect, imageAspect: imageAspect)
-            cornerHandle(type: .bottomLeft, point: CGPoint(x: cropRect.minX, y: cropRect.maxY), imageRect: imageRect, imageAspect: imageAspect)
-            cornerHandle(type: .bottomRight, point: CGPoint(x: cropRect.maxX, y: cropRect.maxY), imageRect: imageRect, imageAspect: imageAspect)
+            cornerHandleView(type: .topLeft, point: CGPoint(x: cropRect.minX, y: cropRect.minY))
+            cornerHandleView(type: .topRight, point: CGPoint(x: cropRect.maxX, y: cropRect.minY))
+            cornerHandleView(type: .bottomLeft, point: CGPoint(x: cropRect.minX, y: cropRect.maxY))
+            cornerHandleView(type: .bottomRight, point: CGPoint(x: cropRect.maxX, y: cropRect.maxY))
         }
+        .allowsHitTesting(false)
+    }
+    
+    private func edgeHandleView(point: CGPoint, isHorizontal: Bool) -> some View {
+        Capsule()
+            .fill(Color.white)
+            .frame(width: isHorizontal ? 26 : 5, height: isHorizontal ? 5 : 26)
+            .shadow(color: Color.black.opacity(0.6), radius: 1, x: 0, y: 0.5)
+            .position(point)
+    }
+    
+    private func cornerHandleView(type: DragHandle, point: CGPoint) -> some View {
+        CornerBracketShape(handle: type)
+            .stroke(Color.white, lineWidth: 3.5)
+            .frame(width: 18, height: 18)
+            .shadow(color: Color.black.opacity(0.7), radius: 1, x: 0, y: 0.5)
+            .position(point)
+    }
+    
+    // MARK: - Unified Drag Handling
+    private func handleDragChanged(value: DragGesture.Value, imageRect: CGRect, cropRect: CGRect, imageAspect: CGFloat) {
+        if activeHandle == nil {
+            let start = value.startLocation
+            let cornerRadius: CGFloat = 28.0
+            
+            // 1. Check corner handles first
+            if hypot(start.x - cropRect.minX, start.y - cropRect.minY) <= cornerRadius {
+                activeHandle = .topLeft
+            } else if hypot(start.x - cropRect.maxX, start.y - cropRect.minY) <= cornerRadius {
+                activeHandle = .topRight
+            } else if hypot(start.x - cropRect.minX, start.y - cropRect.maxY) <= cornerRadius {
+                activeHandle = .bottomLeft
+            } else if hypot(start.x - cropRect.maxX, start.y - cropRect.maxY) <= cornerRadius {
+                activeHandle = .bottomRight
+            }
+            // 2. Check edge handles
+            else if abs(start.y - cropRect.minY) <= 18.0 && start.x >= cropRect.minX && start.x <= cropRect.maxX {
+                activeHandle = .top
+            } else if abs(start.y - cropRect.maxY) <= 18.0 && start.x >= cropRect.minX && start.x <= cropRect.maxX {
+                activeHandle = .bottom
+            } else if abs(start.x - cropRect.minX) <= 18.0 && start.y >= cropRect.minY && start.y <= cropRect.maxY {
+                activeHandle = .left
+            } else if abs(start.x - cropRect.maxX) <= 18.0 && start.y >= cropRect.minY && start.y <= cropRect.maxY {
+                activeHandle = .right
+            }
+            // 3. Check inside crop rect (translate)
+            else if cropRect.contains(start) {
+                activeHandle = .inside
+            }
+            // 4. Outside crop rect (rotate / straighten)
+            else {
+                activeHandle = .rotate
+                isRotating = true
+            }
+            
+            viewModel.beginSliderScrub()
+            dragStartCrop = (viewModel.cropLeft, viewModel.cropTop, viewModel.cropRight, viewModel.cropBottom)
+            dragStartStraighten = viewModel.straightenAngle
+        }
+        
+        guard let handle = activeHandle else { return }
+        
+        switch handle {
+        case .rotate:
+            let center = CGPoint(x: imageRect.midX, y: imageRect.midY)
+            let startVector = CGPoint(x: value.startLocation.x - center.x, y: value.startLocation.y - center.y)
+            let currentVector = CGPoint(x: value.location.x - center.x, y: value.location.y - center.y)
+            let startAngle = atan2(startVector.y, startVector.x)
+            let currentAngle = atan2(currentVector.y, currentVector.x)
+            var deltaDegrees = Float((currentAngle - startAngle) * 180.0 / .pi)
+            if deltaDegrees > 180.0 { deltaDegrees -= 360.0 }
+            if deltaDegrees < -180.0 { deltaDegrees += 360.0 }
+            
+            let newStraighten = clamp(dragStartStraighten + deltaDegrees, min: -45.0, max: 45.0)
+            viewModel.straightenAngle = newStraighten
+            
+        case .inside:
+            let deltaU = Float(value.translation.width / imageRect.width)
+            let deltaV = Float(value.translation.height / imageRect.height)
+            let width = dragStartCrop.right - dragStartCrop.left
+            let height = dragStartCrop.bottom - dragStartCrop.top
+            
+            var newLeft = dragStartCrop.left + deltaU
+            var newTop = dragStartCrop.top + deltaV
+            
+            newLeft = max(0.0, min(newLeft, 1.0 - width))
+            newTop = max(0.0, min(newTop, 1.0 - height))
+            
+            viewModel.cropLeft = newLeft
+            viewModel.cropRight = newLeft + width
+            viewModel.cropTop = newTop
+            viewModel.cropBottom = newTop + height
+            
+        case .top, .bottom, .left, .right:
+            updateEdgeDrag(type: handle, translation: value.translation, imageRect: imageRect, imageAspect: imageAspect)
+            
+        case .topLeft, .topRight, .bottomLeft, .bottomRight:
+            updateCornerDrag(type: handle, translation: value.translation, imageRect: imageRect, imageAspect: imageAspect)
+        }
+    }
+    
+    private func handleDragEnded() {
+        guard let handle = activeHandle else { return }
+        let actionTitle: String
+        switch handle {
+        case .rotate:
+            actionTitle = "Straighten (\(String(format: "%.1f°", viewModel.straightenAngle)))"
+        case .inside:
+            actionTitle = "Move Crop"
+        case .topLeft, .topRight, .bottomLeft, .bottomRight, .top, .bottom, .left, .right:
+            actionTitle = "Crop Box"
+        }
+        activeHandle = nil
+        isRotating = false
+        viewModel.endSliderScrub(actionName: actionTitle)
     }
     
     // MARK: - Aspect Ratio Resolver
@@ -257,201 +324,155 @@ public struct CropOverlayView: View {
         }
     }
     
-    // MARK: - Edge Center Handle
-    private func edgeHandle(type: DragHandle, point: CGPoint, isHorizontal: Bool, imageRect: CGRect, imageAspect: CGFloat) -> some View {
-        Capsule()
-            .fill(Color.white)
-            .frame(width: isHorizontal ? 26 : 5, height: isHorizontal ? 5 : 26)
-            .shadow(color: Color.black.opacity(0.6), radius: 1, x: 0, y: 0.5)
-            .frame(width: 44, height: 44) // Generous hit testing zone
-            .contentShape(Rectangle())
-            .position(point)
-            .gesture(
-                DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        if activeHandle == nil {
-                            activeHandle = type
-                            viewModel.beginSliderScrub()
-                            dragStartCrop = (viewModel.cropLeft, viewModel.cropTop, viewModel.cropRight, viewModel.cropBottom)
-                        }
-                        guard activeHandle == type else { return }
-                        let deltaU = Float(value.translation.width / imageRect.width)
-                        let deltaV = Float(value.translation.height / imageRect.height)
-                        
-                        let W0 = dragStartCrop.right - dragStartCrop.left
-                        let H0 = dragStartCrop.bottom - dragStartCrop.top
-                        
-                        if let ratio = getTargetRatio(imageAspect: imageAspect) {
-                            let normRatio = Float(ratio / imageAspect)
-                            let Yc = (dragStartCrop.top + dragStartCrop.bottom) / 2.0
-                            let Xc = (dragStartCrop.left + dragStartCrop.right) / 2.0
-                            
-                            switch type {
-                            case .right:
-                                let maxAllowedW = max(0.01, min(1.0 - dragStartCrop.left, 2.0 * min(Yc, 1.0 - Yc) * normRatio))
-                                let minW = min(Float(0.05), maxAllowedW)
-                                let newW = clamp(W0 + deltaU, min: minW, max: maxAllowedW)
-                                let newH = newW / normRatio
-                                viewModel.cropLeft = dragStartCrop.left
-                                viewModel.cropRight = clamp(dragStartCrop.left + newW, min: 0.0, max: 1.0)
-                                viewModel.cropTop = clamp(Yc - newH / 2.0, min: 0.0, max: 1.0)
-                                viewModel.cropBottom = clamp(Yc + newH / 2.0, min: 0.0, max: 1.0)
-                                
-                            case .left:
-                                let maxAllowedW = max(0.01, min(dragStartCrop.right, 2.0 * min(Yc, 1.0 - Yc) * normRatio))
-                                let minW = min(Float(0.05), maxAllowedW)
-                                let newW = clamp(W0 - deltaU, min: minW, max: maxAllowedW)
-                                let newH = newW / normRatio
-                                viewModel.cropLeft = clamp(dragStartCrop.right - newW, min: 0.0, max: 1.0)
-                                viewModel.cropRight = dragStartCrop.right
-                                viewModel.cropTop = clamp(Yc - newH / 2.0, min: 0.0, max: 1.0)
-                                viewModel.cropBottom = clamp(Yc + newH / 2.0, min: 0.0, max: 1.0)
-                                
-                            case .bottom:
-                                let maxAllowedH = max(0.01, min(1.0 - dragStartCrop.top, 2.0 * min(Xc, 1.0 - Xc) / normRatio))
-                                let minH = min(Float(0.05), maxAllowedH)
-                                let newH = clamp(H0 + deltaV, min: minH, max: maxAllowedH)
-                                let newW = newH * normRatio
-                                viewModel.cropTop = dragStartCrop.top
-                                viewModel.cropBottom = clamp(dragStartCrop.top + newH, min: 0.0, max: 1.0)
-                                viewModel.cropLeft = clamp(Xc - newW / 2.0, min: 0.0, max: 1.0)
-                                viewModel.cropRight = clamp(Xc + newW / 2.0, min: 0.0, max: 1.0)
-                                
-                            case .top:
-                                let maxAllowedH = max(0.01, min(dragStartCrop.bottom, 2.0 * min(Xc, 1.0 - Xc) / normRatio))
-                                let minH = min(Float(0.05), maxAllowedH)
-                                let newH = clamp(H0 - deltaV, min: minH, max: maxAllowedH)
-                                let newW = newH * normRatio
-                                viewModel.cropTop = clamp(dragStartCrop.bottom - newH, min: 0.0, max: 1.0)
-                                viewModel.cropBottom = dragStartCrop.bottom
-                                viewModel.cropLeft = clamp(Xc - newW / 2.0, min: 0.0, max: 1.0)
-                                viewModel.cropRight = clamp(Xc + newW / 2.0, min: 0.0, max: 1.0)
-                                
-                            default:
-                                break
-                            }
-                        } else {
-                            // Freeform resizing
-                            switch type {
-                            case .top:
-                                viewModel.cropTop = clamp(dragStartCrop.top + deltaV, min: 0.0, max: dragStartCrop.bottom - 0.05)
-                            case .bottom:
-                                viewModel.cropBottom = clamp(dragStartCrop.bottom + deltaV, min: dragStartCrop.top + 0.05, max: 1.0)
-                            case .left:
-                                viewModel.cropLeft = clamp(dragStartCrop.left + deltaU, min: 0.0, max: dragStartCrop.right - 0.05)
-                            case .right:
-                                viewModel.cropRight = clamp(dragStartCrop.right + deltaU, min: dragStartCrop.left + 0.05, max: 1.0)
-                            default:
-                                break
-                            }
-                        }
-                    }
-                    .onEnded { _ in
-                        activeHandle = nil
-                        viewModel.endSliderScrub(actionName: "Crop Area")
-                    }
-            )
+    // MARK: - Edge Handle Updates
+    private func updateEdgeDrag(type: DragHandle, translation: CGSize, imageRect: CGRect, imageAspect: CGFloat) {
+        let deltaU = Float(translation.width / imageRect.width)
+        let deltaV = Float(translation.height / imageRect.height)
+        let W0 = dragStartCrop.right - dragStartCrop.left
+        let H0 = dragStartCrop.bottom - dragStartCrop.top
+        
+        if let ratio = getTargetRatio(imageAspect: imageAspect) {
+            let normRatio = Float(ratio / imageAspect)
+            let Yc = (dragStartCrop.top + dragStartCrop.bottom) / 2.0
+            let Xc = (dragStartCrop.left + dragStartCrop.right) / 2.0
+            
+            switch type {
+            case .right:
+                let maxAllowedW = max(0.01, min(1.0 - dragStartCrop.left, 2.0 * min(Yc, 1.0 - Yc) * normRatio))
+                let minW = min(Float(0.05), maxAllowedW)
+                let newW = clamp(W0 + deltaU, min: minW, max: maxAllowedW)
+                let newH = newW / normRatio
+                viewModel.cropLeft = dragStartCrop.left
+                viewModel.cropRight = clamp(dragStartCrop.left + newW, min: 0.0, max: 1.0)
+                viewModel.cropTop = clamp(Yc - newH / 2.0, min: 0.0, max: 1.0)
+                viewModel.cropBottom = clamp(Yc + newH / 2.0, min: 0.0, max: 1.0)
+                
+            case .left:
+                let maxAllowedW = max(0.01, min(dragStartCrop.right, 2.0 * min(Yc, 1.0 - Yc) * normRatio))
+                let minW = min(Float(0.05), maxAllowedW)
+                let newW = clamp(W0 - deltaU, min: minW, max: maxAllowedW)
+                let newH = newW / normRatio
+                viewModel.cropLeft = clamp(dragStartCrop.right - newW, min: 0.0, max: 1.0)
+                viewModel.cropRight = dragStartCrop.right
+                viewModel.cropTop = clamp(Yc - newH / 2.0, min: 0.0, max: 1.0)
+                viewModel.cropBottom = clamp(Yc + newH / 2.0, min: 0.0, max: 1.0)
+                
+            case .bottom:
+                let maxAllowedH = max(0.01, min(1.0 - dragStartCrop.top, 2.0 * min(Xc, 1.0 - Xc) / normRatio))
+                let minH = min(Float(0.05), maxAllowedH)
+                let newH = clamp(H0 + deltaV, min: minH, max: maxAllowedH)
+                let newW = newH * normRatio
+                viewModel.cropTop = dragStartCrop.top
+                viewModel.cropBottom = clamp(dragStartCrop.top + newH, min: 0.0, max: 1.0)
+                viewModel.cropLeft = clamp(Xc - newW / 2.0, min: 0.0, max: 1.0)
+                viewModel.cropRight = clamp(Xc + newW / 2.0, min: 0.0, max: 1.0)
+                
+            case .top:
+                let maxAllowedH = max(0.01, min(dragStartCrop.bottom, 2.0 * min(Xc, 1.0 - Xc) / normRatio))
+                let minH = min(Float(0.05), maxAllowedH)
+                let newH = clamp(H0 - deltaV, min: minH, max: maxAllowedH)
+                let newW = newH * normRatio
+                viewModel.cropTop = clamp(dragStartCrop.bottom - newH, min: 0.0, max: 1.0)
+                viewModel.cropBottom = dragStartCrop.bottom
+                viewModel.cropLeft = clamp(Xc - newW / 2.0, min: 0.0, max: 1.0)
+                viewModel.cropRight = clamp(Xc + newW / 2.0, min: 0.0, max: 1.0)
+                
+            default:
+                break
+            }
+        } else {
+            // Freeform resizing
+            switch type {
+            case .top:
+                viewModel.cropTop = clamp(dragStartCrop.top + deltaV, min: 0.0, max: dragStartCrop.bottom - 0.05)
+            case .bottom:
+                viewModel.cropBottom = clamp(dragStartCrop.bottom + deltaV, min: dragStartCrop.top + 0.05, max: 1.0)
+            case .left:
+                viewModel.cropLeft = clamp(dragStartCrop.left + deltaU, min: 0.0, max: dragStartCrop.right - 0.05)
+            case .right:
+                viewModel.cropRight = clamp(dragStartCrop.right + deltaU, min: dragStartCrop.left + 0.05, max: 1.0)
+            default:
+                break
+            }
+        }
     }
     
-    // MARK: - Corner Bracket Handle
-    private func cornerHandle(type: DragHandle, point: CGPoint, imageRect: CGRect, imageAspect: CGFloat) -> some View {
-        CornerBracketShape(handle: type)
-            .stroke(Color.white, lineWidth: 3.5)
-            .frame(width: 18, height: 18)
-            .shadow(color: Color.black.opacity(0.7), radius: 1, x: 0, y: 0.5)
-            .frame(width: 44, height: 44) // Generous hit testing area
-            .contentShape(Rectangle())
-            .position(point)
-            .gesture(
-                DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        if activeHandle == nil {
-                            activeHandle = type
-                            viewModel.beginSliderScrub()
-                            dragStartCrop = (viewModel.cropLeft, viewModel.cropTop, viewModel.cropRight, viewModel.cropBottom)
-                        }
-                        guard activeHandle == type else { return }
-                        let deltaU = Float(value.translation.width / imageRect.width)
-                        let deltaV = Float(value.translation.height / imageRect.height)
-                        
-                        let W0 = dragStartCrop.right - dragStartCrop.left
-                        
-                        if let ratio = getTargetRatio(imageAspect: imageAspect) {
-                            let normRatio = Float(ratio / imageAspect)
-                            
-                            switch type {
-                            case .bottomRight:
-                                let delta = (deltaU + deltaV * normRatio) / 2.0
-                                let maxAllowedW = max(0.01, min(1.0 - dragStartCrop.left, (1.0 - dragStartCrop.top) * normRatio))
-                                let minW = min(Float(0.05), maxAllowedW)
-                                let newW = clamp(W0 + delta, min: minW, max: maxAllowedW)
-                                let newH = newW / normRatio
-                                viewModel.cropLeft = dragStartCrop.left
-                                viewModel.cropRight = clamp(dragStartCrop.left + newW, min: 0.0, max: 1.0)
-                                viewModel.cropTop = dragStartCrop.top
-                                viewModel.cropBottom = clamp(dragStartCrop.top + newH, min: 0.0, max: 1.0)
-                                
-                            case .topRight:
-                                let delta = (deltaU - deltaV * normRatio) / 2.0
-                                let maxAllowedW = max(0.01, min(1.0 - dragStartCrop.left, dragStartCrop.bottom * normRatio))
-                                let minW = min(Float(0.05), maxAllowedW)
-                                let newW = clamp(W0 + delta, min: minW, max: maxAllowedW)
-                                let newH = newW / normRatio
-                                viewModel.cropLeft = dragStartCrop.left
-                                viewModel.cropRight = clamp(dragStartCrop.left + newW, min: 0.0, max: 1.0)
-                                viewModel.cropTop = clamp(dragStartCrop.bottom - newH, min: 0.0, max: 1.0)
-                                viewModel.cropBottom = dragStartCrop.bottom
-                                
-                            case .bottomLeft:
-                                let delta = (-deltaU + deltaV * normRatio) / 2.0
-                                let maxAllowedW = max(0.01, min(dragStartCrop.right, (1.0 - dragStartCrop.top) * normRatio))
-                                let minW = min(Float(0.05), maxAllowedW)
-                                let newW = clamp(W0 + delta, min: minW, max: maxAllowedW)
-                                let newH = newW / normRatio
-                                viewModel.cropLeft = clamp(dragStartCrop.right - newW, min: 0.0, max: 1.0)
-                                viewModel.cropRight = dragStartCrop.right
-                                viewModel.cropTop = dragStartCrop.top
-                                viewModel.cropBottom = clamp(dragStartCrop.top + newH, min: 0.0, max: 1.0)
-                                
-                            case .topLeft:
-                                let delta = (-deltaU - deltaV * normRatio) / 2.0
-                                let maxAllowedW = max(0.01, min(dragStartCrop.right, dragStartCrop.bottom * normRatio))
-                                let minW = min(Float(0.05), maxAllowedW)
-                                let newW = clamp(W0 + delta, min: minW, max: maxAllowedW)
-                                let newH = newW / normRatio
-                                viewModel.cropLeft = clamp(dragStartCrop.right - newW, min: 0.0, max: 1.0)
-                                viewModel.cropRight = dragStartCrop.right
-                                viewModel.cropTop = clamp(dragStartCrop.bottom - newH, min: 0.0, max: 1.0)
-                                viewModel.cropBottom = dragStartCrop.bottom
-                                
-                            default:
-                                break
-                            }
-                        } else {
-                            // Freeform resizing
-                            switch type {
-                            case .topLeft:
-                                viewModel.cropLeft = clamp(dragStartCrop.left + deltaU, min: 0.0, max: dragStartCrop.right - 0.05)
-                                viewModel.cropTop = clamp(dragStartCrop.top + deltaV, min: 0.0, max: dragStartCrop.bottom - 0.05)
-                            case .topRight:
-                                viewModel.cropRight = clamp(dragStartCrop.right + deltaU, min: dragStartCrop.left + 0.05, max: 1.0)
-                                viewModel.cropTop = clamp(dragStartCrop.top + deltaV, min: 0.0, max: dragStartCrop.bottom - 0.05)
-                            case .bottomLeft:
-                                viewModel.cropLeft = clamp(dragStartCrop.left + deltaU, min: 0.0, max: dragStartCrop.right - 0.05)
-                                viewModel.cropBottom = clamp(dragStartCrop.bottom + deltaV, min: dragStartCrop.top + 0.05, max: 1.0)
-                            case .bottomRight:
-                                viewModel.cropRight = clamp(dragStartCrop.right + deltaU, min: dragStartCrop.left + 0.05, max: 1.0)
-                                viewModel.cropBottom = clamp(dragStartCrop.bottom + deltaV, min: dragStartCrop.top + 0.05, max: 1.0)
-                            default:
-                                break
-                            }
-                        }
-                    }
-                    .onEnded { _ in
-                        activeHandle = nil
-                        viewModel.endSliderScrub(actionName: "Crop Area")
-                    }
-            )
+    // MARK: - Corner Bracket Updates
+    private func updateCornerDrag(type: DragHandle, translation: CGSize, imageRect: CGRect, imageAspect: CGFloat) {
+        let deltaU = Float(translation.width / imageRect.width)
+        let deltaV = Float(translation.height / imageRect.height)
+        let W0 = dragStartCrop.right - dragStartCrop.left
+        
+        if let ratio = getTargetRatio(imageAspect: imageAspect) {
+            let normRatio = Float(ratio / imageAspect)
+            
+            switch type {
+            case .bottomRight:
+                let delta = (deltaU + deltaV * normRatio) / 2.0
+                let maxAllowedW = max(0.01, min(1.0 - dragStartCrop.left, (1.0 - dragStartCrop.top) * normRatio))
+                let minW = min(Float(0.05), maxAllowedW)
+                let newW = clamp(W0 + delta, min: minW, max: maxAllowedW)
+                let newH = newW / normRatio
+                viewModel.cropLeft = dragStartCrop.left
+                viewModel.cropRight = clamp(dragStartCrop.left + newW, min: 0.0, max: 1.0)
+                viewModel.cropTop = dragStartCrop.top
+                viewModel.cropBottom = clamp(dragStartCrop.top + newH, min: 0.0, max: 1.0)
+                
+            case .topRight:
+                let delta = (deltaU - deltaV * normRatio) / 2.0
+                let maxAllowedW = max(0.01, min(1.0 - dragStartCrop.left, dragStartCrop.bottom * normRatio))
+                let minW = min(Float(0.05), maxAllowedW)
+                let newW = clamp(W0 + delta, min: minW, max: maxAllowedW)
+                let newH = newW / normRatio
+                viewModel.cropLeft = dragStartCrop.left
+                viewModel.cropRight = clamp(dragStartCrop.left + newW, min: 0.0, max: 1.0)
+                viewModel.cropTop = clamp(dragStartCrop.bottom - newH, min: 0.0, max: 1.0)
+                viewModel.cropBottom = dragStartCrop.bottom
+                
+            case .bottomLeft:
+                let delta = (-deltaU + deltaV * normRatio) / 2.0
+                let maxAllowedW = max(0.01, min(dragStartCrop.right, (1.0 - dragStartCrop.top) * normRatio))
+                let minW = min(Float(0.05), maxAllowedW)
+                let newW = clamp(W0 + delta, min: minW, max: maxAllowedW)
+                let newH = newW / normRatio
+                viewModel.cropLeft = clamp(dragStartCrop.right - newW, min: 0.0, max: 1.0)
+                viewModel.cropRight = dragStartCrop.right
+                viewModel.cropTop = dragStartCrop.top
+                viewModel.cropBottom = clamp(dragStartCrop.top + newH, min: 0.0, max: 1.0)
+                
+            case .topLeft:
+                let delta = (-deltaU - deltaV * normRatio) / 2.0
+                let maxAllowedW = max(0.01, min(dragStartCrop.right, dragStartCrop.bottom * normRatio))
+                let minW = min(Float(0.05), maxAllowedW)
+                let newW = clamp(W0 + delta, min: minW, max: maxAllowedW)
+                let newH = newW / normRatio
+                viewModel.cropLeft = clamp(dragStartCrop.right - newW, min: 0.0, max: 1.0)
+                viewModel.cropRight = dragStartCrop.right
+                viewModel.cropTop = clamp(dragStartCrop.bottom - newH, min: 0.0, max: 1.0)
+                viewModel.cropBottom = dragStartCrop.bottom
+                
+            default:
+                break
+            }
+        } else {
+            // Freeform resizing
+            switch type {
+            case .topLeft:
+                viewModel.cropLeft = clamp(dragStartCrop.left + deltaU, min: 0.0, max: dragStartCrop.right - 0.05)
+                viewModel.cropTop = clamp(dragStartCrop.top + deltaV, min: 0.0, max: dragStartCrop.bottom - 0.05)
+            case .topRight:
+                viewModel.cropRight = clamp(dragStartCrop.right + deltaU, min: dragStartCrop.left + 0.05, max: 1.0)
+                viewModel.cropTop = clamp(dragStartCrop.top + deltaV, min: 0.0, max: dragStartCrop.bottom - 0.05)
+            case .bottomLeft:
+                viewModel.cropLeft = clamp(dragStartCrop.left + deltaU, min: 0.0, max: dragStartCrop.right - 0.05)
+                viewModel.cropBottom = clamp(dragStartCrop.bottom + deltaV, min: dragStartCrop.top + 0.05, max: 1.0)
+            case .bottomRight:
+                viewModel.cropRight = clamp(dragStartCrop.right + deltaU, min: dragStartCrop.left + 0.05, max: 1.0)
+                viewModel.cropBottom = clamp(dragStartCrop.bottom + deltaV, min: dragStartCrop.top + 0.05, max: 1.0)
+            default:
+                break
+            }
+        }
     }
     
     // MARK: - Floating Action Bar HUD
@@ -501,6 +522,11 @@ public struct CropOverlayView: View {
             
             // Done Button
             Button(action: {
+                if activeHandle != nil {
+                    handleDragEnded()
+                } else if viewModel.undoHistory.scrubStartEdits != nil {
+                    viewModel.endSliderScrub(actionName: "Crop Box")
+                }
                 viewModel.isCropToolActive = false
                 viewModel.saveCurrentEdits()
                 viewModel.notifyThumbnailChanged()

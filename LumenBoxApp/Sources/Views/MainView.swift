@@ -127,7 +127,12 @@ struct MainView: View {
             switch event.keyCode {
             case 36: // Return / Enter: switch to Detail mode or exit Crop mode
                 if viewModel.isCropToolActive {
+                    if viewModel.undoHistory.scrubStartEdits != nil {
+                        viewModel.endSliderScrub(actionName: "Crop Box")
+                    }
                     viewModel.isCropToolActive = false
+                    viewModel.saveCurrentEdits()
+                    viewModel.notifyThumbnailChanged()
                     return nil
                 } else if viewModel.canvasMode == .grid {
                     viewModel.enterDetailMode()
@@ -135,7 +140,12 @@ struct MainView: View {
                 }
             case 53: // Escape: exit Crop mode, return to Grid mode, or exit bulk selection mode
                 if viewModel.isCropToolActive {
+                    if viewModel.undoHistory.scrubStartEdits != nil {
+                        viewModel.endSliderScrub(actionName: "Crop Box")
+                    }
                     viewModel.isCropToolActive = false
+                    viewModel.saveCurrentEdits()
+                    viewModel.notifyThumbnailChanged()
                     return nil
                 } else if viewModel.canvasMode == .detail {
                     viewModel.enterGridMode()

@@ -67,7 +67,7 @@ public struct HistorySectionView: View {
                         let isLatest = (index == viewModel.undoHistory.undoStack.count - 1)
                         historyRow(
                             title: entry.title,
-                            icon: iconForPayload(entry.payload),
+                            icon: iconForPayload(entry.payload, title: entry.title),
                             isActive: isLatest,
                             isFuture: false,
                             action: {
@@ -80,7 +80,7 @@ public struct HistorySectionView: View {
                     ForEach(viewModel.undoHistory.redoStack.reversed(), id: \.id) { entry in
                         historyRow(
                             title: entry.title,
-                            icon: iconForPayload(entry.payload),
+                            icon: iconForPayload(entry.payload, title: entry.title),
                             isActive: false,
                             isFuture: true,
                             action: {
@@ -146,9 +146,24 @@ public struct HistorySectionView: View {
         .help(isFuture ? "Redo to this state" : (isActive ? "Current state" : "Restore to this state"))
     }
     
-    private func iconForPayload(_ payload: UndoActionPayload) -> String {
+    private func iconForPayload(_ payload: UndoActionPayload, title: String) -> String {
         switch payload {
         case .edits:
+            if title.contains("Crop") || title.contains("Aspect Ratio") {
+                return "crop"
+            } else if title.contains("Straighten") {
+                return "rotate.right"
+            } else if title.contains("Rotate") || title.contains("Flip") {
+                return "arrow.triangle.2.circlepath"
+            } else if title.contains("Curve") {
+                return "waveform.path.ecg"
+            } else if title.contains("Profile") || title.contains("LUT") {
+                return "camera.filters"
+            } else if title.contains("Grain") {
+                return "circle.dotted"
+            } else if title.contains("White Balance") {
+                return "eyedropper"
+            }
             return "slider.horizontal.3"
         case .rating:
             return "star.fill"

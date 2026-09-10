@@ -109,121 +109,126 @@ public struct ToneCurveView: View {
                 }
             }
             
-            // Interactive 2D Spline Graph
-            GeometryReader { geo in
-                let size = geo.size.width
-                let height = size
-                
-                ZStack {
-                    // 1. Background Canvas
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                        )
-                    
-                    // 2. Zone Grid (4x4 zones: Blacks, Shadows, Midtones, Highlights)
-                    Path { path in
-                        // Grid lines at 25%, 50%, 75%
-                        for frac in [0.25, 0.50, 0.75] {
-                            let x = size * CGFloat(frac)
-                            let y = height * CGFloat(frac)
-                            // Vertical
-                            path.move(to: CGPoint(x: x, y: 0))
-                            path.addLine(to: CGPoint(x: x, y: height))
-                            // Horizontal
-                            path.move(to: CGPoint(x: 0, y: y))
-                            path.addLine(to: CGPoint(x: size, y: y))
-                        }
-                    }
-                    .stroke(Color.white.opacity(0.07), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    
-                    // 3. Diagonal Linear Baseline (Identity)
-                    Path { path in
-                        path.move(to: CGPoint(x: 0, y: height))
-                        path.addLine(to: CGPoint(x: size, y: 0))
-                    }
-                    .stroke(Color.white.opacity(0.15), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                    
-                    // 4. Ghost Curves (Master curve if in RGB channel mode, or RGB curves if in Master mode)
-                    if selectedChannel != .master && viewModel.curves.master.count > 1 {
-                        renderCurvePath(points: viewModel.curves.master, size: size, height: height)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
-                    }
-                    
-                    // 5. Active Channel Fill Gradient under curve
-                    renderCurvePath(points: currentPoints, size: size, height: height, closeToBottom: true)
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    selectedChannel.color.opacity(0.18),
-                                    selectedChannel.color.opacity(0.01)
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                    
-                    // 6. Active Channel Spline Line
-                    renderCurvePath(points: currentPoints, size: size, height: height)
-                        .stroke(selectedChannel.color, style: StrokeStyle(lineWidth: 2.0, lineCap: .round, lineJoin: .round))
-                        .shadow(color: selectedChannel.color.opacity(0.4), radius: 3)
-                    
-                    // 7. Interactive Control Points
-                    ForEach(Array(currentPoints.enumerated()), id: \.offset) { index, pt in
-                        let px = CGFloat(pt.x) * size
-                        let py = (1.0 - CGFloat(pt.y)) * height
-                        let isHovered = hoveredPointIndex == index
-                        let isDragged = draggingPointIndex == index
+            // Interactive 2D Spline Graph (Strict 1:1 Aspect Ratio)
+            Color.clear
+                .aspectRatio(1.0, contentMode: .fit)
+                .overlay(
+                    GeometryReader { geo in
+                        let size = geo.size.width
+                        let height = geo.size.height
                         
                         ZStack {
-                            // Outer active aura
-                            Circle()
-                                .fill(selectedChannel.color.opacity(isDragged ? 0.4 : (isHovered ? 0.25 : 0.0)))
-                                .frame(width: 22, height: 22)
+                            // 1. Background Canvas
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                )
                             
-                            // Outer ring
-                            Circle()
-                                .stroke(Color.black.opacity(0.8), lineWidth: 2)
-                                .background(Circle().fill(selectedChannel.color))
-                                .frame(width: isDragged ? 12 : 10, height: isDragged ? 12 : 10)
+                            // 2. Zone Grid (4x4 zones: Blacks, Shadows, Midtones, Highlights)
+                            Path { path in
+                                // Grid lines at 25%, 50%, 75%
+                                for frac in [0.25, 0.50, 0.75] {
+                                    let x = size * CGFloat(frac)
+                                    let y = height * CGFloat(frac)
+                                    // Vertical
+                                    path.move(to: CGPoint(x: x, y: 0))
+                                    path.addLine(to: CGPoint(x: x, y: height))
+                                    // Horizontal
+                                    path.move(to: CGPoint(x: 0, y: y))
+                                    path.addLine(to: CGPoint(x: size, y: y))
+                                }
+                            }
+                            .stroke(Color.white.opacity(0.07), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            
+                            // 3. Diagonal Linear Baseline (Identity)
+                            Path { path in
+                                path.move(to: CGPoint(x: 0, y: height))
+                                path.addLine(to: CGPoint(x: size, y: 0))
+                            }
+                            .stroke(Color.white.opacity(0.15), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                            
+                            // 4. Ghost Curves (Master curve if in RGB channel mode, or RGB curves if in Master mode)
+                            if selectedChannel != .master && viewModel.curves.master.count > 1 {
+                                renderCurvePath(points: viewModel.curves.master, size: size, height: height)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
+                            }
+                            
+                            // 5. Active Channel Fill Gradient under curve
+                            renderCurvePath(points: currentPoints, size: size, height: height, closeToBottom: true)
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            selectedChannel.color.opacity(0.18),
+                                            selectedChannel.color.opacity(0.01)
+                                        ]),
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                            
+                            // 6. Active Channel Spline Line
+                            renderCurvePath(points: currentPoints, size: size, height: height)
+                                .stroke(selectedChannel.color, style: StrokeStyle(lineWidth: 2.0, lineCap: .round, lineJoin: .round))
+                                .shadow(color: selectedChannel.color.opacity(0.4), radius: 3)
+                            
+                            // 7. Interactive Control Points
+                            ForEach(Array(currentPoints.enumerated()), id: \.offset) { index, pt in
+                                let px = CGFloat(pt.x) * size
+                                let py = (1.0 - CGFloat(pt.y)) * height
+                                let isHovered = hoveredPointIndex == index
+                                let isDragged = draggingPointIndex == index
+                                
+                                ZStack {
+                                    // Outer active aura
+                                    Circle()
+                                        .fill(selectedChannel.color.opacity(isDragged ? 0.4 : (isHovered ? 0.25 : 0.0)))
+                                        .frame(width: 22, height: 22)
+                                    
+                                    // Outer ring
+                                    Circle()
+                                        .stroke(Color.black.opacity(0.8), lineWidth: 2)
+                                        .background(Circle().fill(selectedChannel.color))
+                                        .frame(width: isDragged ? 12 : 10, height: isDragged ? 12 : 10)
+                                }
+                                .position(x: px, y: py)
+                                .onHover { hovering in
+                                    if hovering {
+                                        hoveredPointIndex = index
+                                    } else if hoveredPointIndex == index {
+                                        hoveredPointIndex = nil
+                                    }
+                                }
+                            }
                         }
-                        .position(x: px, y: py)
-                        .onHover { hovering in
-                            if hovering {
-                                hoveredPointIndex = index
-                            } else if hoveredPointIndex == index {
-                                hoveredPointIndex = nil
+                        .frame(width: size, height: height)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    if draggingPointIndex == nil {
+                                        viewModel.beginSliderScrub()
+                                    }
+                                    handleDrag(at: value.location, in: CGSize(width: size, height: height))
+                                }
+                                .onEnded { _ in
+                                    draggingPointIndex = nil
+                                    activeCoordinates = nil
+                                    viewModel.endSliderScrub(actionName: "Tone Curve (\(selectedChannel.rawValue))")
+                                }
+                        )
+                        .onTapGesture(count: 2) {
+                            // Double-tap on graph deletes nearest midtone point or resets endpoint
+                            if let idx = hoveredPointIndex {
+                                deleteOrResetPoint(at: idx)
                             }
                         }
                     }
-                }
-                .frame(width: size, height: height)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            if draggingPointIndex == nil {
-                                viewModel.beginSliderScrub()
-                            }
-                            handleDrag(at: value.location, in: CGSize(width: size, height: height))
-                        }
-                        .onEnded { _ in
-                            draggingPointIndex = nil
-                            activeCoordinates = nil
-                            viewModel.endSliderScrub(actionName: "Tone Curve (\(selectedChannel.rawValue))")
-                        }
                 )
-                .onTapGesture(count: 2) {
-                    // Double-tap on graph deletes nearest midtone point or resets endpoint
-                    if let idx = hoveredPointIndex {
-                        deleteOrResetPoint(at: idx)
-                    }
-                }
-            }
-            .frame(height: 200)
-            .padding(.vertical, 2)
+                .clipped()
+                .padding(.vertical, 2)
             
             // Bottom Zone Labels
             HStack {

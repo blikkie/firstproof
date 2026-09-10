@@ -40,28 +40,6 @@ public struct OpticsGeometryWorkspaceView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(viewModel.isCropToolActive ? .green : .accentColor)
                 .controlSize(.regular)
-                
-                HStack(spacing: 8) {
-                    Picker("Aspect Ratio", selection: Binding<CropAspectRatioPreset>(
-                        get: { viewModel.cropAspectRatioPreset },
-                        set: { viewModel.setCropAspectRatioPreset($0) }
-                    )) {
-                        ForEach(CropAspectRatioPreset.allCases) { preset in
-                            Text(preset.rawValue).tag(preset)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    
-                    Button(action: {
-                        viewModel.flipCropOrientation()
-                    }) {
-                        Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right.fill")
-                            .font(.system(size: 11))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Flip Aspect Ratio Orientation (X)")
-                }
             }
             
             Divider()
