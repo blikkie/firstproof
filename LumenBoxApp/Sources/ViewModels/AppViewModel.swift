@@ -157,6 +157,14 @@ public final class AppViewModel {
     public var gridColumnCount: Int = 4
     var currentlyLoadedPhotoPath: String? = nil
     
+    // MARK: - Editable Metadata Properties
+    public var metadataTitle: String = ""
+    public var metadataDescription: String = ""
+    public var metadataCreator: String = ""
+    public var metadataCopyright: String = ""
+    public var metadataKeywords: String = ""
+    @ObservationIgnored var metadataSaveWorkItem: DispatchWorkItem? = nil
+    
     // MARK: - Batch Export Engine State
     public var isBatchExporting: Bool = false
     public var batchExportTotalCount: Int = 0
@@ -401,6 +409,121 @@ public final class AppViewModel {
         ) { [weak self] note in
             let win = note.object as? NSWindow
             self?.updateScreenCapabilities(for: win)
+        }
+    }
+    
+    // MARK: - Metadata Persistence & Sync
+    public func loadMetadataForSelectedPhoto() {
+        guard let photo = selectedPhoto else {
+            metadataTitle = ""
+            metadataDescription = ""
+            metadataCreator = ""
+            metadataCopyright = ""
+            metadataKeywords = ""
+            return
+        }
+        metadataTitle = photo.title ?? ""
+        metadataDescription = photo.description ?? ""
+        metadataCreator = photo.creator ?? ""
+        metadataCopyright = photo.copyright ?? ""
+        metadataKeywords = photo.keywords ?? ""
+    }
+
+    public func scheduleMetadataSave() {
+        guard let path = selectedPhoto?.filePath else { return }
+        metadataSaveWorkItem?.cancel()
+
+        let title = metadataTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = metadataDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let creator = metadataCreator.trimmingCharacters(in: .whitespacesAndNewlines)
+        let copyright = metadataCopyright.trimmingCharacters(in: .whitespacesAndNewlines)
+        let keywords = metadataKeywords.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let item = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.saveMetadata(
+                for: path,
+                title: title.isEmpty ? nil : title,
+                description: description.isEmpty ? nil : description,
+                creator: creator.isEmpty ? nil : creator,
+                copyright: copyright.isEmpty ? nil : copyright,
+                keywords: keywords.isEmpty ? nil : keywords
+            )
+        }
+        metadataSaveWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: item)
+    }
+
+    public func flushPendingMetadataSave() {
+        if let workItem = metadataSaveWorkItem {
+            workItem.perform()
+            metadataSaveWorkItem = nil
+        }
+    }
+
+    public func saveMetadata(
+        for path: String,
+        title: String?,
+        description: String?,
+        creator: String?,
+        copyright: String?,
+        keywords: String?
+    ) {
+        guard let db = db else { return }
+        _ = db.updatePhotoMetadata(
+            filePath: path,
+            title: title,
+            description: description,
+            creator: creator,
+            copyright: copyright,
+            keywords: keywords
+        )
+
+        // Update in-memory records
+        if let idx = photos.firstIndex(where: { $0.filePath == path }) {
+            photos[idx].title = title
+            photos[idx].description = description
+            photos[idx].creator = creator
+            photos[idx].copyright = copyright
+            photos[idx].keywords = keywords
+        }
+        if selectedPhoto?.filePath == path {
+            selectedPhoto?.title = title
+            selectedPhoto?.description = description
+            selectedPhoto?.creator = creator
+            selectedPhoto?.copyright = copyright
+            selectedPhoto?.keywords = keywords
+        }
+
+        // Sync to XMP sidecar
+        let activeSnapshot = currentEdits
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            let xmpPath = path.hasSuffix(".xmp") ? path : "\(path).xmp"
+            let existing = readXmp(path: xmpPath)
+            let splitKeywords: [String] = keywords?
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty } ?? existing?.keywords ?? []
+
+            let currentRating = self.photos.first(where: { $0.filePath == path })?.rating ?? existing?.rating
+            let currentStatus = self.photos.first(where: { $0.filePath == path })?.status ?? existing?.status ?? "None"
+            let currentLat = self.photos.first(where: { $0.filePath == path })?.latitude ?? existing?.latitude
+            let currentLon = self.photos.first(where: { $0.filePath == path })?.longitude ?? existing?.longitude
+
+            let record = XmpDataRecord(
+                rating: currentRating,
+                status: currentStatus,
+                title: title ?? existing?.title,
+                description: description ?? existing?.description,
+                creator: creator ?? existing?.creator,
+                copyright: copyright ?? existing?.copyright,
+                keywords: splitKeywords,
+                latitude: currentLat,
+                longitude: currentLon,
+                edits: (path == self.currentlyLoadedPhotoPath) ? activeSnapshot : (existing?.edits ?? EditSettings.defaultIdentity)
+            )
+            _ = writeXmp(path: xmpPath, record: record)
         }
     }
 }

@@ -91,10 +91,13 @@ public struct RatingControlsView: View {
                         viewModel.setRating(Int32(star))
                     }) {
                         Image(systemName: isSelected ? "star.fill" : "star")
-                            .font(.subheadline)
-                            .foregroundColor(isSelected ? .yellow : .secondary)
+                            .font(.system(size: 13, weight: isSelected ? .bold : .regular))
+                            .foregroundColor(isSelected ? .yellow : .secondary.opacity(0.6))
+                            .padding(4)
+                            .background(isSelected ? Color.yellow.opacity(0.15) : Color.clear)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.plain)
                     .help("Rate \(star) Star\(star > 1 ? "s" : "") (Key \(star))")
                 }
                 
@@ -102,8 +105,9 @@ public struct RatingControlsView: View {
                     viewModel.setRating(nil)
                 }) {
                     Image(systemName: "xmark")
-                        .font(.caption)
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.secondary)
+                        .padding(4)
                 }
                 .buttonStyle(.plain)
                 .help("Clear Rating (Key 0)")
@@ -120,32 +124,66 @@ public struct FlagControlsView: View {
     }
     
     public var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("Flag:")
                 .font(.caption)
                 .foregroundColor(.secondary)
             
             HStack(spacing: 8) {
+                let currentStatus = viewModel.selectedPhoto?.status.lowercased() ?? "none"
+                let isPick = currentStatus == "pick"
+                let isReject = currentStatus == "reject"
+                
                 Button(action: { viewModel.setStatus("pick") }) {
-                    Label("Pick (P)", systemImage: "flag.fill")
-                        .font(.caption)
-                        .foregroundColor(.green)
+                    HStack(spacing: 5) {
+                        Image(systemName: "flag.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Pick (P)")
+                            .font(.caption)
+                            .fontWeight(isPick ? .bold : .medium)
+                    }
+                    .foregroundColor(isPick ? .white : .green)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(isPick ? Color.green : Color.green.opacity(0.12))
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(isPick ? Color.green : Color.green.opacity(0.3), lineWidth: 1)
+                    )
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
                 .help("Mark as Pick (P)")
                 
                 Button(action: { viewModel.setStatus("reject") }) {
-                    Label("Reject (X)", systemImage: "xmark.circle.fill")
-                        .font(.caption)
-                        .foregroundColor(.red)
+                    HStack(spacing: 5) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Reject (X)")
+                            .font(.caption)
+                            .fontWeight(isReject ? .bold : .medium)
+                    }
+                    .foregroundColor(isReject ? .white : .red)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(isReject ? Color.red : Color.red.opacity(0.12))
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(isReject ? Color.red : Color.red.opacity(0.3), lineWidth: 1)
+                    )
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
                 .help("Mark as Reject (X)")
                 
                 Button(action: { viewModel.setStatus("none") }) {
                     Text("Clear (U)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(currentStatus == "none" ? .secondary : .primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.secondary.opacity(0.08))
+                        .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
                 .help("Unflag (U)")

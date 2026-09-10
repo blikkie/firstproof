@@ -182,14 +182,16 @@ extension AppViewModel {
     }
     
     public func loadPreview(for photo: PhotoRecord) {
-        // Save edits of previously active photo before switching
+        // Save edits and pending metadata of previously active photo before switching
         if let prevPath = currentlyLoadedPhotoPath, prevPath != photo.filePath {
+            self.flushPendingMetadataSave()
             let editsSnapshot = currentEdits
             DispatchQueue.global(qos: .utility).async { [weak self] in
                 self?.syncXmp(for: prevPath, rating: nil, status: nil, edits: editsSnapshot)
             }
         }
         self.currentlyLoadedPhotoPath = photo.filePath
+        self.loadMetadataForSelectedPhoto()
         
         // Resolve Lensfun lens distortion coefficients
         if let make = photo.cameraMake,
@@ -455,11 +457,21 @@ extension AppViewModel {
         
         let finalEdits = edits ?? existingXmp?.edits ?? EditSettings.defaultIdentity
         
+        let splitKeywords: [String]
+        if let kw = currentPhoto?.keywords {
+            splitKeywords = kw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        } else {
+            splitKeywords = existingXmp?.keywords ?? []
+        }
+        
         let record = XmpDataRecord(
             rating: finalRating,
             status: finalStatus,
-            title: existingXmp?.title,
-            description: existingXmp?.description,
+            title: currentPhoto?.title ?? existingXmp?.title,
+            description: currentPhoto?.description ?? existingXmp?.description,
+            creator: currentPhoto?.creator ?? existingXmp?.creator,
+            copyright: currentPhoto?.copyright ?? existingXmp?.copyright,
+            keywords: splitKeywords,
             latitude: currentPhoto?.latitude,
             longitude: currentPhoto?.longitude,
             edits: finalEdits

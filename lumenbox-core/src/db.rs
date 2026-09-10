@@ -27,7 +27,11 @@ pub struct PhotoRecord {
     pub taken_time: Option<i64>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub title: Option<String>,
     pub description: Option<String>,
+    pub creator: Option<String>,
+    pub copyright: Option<String>,
+    pub keywords: Option<String>,
     pub rating: Option<i32>,
     pub status: String, // "Pick", "Reject", "None"
     pub has_xmp: bool,
@@ -93,7 +97,11 @@ impl Database {
                 taken_time INTEGER,
                 latitude REAL,
                 longitude REAL,
+                title TEXT,
                 description TEXT,
+                creator TEXT,
+                copyright TEXT,
+                keywords TEXT,
                 rating INTEGER,
                 status TEXT NOT NULL DEFAULT 'None',
                 has_xmp INTEGER NOT NULL DEFAULT 0,
@@ -107,6 +115,13 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_photos_status ON photos(status);
             CREATE INDEX IF NOT EXISTS idx_photos_file_path ON photos(file_path);",
         )?;
+
+        // Execute schema migrations if existing catalog database does not have new columns
+        let _ = conn.execute("ALTER TABLE photos ADD COLUMN title TEXT;", []);
+        let _ = conn.execute("ALTER TABLE photos ADD COLUMN creator TEXT;", []);
+        let _ = conn.execute("ALTER TABLE photos ADD COLUMN copyright TEXT;", []);
+        let _ = conn.execute("ALTER TABLE photos ADD COLUMN keywords TEXT;", []);
+
         Ok(())
     }
 
@@ -198,6 +213,10 @@ impl Database {
                 let mut latitude = raw_meta.as_ref().and_then(|m| m.latitude);
                 let mut longitude = raw_meta.as_ref().and_then(|m| m.longitude);
                 let mut description = raw_meta.as_ref().and_then(|m| m.description.clone());
+                let mut creator = raw_meta.as_ref().and_then(|m| m.creator.clone());
+                let mut copyright = raw_meta.as_ref().and_then(|m| m.copyright.clone());
+                let mut title = None;
+                let mut keywords = None;
 
                 // 2. XMP Sidecar Integration (Support both Lightroom foo.jpg.xmp and standard foo.xmp)
                 let xmp_path1 = PathBuf::from(format!("{}.xmp", file_path_str));
@@ -227,8 +246,20 @@ impl Database {
                         if xmp_data.longitude.is_some() {
                             longitude = xmp_data.longitude;
                         }
+                        if xmp_data.title.is_some() {
+                            title = xmp_data.title;
+                        }
                         if xmp_data.description.is_some() {
                             description = xmp_data.description;
+                        }
+                        if xmp_data.creator.is_some() {
+                            creator = xmp_data.creator;
+                        }
+                        if xmp_data.copyright.is_some() {
+                            copyright = xmp_data.copyright;
+                        }
+                        if !xmp_data.keywords.is_empty() {
+                            keywords = Some(xmp_data.keywords.join(", "));
                         }
                     }
                 }
@@ -269,7 +300,11 @@ impl Database {
                     taken_time,
                     latitude,
                     longitude,
+                    title,
                     description,
+                    creator,
+                    copyright,
+                    keywords,
                     rating,
                     status,
                     has_xmp,
@@ -313,13 +348,13 @@ impl Database {
                 "INSERT INTO photos (
                     file_path, file_name, file_size, modified_time,
                     camera_make, camera_model, lens_model, iso, aperture, shutter_speed, focal_length,
-                    taken_time, latitude, longitude, description, rating, status,
+                    taken_time, latitude, longitude, title, description, creator, copyright, keywords, rating, status,
                     has_xmp, has_takeout, created_at, updated_at
                 ) VALUES (
                     ?1, ?2, ?3, ?4,
                     ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-                    ?12, ?13, ?14, ?15, ?16, ?17,
-                    ?18, ?19, ?20, ?21
+                    ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21,
+                    ?22, ?23, ?24, ?25
                 ) ON CONFLICT(file_path) DO UPDATE SET
                     file_name = excluded.file_name,
                     file_size = excluded.file_size,
@@ -334,7 +369,11 @@ impl Database {
                     taken_time = excluded.taken_time,
                     latitude = excluded.latitude,
                     longitude = excluded.longitude,
+                    title = excluded.title,
                     description = excluded.description,
+                    creator = excluded.creator,
+                    copyright = excluded.copyright,
+                    keywords = excluded.keywords,
                     rating = excluded.rating,
                     status = excluded.status,
                     has_xmp = excluded.has_xmp,
@@ -358,7 +397,11 @@ impl Database {
                     p.taken_time,
                     p.latitude,
                     p.longitude,
+                    p.title,
                     p.description,
+                    p.creator,
+                    p.copyright,
+                    p.keywords,
                     p.rating,
                     p.status,
                     p.has_xmp,
@@ -380,13 +423,13 @@ impl Database {
             "INSERT INTO photos (
                 file_path, file_name, file_size, modified_time,
                 camera_make, camera_model, lens_model, iso, aperture, shutter_speed, focal_length,
-                taken_time, latitude, longitude, description, rating, status,
+                taken_time, latitude, longitude, title, description, creator, copyright, keywords, rating, status,
                 has_xmp, has_takeout, created_at, updated_at
             ) VALUES (
                 ?1, ?2, ?3, ?4,
                 ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-                ?12, ?13, ?14, ?15, ?16, ?17,
-                ?18, ?19, ?20, ?21
+                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21,
+                ?22, ?23, ?24, ?25
             ) ON CONFLICT(file_path) DO UPDATE SET
                 file_name = excluded.file_name,
                 file_size = excluded.file_size,
@@ -401,7 +444,11 @@ impl Database {
                 taken_time = excluded.taken_time,
                 latitude = excluded.latitude,
                 longitude = excluded.longitude,
-                description = excluded.description,
+                title = COALESCE(excluded.title, photos.title),
+                description = COALESCE(excluded.description, photos.description),
+                creator = COALESCE(excluded.creator, photos.creator),
+                copyright = COALESCE(excluded.copyright, photos.copyright),
+                keywords = COALESCE(excluded.keywords, photos.keywords),
                 rating = COALESCE(excluded.rating, photos.rating),
                 status = CASE WHEN excluded.status != 'None' THEN excluded.status ELSE photos.status END,
                 has_xmp = excluded.has_xmp,
@@ -422,7 +469,11 @@ impl Database {
                 photo.taken_time,
                 photo.latitude,
                 photo.longitude,
+                photo.title,
                 photo.description,
+                photo.creator,
+                photo.copyright,
+                photo.keywords,
                 photo.rating,
                 photo.status,
                 if photo.has_xmp { 1 } else { 0 },
@@ -440,7 +491,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, file_path, file_name, file_size, modified_time,
                     camera_make, camera_model, lens_model, iso, aperture, shutter_speed, focal_length,
-                    taken_time, latitude, longitude, description, rating, status,
+                    taken_time, latitude, longitude, title, description, creator, copyright, keywords, rating, status,
                     has_xmp, has_takeout, created_at, updated_at
              FROM photos WHERE file_path = ?1",
         )?;
@@ -463,13 +514,17 @@ impl Database {
                 taken_time: row.get(12)?,
                 latitude: row.get(13)?,
                 longitude: row.get(14)?,
-                description: row.get(15)?,
-                rating: row.get(16)?,
-                status: row.get(17)?,
-                has_xmp: row.get::<_, i32>(18)? != 0,
-                has_takeout: row.get::<_, i32>(19)? != 0,
-                created_at: row.get(20)?,
-                updated_at: row.get(21)?,
+                title: row.get(15)?,
+                description: row.get(16)?,
+                creator: row.get(17)?,
+                copyright: row.get(18)?,
+                keywords: row.get(19)?,
+                rating: row.get(20)?,
+                status: row.get(21)?,
+                has_xmp: row.get::<_, i32>(22)? != 0,
+                has_takeout: row.get::<_, i32>(23)? != 0,
+                created_at: row.get(24)?,
+                updated_at: row.get(25)?,
             }))
         } else {
             Ok(None)
@@ -481,7 +536,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, file_path, file_name, file_size, modified_time,
                     camera_make, camera_model, lens_model, iso, aperture, shutter_speed, focal_length,
-                    taken_time, latitude, longitude, description, rating, status,
+                    taken_time, latitude, longitude, title, description, creator, copyright, keywords, rating, status,
                     has_xmp, has_takeout, created_at, updated_at
              FROM photos ORDER BY taken_time DESC, file_name ASC",
         )?;
@@ -503,13 +558,17 @@ impl Database {
                 taken_time: row.get(12)?,
                 latitude: row.get(13)?,
                 longitude: row.get(14)?,
-                description: row.get(15)?,
-                rating: row.get(16)?,
-                status: row.get(17)?,
-                has_xmp: row.get::<_, i32>(18)? != 0,
-                has_takeout: row.get::<_, i32>(19)? != 0,
-                created_at: row.get(20)?,
-                updated_at: row.get(21)?,
+                title: row.get(15)?,
+                description: row.get(16)?,
+                creator: row.get(17)?,
+                copyright: row.get(18)?,
+                keywords: row.get(19)?,
+                rating: row.get(20)?,
+                status: row.get(21)?,
+                has_xmp: row.get::<_, i32>(22)? != 0,
+                has_takeout: row.get::<_, i32>(23)? != 0,
+                created_at: row.get(24)?,
+                updated_at: row.get(25)?,
             })
         })?;
 
@@ -518,6 +577,24 @@ impl Database {
             photos.push(p?);
         }
         Ok(photos)
+    }
+
+    pub fn update_photo_metadata(
+        &self,
+        file_path: &str,
+        title: Option<&str>,
+        description: Option<&str>,
+        creator: Option<&str>,
+        copyright: Option<&str>,
+        keywords: Option<&str>,
+    ) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let now = current_timestamp();
+        let updated = conn.execute(
+            "UPDATE photos SET title = ?1, description = ?2, creator = ?3, copyright = ?4, keywords = ?5, updated_at = ?6 WHERE file_path = ?7",
+            params![title, description, creator, copyright, keywords, now, file_path],
+        )?;
+        Ok(updated > 0)
     }
 
     pub fn update_rating_status(
@@ -708,10 +785,6 @@ fn current_timestamp() -> i64 {
         .unwrap_or(0)
 }
 
-fn dirs_next_home() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -738,7 +811,11 @@ mod tests {
             taken_time: Some(1600000000),
             latitude: Some(37.7749),
             longitude: Some(-122.4194),
+            title: Some("Half Dome".to_string()),
             description: Some("Test Photo".to_string()),
+            creator: Some("Ansel Adams".to_string()),
+            copyright: Some("© 2026".to_string()),
+            keywords: Some("nature, mountain".to_string()),
             rating: Some(5),
             status: "Pick".to_string(),
             has_xmp: true,
@@ -758,6 +835,27 @@ mod tests {
         assert_eq!(fetched.rating, Some(5));
         assert_eq!(fetched.status, "Pick");
         assert_eq!(fetched.camera_make.as_deref(), Some("Canon"));
+        assert_eq!(fetched.title.as_deref(), Some("Half Dome"));
+        assert_eq!(fetched.creator.as_deref(), Some("Ansel Adams"));
+        assert_eq!(fetched.keywords.as_deref(), Some("nature, mountain"));
+
+        // Test update metadata
+        let meta_updated = db
+            .update_photo_metadata(
+                "/photos/IMG_0001.CR2",
+                Some("El Capitan"),
+                Some("Updated Caption"),
+                Some("Galen Rowell"),
+                Some("© 2026 All Rights Reserved"),
+                Some("climbing, yosemite"),
+            )
+            .expect("Metadata update should succeed");
+        assert!(meta_updated);
+
+        let refetched_meta = db.get_photo("/photos/IMG_0001.CR2").unwrap().unwrap();
+        assert_eq!(refetched_meta.title.as_deref(), Some("El Capitan"));
+        assert_eq!(refetched_meta.creator.as_deref(), Some("Galen Rowell"));
+        assert_eq!(refetched_meta.keywords.as_deref(), Some("climbing, yosemite"));
 
         // Test update rating & status
         let updated = db

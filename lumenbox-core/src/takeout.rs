@@ -136,17 +136,6 @@ pub fn match_takeout_json<P: AsRef<Path>>(image_path: P) -> Option<PathBuf> {
     None
 }
 
-/// Helper to parse the "title" string from raw JSON text snippet
-fn extract_json_title(content: &str) -> Option<String> {
-    let key = "\"title\"";
-    let key_idx = content.find(key)?;
-    let rest = &content[key_idx + key.len()..];
-    let colon_idx = rest.find(':')?;
-    let quote_start = rest[colon_idx + 1..].find('"')? + colon_idx + 1;
-    let quote_end = rest[quote_start + 1..].find('"')? + quote_start + 1;
-    Some(rest[quote_start + 1..quote_end].to_string())
-}
-
 /// Recursively scans a directory for images/media and returns matched (image, JSON) sidecar pairs.
 pub fn scan_directory_for_takeout<P: AsRef<Path>>(dir_path: P) -> Vec<TakeoutMatch> {
     let mut matches = Vec::new();

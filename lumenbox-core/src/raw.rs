@@ -17,6 +17,8 @@ pub struct ImageMetadata {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub description: Option<String>,
+    pub creator: Option<String>,
+    pub copyright: Option<String>,
     pub orientation: Option<u32>,
 }
 
@@ -216,6 +218,28 @@ pub fn extract_metadata<P: AsRef<Path>>(path: P) -> std::io::Result<ImageMetadat
         }
     }
     
+    let mut creator = None;
+    if let Some(field) = exif.get_field(Tag::Artist, In::PRIMARY) {
+        if let Value::Ascii(ref v) = field.value {
+            if let Some(s) = v.get(0) {
+                if let Ok(string) = std::str::from_utf8(s) {
+                    creator = Some(string.trim().to_string());
+                }
+            }
+        }
+    }
+
+    let mut copyright = None;
+    if let Some(field) = exif.get_field(Tag::Copyright, In::PRIMARY) {
+        if let Value::Ascii(ref v) = field.value {
+            if let Some(s) = v.get(0) {
+                if let Ok(string) = std::str::from_utf8(s) {
+                    copyright = Some(string.trim().to_string());
+                }
+            }
+        }
+    }
+
     let latitude = parse_gps(&exif, Tag::GPSLatitude, Tag::GPSLatitudeRef);
     let longitude = parse_gps(&exif, Tag::GPSLongitude, Tag::GPSLongitudeRef);
     
@@ -241,6 +265,8 @@ pub fn extract_metadata<P: AsRef<Path>>(path: P) -> std::io::Result<ImageMetadat
         latitude,
         longitude,
         description,
+        creator,
+        copyright,
         orientation,
     })
 }

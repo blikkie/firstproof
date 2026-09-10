@@ -572,6 +572,8 @@ public protocol LumenBoxDatabaseProtocol : AnyObject {
     
     func indexFolder(folderPath: String)  -> UInt32
     
+    func updatePhotoMetadata(filePath: String, title: String?, description: String?, creator: String?, copyright: String?, keywords: String?)  -> Bool
+    
     func updateRatingStatus(filePath: String, rating: Int32?, status: String)  -> Bool
     
     func updateRatingStatusBatch(filePaths: [String], rating: Int32?, updateRating: Bool, status: String?)  -> UInt32
@@ -665,6 +667,19 @@ open func indexFolder(folderPath: String) -> UInt32 {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
     uniffi_lumenbox_core_fn_method_lumenboxdatabase_index_folder(self.uniffiClonePointer(),
         FfiConverterString.lower(folderPath),$0
+    )
+})
+}
+    
+open func updatePhotoMetadata(filePath: String, title: String?, description: String?, creator: String?, copyright: String?, keywords: String?) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_lumenbox_core_fn_method_lumenboxdatabase_update_photo_metadata(self.uniffiClonePointer(),
+        FfiConverterString.lower(filePath),
+        FfiConverterOptionString.lower(title),
+        FfiConverterOptionString.lower(description),
+        FfiConverterOptionString.lower(creator),
+        FfiConverterOptionString.lower(copyright),
+        FfiConverterOptionString.lower(keywords),$0
     )
 })
 }
@@ -2084,11 +2099,13 @@ public struct ImageMetadata {
     public var latitude: Double?
     public var longitude: Double?
     public var description: String?
+    public var creator: String?
+    public var copyright: String?
     public var orientation: UInt32?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(filePath: String, cameraMake: String?, cameraModel: String?, lensModel: String?, iso: UInt32?, aperture: Float?, shutterSpeed: String?, focalLength: Float?, takenTime: Int64?, latitude: Double?, longitude: Double?, description: String?, orientation: UInt32?) {
+    public init(filePath: String, cameraMake: String?, cameraModel: String?, lensModel: String?, iso: UInt32?, aperture: Float?, shutterSpeed: String?, focalLength: Float?, takenTime: Int64?, latitude: Double?, longitude: Double?, description: String?, creator: String?, copyright: String?, orientation: UInt32?) {
         self.filePath = filePath
         self.cameraMake = cameraMake
         self.cameraModel = cameraModel
@@ -2101,6 +2118,8 @@ public struct ImageMetadata {
         self.latitude = latitude
         self.longitude = longitude
         self.description = description
+        self.creator = creator
+        self.copyright = copyright
         self.orientation = orientation
     }
 }
@@ -2145,6 +2164,12 @@ extension ImageMetadata: Equatable, Hashable {
         if lhs.description != rhs.description {
             return false
         }
+        if lhs.creator != rhs.creator {
+            return false
+        }
+        if lhs.copyright != rhs.copyright {
+            return false
+        }
         if lhs.orientation != rhs.orientation {
             return false
         }
@@ -2164,6 +2189,8 @@ extension ImageMetadata: Equatable, Hashable {
         hasher.combine(latitude)
         hasher.combine(longitude)
         hasher.combine(description)
+        hasher.combine(creator)
+        hasher.combine(copyright)
         hasher.combine(orientation)
     }
 }
@@ -2188,6 +2215,8 @@ public struct FfiConverterTypeImageMetadata: FfiConverterRustBuffer {
                 latitude: FfiConverterOptionDouble.read(from: &buf), 
                 longitude: FfiConverterOptionDouble.read(from: &buf), 
                 description: FfiConverterOptionString.read(from: &buf), 
+                creator: FfiConverterOptionString.read(from: &buf), 
+                copyright: FfiConverterOptionString.read(from: &buf), 
                 orientation: FfiConverterOptionUInt32.read(from: &buf)
         )
     }
@@ -2205,6 +2234,8 @@ public struct FfiConverterTypeImageMetadata: FfiConverterRustBuffer {
         FfiConverterOptionDouble.write(value.latitude, into: &buf)
         FfiConverterOptionDouble.write(value.longitude, into: &buf)
         FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterOptionString.write(value.creator, into: &buf)
+        FfiConverterOptionString.write(value.copyright, into: &buf)
         FfiConverterOptionUInt32.write(value.orientation, into: &buf)
     }
 }
@@ -2347,7 +2378,11 @@ public struct PhotoRecord {
     public var takenTime: Int64?
     public var latitude: Double?
     public var longitude: Double?
+    public var title: String?
     public var description: String?
+    public var creator: String?
+    public var copyright: String?
+    public var keywords: String?
     public var rating: Int32?
     public var status: String
     public var hasXmp: Bool
@@ -2357,7 +2392,7 @@ public struct PhotoRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: Int64, filePath: String, fileName: String, fileSize: Int64, modifiedTime: Int64, cameraMake: String?, cameraModel: String?, lensModel: String?, iso: UInt32?, aperture: Float?, shutterSpeed: String?, focalLength: Float?, takenTime: Int64?, latitude: Double?, longitude: Double?, description: String?, rating: Int32?, status: String, hasXmp: Bool, hasTakeout: Bool, createdAt: Int64, updatedAt: Int64) {
+    public init(id: Int64, filePath: String, fileName: String, fileSize: Int64, modifiedTime: Int64, cameraMake: String?, cameraModel: String?, lensModel: String?, iso: UInt32?, aperture: Float?, shutterSpeed: String?, focalLength: Float?, takenTime: Int64?, latitude: Double?, longitude: Double?, title: String?, description: String?, creator: String?, copyright: String?, keywords: String?, rating: Int32?, status: String, hasXmp: Bool, hasTakeout: Bool, createdAt: Int64, updatedAt: Int64) {
         self.id = id
         self.filePath = filePath
         self.fileName = fileName
@@ -2373,7 +2408,11 @@ public struct PhotoRecord {
         self.takenTime = takenTime
         self.latitude = latitude
         self.longitude = longitude
+        self.title = title
         self.description = description
+        self.creator = creator
+        self.copyright = copyright
+        self.keywords = keywords
         self.rating = rating
         self.status = status
         self.hasXmp = hasXmp
@@ -2432,7 +2471,19 @@ extension PhotoRecord: Equatable, Hashable {
         if lhs.longitude != rhs.longitude {
             return false
         }
+        if lhs.title != rhs.title {
+            return false
+        }
         if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.creator != rhs.creator {
+            return false
+        }
+        if lhs.copyright != rhs.copyright {
+            return false
+        }
+        if lhs.keywords != rhs.keywords {
             return false
         }
         if lhs.rating != rhs.rating {
@@ -2472,7 +2523,11 @@ extension PhotoRecord: Equatable, Hashable {
         hasher.combine(takenTime)
         hasher.combine(latitude)
         hasher.combine(longitude)
+        hasher.combine(title)
         hasher.combine(description)
+        hasher.combine(creator)
+        hasher.combine(copyright)
+        hasher.combine(keywords)
         hasher.combine(rating)
         hasher.combine(status)
         hasher.combine(hasXmp)
@@ -2505,7 +2560,11 @@ public struct FfiConverterTypePhotoRecord: FfiConverterRustBuffer {
                 takenTime: FfiConverterOptionInt64.read(from: &buf), 
                 latitude: FfiConverterOptionDouble.read(from: &buf), 
                 longitude: FfiConverterOptionDouble.read(from: &buf), 
+                title: FfiConverterOptionString.read(from: &buf), 
                 description: FfiConverterOptionString.read(from: &buf), 
+                creator: FfiConverterOptionString.read(from: &buf), 
+                copyright: FfiConverterOptionString.read(from: &buf), 
+                keywords: FfiConverterOptionString.read(from: &buf), 
                 rating: FfiConverterOptionInt32.read(from: &buf), 
                 status: FfiConverterString.read(from: &buf), 
                 hasXmp: FfiConverterBool.read(from: &buf), 
@@ -2531,7 +2590,11 @@ public struct FfiConverterTypePhotoRecord: FfiConverterRustBuffer {
         FfiConverterOptionInt64.write(value.takenTime, into: &buf)
         FfiConverterOptionDouble.write(value.latitude, into: &buf)
         FfiConverterOptionDouble.write(value.longitude, into: &buf)
+        FfiConverterOptionString.write(value.title, into: &buf)
         FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterOptionString.write(value.creator, into: &buf)
+        FfiConverterOptionString.write(value.copyright, into: &buf)
+        FfiConverterOptionString.write(value.keywords, into: &buf)
         FfiConverterOptionInt32.write(value.rating, into: &buf)
         FfiConverterString.write(value.status, into: &buf)
         FfiConverterBool.write(value.hasXmp, into: &buf)
@@ -2956,17 +3019,23 @@ public struct XmpDataRecord {
     public var status: String
     public var title: String?
     public var description: String?
+    public var creator: String?
+    public var copyright: String?
+    public var keywords: [String]
     public var latitude: Double?
     public var longitude: Double?
     public var edits: EditSettings
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(rating: Int32?, status: String, title: String?, description: String?, latitude: Double?, longitude: Double?, edits: EditSettings) {
+    public init(rating: Int32?, status: String, title: String?, description: String?, creator: String?, copyright: String?, keywords: [String], latitude: Double?, longitude: Double?, edits: EditSettings) {
         self.rating = rating
         self.status = status
         self.title = title
         self.description = description
+        self.creator = creator
+        self.copyright = copyright
+        self.keywords = keywords
         self.latitude = latitude
         self.longitude = longitude
         self.edits = edits
@@ -2989,6 +3058,15 @@ extension XmpDataRecord: Equatable, Hashable {
         if lhs.description != rhs.description {
             return false
         }
+        if lhs.creator != rhs.creator {
+            return false
+        }
+        if lhs.copyright != rhs.copyright {
+            return false
+        }
+        if lhs.keywords != rhs.keywords {
+            return false
+        }
         if lhs.latitude != rhs.latitude {
             return false
         }
@@ -3006,6 +3084,9 @@ extension XmpDataRecord: Equatable, Hashable {
         hasher.combine(status)
         hasher.combine(title)
         hasher.combine(description)
+        hasher.combine(creator)
+        hasher.combine(copyright)
+        hasher.combine(keywords)
         hasher.combine(latitude)
         hasher.combine(longitude)
         hasher.combine(edits)
@@ -3024,6 +3105,9 @@ public struct FfiConverterTypeXmpDataRecord: FfiConverterRustBuffer {
                 status: FfiConverterString.read(from: &buf), 
                 title: FfiConverterOptionString.read(from: &buf), 
                 description: FfiConverterOptionString.read(from: &buf), 
+                creator: FfiConverterOptionString.read(from: &buf), 
+                copyright: FfiConverterOptionString.read(from: &buf), 
+                keywords: FfiConverterSequenceString.read(from: &buf), 
                 latitude: FfiConverterOptionDouble.read(from: &buf), 
                 longitude: FfiConverterOptionDouble.read(from: &buf), 
                 edits: FfiConverterTypeEditSettings.read(from: &buf)
@@ -3035,6 +3119,9 @@ public struct FfiConverterTypeXmpDataRecord: FfiConverterRustBuffer {
         FfiConverterString.write(value.status, into: &buf)
         FfiConverterOptionString.write(value.title, into: &buf)
         FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterOptionString.write(value.creator, into: &buf)
+        FfiConverterOptionString.write(value.copyright, into: &buf)
+        FfiConverterSequenceString.write(value.keywords, into: &buf)
         FfiConverterOptionDouble.write(value.latitude, into: &buf)
         FfiConverterOptionDouble.write(value.longitude, into: &buf)
         FfiConverterTypeEditSettings.write(value.edits, into: &buf)
@@ -4282,6 +4369,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_method_lumenboxdatabase_index_folder() != 7368) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_lumenbox_core_checksum_method_lumenboxdatabase_update_photo_metadata() != 39705) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_lumenbox_core_checksum_method_lumenboxdatabase_update_rating_status() != 14433) {

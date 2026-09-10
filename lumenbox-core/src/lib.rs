@@ -240,7 +240,11 @@ pub struct PhotoRecord {
     pub taken_time: Option<i64>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub title: Option<String>,
     pub description: Option<String>,
+    pub creator: Option<String>,
+    pub copyright: Option<String>,
+    pub keywords: Option<String>,
     pub rating: Option<i32>,
     pub status: String,
     pub has_xmp: bool,
@@ -267,7 +271,11 @@ impl From<db::PhotoRecord> for PhotoRecord {
             taken_time: r.taken_time,
             latitude: r.latitude,
             longitude: r.longitude,
+            title: r.title,
             description: r.description,
+            creator: r.creator,
+            copyright: r.copyright,
+            keywords: r.keywords,
             rating: r.rating,
             status: r.status,
             has_xmp: r.has_xmp,
@@ -292,6 +300,8 @@ pub struct ImageMetadata {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub description: Option<String>,
+    pub creator: Option<String>,
+    pub copyright: Option<String>,
     pub orientation: Option<u32>,
 }
 
@@ -318,6 +328,9 @@ pub struct XmpDataRecord {
     pub status: String,
     pub title: Option<String>,
     pub description: Option<String>,
+    pub creator: Option<String>,
+    pub copyright: Option<String>,
+    pub keywords: Vec<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub edits: EditSettings,
@@ -355,6 +368,8 @@ pub fn extract_metadata(path: String) -> Option<ImageMetadata> {
             latitude: m.latitude,
             longitude: m.longitude,
             description: m.description,
+            creator: m.creator,
+            copyright: m.copyright,
             orientation: m.orientation,
         }),
         Err(_) => None,
@@ -374,6 +389,9 @@ pub fn read_xmp(path: String) -> Option<XmpDataRecord> {
             status: x.status,
             title: x.title,
             description: x.description,
+            creator: x.creator,
+            copyright: x.copyright,
+            keywords: x.keywords,
             latitude: x.latitude,
             longitude: x.longitude,
             edits: x.edits,
@@ -389,6 +407,9 @@ pub fn write_xmp(path: String, record: XmpDataRecord) -> bool {
         status: record.status,
         title: record.title,
         description: record.description,
+        creator: record.creator,
+        copyright: record.copyright,
+        keywords: record.keywords,
         latitude: record.latitude,
         longitude: record.longitude,
         edits: record.edits,
@@ -615,6 +636,27 @@ impl LumenBoxDatabase {
     pub fn update_rating_status(&self, file_path: String, rating: Option<i32>, status: String) -> bool {
         self.inner
             .update_rating_status(&file_path, rating, &status)
+            .unwrap_or(false)
+    }
+
+    pub fn update_photo_metadata(
+        &self,
+        file_path: String,
+        title: Option<String>,
+        description: Option<String>,
+        creator: Option<String>,
+        copyright: Option<String>,
+        keywords: Option<String>,
+    ) -> bool {
+        self.inner
+            .update_photo_metadata(
+                &file_path,
+                title.as_deref(),
+                description.as_deref(),
+                creator.as_deref(),
+                copyright.as_deref(),
+                keywords.as_deref(),
+            )
             .unwrap_or(false)
     }
 

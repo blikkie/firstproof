@@ -8,6 +8,9 @@ pub struct XmpData {
     pub status: String, // "Pick", "Reject", "None"
     pub title: Option<String>,
     pub description: Option<String>,
+    pub creator: Option<String>,
+    pub copyright: Option<String>,
+    pub keywords: Vec<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub edits: EditSettings,
@@ -20,6 +23,9 @@ impl Default for XmpData {
             status: "None".to_string(),
             title: None,
             description: None,
+            creator: None,
+            copyright: None,
+            keywords: Vec::new(),
             latitude: None,
             longitude: None,
             edits: EditSettings::default(),
@@ -113,6 +119,15 @@ pub fn generate_xmp(data: &XmpData) -> String {
     }
     if let Some(d) = &data.description {
         writer.description([(None, d.as_str())]);
+    }
+    if let Some(c) = &data.creator {
+        writer.creator([c.as_str()]);
+    }
+    if let Some(r) = &data.copyright {
+        writer.rights([(None, r.as_str())]);
+    }
+    if !data.keywords.is_empty() {
+        writer.subject(data.keywords.iter().map(|s| s.as_str()));
     }
 
     // Standard XMP Rating
@@ -226,6 +241,22 @@ fn find_rdf_li_val(node: Node) -> Option<String> {
         }
     }
     None
+}
+
+/// Reads all li child node values out of an rdf:Bag or rdf:Seq (e.g. dc:subject, lr:hierarchicalSubject).
+fn find_rdf_li_vals(node: Node) -> Vec<String> {
+    let mut items = Vec::new();
+    for child in node.descendants() {
+        if child.has_tag_name(( "http://www.w3.org/1999/02/22-rdf-syntax-ns#", "li" )) || child.tag_name().name() == "li" {
+            if let Some(text) = child.text() {
+                let trimmed = text.trim();
+                if !trimmed.is_empty() && !items.contains(&trimmed.to_string()) {
+                    items.push(trimmed.to_string());
+                }
+            }
+        }
+    }
+    items
 }
 
 fn find_desc_node<'a, 'd>(doc: &'a Document<'d>) -> Option<Node<'a, 'd>> {
@@ -692,12 +723,53 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         }
     }
     
-    // 4. Parse Title/Description Children
+    // 4. Parse Title/Description/Creator/Copyright/Keywords Children
     for child in desc.children() {
-        if child.has_tag_name(( "http://purl.org/dc/elements/1.1/", "title" )) {
+        let tag = child.tag_name().name();
+        let ns = child.tag_name().namespace().unwrap_or("");
+        let is_dc = ns == "http://purl.org/dc/elements/1.1/" || ns.is_empty();
+        let is_photoshop = ns == "http://ns.adobe.com/photoshop/1.0/";
+        let is_lr = ns == "http://ns.adobe.com/lightroom/1.0/";
+
+        if is_dc && tag == "title" {
             data.title = find_rdf_li_val(child);
-        } else if child.has_tag_name(( "http://purl.org/dc/elements/1.1/", "description" )) {
+        } else if is_photoshop && tag == "Headline" && data.title.is_none() {
+            if let Some(text) = child.text() {
+                data.title = Some(text.trim().to_string());
+            }
+        } else if is_dc && tag == "description" {
             data.description = find_rdf_li_val(child);
+        } else if is_dc && tag == "creator" {
+            data.creator = find_rdf_li_val(child);
+        } else if is_photoshop && tag == "By-line" && data.creator.is_none() {
+            if let Some(text) = child.text() {
+                data.creator = Some(text.trim().to_string());
+            }
+        } else if is_dc && tag == "rights" {
+            data.copyright = find_rdf_li_val(child);
+        } else if (is_dc && tag == "subject") || (is_lr && tag == "hierarchicalSubject") {
+            let kws = find_rdf_li_vals(child);
+            for kw in kws {
+                if !data.keywords.contains(&kw) {
+                    data.keywords.push(kw);
+                }
+            }
+        }
+    }
+    
+    if data.title.is_none() {
+        if let Some(t) = get("http://ns.adobe.com/photoshop/1.0/", "Headline") {
+            data.title = Some(t.to_string());
+        }
+    }
+    if data.creator.is_none() {
+        if let Some(c) = get("http://ns.adobe.com/photoshop/1.0/", "By-line") {
+            data.creator = Some(c.to_string());
+        }
+    }
+    if data.copyright.is_none() {
+        if let Some(r) = get("http://purl.org/dc/elements/1.1/", "rights") {
+            data.copyright = Some(r.to_string());
         }
     }
     

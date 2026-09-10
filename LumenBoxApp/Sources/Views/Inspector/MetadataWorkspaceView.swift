@@ -23,6 +23,15 @@ public struct MetadataWorkspaceView: View {
     @ViewBuilder
     private var metadataRows: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let title = photo.title, !title.isEmpty {
+                MetadataRow(label: "Title", value: title)
+            }
+            if let creator = photo.creator, !creator.isEmpty {
+                MetadataRow(label: "Creator", value: creator)
+            }
+            if let keywords = photo.keywords, !keywords.isEmpty {
+                MetadataRow(label: "Keywords", value: keywords)
+            }
             if let make = photo.cameraMake, let model = photo.cameraModel, !make.isEmpty || !model.isEmpty {
                 MetadataRow(label: "Camera", value: "\(make) \(model)".trimmingCharacters(in: .whitespaces))
             }
