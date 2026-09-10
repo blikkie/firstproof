@@ -176,7 +176,7 @@ public final class AppViewModel {
     public var statusFilter: String? = nil // nil = All, "pick", "reject"
     
     // MARK: - Edit Sliders (P0 + Lens Corrections)
-    public var exposure: Float = 0.0      // -5.0 .. +5.0 EV
+    public var exposure: Float = 0.0      // -3.0 .. +3.0 EV
     public var contrast: Float = 0.0      // -100 .. +100
     public var highlights: Float = 0.0    // -100 .. +100
     public var shadows: Float = 0.0       // -100 .. +100
@@ -210,8 +210,8 @@ public final class AppViewModel {
     public var defaultGrainChroma: Float { 0.0 }
 
     public var isEyedropperActive: Bool = false
-    public var temperature: Float = 5500.0 // 2000K .. 50000K
-    public var tint: Float = 0.0          // -150 .. +150
+    public var temperature: Float = 5500.0 // 2000K .. 20000K
+    public var tint: Float = 0.0          // -100 .. +100
     public var straightenAngle: Float = 0.0 // -45 .. +45 deg
     public var cropLeft: Float = 0.0
     public var cropTop: Float = 0.0

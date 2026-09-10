@@ -437,7 +437,7 @@ fn test_sliders_dual_engine_parity_sweep() {
             let temp_norm = (temp / 5500.0).clamp(0.25, 4.0);
             let mut r_scale = temp_norm.powf(0.75);
             let mut b_scale = (1.0 / temp_norm).powf(0.75);
-            let tint_factor = tint * 0.003;
+            let tint_factor = tint * 0.002;
             let g_scale = 1.0 - tint_factor;
             r_scale += tint_factor * 0.5;
             b_scale += tint_factor * 0.5;

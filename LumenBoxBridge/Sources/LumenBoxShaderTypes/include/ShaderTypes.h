@@ -18,9 +18,9 @@ struct Vertex {
 };
 
 struct ShaderUniforms {
-    float exposure;          // -5.0 .. +5.0 EV
-    float temperature;       // 2000K .. 50000K (default 5500K)
-    float tint;              // -150 .. +150 (default 0.0)
+    float exposure;          // -3.0 .. +3.0 EV
+    float temperature;       // 2000K .. 20000K (default 5500K)
+    float tint;              // -100 .. +100 (default 0.0)
     float contrast;          // -100 .. +100 (default 0.0)
     float highlights;        // -100 .. +100 (default 0.0)
     float shadows;           // -100 .. +100 (default 0.0)

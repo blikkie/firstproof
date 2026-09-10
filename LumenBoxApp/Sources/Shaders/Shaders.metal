@@ -109,7 +109,7 @@ fragment float4 fragmentShader(
         float rScale = pow(tempNorm, 0.75);
         float bScale = pow(1.0 / tempNorm, 0.75);
         
-        float tintFactor = editTint * 0.003;
+        float tintFactor = editTint * 0.002;
         float gScale = 1.0 - tintFactor;
         rScale += tintFactor * 0.5;
         bScale += tintFactor * 0.5;

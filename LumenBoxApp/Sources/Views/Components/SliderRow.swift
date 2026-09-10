@@ -69,26 +69,26 @@ public struct TemperatureSliderRow: View {
     // Perceptual Mired mapping:
     // Human color perception of blackbody temperature is linear in Mireds (10^6 / K), not linear Kelvin.
     // 2000 K  -> 500 Mireds (pos = 0.0)
-    // 5500 K  -> 181.8 Mireds (pos = 0.663)
-    // 50000 K -> 20 Mireds (pos = 1.0)
+    // 5500 K  -> 181.8 Mireds (pos = 0.707)
+    // 20000 K -> 50 Mireds (pos = 1.0)
     // This gives generous precision across 2,500K - 8,500K where 99% of photo adjustments occur.
     private var sliderPosition: Binding<Float> {
         Binding<Float>(
             get: {
-                let k = min(max(kelvin, 2000.0), 50000.0)
+                let k = min(max(kelvin, 2000.0), 20000.0)
                 let mired = 1_000_000.0 / k
-                let pos = (500.0 - mired) / 480.0
+                let pos = (500.0 - mired) / 450.0
                 return min(max(pos, 0.0), 1.0)
             },
             set: { newPos in
                 let pos = min(max(newPos, 0.0), 1.0)
-                let mired = 500.0 - pos * 480.0
+                let mired = 500.0 - pos * 450.0
                 let rawK = 1_000_000.0 / mired
                 // Stepped in 50K increments below 10,000K, 200K increments above
                 let steppedK = (rawK < 10000.0)
                     ? (rawK / 50.0).rounded() * 50.0
                     : (rawK / 200.0).rounded() * 200.0
-                kelvin = min(max(steppedK, 2000.0), 50000.0)
+                kelvin = min(max(steppedK, 2000.0), 20000.0)
             }
         )
     }

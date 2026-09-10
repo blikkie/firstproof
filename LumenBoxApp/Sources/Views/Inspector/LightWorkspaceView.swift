@@ -29,7 +29,7 @@ public struct LightWorkspaceView: View {
             SliderRow(
                 label: "Exposure",
                 value: $viewModel.exposure,
-                range: -5.0...5.0,
+                range: -3.0...3.0,
                 format: "%.2f EV",
                 onReset: { viewModel.resetSlider(.exposure) },
                 onEditingChanged: { isEditing in

@@ -44,7 +44,7 @@ public struct ColorWorkspaceView: View {
             SliderRow(
                 label: "Tint",
                 value: $viewModel.tint,
-                range: -150.0...150.0,
+                range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.tint) },
                 onEditingChanged: { isEditing in

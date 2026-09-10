@@ -234,7 +234,7 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
     let mut r_scale = temp_norm.powf(0.75);
     let mut b_scale = (1.0 / temp_norm).powf(0.75);
     
-    let tint_factor = edits.tint * 0.003;
+    let tint_factor = edits.tint * 0.002;
     let g_scale = 1.0 - tint_factor;
     r_scale += tint_factor * 0.5;
     b_scale += tint_factor * 0.5;
@@ -1476,7 +1476,13 @@ mod tests {
         };
         assert!((ceil_gain - 2.0f32).abs() < 1e-6);
 
-        // 2. Tonal recovery limits: ensure delta_ev never exceeds safe photographic range
+        // 2. Exposure limits: ensure -3.0 EV provides non-degenerate 8x attenuation rather than pitch-black void
+        let exp_floor = 2.0f32.powf(-3.0);
+        assert!((exp_floor - 0.125f32).abs() < 1e-6);
+        let exp_ceil = 2.0f32.powf(3.0);
+        assert!((exp_ceil - 8.0f32).abs() < 1e-6);
+
+        // 3. Tonal recovery limits: ensure delta_ev never exceeds safe photographic range
         let (_, g_max, _) = apply_tone_recovery(0.8, 0.8, 0.8, -100.0, 0.0, 0.0, 0.0);
         assert!(g_max > 0.8 * 0.35, "Highlights at -100 should not crush below photographic threshold");
 
@@ -1497,16 +1503,27 @@ mod tests {
         // Correcting warm cast requires lowering Kelvin (cooler WB)
         let warm = calculate_white_balance_from_sample(0.8, 0.6, 0.3);
         assert!(warm.temperature < 5500.0, "Warm sample must calculate cooler Kelvin: got {}", warm.temperature);
+        assert!(warm.temperature >= 2000.0, "Temperature floor is 2000K");
 
         // 3. Cool/shade sample (B > R, e.g. R=0.3, G=0.5, B=0.8)
         // Correcting cool cast requires raising Kelvin (warmer WB)
         let cool = calculate_white_balance_from_sample(0.3, 0.5, 0.8);
         assert!(cool.temperature > 5500.0, "Cool sample must calculate warmer Kelvin: got {}", cool.temperature);
+        assert!(cool.temperature <= 20000.0, "Temperature ceiling is 20000K");
 
         // 4. Greenish tint sample (G > (R+B)/2, e.g. fluorescent cast)
         // Correcting green cast requires positive magenta tint
         let green = calculate_white_balance_from_sample(0.4, 0.6, 0.4);
         assert!(green.tint > 0.0, "Green-cast sample must calculate positive magenta tint: got {}", green.tint);
+        assert!(green.tint <= 100.0, "Tint ceiling is +100.0");
+
+        // 5. Extreme samples stay clamped within [2000K..20000K] and [-100..+100]
+        let extreme_blue = calculate_white_balance_from_sample(0.01, 0.1, 0.99);
+        assert_eq!(extreme_blue.temperature, 20000.0, "Extreme blue clamped to 20000K");
+        let extreme_red = calculate_white_balance_from_sample(0.99, 0.1, 0.01);
+        assert_eq!(extreme_red.temperature, 2000.0, "Extreme red clamped to 2000K");
+        let extreme_green = calculate_white_balance_from_sample(0.01, 0.99, 0.01);
+        assert_eq!(extreme_green.tint, 100.0, "Extreme green clamped to +100 tint");
     }
 
     #[test]

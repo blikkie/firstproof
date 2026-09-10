@@ -208,14 +208,14 @@ pub fn calculate_white_balance_from_sample(r: f32, g: f32, b: f32) -> WhiteBalan
 
     let temp_ratio = (b / r).max(1e-4);
     let temp_norm = temp_ratio.powf(2.0 / 3.0);
-    let target_temp = (5500.0 * temp_norm).clamp(2000.0, 50000.0);
+    let target_temp = (5500.0 * temp_norm).clamp(2000.0, 20000.0);
 
     let r_scaled = r * temp_norm.powf(0.75);
     let b_scaled = b * (1.0 / temp_norm).powf(0.75);
     let rb_avg = (r_scaled + b_scaled) * 0.5;
 
     let tint_factor = 1.0 - (rb_avg / g.max(1e-4));
-    let target_tint = (tint_factor / 0.003).clamp(-150.0, 150.0);
+    let target_tint = (tint_factor / 0.002).clamp(-100.0, 100.0);
 
     WhiteBalanceResult {
         temperature: (target_temp / 50.0).round() * 50.0,
