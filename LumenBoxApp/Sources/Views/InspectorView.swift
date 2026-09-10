@@ -95,9 +95,17 @@ struct InspectorView: View {
                 case .metadata:
                     MetadataWorkspaceView(viewModel: viewModel, photo: photo)
                 }
+                
+                Divider()
+                
+                HistorySectionView(viewModel: viewModel)
             } else {
                 // In Grid Mode: Metadata editing only (Rating, Flags, EXIF, Takeout)
                 MetadataWorkspaceView(viewModel: viewModel, photo: photo)
+                
+                Divider()
+                
+                HistorySectionView(viewModel: viewModel)
                 
                 Divider()
                 

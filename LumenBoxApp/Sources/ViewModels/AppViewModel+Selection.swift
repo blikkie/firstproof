@@ -343,6 +343,14 @@ extension AppViewModel {
         let allMatch = targetPhotos.allSatisfy { $0.rating == rating }
         let newRating: Int32? = allMatch ? nil : rating
         
+        var transitions: [RatingTransition] = []
+        for path in targets {
+            let oldR = photos.first(where: { $0.filePath == path })?.rating
+            if oldR != newRating {
+                transitions.append(RatingTransition(path: path, oldRating: oldR, newRating: newRating))
+            }
+        }
+        
         _ = db.updateRatingStatusBatch(filePaths: targets, rating: newRating, updateRating: true, status: nil)
         
         let targetSet = Set(targets)
@@ -353,6 +361,18 @@ extension AppViewModel {
         }
         if let current = selectedPhoto, targetSet.contains(current.filePath) {
             selectedPhoto?.rating = newRating
+        }
+        
+        if !transitions.isEmpty {
+            let title: String
+            if let r = newRating {
+                let stars = String(repeating: "★", count: Int(r))
+                title = targets.count > 1 ? "Set Rating \(stars) (\(targets.count) photos)" : "Set Rating \(stars)"
+            } else {
+                title = targets.count > 1 ? "Clear Rating (\(targets.count) photos)" : "Clear Rating"
+            }
+            let primaryPath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath ?? targets.first ?? ""
+            undoHistory.registerAction(title: title, photoPath: primaryPath, payload: .rating(targets: transitions))
         }
         
         let activeSnapshot = currentEdits
@@ -378,6 +398,14 @@ extension AppViewModel {
         let allMatch = targetPhotos.allSatisfy { $0.status == status }
         let newStatus = allMatch ? "none" : status
         
+        var transitions: [StatusTransition] = []
+        for path in targets {
+            let oldS = photos.first(where: { $0.filePath == path })?.status ?? "none"
+            if oldS != newStatus {
+                transitions.append(StatusTransition(path: path, oldStatus: oldS, newStatus: newStatus))
+            }
+        }
+        
         _ = db.updateRatingStatusBatch(filePaths: targets, rating: nil, updateRating: false, status: newStatus)
         
         let targetSet = Set(targets)
@@ -388,6 +416,18 @@ extension AppViewModel {
         }
         if let current = selectedPhoto, targetSet.contains(current.filePath) {
             selectedPhoto?.status = newStatus
+        }
+        
+        if !transitions.isEmpty {
+            let statusLabel: String
+            switch newStatus {
+            case "pick": statusLabel = "Pick"
+            case "reject": statusLabel = "Reject"
+            default: statusLabel = "Unflag"
+            }
+            let title = targets.count > 1 ? "Set \(statusLabel) (\(targets.count) photos)" : "Set \(statusLabel)"
+            let primaryPath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath ?? targets.first ?? ""
+            undoHistory.registerAction(title: title, photoPath: primaryPath, payload: .status(targets: transitions))
         }
         
         let activeSnapshot = currentEdits

@@ -204,12 +204,15 @@ public struct ToneCurveView: View {
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
+                            if draggingPointIndex == nil {
+                                viewModel.beginSliderScrub()
+                            }
                             handleDrag(at: value.location, in: CGSize(width: size, height: height))
                         }
                         .onEnded { _ in
                             draggingPointIndex = nil
                             activeCoordinates = nil
-                            viewModel.saveCurrentEdits()
+                            viewModel.endSliderScrub(actionName: "Tone Curve (\(selectedChannel.rawValue))")
                         }
                 )
                 .onTapGesture(count: 2) {
@@ -334,6 +337,7 @@ public struct ToneCurveView: View {
     }
     
     private func deleteOrResetPoint(at idx: Int) {
+        let before = viewModel.currentEdits
         var pts = currentPoints
         guard idx < pts.count else { return }
         
@@ -347,21 +351,23 @@ public struct ToneCurveView: View {
         setPoints(pts)
         draggingPointIndex = nil
         hoveredPointIndex = nil
-        viewModel.saveCurrentEdits()
+        viewModel.registerDiscreteEdit(title: "Delete Tone Curve Point", before: before)
     }
     
     private func resetActiveChannel() {
+        let before = viewModel.currentEdits
         let linear = [CurvePointRecord(x: 0.0, y: 0.0), CurvePointRecord(x: 1.0, y: 1.0)]
         setPoints(linear)
-        viewModel.saveCurrentEdits()
+        viewModel.registerDiscreteEdit(title: "Reset \(selectedChannel.rawValue) Curve", before: before)
     }
     
     private func resetAllCurves() {
+        let before = viewModel.currentEdits
         viewModel.curves = .defaultIdentity
         draggingPointIndex = nil
         hoveredPointIndex = nil
         activeCoordinates = nil
-        viewModel.saveCurrentEdits()
+        viewModel.registerDiscreteEdit(title: "Reset Tone Curves", before: before)
     }
 }
 

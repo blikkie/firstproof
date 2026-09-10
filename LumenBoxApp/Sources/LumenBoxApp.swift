@@ -78,7 +78,22 @@ struct LumenBoxApp: App {
                 .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
             }
             
-            CommandMenu("Edit") {
+            CommandGroup(replacing: .undoRedo) {
+                Button(viewModel.undoActionTitle) {
+                    viewModel.undo()
+                }
+                .keyboardShortcut("z", modifiers: [.command])
+                .disabled(!viewModel.canUndo)
+                
+                Button(viewModel.redoActionTitle) {
+                    viewModel.redo()
+                }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+                .disabled(!viewModel.canRedo)
+            }
+            
+            CommandGroup(after: .undoRedo) {
+                Divider()
                 Button("Select All") {
                     viewModel.selectAllPhotos()
                 }

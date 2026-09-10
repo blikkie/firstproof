@@ -32,9 +32,7 @@ public struct LightWorkspaceView: View {
                 range: -3.0...3.0,
                 format: "%.2f EV",
                 onReset: { viewModel.resetSlider(.exposure) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .exposure) }
             )
             
             SliderRow(
@@ -43,9 +41,7 @@ public struct LightWorkspaceView: View {
                 range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.contrast) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .contrast) }
             )
             
             Divider()
@@ -61,9 +57,7 @@ public struct LightWorkspaceView: View {
                 range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.highlights) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .highlights) }
             )
             
             SliderRow(
@@ -72,9 +66,7 @@ public struct LightWorkspaceView: View {
                 range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.shadows) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .shadows) }
             )
             
             SliderRow(
@@ -83,9 +75,7 @@ public struct LightWorkspaceView: View {
                 range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.whites) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .whites) }
             )
             
             SliderRow(
@@ -94,9 +84,7 @@ public struct LightWorkspaceView: View {
                 range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.blacks) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .blacks) }
             )
             
             Divider()

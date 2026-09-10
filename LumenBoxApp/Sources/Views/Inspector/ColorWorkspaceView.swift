@@ -36,9 +36,7 @@ public struct ColorWorkspaceView: View {
                 label: "Temperature",
                 kelvin: $viewModel.temperature,
                 onReset: { viewModel.resetSlider(.temperature) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .temperature) }
             )
             
             SliderRow(
@@ -47,9 +45,7 @@ public struct ColorWorkspaceView: View {
                 range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.tint) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .tint) }
             )
             
             Divider()
@@ -65,9 +61,7 @@ public struct ColorWorkspaceView: View {
                 range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.vibrance) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .vibrance) }
             )
             
             SliderRow(
@@ -76,9 +70,7 @@ public struct ColorWorkspaceView: View {
                 range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.saturation) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .saturation) }
             )
             
             SliderRow(
@@ -87,9 +79,7 @@ public struct ColorWorkspaceView: View {
                 range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.deepBlue) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .deepBlue) }
             )
             
             SliderRow(
@@ -98,9 +88,7 @@ public struct ColorWorkspaceView: View {
                 range: -100.0...100.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.foliage) },
-                onEditingChanged: { isEditing in
-                    if !isEditing { viewModel.saveCurrentEdits() }
-                }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .foliage) }
             )
             
             Divider()
@@ -109,7 +97,10 @@ public struct ColorWorkspaceView: View {
                 Text("Tone Profile")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Picker("", selection: $viewModel.toneProfile) {
+                Picker("", selection: Binding<ColorProfileMode>(
+                    get: { viewModel.toneProfile },
+                    set: { viewModel.setToneProfile($0) }
+                )) {
                     Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
                     Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
                     Text("Camera Standard").tag(ColorProfileMode.cameraStandard)
@@ -119,9 +110,6 @@ public struct ColorWorkspaceView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .onChange(of: viewModel.toneProfile) {
-                    viewModel.saveCurrentEdits()
-                }
             }
             
             Divider()
@@ -135,8 +123,7 @@ public struct ColorWorkspaceView: View {
                     Picker("", selection: Binding<String>(
                         get: { viewModel.selectedLutName ?? "" },
                         set: { newValue in
-                            viewModel.selectedLutName = newValue.isEmpty ? nil : newValue
-                            viewModel.saveCurrentEdits()
+                            viewModel.setSelectedLutName(newValue.isEmpty ? nil : newValue)
                         }
                     )) {
                         Text("None (Bypass)").tag("")
@@ -165,9 +152,7 @@ public struct ColorWorkspaceView: View {
                     range: 0.0...1.0,
                     format: "%.0f%%",
                     onReset: { viewModel.resetSlider(.lutIntensity) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    },
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .lutIntensity) },
                     multiplier: 100.0
                 )
             }

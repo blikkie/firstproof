@@ -47,6 +47,35 @@ public enum EditSliderType {
     case grainSize
     case grainRoughness
     case grainChroma
+    
+    public var displayName: String {
+        switch self {
+        case .exposure: return "Exposure"
+        case .contrast: return "Contrast"
+        case .highlights: return "Highlights"
+        case .shadows: return "Shadows"
+        case .whites: return "Whites"
+        case .blacks: return "Blacks"
+        case .vibrance: return "Vibrance"
+        case .saturation: return "Saturation"
+        case .deepBlue: return "Deep Blue"
+        case .foliage: return "Foliage"
+        case .sharpeningAmount: return "Sharpening"
+        case .sharpeningRadius: return "Sharpening Radius"
+        case .sharpeningMasking: return "Sharpening Masking"
+        case .noiseReduction: return "Noise Reduction"
+        case .temperature: return "Temperature"
+        case .tint: return "Tint"
+        case .straighten: return "Straighten"
+        case .perspectiveVertical: return "Perspective Vertical"
+        case .perspectiveHorizontal: return "Perspective Horizontal"
+        case .lutIntensity: return "LUT Intensity"
+        case .grainAmount: return "Film Grain"
+        case .grainSize: return "Grain Size"
+        case .grainRoughness: return "Grain Roughness"
+        case .grainChroma: return "Grain Color"
+        }
+    }
 }
 
 public enum CropAspectRatioPreset: String, CaseIterable, Identifiable {
@@ -239,6 +268,14 @@ public final class AppViewModel {
     public var defaultExifFlipH: Bool = false
     public var defaultExifFlipV: Bool = false
     public var isShowingOriginal: Bool = false
+    
+    // MARK: - Undo/Redo & Session History
+    public var undoHistory = UndoHistoryManager()
+    
+    public var canUndo: Bool { undoHistory.canUndo }
+    public var canRedo: Bool { undoHistory.canRedo }
+    public var undoActionTitle: String { undoHistory.undoTitle }
+    public var redoActionTitle: String { undoHistory.redoTitle }
     
     // MARK: - Viewport Zoom & Pan
     public var zoomScale: Float = 1.0

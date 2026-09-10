@@ -164,12 +164,161 @@ extension AppViewModel {
         editsHasModifications(edits: currentEdits, asShotTemp: asShotTemperature, asShotTint: asShotTint)
     }
     
+    // MARK: - Undo/Redo & Coalesced Scrubbing
+    public func beginSliderScrub() {
+        guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
+        undoHistory.beginScrub(photoPath: path, currentEdits: currentEdits)
+    }
+    
+    public func endSliderScrub(actionName: String) {
+        guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
+        undoHistory.endScrub(photoPath: path, currentEdits: currentEdits, title: actionName)
+        saveCurrentEdits()
+    }
+    
+    public func handleSliderEditing(_ isEditing: Bool, slider: EditSliderType) {
+        if isEditing {
+            beginSliderScrub()
+        } else {
+            let title: String
+            switch slider {
+            case .exposure:
+                title = "Exposure (\(String(format: "%.2f EV", exposure)))"
+            case .contrast:
+                title = "Contrast (\(contrast >= 0 ? "+" : "")\(Int(contrast)))"
+            case .highlights:
+                title = "Highlights (\(highlights >= 0 ? "+" : "")\(Int(highlights)))"
+            case .shadows:
+                title = "Shadows (\(shadows >= 0 ? "+" : "")\(Int(shadows)))"
+            case .whites:
+                title = "Whites (\(whites >= 0 ? "+" : "")\(Int(whites)))"
+            case .blacks:
+                title = "Blacks (\(blacks >= 0 ? "+" : "")\(Int(blacks)))"
+            case .vibrance:
+                title = "Vibrance (\(vibrance >= 0 ? "+" : "")\(Int(vibrance)))"
+            case .saturation:
+                title = "Saturation (\(saturation >= 0 ? "+" : "")\(Int(saturation)))"
+            case .deepBlue:
+                title = "Deep Blue (\(deepBlue >= 0 ? "+" : "")\(Int(deepBlue)))"
+            case .foliage:
+                title = "Foliage (\(foliage >= 0 ? "+" : "")\(Int(foliage)))"
+            case .temperature:
+                title = "Temperature (\(Int(temperature)) K)"
+            case .tint:
+                title = "Tint (\(tint >= 0 ? "+" : "")\(Int(tint)))"
+            case .straighten:
+                title = "Straighten (\(String(format: "%.1f°", straightenAngle)))"
+            case .perspectiveVertical:
+                title = "Perspective V (\(Int(perspectiveVertical)))"
+            case .perspectiveHorizontal:
+                title = "Perspective H (\(Int(perspectiveHorizontal)))"
+            case .sharpeningAmount:
+                title = "Sharpening (\(Int(sharpeningAmount)))"
+            case .sharpeningRadius:
+                title = "Sharpening Radius (\(String(format: "%.1f px", sharpeningRadius)))"
+            case .sharpeningMasking:
+                title = "Sharpening Masking (\(Int(sharpeningMasking)))"
+            case .noiseReduction:
+                title = "Noise Reduction (\(Int(noiseReduction)))"
+            case .grainAmount:
+                title = "Film Grain (\(Int(grainAmount)))"
+            case .grainSize:
+                title = "Grain Size (\(String(format: "%.1f", grainSize)))"
+            case .grainRoughness:
+                title = "Grain Roughness (\(Int(grainRoughness)))"
+            case .grainChroma:
+                title = "Grain Color (\(Int(grainChroma)))"
+            case .lutIntensity:
+                title = "LUT Intensity (\(Int(lutIntensity * 100))%)"
+            }
+            endSliderScrub(actionName: title)
+        }
+    }
+    
+    public func registerDiscreteEdit(title: String, before: EditSettings) {
+        guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
+        let after = currentEdits
+        if before != after {
+            undoHistory.registerAction(title: title, photoPath: path, payload: .edits(before: before, after: after))
+        }
+        saveCurrentEdits()
+    }
+    
+    public func undo() {
+        guard let entry = undoHistory.popUndo() else { return }
+        executeUndoPayload(entry.payload, isUndo: true, primaryPath: entry.primaryPhotoPath)
+    }
+    
+    public func redo() {
+        guard let entry = undoHistory.popRedo() else { return }
+        executeUndoPayload(entry.payload, isUndo: false, primaryPath: entry.primaryPhotoPath)
+    }
+    
+    public func jumpToHistoryStep(_ targetEntry: UndoEntry) {
+        if let targetIdx = undoHistory.undoStack.firstIndex(where: { $0.id == targetEntry.id }) {
+            let stepsToUndo = undoHistory.undoStack.count - 1 - targetIdx
+            for _ in 0..<stepsToUndo {
+                undo()
+            }
+        } else if let targetIdx = undoHistory.redoStack.firstIndex(where: { $0.id == targetEntry.id }) {
+            let stepsToRedo = undoHistory.redoStack.count - targetIdx
+            for _ in 0..<stepsToRedo {
+                redo()
+            }
+        }
+    }
+    
+    private func executeUndoPayload(_ payload: UndoActionPayload, isUndo: Bool, primaryPath: String) {
+        if let currentPath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath, currentPath != primaryPath {
+            if let matching = photos.first(where: { $0.filePath == primaryPath }) {
+                selectPhoto(matching)
+            }
+        }
+        
+        switch payload {
+        case .edits(let before, let after):
+            let targetEdits = isUndo ? before : after
+            applyEdits(targetEdits)
+            saveCurrentEdits()
+            notifyThumbnailChanged()
+            
+        case .rating(let targets):
+            guard let db = db else { return }
+            for target in targets {
+                let targetRating = isUndo ? target.oldRating : target.newRating
+                _ = db.updateRatingStatusBatch(filePaths: [target.path], rating: targetRating, updateRating: true, status: nil)
+                if let idx = photos.firstIndex(where: { $0.filePath == target.path }) {
+                    photos[idx].rating = targetRating
+                }
+                if selectedPhoto?.filePath == target.path {
+                    selectedPhoto?.rating = targetRating
+                }
+                syncXmp(for: target.path, rating: targetRating, status: nil, edits: nil)
+            }
+            
+        case .status(let targets):
+            guard let db = db else { return }
+            for target in targets {
+                let targetStatus = isUndo ? target.oldStatus : target.newStatus
+                _ = db.updateRatingStatusBatch(filePaths: [target.path], rating: nil, updateRating: false, status: targetStatus)
+                if let idx = photos.firstIndex(where: { $0.filePath == target.path }) {
+                    photos[idx].status = targetStatus
+                }
+                if selectedPhoto?.filePath == target.path {
+                    selectedPhoto?.status = targetStatus
+                }
+                syncXmp(for: target.path, rating: nil, status: targetStatus, edits: nil)
+            }
+        }
+    }
+    
     // MARK: - Crop & Composition Controls
     public func toggleCropTool() {
         isCropToolActive.toggle()
     }
     
     public func setCropAspectRatioPreset(_ preset: CropAspectRatioPreset) {
+        let before = currentEdits
         self.cropAspectRatioPreset = preset
         guard preset != .freeform else { return }
         
@@ -225,11 +374,12 @@ extension AppViewModel {
         self.cropTop = Float(finalTop)
         self.cropRight = Float(newRight)
         self.cropBottom = Float(newBottom)
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Aspect Ratio (\(preset.rawValue))", before: before)
         notifyThumbnailChanged()
     }
     
     public func flipCropOrientation() {
+        let before = currentEdits
         let currentW: CGFloat = CGFloat(cropRight - cropLeft)
         let currentH: CGFloat = CGFloat(cropBottom - cropTop)
         let center = CGPoint(x: CGFloat(cropLeft + cropRight) / 2.0, y: CGFloat(cropTop + cropBottom) / 2.0)
@@ -268,21 +418,23 @@ extension AppViewModel {
         self.cropTop = Float(finalTop)
         self.cropRight = Float(newRight)
         self.cropBottom = Float(newBottom)
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Flip Aspect Ratio", before: before)
         notifyThumbnailChanged()
     }
     
     public func resetCrop() {
+        let before = currentEdits
         cropLeft = 0.0
         cropTop = 0.0
         cropRight = 1.0
         cropBottom = 1.0
         cropAspectRatioPreset = .original
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Reset Crop", before: before)
         notifyThumbnailChanged()
     }
     
     public func resetGeometry() {
+        let before = currentEdits
         cropLeft = 0.0
         cropTop = 0.0
         cropRight = 1.0
@@ -292,31 +444,35 @@ extension AppViewModel {
         perspectiveHorizontal = 0.0
         cropConstrain = true
         cropAspectRatioPreset = .original
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Reset Geometry", before: before)
         notifyThumbnailChanged()
     }
     
     public func rotateClockwise() {
+        let before = currentEdits
         rotationDegrees = (rotationDegrees + 90) % 360
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Rotate 90° Clockwise", before: before)
         notifyThumbnailChanged()
     }
     
     public func rotateCounterClockwise() {
+        let before = currentEdits
         rotationDegrees = (rotationDegrees + 270) % 360
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Rotate 90° Counter-Clockwise", before: before)
         notifyThumbnailChanged()
     }
     
     public func toggleFlipHorizontal() {
+        let before = currentEdits
         flipHorizontal.toggle()
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Flip Horizontal", before: before)
         notifyThumbnailChanged()
     }
     
     public func toggleFlipVertical() {
+        let before = currentEdits
         flipVertical.toggle()
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Flip Vertical", before: before)
         notifyThumbnailChanged()
     }
     
@@ -340,6 +496,7 @@ extension AppViewModel {
     // MARK: - Auto Development Adjustments
     public func applyAutoAdjustments() {
         guard let photo = selectedPhoto else { return }
+        let before = currentEdits
         
         // 1. Fast-path: Calculate from already decoded half-float preview buffer
         if let rawRecord = rawPreviewRecord {
@@ -348,7 +505,7 @@ extension AppViewModel {
                     self.exposure = adj.exposure
                     self.contrast = adj.contrast
                 }
-                saveCurrentEdits()
+                registerDiscreteEdit(title: "Auto Tone", before: before)
                 return
             }
         }
@@ -363,13 +520,14 @@ extension AppViewModel {
                     self.exposure = adj.exposure
                     self.contrast = adj.contrast
                 }
-                self.saveCurrentEdits()
+                self.registerDiscreteEdit(title: "Auto Tone", before: before)
             }
         }
     }
     
     // MARK: - Slider Reset Helpers
     public func resetSlider(_ type: EditSliderType) {
+        let before = currentEdits
         switch type {
         case .exposure:
             exposure = 0.0
@@ -424,17 +582,18 @@ extension AppViewModel {
         case .lutIntensity:
             lutIntensity = 1.0
         }
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Reset \(type.displayName)", before: before)
     }
     
     public func applyGrainPreset(_ preset: FilmGrainPreset?) {
+        let before = currentEdits
         guard let p = preset else {
             selectedGrainPresetId = nil
             grainAmount = defaultGrainAmount
             grainSize = defaultGrainSize
             grainRoughness = defaultGrainRoughness
             grainChroma = defaultGrainChroma
-            saveCurrentEdits()
+            registerDiscreteEdit(title: "Film Grain (Off)", before: before)
             return
         }
         selectedGrainPresetId = p.id
@@ -442,10 +601,11 @@ extension AppViewModel {
         grainSize = p.size
         grainRoughness = p.roughness
         grainChroma = p.chroma
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Grain: \(p.name)", before: before)
     }
     
     public func resetAllSliders() {
+        let before = currentEdits
         exposure = 0.0
         contrast = 0.0
         highlights = 0.0
@@ -484,12 +644,13 @@ extension AppViewModel {
         selectedLutName = nil
         lutIntensity = 1.0
         curves = .defaultIdentity
-        saveCurrentEdits()
+        registerDiscreteEdit(title: "Reset All Edits", before: before)
         notifyThumbnailChanged()
     }
     
     // MARK: - White Balance Eyedropper Sampling
     public func applyEyedropperSample(atNormalizedUV uv: CGPoint) {
+        let before = currentEdits
         if let rawRecord = rawPreviewRecord, rawRecord.width > 0, rawRecord.height > 0 {
             let width = Int(rawRecord.width)
             let height = Int(rawRecord.height)
@@ -525,7 +686,7 @@ extension AppViewModel {
                     self.temperature = wb.temperature
                     self.tint = wb.tint
                 }
-                saveCurrentEdits()
+                registerDiscreteEdit(title: "White Balance Pick", before: before)
             }
         } else if let preview = previewImage, let cgImage = preview.cgImage(forProposedRect: nil, context: nil, hints: nil) {
             let width = cgImage.width
@@ -562,7 +723,7 @@ extension AppViewModel {
                 self.temperature = wb.temperature
                 self.tint = wb.tint
             }
-            saveCurrentEdits()
+            registerDiscreteEdit(title: "White Balance Pick", before: before)
         }
     }
     
@@ -576,14 +737,47 @@ extension AppViewModel {
         panel.title = "Import 3D LUT (.cube)"
         
         if panel.runModal() == .OK, let url = panel.url {
+            let before = currentEdits
             if let customLut = loadCubeLut(path: url.path) {
                 if !self.customLuts.contains(where: { $0.title == customLut.title }) {
                     self.customLuts.append(customLut)
                 }
                 self.selectedLutName = customLut.title
                 self.lutIntensity = 1.0
-                saveCurrentEdits()
+                registerDiscreteEdit(title: "3D LUT: \(customLut.title)", before: before)
             }
         }
+    }
+    
+    public func setToneProfile(_ profile: ColorProfileMode) {
+        guard self.toneProfile != profile else { return }
+        let before = currentEdits
+        self.toneProfile = profile
+        let title: String
+        switch profile {
+        case .agxVivid: title = "Tone Profile: AgX Vivid"
+        case .agxFilmic: title = "Tone Profile: AgX Neutral"
+        case .cameraStandard: title = "Tone Profile: Camera Standard"
+        case .cameraPortrait: title = "Tone Profile: Camera Portrait"
+        case .cameraLandscape: title = "Tone Profile: Camera Landscape"
+        case .cameraVivid: title = "Tone Profile: Camera Vivid"
+        }
+        registerDiscreteEdit(title: title, before: before)
+        notifyThumbnailChanged()
+    }
+    
+    public func setSelectedLutName(_ name: String?) {
+        guard self.selectedLutName != name else { return }
+        let before = currentEdits
+        self.selectedLutName = name
+        let title = name != nil ? "LUT: \(name!)" : "LUT: None"
+        registerDiscreteEdit(title: title, before: before)
+        notifyThumbnailChanged()
+    }
+    
+    public func toggleCropConstrain() {
+        let before = currentEdits
+        cropConstrain.toggle()
+        registerDiscreteEdit(title: cropConstrain ? "Enable Constrain Crop" : "Disable Constrain Crop", before: before)
     }
 }

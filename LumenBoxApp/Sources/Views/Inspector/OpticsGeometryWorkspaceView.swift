@@ -90,9 +90,7 @@ public struct OpticsGeometryWorkspaceView: View {
                     range: -45.0...45.0,
                     format: "%.1f°",
                     onReset: { viewModel.resetSlider(.straighten) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .straighten) }
                 )
                 
                 SliderRow(
@@ -101,9 +99,7 @@ public struct OpticsGeometryWorkspaceView: View {
                     range: -100.0...100.0,
                     format: "%.0f",
                     onReset: { viewModel.resetSlider(.perspectiveVertical) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .perspectiveVertical) }
                 )
                 
                 SliderRow(
@@ -112,16 +108,14 @@ public struct OpticsGeometryWorkspaceView: View {
                     range: -100.0...100.0,
                     format: "%.0f",
                     onReset: { viewModel.resetSlider(.perspectiveHorizontal) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .perspectiveHorizontal) }
                 )
                 
-                Toggle("Constrain Crop (Auto-Crop)", isOn: $viewModel.cropConstrain)
-                    .toggleStyle(.switch)
-                    .onChange(of: viewModel.cropConstrain) { _, _ in
-                        viewModel.saveCurrentEdits()
-                    }
+                Toggle("Constrain Crop (Auto-Crop)", isOn: Binding<Bool>(
+                    get: { viewModel.cropConstrain },
+                    set: { _ in viewModel.toggleCropConstrain() }
+                ))
+                .toggleStyle(.switch)
             }
             
             Divider()

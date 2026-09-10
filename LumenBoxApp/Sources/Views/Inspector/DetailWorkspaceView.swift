@@ -43,9 +43,7 @@ public struct DetailWorkspaceView: View {
                     range: 0.0...100.0,
                     format: "%.0f",
                     onReset: { viewModel.resetSlider(.sharpeningAmount) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .sharpeningAmount) }
                 )
                 
                 SliderRow(
@@ -54,9 +52,7 @@ public struct DetailWorkspaceView: View {
                     range: 0.5...3.0,
                     format: "%.1f px",
                     onReset: { viewModel.resetSlider(.sharpeningRadius) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .sharpeningRadius) }
                 )
                 
                 SliderRow(
@@ -65,9 +61,7 @@ public struct DetailWorkspaceView: View {
                     range: 0.0...100.0,
                     format: "%.0f",
                     onReset: { viewModel.resetSlider(.sharpeningMasking) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .sharpeningMasking) }
                 )
             }
             
@@ -85,9 +79,7 @@ public struct DetailWorkspaceView: View {
                     range: 0.0...100.0,
                     format: "%.0f",
                     onReset: { viewModel.resetSlider(.noiseReduction) },
-                    onEditingChanged: { isEditing in
-                        if !isEditing { viewModel.saveCurrentEdits() }
-                    }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .noiseReduction) }
                 )
             }
             
@@ -172,7 +164,7 @@ public struct DetailWorkspaceView: View {
                         },
                         onEditingChanged: { isEditing in
                             if isEditing { viewModel.selectedGrainPresetId = nil }
-                            if !isEditing { viewModel.saveCurrentEdits() }
+                            viewModel.handleSliderEditing(isEditing, slider: .grainAmount)
                         }
                     )
                     
@@ -186,7 +178,7 @@ public struct DetailWorkspaceView: View {
                         },
                         onEditingChanged: { isEditing in
                             if isEditing { viewModel.selectedGrainPresetId = nil }
-                            if !isEditing { viewModel.saveCurrentEdits() }
+                            viewModel.handleSliderEditing(isEditing, slider: .grainSize)
                         }
                     )
                     
@@ -200,7 +192,7 @@ public struct DetailWorkspaceView: View {
                         },
                         onEditingChanged: { isEditing in
                             if isEditing { viewModel.selectedGrainPresetId = nil }
-                            if !isEditing { viewModel.saveCurrentEdits() }
+                            viewModel.handleSliderEditing(isEditing, slider: .grainRoughness)
                         }
                     )
                     
@@ -214,7 +206,7 @@ public struct DetailWorkspaceView: View {
                         },
                         onEditingChanged: { isEditing in
                             if isEditing { viewModel.selectedGrainPresetId = nil }
-                            if !isEditing { viewModel.saveCurrentEdits() }
+                            viewModel.handleSliderEditing(isEditing, slider: .grainChroma)
                         }
                     )
                     

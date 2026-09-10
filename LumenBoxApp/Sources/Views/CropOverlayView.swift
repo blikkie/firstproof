@@ -157,6 +157,7 @@ public struct CropOverlayView: View {
                         .onChanged { value in
                             if activeHandle == nil {
                                 activeHandle = .rotate
+                                viewModel.beginSliderScrub()
                                 dragStartStraighten = viewModel.straightenAngle
                                 isRotating = true
                             }
@@ -176,8 +177,7 @@ public struct CropOverlayView: View {
                         .onEnded { _ in
                             activeHandle = nil
                             isRotating = false
-                            viewModel.saveCurrentEdits()
-                            viewModel.notifyThumbnailChanged()
+                            viewModel.endSliderScrub(actionName: "Straighten")
                         }
                 )
             
@@ -191,6 +191,7 @@ public struct CropOverlayView: View {
                         .onChanged { value in
                             if activeHandle == nil {
                                 activeHandle = .inside
+                                viewModel.beginSliderScrub()
                                 dragStartCrop = (viewModel.cropLeft, viewModel.cropTop, viewModel.cropRight, viewModel.cropBottom)
                             }
                             guard activeHandle == .inside else { return }
@@ -212,8 +213,7 @@ public struct CropOverlayView: View {
                         }
                         .onEnded { _ in
                             activeHandle = nil
-                            viewModel.saveCurrentEdits()
-                            viewModel.notifyThumbnailChanged()
+                            viewModel.endSliderScrub(actionName: "Crop Position")
                         }
                 )
             
@@ -271,6 +271,7 @@ public struct CropOverlayView: View {
                     .onChanged { value in
                         if activeHandle == nil {
                             activeHandle = type
+                            viewModel.beginSliderScrub()
                             dragStartCrop = (viewModel.cropLeft, viewModel.cropTop, viewModel.cropRight, viewModel.cropBottom)
                         }
                         guard activeHandle == type else { return }
@@ -347,8 +348,7 @@ public struct CropOverlayView: View {
                     }
                     .onEnded { _ in
                         activeHandle = nil
-                        viewModel.saveCurrentEdits()
-                        viewModel.notifyThumbnailChanged()
+                        viewModel.endSliderScrub(actionName: "Crop Area")
                     }
             )
     }
@@ -367,6 +367,7 @@ public struct CropOverlayView: View {
                     .onChanged { value in
                         if activeHandle == nil {
                             activeHandle = type
+                            viewModel.beginSliderScrub()
                             dragStartCrop = (viewModel.cropLeft, viewModel.cropTop, viewModel.cropRight, viewModel.cropBottom)
                         }
                         guard activeHandle == type else { return }
@@ -448,8 +449,7 @@ public struct CropOverlayView: View {
                     }
                     .onEnded { _ in
                         activeHandle = nil
-                        viewModel.saveCurrentEdits()
-                        viewModel.notifyThumbnailChanged()
+                        viewModel.endSliderScrub(actionName: "Crop Area")
                     }
             )
     }
