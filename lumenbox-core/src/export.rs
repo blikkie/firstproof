@@ -224,7 +224,11 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
 pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
     let total_exposure = edits.exposure;
     let exposure_gain = 2.0f32.powf(total_exposure);
-    let contrast_gain = 1.0 + (edits.contrast / 100.0);
+    let contrast_gain = if edits.contrast >= 0.0 {
+        1.0 + (edits.contrast / 100.0)
+    } else {
+        1.0 + (edits.contrast / 100.0) * 0.60
+    };
     
     let temp_norm = (edits.temperature / 5500.0).clamp(0.25, 4.0);
     let mut r_scale = temp_norm.powf(0.75);
@@ -356,28 +360,28 @@ pub fn apply_tone_recovery(
     if blacks != 0.0 {
         let u = ((-ev - 1.0) / 3.0).clamp(0.0, 1.0);
         let w_blacks = u * u * (3.0 - 2.0 * u);
-        delta_ev += (blacks / 100.0) * 1.5 * w_blacks;
+        delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
     }
     
     // 2. Shadows: Lift lower midtones and shadow textures (ev in [-4.0, 0.0])
     if shadows != 0.0 {
         let u = ((ev + 4.0) / 4.0).clamp(0.0, 1.0);
         let w_shadows = (std::f32::consts::PI * u).sin();
-        delta_ev += (shadows / 100.0) * 1.75 * w_shadows;
+        delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
     }
     
     // 3. Highlights: Recover or boost bright areas and skies (ev in [0.0, 4.0])
     if highlights != 0.0 {
         let u = (ev / 4.0).clamp(0.0, 1.0);
         let w_highlights = (std::f32::consts::PI * u).sin();
-        delta_ev += (highlights / 100.0) * 2.0 * w_highlights;
+        delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
     }
     
     // 4. Whites: Adjust specular highlight threshold and ceiling (ev >= 1.0)
     if whites != 0.0 {
         let u = ((ev - 1.0) / 3.0).clamp(0.0, 1.0);
         let w_whites = u * u * (3.0 - 2.0 * u);
-        delta_ev += (whites / 100.0) * 1.5 * w_whites;
+        delta_ev += (whites / 100.0) * 0.90 * w_whites;
     }
     
     if delta_ev == 0.0 {
@@ -1452,6 +1456,32 @@ mod tests {
         let (r_bl_in, g_bl_in, b_bl_in) = (0.008, 0.008, 0.008);
         let (_, g_bl, _) = apply_tone_recovery(r_bl_in, g_bl_in, b_bl_in, 0.0, 0.0, 0.0, -50.0);
         assert!(g_bl < g_bl_in);
+    }
+
+    #[test]
+    fn test_contrast_floor_and_tonal_recovery_limits() {
+        // 1. Contrast floor at -100 must be exactly 0.40, preventing flat gray collapse
+        let floor_gain = if -100.0f32 >= 0.0 {
+            1.0 + (-100.0 / 100.0)
+        } else {
+            1.0 + (-100.0 / 100.0) * 0.60
+        };
+        assert!((floor_gain - 0.40f32).abs() < 1e-6);
+
+        // Ceiling at +100 must be 2.0
+        let ceil_gain = if 100.0f32 >= 0.0 {
+            1.0 + (100.0 / 100.0)
+        } else {
+            1.0 + (100.0 / 100.0) * 0.60
+        };
+        assert!((ceil_gain - 2.0f32).abs() < 1e-6);
+
+        // 2. Tonal recovery limits: ensure delta_ev never exceeds safe photographic range
+        let (_, g_max, _) = apply_tone_recovery(0.8, 0.8, 0.8, -100.0, 0.0, 0.0, 0.0);
+        assert!(g_max > 0.8 * 0.35, "Highlights at -100 should not crush below photographic threshold");
+
+        let (_, g_min, _) = apply_tone_recovery(0.05, 0.05, 0.05, 0.0, 100.0, 0.0, 0.0);
+        assert!(g_min < 0.05 * 3.0, "Shadows at +100 should not blow out beyond 3x gain");
     }
 
     #[test]

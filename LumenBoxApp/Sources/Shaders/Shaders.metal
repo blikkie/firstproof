@@ -129,15 +129,17 @@ fragment float4 fragmentShader(
     rec2020Color = applyToneRecovery(rec2020Color, editHighlights, editShadows, editWhites, editBlacks);
     
     // 5. AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles
+    // Calibrated contrast: Ceiling 2.0x (+100), Floor 0.40x (-100) preventing flat gray collapse
+    float contrastGain = (editContrast >= 0.0)
+        ? (1.0 + editContrast / 100.0)
+        : (1.0 + (editContrast / 100.0) * 0.60);
     float3 srgbLinearOut;
     if (uniforms.toneProfileMode == 0) {
         // Mode 0: AgX Vivid (Filmic Punchy) - DEFAULT
-        float contrastGain = 1.0 + (editContrast / 100.0);
         srgbLinearOut = agxToneMapVivid(rec2020Color, contrastGain);
     } else if (uniforms.toneProfileMode == 1) {
         // Mode 1: AgX Neutral (Filmic Base)
         if (uniforms.isLinearRaw == 1 || editContrast != 0.0) {
-            float contrastGain = 1.0 + (editContrast / 100.0);
             srgbLinearOut = agxToneMap(rec2020Color, contrastGain);
         } else {
             srgbLinearOut = max(REC2020_TO_LINEAR_SRGB * rec2020Color, float3(0.0));
@@ -152,7 +154,6 @@ fragment float4 fragmentShader(
         
         float lum = dot(rgbAdjusted, float3(0.2126, 0.7152, 0.0722));
         float lumCurved = applyCameraToneCurve(lum, camMode);
-        float contrastGain = 1.0 + (editContrast / 100.0);
         float lumAdj = clamp((lumCurved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
         float gain = lumAdj / max(lum, 1e-6);
         

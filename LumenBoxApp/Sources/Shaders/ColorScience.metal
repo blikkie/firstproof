@@ -212,25 +212,25 @@ inline float3 applyToneRecovery(float3 color, float highlights, float shadows, f
     if (blacks != 0.0) {
         float u = clamp((-ev - 1.0) / 3.0, 0.0, 1.0);
         float w_blacks = u * u * (3.0 - 2.0 * u);
-        delta_ev += (blacks / 100.0) * 1.5 * w_blacks;
+        delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
     }
     
     if (shadows != 0.0) {
         float u = clamp((ev + 4.0) / 4.0, 0.0, 1.0);
         float w_shadows = sin(3.141592653589793 * u);
-        delta_ev += (shadows / 100.0) * 1.75 * w_shadows;
+        delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
     }
     
     if (highlights != 0.0) {
         float u = clamp(ev / 4.0, 0.0, 1.0);
         float w_highlights = sin(3.141592653589793 * u);
-        delta_ev += (highlights / 100.0) * 2.0 * w_highlights;
+        delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
     }
     
     if (whites != 0.0) {
         float u = clamp((ev - 1.0) / 3.0, 0.0, 1.0);
         float w_whites = u * u * (3.0 - 2.0 * u);
-        delta_ev += (whites / 100.0) * 1.5 * w_whites;
+        delta_ev += (whites / 100.0) * 0.90 * w_whites;
     }
     
     if (delta_ev == 0.0) {

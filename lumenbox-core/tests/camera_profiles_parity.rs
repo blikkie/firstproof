@@ -363,7 +363,11 @@ fn test_cr2_0194_full_pipeline_parity() {
         );
         
         // Tone profile (AgX Vivid)
-        let contrast_gain = 1.0 + (edits.contrast / 100.0);
+        let contrast_gain = if edits.contrast >= 0.0 {
+            1.0 + (edits.contrast / 100.0)
+        } else {
+            1.0 + (edits.contrast / 100.0) * 0.60
+        };
         let srgb = agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
         
         // Color adjustments
@@ -447,7 +451,11 @@ fn test_sliders_dual_engine_parity_sweep() {
             let (r_rec, g_rec, b_rec) = apply_tone_recovery(r_gpu, g_gpu, b_gpu, hl, sh, wh, bl);
             
             // Tone Profile
-            let contrast_gain = 1.0 + (contrast / 100.0);
+            let contrast_gain = if contrast >= 0.0 {
+                1.0 + (contrast / 100.0)
+            } else {
+                1.0 + (contrast / 100.0) * 0.60
+            };
             let (r_disp_gpu, g_disp_gpu, b_disp_gpu) = match mode {
                 ColorProfileMode::AgxVivid => {
                     let srgb = agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
