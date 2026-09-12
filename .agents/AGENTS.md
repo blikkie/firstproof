@@ -2,7 +2,12 @@
 
 - **Environment & Toolchain Errors**: Whenever encountering an error that stems from environment or development toolchain setup (e.g., SDK version mismatches, toolchain configuration issues, missing system packages/Xcode), STOP and check in with the user immediately rather than spending cycles trying complex workarounds.
 
-- **Toolchain Sandbox Permissions**: Commands involving the Darwin linker or Swift compiler (`swift build`, `make bundle`) require `BypassSandbox: true`. Pure Rust tests (`cargo test --manifest-path lumenbox-core/Cargo.toml`) and git inspection can run in standard sandboxed mode.
+- **Product Philosophy & Anti-Slop Invariants**:
+  - **First Proof** (`firstproof.photo`) is dedicated to photographic restraint, authentic color, and pure capture: *"Pure capture. Honest color. Zero digital plastic."*
+  - The color engine must do the heavy lifting so photos look 90% finished immediately without requiring 40 micro-adjustments or plastic HDR/AI filters.
+  - Never add synthetic AI pixel generation, sky replacements, or hallucinatory filters. Every adjustment must correspond to real optical, sensor, or chemical darkroom principles.
+
+- **Toolchain Sandbox Permissions**: Commands involving the Darwin linker or Swift compiler (`swift build`, `make bundle`) require `BypassSandbox: true`. Pure Rust tests (`cargo test --manifest-path firstproof-core/Cargo.toml`) and git inspection can run in standard sandboxed mode.
 
 - **Adversarial Code Reviews**: Before every commit and check-in, perform an adversarial review (probing diffs for race conditions, memory leaks/retain cycles, error boundary misses, out-of-order async responses, and main-thread bottlenecks).
 
@@ -46,7 +51,7 @@
     ```
   - This guarantees the layout engine allocates exact vertical space matching horizontal width, preventing layout overflow into adjacent disclosure groups.
 
-- **Portable Catalogs on External Drives (`.lumenbox/`)**:
-  - Folder indexing on external storage volumes stores catalogs inside `<volume>/.lumenbox/catalog.sqlite` so the catalog travels with the external media.
+- **Portable Catalogs on External Drives (`.firstproof/`)**:
+  - Folder indexing on external storage volumes stores catalogs inside `<volume>/.firstproof/catalog.db` so the catalog travels with the external media.
 
 - **Proactive Customization Encoding**: Whenever a platform-specific quirk, non-obvious workaround, multi-step pipeline recipe, or architectural convention is established during development, proactively suggest encoding it into `.agents/AGENTS.md` or as a new skill under `.agents/skills/` so subsequent chats retain it automatically.

@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "lumenbox-core",
+    "firstproof-core",
 ]
 resolver = "2"
 

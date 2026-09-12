@@ -1,0 +1,29 @@
+[package]
+name = "firstproof-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+name = "firstproof_core"
+
+[dependencies]
+# Core dependencies
+uniffi = { version = "0.28", features = ["cli"] }
+rawler = "0.8"
+kamadak-exif = "0.5.5"
+rusqlite = { version = "0.31.0", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+roxmltree = "0.19.0"
+image = { version = "0.24", default-features = false, features = ["jpeg", "png", "tiff"] }
+rayon = "1.10"
+walkdir = "2.5"
+glam = "0.27"
+palette = "0.7"
+xmp-writer = "0.3"
+img-parts = "0.4.0"
+bayer = "0.1.5"
+lcms2 = { version = "6.2.0", features = ["static"] }
+
+

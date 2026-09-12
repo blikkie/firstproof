@@ -1,6 +1,6 @@
-# LumenBox Future Backlog & Roadmap
+# First Proof Future Backlog & Roadmap
 
-This document outlines the deferred features for LumenBox, detailing the math, logic, and implementation pathways so they can be picked up in future development phases.
+This document outlines the deferred features for First Proof, detailing the math, logic, and implementation pathways calibrated against our core philosophy: **"Pure capture. Honest color. Zero digital plastic. Print & web first."**
 
 ---
 
@@ -11,6 +11,12 @@ Simple exposure sliders shift the entire luminance scale linearly. To recover hi
 *   **Simple Math**: Apply a parametric curve that adjusts tones based on distance from white (highlights) or black (shadows):
     \(L_{new} = L \cdot (1 + S_{Shadows} \cdot (1 - L)^2 - H_{Highlights} \cdot L^2)\)
 *   **Bilateral Filtering (Advanced)**: To prevent halos (where dark lines form around bright boundaries), we will implement a fast bilateral filter on the GPU. The bilateral filter splits the image into a **base layer** (low-frequency details, containing large lighting transitions) and a **detail layer** (high-frequency details, texture). Highlight/shadow adjustments are applied *only* to the base layer, and then the detail layer is multiplied back.
+*   *Role in Workflow*: Tone recovery lives in the **Primary Develop Deck** alongside Exposure and White Balance. It rescues real optical dynamic range captured by the sensor without artificial tone manipulation.
+
+### Conservative Auto-Leveling (P1 - Implemented & Retained)
+*   **Restrained 18% Neutral Gray Leveling**:
+    The "Auto" button (`auto.rs`) calculates a conservative scene exposure offset by analyzing middle-luminance percentiles, shifting exposure to anchor optical midtones at 18% reflectance.
+*   *Philosophy*: Auto-exposure does not hallucinate dynamic range or apply aggressive micro-contrast; it serves documentary photographers who captured the right sensor data in high-pressure shooting situations but missed exposure by ±1–2 stops.
 
 ### Auto-Crop & Inscribed Bounding Box on Straighten (P1)
 When rotating/straightening an image by angle \(\theta\), black triangular boundary wedges appear at the image borders.
@@ -26,28 +32,29 @@ When rotating/straightening an image by angle \(\theta\), black triangular bound
         \(S_{new} = S + M \cdot (1.0 - S) \cdot (1.0 - \text{is\_skin\_tone}(H))\)
 
 ### Interactive RGB & Tone Curves (P1)
-Photographers rely on tone curves for surgical control over tonal contrast and stylized film grading:
+Photographers rely on tone curves for surgical control over tonal contrast and restrained film grading:
 *   **The Concept**: A 2D transfer function where \(X = \text{Input Luminance } [0.0, 1.0]\) and \(Y = \text{Output Luminance } [0.0, 1.0]\).
     *   **Diagonal (\(y = x\))**: Flat / neutral passthrough.
     *   **The Classic S-Curve**: Boosting upper midtones and pulling down lower midtones increases punchy micro-contrast while protecting pure black and specular white points.
     *   **The Matte / Film Fade**: Lifting the shadow black point from \((0, 0) \to (0, 0.1)\) turns harsh digital black into soft, vintage analogue shadows.
-    *   **Independent RGB Channels**: Toning individual Red, Green, or Blue curves enables cinematic split-toning (e.g., adding blue/teal in the shadows while keeping highlights warm).
+    *   **Independent RGB Channels**: Toning individual Red, Green, or Blue curves enables classic split-toning (e.g., cooling shadows while keeping highlights warm).
 *   **Mathematical Implementation**:
     *   Interpolate user control points using a **Monotone Cubic Spline** (Fritsch-Carlson algorithm) to prevent overshoot/ringing.
     *   Bake the evaluated 256-sample curve into a 1D Metal texture (`MTLTextureType1D` with linear filtering) or evaluate directly in `Shaders.metal` with zero GPU latency.
 
-### Sharpening, Detail Masking & Clarity Engine (P1)
-Camera optical low-pass filters (OLPF) and 2x2 Bayer demosaic reconstruction inherently introduce subtle high-frequency smoothing (see **Story 8.4** for upgrading the RAW Bayer pipeline to directional RCD / VNG demosaicing via the `bayer` crate). Camera internal JPEGs counteract this by baking in aggressive edge sharpening:
+### Sharpening & Sensor Detail Engine (P1)
+Camera optical low-pass filters (OLPF) and 2x2 Bayer demosaic reconstruction inherently introduce subtle high-frequency smoothing (see **Story 8.4** for upgrading the RAW Bayer pipeline to directional RCD / VNG demosaicing via the `bayer` crate):
 *   **Luminance Unsharp Masking (USM)**:
     Apply high-pass edge enhancement strictly to the perceptual Luminance (\(Y\)) channel to avoid color noise amplification:
     \[Y_{\text{sharp}} = Y + \text{Amount} \cdot (Y - \text{GaussianBlur}(Y, \sigma = \text{Radius}))\]
 *   **Edge Masking & Thresholding (Sobel Gradient)**:
     To prevent sharpening background noise in flat skies or skin tones, calculate the local luminance gradient magnitude \(|\nabla Y| = \sqrt{G_x^2 + G_y^2}\). Sharpening gain is modulated by an edge weight:
     \[W_{\text{edge}} = \text{smoothstep}(\text{Threshold}, \text{Threshold} + 0.1, |\nabla Y|)\]
-*   **Mid-tone Clarity (Local Contrast)**:
-    A wide-radius (\(\sigma \approx 20\text{--}50\text{px}\)) unsharp mask that increases midtone local contrast, adding punch, definition, and tactile texture without harsh halos.
 *   **Chrominance Denoising (Color Noise Reduction)**:
     A fast bilateral or median filter on \(Cb / Cr\) chroma channels that eliminates speckled color noise at high ISO while leaving luminance edge sharpness intact.
+*   **Anti-Slop Exclusion: Rejection of Mid-tone Clarity / Dehaze**:
+    *   *Decision*: Wide-radius local contrast ("Clarity") and heuristic atmospheric dehazing are **permanently removed from the roadmap**.
+    *   *Rationale*: These filters are the primary source of digital halo artifacts, crunchy skin textures, and synthetic "HDR look" plastic slop. Photographic clarity in First Proof is achieved via lens optical quality, honest focus, and gentle S-curves, not high-pass contrast halos.
 
 ### Point-Selection Tools (P2)
 *   **White Balance Picker**: ✅ *Completed in Story 6.4* (5×5 neighborhood sampling in Metal canvas viewport, Planckian Kelvin / Tint computation, and XMP persistence).
@@ -56,25 +63,26 @@ Camera optical low-pass filters (OLPF) and 2x2 Bayer demosaic reconstruction inh
 
 ---
 
-## 2. Google Photos Sync & Sharing (Post-v1)
+## 2. Google Liberation Bridge: Pixel Ingestion & Cloud Storage Reclamation (Post-v1)
 
-### Google Pixel Computational DNG Ingestion
-Google Pixel phones (Pixel 3 through Pixel 9 Pro) capture computational RAWs in Adobe DNG format (`PXL_YYYYMMDD_HHMMSS.dng` alongside `PXL_YYYYMMDD_HHMMSS.jpg`):
-*   **Computational Linear DNG Format**:
-    Pixel DNGs contain multi-frame HDR+ merged sensor data (9 to 15 burst frames combined in 16-bit linear space) with embedded lens shading gain maps and color calibration matrices.
-*   **Takeout & Sync Ingestion**:
-    *   **Google Takeout**: Takeout archives contain both `PXL_...dng` and `PXL_...jpg`, each with its paired `.json` sidecar. Our scanner automatically indexes the `.dng` file and links GPS, captions, and creation timestamps from the JSON metadata.
-    *   **Google Photos API**: In API sync queries, identify `mimeType == "image/x-adobe-dng"` and download the uncompressed master DNG via `${baseUrl}=d` to preserve full computational sensor headroom.
+Rather than building an ongoing two-way cloud synchronization service (which clashes with First Proof's offline, private desktop architecture), this initiative serves as an **exit ramp and storage reclamation workbench** for Google Pixel users.
 
-### Syncing Phone Library to LumenBox
-1.  **OAuth2 Authentication**: Integrate macOS authentication loop (ASWebAuthenticationSession) to obtain a Google Photos API token.
-2.  **Background Sync Service**:
-    *   Implement background polling in Rust that queries the Google Photos API (`mediaItems.list`).
-    *   Verify if the item is already indexed in the SQLite DB (using Google's unique `id` and local filename checks).
-    *   If missing, download the media item (Google provides a base URL with size specifiers, e.g., `=d` for original resolution) and place it in the user's managed directory.
-3.  **Reverse Syncing (Sharing Back)**:
-    *   Allow users to select photos and export them back to Google Photos using `mediaItems.batchCreate`.
-    *   Pass the updated description, tags, and rating metadata.
+### The Problem: Cloud Lock-In & Bloated Storage
+*   Google Pixel phones capture exceptional computational RAW data (HDR+ multi-frame linear DNGs), but Google Photos' web and mobile interfaces are sluggish, optimize for engagement rather than triage, and penalize users with paid cloud storage tiers as libraries swell with unculled bursts, test shots, and paired RAW+JPEG duplicates.
+
+### Key Capabilities
+1.  **Pixel Computational Linear DNG Ingestion**:
+    *   Google Pixel phones (Pixel 3 through Pixel 9 Pro) produce `PXL_YYYYMMDD_HHMMSS.dng` files containing 9–15 burst frames merged into 16-bit linear space with embedded lens shading gain maps and color calibration matrices.
+    *   First Proof ingests these linear DNGs with zero quality degradation, unlocking optical headroom far superior to in-camera JPEGs.
+2.  **Takeout & Local Archive Extraction**:
+    *   Process Google Takeout archive folders directly, linking `.dng` and `.jpg` files with their accompanying `.json` metadata sidecars (reconstructing original capture timestamps, GPS coordinates, and user captions).
+3.  **High-Speed Triage & Culling (Reclaiming Cloud Quota)**:
+    *   First Proof's sub-millisecond keyboard triage (`1`..`5` star ratings, `P` for Pick, `X` for Reject) allows photographers to cull hundreds of photos in minutes.
+    *   *Storage Reclamation Export / Manifest*: Generate a targeted list or file script of confirmed "Rejects" and redundant JPEGs so the user can delete them from Google Photos in bulk, liberating gigabytes of cloud storage while safely archiving the selected master DNGs on local or external storage (`.firstproof/`).
+
+### Explicitly Excluded from Roadmap
+*   *Two-Way Cloud Daemon Sync*: No background polling service or continuous cloud sync daemon.
+*   *Reverse Syncing / Sharing Back (`mediaItems.batchCreate`)*: First Proof is an offline darkroom and liberation tool, not an upload client for Google services.
 
 ---
 
@@ -82,9 +90,9 @@ Google Pixel phones (Pixel 3 through Pixel 9 Pro) capture computational RAWs in 
 
 *   **The Non-Destructive Principle**:
     Standard photo viewers re-encode JPEGs on save, causing irreversible generation loss (JPEG compression artifacts, color quantization, and highlight/shadow clipping).
-*   **LumenBox Sidecar Architecture**:
+*   **First Proof Sidecar Architecture**:
     *   Treat all source image formats (RAW, JPEG, HEIC, PNG, TIFF) as **immutable read-only master files**.
-    *   Store all user adjustments (Exposure, WB, Contrast, Tone Curves, Crop/Straighten, Ratings, Pick/Reject flags, and EXIF/Takeout titles) in adjacent `.xmp` sidecars (`image.jpg.xmp` or `image.xmp`).
+    *   Store all user adjustments (Exposure, WB, Contrast, Tone Curves, Crop/Straighten, Ratings, Pick/Reject flags, and EXIF/Takeout titles) in adjacent `.xmp` sidecars (`image.jpg.xmp` or `image.xmp`) conforming to `https://firstproof.photo/ns/pm/1.0/`.
     *   **Benefits**:
         1. **Zero Quality Loss**: The original JPEG is never recompressed or degraded.
         2. **Infinite Undo & Repurposing**: Users can adjust edits years later or export in different aspect ratios, resolutions, or color grades on demand.
@@ -101,9 +109,9 @@ Google Pixel phones (Pixel 3 through Pixel 9 Pro) capture computational RAWs in 
     Save and restore `lastOpenedDirectoryPath` in `UserDefaults` / `@AppStorage` so the app automatically re-opens the user's active library on launch.
 *   **Window State & Free Resizing**:
     Enable `NSWindow` frame auto-saving (`window.setFrameAutosaveName`) and configure flexible min/max split pane constraints.
-*   **App Bundle Packaging (`LumenBox.app`)**:
-    Add `make bundle` target to package the Swift executable, `Info.plist`, Metal libraries, and `AppIcon.icns` into a distributable `LumenBox.app` bundle.
-*   **Single-Key Professional Muscle Memory & Modifier Harmonization (P2)**:
+*   **App Bundle Packaging (`FirstProof.app`)**:
+    Add `make bundle` target to package the Swift executable, `Info.plist`, Metal libraries, and `AppIcon.icns` into a distributable `FirstProof.app` bundle.
+*   **Single-Key Professional Muscle Memory & First-Responder Shielding (P2)**:
     Transition standard viewing, triage, and editing tools to single keypresses (no `Cmd` modifier) matching industry-standard photographer muscle memory (Lightroom, Capture One, Photo Mechanic):
     *   `C`: Crop & Rotate tool toggle
     *   `G`: Grid view mode
@@ -114,24 +122,13 @@ Google Pixel phones (Pixel 3 through Pixel 9 Pro) capture computational RAWs in 
     *   `X` (while in Crop tool): Toggle aspect ratio orientation (Landscape \(\leftrightarrow\) Portrait)
     *   `\`: Before / After toggle
     *   `Z`: 100% 1:1 zoom toggle
-    *   *Implementation requirement*: Install an active responder filter (`NSView` / SwiftUI focused state) ensuring single-key shortcuts do not trigger when the user is typing into text search boxes, EXIF title fields, or numerical slider inputs.
+    *   *First-Responder Shielding Invariant*: Install an active responder filter (`NSView` / SwiftUI focused state) ensuring single-key shortcuts never trigger when the user is typing into text search boxes, EXIF title fields, or numerical slider inputs.
 
 ### Comprehensive Undo/Redo & History Engine (Completed ✅)
-Photo editing presents unique requirements for undo/redo compared to document editors:
-*   **The Scrubbing Coalescing Challenge**:
-    *   Dragging a slider (e.g. Exposure, White Balance, Film Grain) emits 60–120 intermediate values per second.
-    *   *Implemented*: Coalesced rapid scrubbing into a single atomic undo action based on slider drag lifecycle (`onEditingChanged: true` snapshots the starting state; `false` commits the step) via `UndoHistoryManager.beginScrub()` and `endScrub()`.
-*   **Command Pattern with Lightweight Value-Type Snapshots**:
-    *   `EditSettings` is a compact value-type struct (~250 bytes), storing complete before/after snapshots with negligible memory overhead (100 undo steps $\approx 25\text{ KB}$).
-    *   Each undoable action records:
-        1. Target photo path
-        2. Timestamp
-        3. Human-readable action label (e.g., `"Exposure (+0.60 EV)"`, `"Tone Curve (RGB)"`, `"Set Rating ★★★★"`)
-        4. Prior state snapshot & New state snapshot (`UndoActionPayload`)
-*   **Dynamic macOS Menu Integration**:
-    *   Dynamically updates `Edit > Undo [Action Name]` and `Edit > Redo [Action Name]` (`Cmd+Z` / `Cmd+Shift+Z`) via SwiftUI `CommandGroup(replacing: .undoRedo)` conforming to Apple Human Interface Guidelines.
-*   **Interactive History Panel**:
-    *   Exposes the chronological action stack in an expandable Inspector panel (`HistorySectionView`) allowing photographers to jump back directly to any previous state in the current session or time-travel to the original unedited state.
+*   Coalesced rapid slider scrubbing into atomic undo steps based on drag lifecycle (`beginScrub` / `endScrub`).
+*   Compact value-type `EditSettings` snapshots (~250 bytes) enabling negligible memory overhead.
+*   Dynamic macOS Menu Integration with HIG-compliant `Edit > Undo [Action]` / `Redo [Action]`.
+*   Expandable Inspector `HistorySectionView` allowing instant time-travel to any prior session state or pristine unedited master.
 
 ---
 
@@ -151,50 +148,30 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
        [ 2. Wide-Gamut Linear Working Space ] (Linear Rec.2020 / ACEScg)
                                     │
                                     ▼
-         [ 3. Scene-Referred Adjustments ] (Exposure EV, WB, Contrast)
+         [ 3. Scene-Referred Adjustments ] (Exposure EV, WB, Tone Recovery, Contrast)
                                     │
                   ┌─────────────────┴─────────────────┐
                   ▼                                   ▼
-      [ Mode A: AgX Filmic (Default) ]    [ Mode B: Camera Matching ]
-      • AgX Inset Matrix                  • DCP HueSatMap
-      • Highlight Filmic Desaturation     • DCP Manufacturer Tone Curve
-      • AgX Sigmoid Curve (Scene -> SDR)  • Camera Matrix to Display
+       [ Mode A: AgX Filmic (Default) ]    [ Mode B: Camera Matching ]
+       • AgX Inset Matrix                  • DCP HueSatMap
+       • Highlight Filmic Desaturation     • DCP Manufacturer Tone Curve
+       • AgX Sigmoid Curve (Scene -> SDR)  • Camera Matrix to Display
                   │                                   │
                   └─────────────────┬─────────────────┘
                                     │
                                     ▼
-            [ 4. Optional Post-Tone 3D LUT (.cube) ] (Display-Referred Creative Looks)
+     [ 4. Secondary Disclosure: Color Nuance & Emulation ] (LUTs / Memory Colors)
                                     │
                                     ▼
-       [ 5. Display / EDR Target ] (Display P3, sRGB, or Ultra HDR Gain Map)
+       [ 5. Display & Print Target ] (Display P3, sRGB, or Print ICC)
 ```
 
 ---
 
 ### Story 5.1: Linear Wide-Gamut Working Space & Pipeline Foundation
-*   **The Foundation**: Prior to applying filmic tone mapping or DCP profiles, sensor data must transition through a standardized, wide-gamut scene-referred working space rather than ad-hoc sRGB clipping.
-*   **Implementation**:
-    *   Standardize on **Linear Rec.2020** (or ACEScg) with a D65 white point in both `lumenbox-core` (Rust) and `Shaders.metal` (Metal).
-    *   Implement baseline matrix conversions: $\text{RAW Sensor} \to \text{CIE XYZ D50} \to \text{Linear Rec.2020}$.
-    *   Execute Exposure (EV), White Balance, and linear Contrast adjustments strictly in this wide-gamut space before any display mapping.
-
----
-
-### Story 5.6: Wide-Gamut Display P3 Viewport & Export Color Management (Deferred from 6.4)
-*   **Background & Observations**:
-    *   During validation on high-chroma RAW files (e.g. `20250409_0194.CR2`), subtle differences in red saturation between the live Metal viewport and exported JPEGs highlighted how modern wide-gamut hardware interacts with color management pipelines.
-    *   **Viewport Presentation**: On macOS Liquid Retina XDR displays (which support 100% of the DCI-P3 color gamut), `CAMetalLayer` buffers are managed by WindowServer. If the layer is tagged as sRGB, WindowServer maps sRGB primaries into P3 display coordinates. If untagged or assigned native display space, sRGB coordinates are rendered directly to wide-gamut emitters, increasing perceived red saturation.
-    *   **Export Pipeline**: The headless Rust export pipeline currently tags JPEGs with an embedded sRGB ICC profile (`SRGB_ICC_PROFILE`). When opened in ColorSync-aware viewers (Preview.app, Safari, QuickLook), the embedded profile dictates how color coordinates are mapped to the monitor's profile.
-*   **Scope for Wide-Gamut Epic**:
-    1.  **Dual-Target Export (Display P3 & sRGB)**:
-        *   Provide an Export Color Space selector in the Export Sheet: **sRGB** (standard web/print compatibility) vs. **Display P3** (wide-gamut preservation for modern Apple, Android, and OLED displays).
-        *   When Display P3 export is selected, map the working Rec.2020 space directly into Display P3 coordinates and embed the official Display P3 ICC profile via `img-parts` (Story 8.6).
-    2.  **ColorSync Proofing & Intent Control**:
-        *   Support *Soft Proofing* mode in the Canvas toolbar to simulate sRGB gamut clipping on wide-gamut displays.
-        *   Integrate LittleCMS2 (`lcms2`, Story 8.7/Table 10) in the Rust export pipeline to support Perceptual vs. Relative Colorimetric rendering intents for out-of-gamut saturated reds and magentas.
-        *   Use `img-parts` (Story 8.6) to inject the resulting target ICC profile cleanly into the JPEG APP2 marker segment, replacing handwritten byte-scanning loops.
-    3.  **Dynamic Viewport Layer Calibration**:
-        *   Expose a preference to toggle the live viewport between native wide-gamut Display P3 rendering and soft-proofed sRGB.
+*   Standardize on **Linear Rec.2020** (or ACEScg) with a D65 white point in both `firstproof-core` (Rust) and `Shaders.metal` (Metal).
+*   Implement baseline matrix conversions: $\text{RAW Sensor} \to \text{CIE XYZ D50} \to \text{Linear Rec.2020}$.
+*   Execute Exposure (EV), White Balance, Tone Recovery, and linear Contrast adjustments strictly in this wide-gamut space before any display mapping.
 
 ---
 
@@ -207,15 +184,15 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
     *   **Sigmoidal Tone Curve**: Smooth analog contrast without harsh digital knee boundaries.
 *   **Strict CPU (Rust) & GPU (Metal) Parity**:
     *   **Live Viewport (Metal)**: Real-time 120 FPS evaluation in `Shaders.metal`.
-    *   **Headless Export (Rust)**: High-quality evaluation in `lumenbox-core/src/export.rs` for batch exports.
-    *   **Parity Test Guard**: An automated integration test in `lumenbox-core/tests/agx_shader_parity.rs` verifies shader constants and polynomial curves against the Rust CPU model to $\epsilon < 10^{-6}$.
+    *   **Headless Export (Rust)**: Bit-accurate evaluation in `firstproof-core/src/export.rs`.
+    *   **Parity Test Guard**: Automated integration test in `firstproof-core/tests/agx_shader_parity.rs` verifying shader constants and polynomial curves against the Rust CPU model to $\epsilon < 10^{-6}$.
 
 ---
 
 ### Story 5.3: Adobe DCP Ingestion & Dual-Illuminant Camera Calibration
 *   **Camera-Specific Colorimetry**: Replace generic D65 matrices with exact camera sensor calibration extracted from Adobe `.dcp` profiles.
 *   **Implementation**:
-    *   **Rust DCP Parser**: Parse TIFF/DNG IFD structures in `lumenbox-core/src/dcp.rs` to extract `ColorMatrix1/2`, `ForwardMatrix1/2`, and `CalibrationIlluminant1/2`.
+    *   **Rust DCP Parser**: Parse TIFF/DNG IFD structures in `firstproof-core/src/color/dcp.rs` to extract `ColorMatrix1/2`, `ForwardMatrix1/2`, and `CalibrationIlluminant1/2`.
     *   **Dual-Illuminant Planckian Interpolation**: Dynamically interpolate between Standard Illuminant A ($2856\text{K}$ tungsten) and CIE Illuminant D65 ($6504\text{K}$ daylight) using reciprocal temperature ($1/T$) derived from the active White Balance slider.
     *   **Pipeline Integration**: Feed this dynamic calibration matrix directly into Story 5.1's scene-referred conversion stage, providing AgX (Story 5.2) with true camera-calibrated sensor data.
 
@@ -227,20 +204,28 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
     *   **DCP HueSatMap**: 3D HSV delta tables that selectively enhance memory colors (sky blues, skin tones, foliage).
     *   **Camera-Matching Tone Curves**: Non-linear S-curves matching camera manufacturer rendering.
     *   **Inspector Profile Selector**:
-        *   **"LumenBox Neutral (AgX Filmic)"** [Default]: Uses DCP sensor calibration $\to$ AgX Inset $\to$ AgX Highlight Desaturation & Sigmoidal curve. Bypasses the DCP `ToneCurve` to prevent double tone-mapping.
+        *   **"First Proof Neutral (AgX Filmic)"** [Default]: Uses DCP sensor calibration $\to$ AgX Inset $\to$ AgX Highlight Desaturation & Sigmoidal curve. Bypasses the DCP `ToneCurve` to prevent double tone-mapping.
         *   **"Camera Standard"**: Uses DCP sensor calibration $\to$ DCP HueSatMap $\to$ DCP Manufacturer Tone Curve $\to$ Output sRGB.
         *   **"Camera Portrait / Landscape / Vivid"**: Swappable DCP profiles for alternate manufacturer looks.
 
 ---
 
-### Story 5.5: 3D LUT Engine (.cube) & Headless SIMD Tetrahedral Interpolator
-*   **Creative Film Simulation**: Support industry-standard `.cube` look-up tables (e.g., $17\times 17\times 17$, $33\times 33\times 33$, $65\times 65\times 65$) for cinema grading and artistic film emulation.
-*   **Architectural Placement**:
+### Story 5.5: Secondary Disclosure: 3D LUT Engine (.cube) & Color Nuance
+*   **Architectural Demotion to Secondary Disclosure**:
+    *   To keep the Primary Develop Deck pure and uncluttered, creative `.cube` 3D LUT import and selective memory color adjustments (`Deep Blue`, `Foliage`) are placed inside a collapsible **"Fine Tuning & Creative Emulation"** disclosure panel.
+*   **Technical Implementation**:
     *   Evaluated in the **display-referred stage (post-tone-mapping)** with an opacity/mix slider ($0\%\text{--}100\%$). Applying LUTs post-tone-mapping ensures $[0, 1]$ creative LUTs do not hard-clamp high dynamic range sensor highlights.
-*   **Metal & Rust Parity**:
     *   **Metal GPU**: Uploaded as a 3D texture (`MTLTextureType3D`) with single-cycle hardware trilinear texture filtering.
-    *   **Rust CPU**: Implemented in `lumenbox-core/src/export.rs` with SIMD-accelerated tetrahedral or trilinear interpolation for deterministic headless batch exports.
-*   **UI Integration**: Custom `.cube` file picker and blend slider in the Inspector under *Color & Tone*.
+    *   **Rust CPU**: Implemented in `firstproof-core/src/export.rs` with SIMD-accelerated tetrahedral or trilinear interpolation for deterministic headless batch exports.
+
+---
+
+### Story 5.6: Wide-Gamut Display P3 Viewport & Export Color Management
+*   **Dual-Target Export (Display P3 & sRGB)**:
+    *   Export Color Space selector in Export Sheet: **sRGB** (universal web/print compatibility) vs. **Display P3** (wide-gamut preservation for modern Apple, Android, and OLED displays).
+*   **ColorSync Proofing & Intent Control**:
+    *   *Soft Proofing* mode in the Canvas toolbar to simulate sRGB and standard print gamut clipping on wide-gamut displays.
+    *   Integrate LittleCMS2 (`lcms2`, Story 8.7) in the Rust export pipeline to support Perceptual vs. Relative Colorimetric rendering intents.
 
 ---
 
@@ -267,71 +252,75 @@ Photographers regularly need to batch export dozens or hundreds of culled photos
 
 ---
 
-## 7. Apple EDR & Ultra HDR (ISO 21496-1) Gain Map Pipeline (P1)
+## 7. Apple EDR & Ultra HDR Gain Map Pipeline (Print & Web First Constraint)
 
-HDR photos are now the standard on the web, Google Photos, Instagram, and modern smartphone/laptop screens (iPhone Super Retina, MacBook Liquid Retina XDR):
+### Core Philosophical Principle: Print & Web First
+First Proof exists to make photographs look sublime on standard screens, personal websites, and in physical print. Over-emphasizing HDR radiance can compromise print tonality and create images that look flat and muddy when viewed on normal SDR monitors.
 
+Therefore, EDR is architected with a strict hierarchy:
+1.  **SDR Master First**: Every image's primary tone curve and color grade is calibrated for standard dynamic range (sRGB / Display P3 / Print).
+2.  **EDR as a Diagnostic Tool**: On macOS Liquid Retina XDR displays, EDR serves primarily as an **auxiliary inspection tool** to visualize unclipped sensor highlight latitude and verify highlight roll-off.
+3.  **Ultra HDR as an Auxiliary Gain Map**: When exporting for HDR-capable platforms (Instagram, Apple Photos, Google Photos), First Proof creates an ISO 21496-1 compliant gain map layer bundled into a standard JPEG. SDR viewers and printers see the pristine SDR master; HDR screens radiate specular highlights without altering the midtone balance.
+
+### Technical Implementation
 *   **How Ultra HDR Works (Universal JPEG Compatibility)**:
     *   An Ultra HDR image is a standard, 100% backward-compatible `.jpg` file.
     *   **Base Image**: Standard SDR tone-mapped image (safe for legacy screens and fine art printing).
     *   **Embedded Gain Map (ISO 21496-1 / Adobe HDR)**: A compact secondary grayscale map embedded in the JPEG's metadata (MPF/XMP) storing the exact per-pixel gain multiplier:
         \[G(x, y) = \frac{\log_2(I_{\text{HDR}}(x, y) / I_{\text{SDR}}(x, y)) - \text{MinGain}}{\text{MaxGain} - \text{MinGain}}\]
-    *   **Rendering**: SDR screens show the base image; HDR screens (Google Photos web, Instagram, Apple XDR) multiply the base image by the gain map to physically radiate specular highlights at up to 1,600 nits.
 *   **Metal EDR Live Viewport (SwiftUI + Metal)**:
     *   Configure `MTKView` with `.rgba16Float` and `metalLayer.wantsExtendedDynamicRangeContent = true`.
     *   Query `NSScreen.main?.maximumExtendedDynamicRangeColorComponentValue` to dynamically read available display headroom ($1.0 \to 4.0+$).
-    *   Add an **"HDR"** toggle badge in the Canvas toolbar to toggle between standard SDR preview and full 1,600-nit XDR radiance.
+    *   Add an **"EDR"** inspection badge in the Canvas toolbar to toggle between standard SDR proofing and extended highlight visualization.
 *   **Ultra HDR Export Option**:
     *   Add an **"Ultra HDR (Gain Map JPEG)"** checkbox in the Export Sheet (`Cmd+E`).
     *   Rust export engine generates the SDR baseline, computes the downsampled gain map, and embeds the ISO 21496-1 metadata tag.
-*   **Google Photos Takeout & Ingestion**:
-    *   Detect incoming Google Pixel & Google Photos Ultra HDR JPEGs and extract their gain map channels for instant high-dynamic-range playback.
 
 ---
 
 ## 8. Core Refactoring & Library Modernization Audit (P2 Tech Debt)
 
-An architectural audit of existing `lumenbox-core` code revealed several areas where algorithms were hand-rolled from scratch rather than leveraging mature, community-tested Rust crates. While some hand-rolled code was intentionally defensive (e.g. avoiding LGPL C++ bindings), other areas represent maintenance surface area and should be modernized:
+An architectural audit of existing `firstproof-core` code revealed several areas where algorithms were hand-rolled from scratch rather than leveraging mature, community-tested Rust crates. While some hand-rolled code was intentionally defensive (e.g. avoiding LGPL C++ bindings), other areas represent maintenance surface area and should be modernized:
 
 ### Story 8.1: Migrate Hand-Rolled CIEDE2000 & Color Conversions to `palette`
-*   **Current State**: `lumenbox-core/src/color/ciede2000.rs` (163 lines) implements ISO/CIE 11664-6:2014 CIEDE2000 perceptual difference math by hand, along with custom `Lab` and `Color3` conversions.
+*   **Current State**: `firstproof-core/src/color/ciede2000.rs` implements ISO/CIE 11664-6:2014 CIEDE2000 perceptual difference math by hand, along with custom `Lab` and `Color3` conversions.
 *   **The Modernization**:
     *   Adopt the **`palette`** crate (`palette = "0.7"`, MIT / Apache-2.0).
     *   `palette` natively supports SIMD-friendly `Lab`, `Xyz`, `Srgb`, `LinSrgb`, `Rec2020`, `Oklab`, and provides the `Difference` trait (`ciede2000`) out of the box with zero boilerplate.
-    *   Eliminates 160+ lines of fragile trigonometric color difference math while guaranteeing compliance with official CIE test vectors.
+    *   Eliminates fragile trigonometric color difference math while guaranteeing compliance with official CIE test vectors.
 
 ### Story 8.2: Adopt `glam` for High-Performance SIMD Matrix & Vector Math
-*   **Current State**: `lumenbox-core/src/color/mod.rs` implements a custom `struct Matrix3x3([[f32; 3]; 3])` with hand-rolled 3x3 cofactor inversion, matrix-matrix multiplication, and matrix-vector transforms.
+*   **Current State**: `firstproof-core/src/color/mod.rs` implements a custom `struct Matrix3x3([[f32; 3]; 3])` with hand-rolled 3x3 cofactor inversion and multiplication.
 *   **The Modernization**:
     *   Adopt **`glam`** (`glam = "0.27"`, MIT / Apache-2.0).
     *   Replaces hand-rolled matrix operations with `glam::Mat3` and `glam::Vec3`.
     *   Compiles to hardware NEON SIMD instructions on Apple Silicon ARM64, and shares a bit-identical 1:1 memory layout with Apple Metal's `simd_float3x3` and `simd_float3`.
 
 ### Story 8.3: Adopt `xmp-writer` for Robust Sidecar Generation
-*   **Current State**: `lumenbox-core/src/xmp.rs` uses manual format strings and XML string concatenation to write RDF/XMP sidecar files.
+*   **Current State**: `firstproof-core/src/xmp.rs` uses manual format strings and XML string concatenation to write RDF/XMP sidecar files.
 *   **The Modernization**:
     *   Adopt **`xmp-writer`** (used by Typst, MIT / Apache-2.0).
     *   Provides a type-safe, validated builder pattern for standard Dublin Core (`dc:`), TIFF (`tiff:`), EXIF (`exif:`), and custom (`pm:`) namespace properties without risk of XML formatting regressions or escaping bugs.
 
 ### Story 8.4: Upgrade from Naive Bilinear Demosaicing to Directional (RCD / VNG)
-*   **Current State**: `lumenbox-core/src/export.rs` uses simple 2x2 bilinear interpolation over the Bayer grid. Bilinear demosaicing is fast, but causes "zipper" edge artifacts, chromatic aberration false colors, and high-frequency resolution loss.
+*   **Current State**: `firstproof-core/src/export.rs` uses simple 2x2 bilinear interpolation over the Bayer grid. Bilinear demosaicing causes "zipper" edge artifacts, chromatic aberration false colors, and high-frequency resolution loss.
 *   **The Modernization**:
-    *   Adopt or port a permissive (MIT/BSD-licensed) directional demosaicer such as **RCD (Ratio Color Difference)** or **VNG (Variable Number of Gradients)** for high-quality batch exports, while retaining bilinear only for fast-path scratch previews.
+    *   Adopt or port a permissive (MIT/BSD-licensed) directional demosaicer such as **RCD (Ratio Color Difference)** or **VNG (Variable Number of Gradients)** for high-quality batch exports, retaining bilinear only for fast-path scratch previews.
 
 ### Story 8.5: Lensfun Database Licensing & Pure-Rust Engine Isolation
-*   **Current State**: `lumenbox-core/src/lensfun.rs` (560 lines) parses Lensfun XML database files using `roxmltree`.
+*   **Current State**: `firstproof-core/src/lensfun.rs` parses Lensfun XML database files using `roxmltree`.
 *   **The Audit Finding**: Hand-rolling this pure Rust XML parser was a necessary architectural defense to avoid linking against the official `liblensfun` C++ library (which is LGPL-3.0).
 *   **Actionable Task**:
-    *   Factor `lensfun.rs` into an internal standalone sub-crate (`lumenbox-lensfun`).
+    *   Factor `lensfun.rs` into an internal standalone sub-crate (`firstproof-lensfun`).
 
 ### Story 8.6: Adopt `img-parts` for Zero-Copy JPEG APP2 ICC & Metadata Injection
-*   **Current State**: `lumenbox-core/src/export.rs:847-875` uses a handwritten byte scanner searching for `0xFF, 0xD8` (SOI) and manually constructs raw `APP2` marker chunks with `ICC_PROFILE\0\x01\x01`.
+*   **Current State**: `firstproof-core/src/export.rs` uses a handwritten byte scanner searching for `0xFF, 0xD8` (SOI) and manually constructs raw `APP2` marker chunks with `ICC_PROFILE\0\x01\x01`.
 *   **The Modernization**:
     *   Adopt **`img-parts`** (`img-parts = "0.3"`, MIT / Apache-2.0).
     *   Provides zero-copy parsing and manipulation of JPEG/PNG segment containers, guaranteeing conformant marker insertion (`APP1` EXIF/XMP, `APP2` ICC profile) without risks of offset truncation or stream corruption.
 
 ### Story 8.7: Adopt `lcms2` for ICC Color Management, Soft-Proofing & Gamut Checking
-*   **Current State**: `lumenbox-core/src/export.rs` embeds a hardcoded static sRGB ICC byte array without colorimetric intent transformation or gamut remapping. Viewport soft-proofing relies on naive sRGB gamut clipping.
+*   **Current State**: `firstproof-core/src/export.rs` embeds a hardcoded static sRGB ICC byte array without colorimetric intent transformation or gamut remapping. Viewport soft-proofing relies on naive sRGB gamut clipping.
 *   **The Modernization**:
     *   Adopt **`lcms2`** (`lcms2 = "6.0"`, MIT license, safe bindings to LittleCMS 2.16+).
     *   Integrates the industry-standard color management engine (used by Safari and Firefox) to generate parametric ICC profiles (sRGB, Display P3, AdobeRGB), execute Perceptual and Relative Colorimetric transformations with Black Point Compensation (BPC), and calculate soft-proofing gamut alarm masks for print simulation.
@@ -359,7 +348,7 @@ Physical film grain simulation (distinct from pointwise 3D LUTs) models the stoc
 
 ## 10. Third-Party Libraries & Licensing Guardrails
 
-To preserve LumenBox's ability to be distributed as a proprietary, commercial macOS application on the Mac App Store and direct download, the project enforces strict IP and licensing guardrails:
+To preserve First Proof's ability to be distributed as a proprietary, commercial macOS application on the Mac App Store and direct download, the project enforces strict IP and licensing guardrails:
 
 | Technology / Component | Recommended Library | License | Licensing Risk & Policy |
 | :--- | :--- | :--- | :--- |
@@ -377,3 +366,37 @@ To preserve LumenBox's ability to be distributed as a proprietary, commercial ma
 | **Adobe DCP Camera Profiles** | Native `.dcp` parser (`dcp.rs`) | Adobe Open Specification | **Safe for Parsing**. Reading DNG/DCP metadata is permitted under Adobe's royalty-free patent grant. Do not bundle copyrighted creative DCP profiles; let users supply them. |
 | **Compressed RAW Patents** | *Apple ImageIO Stills Only* | RED / Apple Patents | **High Risk**. Never attempt to implement reverse-engineered REDCODE or ProRes RAW decompression. |
 | **Lensfun Calibration Data** | Pure-Rust XML Parser | CC-BY-SA 3.0 / LGPL-3.0 | **Medium Risk**. Keep calibration data decoupled from binary code; do not statically bake database into executable. |
+
+---
+
+## 11. The Two-Speed Workspace Architecture
+
+To prevent slider creep and preserve First Proof's rapid, restrained editorial workflow, the application interface is architected into two distinct zones:
+
+```
+┌────────────────────────────────────────────────────────┐
+│              1. PRIMARY DEVELOP DECK                   │
+│   Fast, instinctive, optical darkroom essentials       │
+│                                                        │
+│  • Conservative Auto (18% neutral gray leveling)       │
+│  • White Balance (Kelvin & Tint + 5x5 Eyedropper)      │
+│  • Exposure (±4.00 EV in 0.05 increments)              │
+│  • Tone Recovery (Highlights & Shadows)                │
+│  • Contrast (Linear pivot contrast)                    │
+│  • Tone Curve (Spline-interpolated S-curve)            │
+│  • Crop & Straighten (Keyboard 'C', Inscribed Aspect)  │
+│  • Organic Film Grain (Midtone physical clumping)      │
+│  • Camera Profile (AgX Filmic vs Camera Matching)      │
+└────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│     2. SECONDARY DISCLOSURE: FINE TUNING & EMULATION   │
+│   Deliberate, secondary tools kept out of primary view │
+│                                                        │
+│  • Selective Color Nuance (Deep Blue, Foliage)         │
+│  • 3D LUT Engine (.cube import & mix slider)           │
+│  • Soft-Proofing & Gamut Clipping Warning Mask         │
+│  • Lensfun Optical Correction Profiles                 │
+└────────────────────────────────────────────────────────┘
+```

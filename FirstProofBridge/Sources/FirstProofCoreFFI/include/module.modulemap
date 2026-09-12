@@ -1,0 +1,4 @@
+module firstproof_coreFFI {
+    header "firstproof_coreFFI.h"
+    export *
+}
