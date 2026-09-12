@@ -160,10 +160,13 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
                   └─────────────────┬─────────────────┘
                                     │
                                     ▼
-     [ 4. Secondary Disclosure: Color Nuance & Emulation ] (LUTs / Memory Colors)
+     [ 4. Creative Film Emulation & Nuance ] (Portra/Tri-X/CineStill LUTs, .cube, Memory Colors)
                                     │
                                     ▼
-       [ 5. Display & Print Target ] (Display P3, sRGB, or Print ICC)
+     [ 5. Procedural Organic Film Grain ] (Physical Zone V Midtone Clumping & Tri-Layer Chemistry)
+                                    │
+                                    ▼
+        [ 6. Display & Print Target ] (Display P3, sRGB, or Print ICC)
 ```
 
 ---
@@ -326,7 +329,7 @@ An architectural audit of existing `firstproof-core` code revealed several areas
 
 ---
 
-## 9. Procedural Organic Film Grain Simulation (P3)
+## 9. Procedural Organic Film Grain Simulation (Completed ✅)
 
 Physical film grain simulation (distinct from pointwise 3D LUTs) models the stochastic, physical behavior of silver halide crystal clumping across photographic emulsions (e.g. Kodak Portra, Tri-X, CineStill):
 
