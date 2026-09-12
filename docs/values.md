@@ -39,7 +39,7 @@ First Proof exists to restore **photographic honesty and creative restraint**. W
 * **Portable Directory Catalogs (`.firstproof/catalog.db`):** Your library data travels with your photos on external SSDs and hard drives. No centralized catalog lock-in that corrupts your entire library.
 * **100% Offline & Private:** Your photos never touch a remote server or training pipeline. First Proof requires no login, no cloud subscription, and zero telemetry.
 * **Google Liberation Bridge (Ingest & Storage Culling):** Rather than locking you into cloud ecosystems, First Proof provides an intentional off-ramp: ingesting Google Pixel computational DNGs and Takeout archives to local storage, and providing fast triage (`P`/`X`) to reclaim cloud storage and own your masters.
-* **Print & Web First:** While the pipeline leverages wide-gamut Rec.2020 and Apple Silicon displays, the ultimate reference target is authentic SDR reproduction that translates honestly to the web and fine-art physical paper prints.
+* **Print & Web First (SDR by Default):** While the pipeline leverages wide-gamut Rec.2020 and Apple Silicon displays, the ultimate reference target is authentic SDR reproduction that translates honestly to the web and fine-art physical paper prints. Even on HDR/EDR-capable screens (Liquid Retina XDR), the viewport always defaults to standard SDR; EDR is an explicit opt-in diagnostic inspection mode, never the default canvas rendering.
 * **Standard Open Metadata:** Full IPTC Core, Dublin Core, EXIF, and standard XMP sidecar synchronization (`https://firstproof.photo/ns/pm/1.0/`).
 
 ---

@@ -271,7 +271,7 @@ Therefore, EDR is architected with a strict hierarchy:
 *   **Metal EDR Live Viewport (SwiftUI + Metal)**:
     *   Configure `MTKView` with `.rgba16Float` and `metalLayer.wantsExtendedDynamicRangeContent = true`.
     *   Query `NSScreen.main?.maximumExtendedDynamicRangeColorComponentValue` to dynamically read available display headroom ($1.0 \to 4.0+$).
-    *   Add an **"EDR"** inspection badge in the Canvas toolbar to toggle between standard SDR proofing and extended highlight visualization.
+    *   **SDR by Default Invariant**: Even when the connected display supports 1,600-nit EDR, the viewport **always defaults to standard SDR** (`isHdrEnabled = false`). Photographers must explicitly click the **"EDR"** inspection badge in the Canvas toolbar to toggle into extended highlight visualization, guaranteeing that the default development baseline is never skewed by display hardware radiance.
 *   **Ultra HDR Export Option**:
     *   Add an **"Ultra HDR (Gain Map JPEG)"** checkbox in the Export Sheet (`Cmd+E`).
     *   Rust export engine generates the SDR baseline, computes the downsampled gain map, and embeds the ISO 21496-1 metadata tag.

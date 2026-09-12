@@ -28,6 +28,7 @@
   - Raw Bayer CFA sensor pixels are mapped into linear Rec.2020 via camera matrix / Adobe DCP profiles before any tone adjustments occur.
   - Tone-mapping to display luminance occurs at the end of the pipeline via AgX (Vivid/Neutral) or Camera DCP profiles.
   - Final offline exports must maintain bit-level parity with GPU viewport rendering and embed color space ICC profiles using `img-parts` and `lcms2`.
+  - **Print & Web First (SDR Viewport Default)**: Even when running on an HDR/EDR-capable screen (e.g. MacBook Liquid Retina XDR, Pro Display XDR), the viewport canvas must always initialize and default to standard dynamic range (`isHdrEnabled = false`). EDR is an explicit user opt-in inspection mode, ensuring the photographer's default tonal decisions remain calibrated for print and universal web viewing rather than eye-searing local hardware radiance.
 
 - **Dual-Engine Math Parity**: The Metal GPU shader pipeline (`Shaders.metal`, `Geometry.metal`) and the Rust CPU pipeline (`export.rs`, `curve.rs`, `color/`) must maintain bit-level mathematical parity. Any new tone transform or slider adjustment must be implemented identically in both engines and verified with `cargo test --test agx_shader_parity` and `cargo test --test camera_profiles_parity`.
 
