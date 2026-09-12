@@ -8,7 +8,27 @@
 
 - **Educational & Interactive Commit Tours**: Before every commit/PR check-in, provide a tour of the code changes and use it as a learning opportunity. Compare Rust and Swift concepts against Python and JavaScript (e.g., ownership vs garbage collection, static typing, FFI, memory layout, concurrency). Include clear code snippets, explain syntax/architecture decisions, and end with 1-2 interactive quiz questions to reinforce fluency in desktop app engineering.
 
+- **Desktop Keyboard Architecture & First-Responder Shielding**:
+  - Single-key shortcuts (`1`..`5` for ratings, `P`/`X`/`U` for flags, `C` for crop, `Z` for zoom, `[`/`]` for rotation, `\` for original peek) must **never** fire while the user is actively typing in editable text fields (e.g. Title, Caption, Keywords, Creator in the metadata panel).
+  - Any local keyboard event monitor in `MainView.swift` or AppKit hosting must always verify that the window's first responder is not an active text field before intercepting keys:
+    ```swift
+    if let responder = window.firstResponder as? NSTextView,
+       responder.isFieldEditor || (responder.isSelectable && responder.isEditable) {
+        return event
+    }
+    ```
+
+- **Color Science Pipeline & Working Space Invariants**:
+  - Internal image adjustments (exposure, contrast, tone curves, saturation, film grain) must strictly execute in **Linear Rec.2020 wide-gamut** color space, NOT gamma-encoded sRGB or display P3.
+  - Raw Bayer CFA sensor pixels are mapped into linear Rec.2020 via camera matrix / Adobe DCP profiles before any tone adjustments occur.
+  - Tone-mapping to display luminance occurs at the end of the pipeline via AgX (Vivid/Neutral) or Camera DCP profiles.
+  - Final offline exports must maintain bit-level parity with GPU viewport rendering and embed color space ICC profiles using `img-parts` and `lcms2`.
+
 - **Dual-Engine Math Parity**: The Metal GPU shader pipeline (`Shaders.metal`, `Geometry.metal`) and the Rust CPU pipeline (`export.rs`, `curve.rs`, `color/`) must maintain bit-level mathematical parity. Any new tone transform or slider adjustment must be implemented identically in both engines and verified with `cargo test --test agx_shader_parity` and `cargo test --test camera_profiles_parity`.
+
+- **Real-Time Viewport Thumbnail Invalidation**:
+  - Viewport adjustments (sliders, curves, rotation) must never trigger slow disk re-renders or LibRaw demosaicing.
+  - Thumbnails are updated via sub-millisecond GPU viewport snapshots (`captureThumbnailSnapshot`) into in-memory `ThumbnailCache`, followed by `NotificationCenter.default.post(name: .thumbnailDidChange, object: path)`. Disk serialization is deferred until save or closing the photo.
 
 - **Desktop Gesture Architecture & Hit Testing**:
   - Never attach `DragGesture` to dynamically repositioned or animated child views (e.g. views using `.position(point)` where `point` mutates during `.onChanged`). In macOS AppKit/SwiftUI hosting, moving the view anchor under the pointer causes the window server to drop pointer tracking or fire cancellation events, silently dropping `.onEnded` and breaking undo history.
@@ -25,5 +45,8 @@
         .clipped()
     ```
   - This guarantees the layout engine allocates exact vertical space matching horizontal width, preventing layout overflow into adjacent disclosure groups.
+
+- **Portable Catalogs on External Drives (`.lumenbox/`)**:
+  - Folder indexing on external storage volumes stores catalogs inside `<volume>/.lumenbox/catalog.sqlite` so the catalog travels with the external media.
 
 - **Proactive Customization Encoding**: Whenever a platform-specific quirk, non-obvious workaround, multi-step pipeline recipe, or architectural convention is established during development, proactively suggest encoding it into `.agents/AGENTS.md` or as a new skill under `.agents/skills/` so subsequent chats retain it automatically.
