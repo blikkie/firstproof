@@ -168,14 +168,14 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
 
 ---
 
-### Story 5.1: Linear Wide-Gamut Working Space & Pipeline Foundation
+### Story 5.1: Linear Wide-Gamut Working Space & Pipeline Foundation (Completed ✅)
 *   Standardize on **Linear Rec.2020** (or ACEScg) with a D65 white point in both `firstproof-core` (Rust) and `Shaders.metal` (Metal).
 *   Implement baseline matrix conversions: $\text{RAW Sensor} \to \text{CIE XYZ D50} \to \text{Linear Rec.2020}$.
 *   Execute Exposure (EV), White Balance, Tone Recovery, and linear Contrast adjustments strictly in this wide-gamut space before any display mapping.
 
 ---
 
-### Story 5.2: AgX Filmic Tone Mapping Engine & Parity Guard
+### Story 5.2: AgX Filmic Tone Mapping Engine & Parity Guard (Completed ✅)
 *   **The Problem: Digital Clipping & The Abney Effect**:
     *   When bright skin tones approach high luminance in naive digital pipelines, the red channel clips first to $1.0$. As green and blue rise, $(R, G, B)$ shifts toward yellow, creating unnatural "salmon" skin tones and plastic highlight clipping.
 *   **The Solution: AgX Color Science**:
@@ -189,7 +189,7 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
 
 ---
 
-### Story 5.3: Adobe DCP Ingestion & Dual-Illuminant Camera Calibration
+### Story 5.3: Adobe DCP Ingestion & Dual-Illuminant Camera Calibration (Completed ✅)
 *   **Camera-Specific Colorimetry**: Replace generic D65 matrices with exact camera sensor calibration extracted from Adobe `.dcp` profiles.
 *   **Implementation**:
     *   **Rust DCP Parser**: Parse TIFF/DNG IFD structures in `firstproof-core/src/color/dcp.rs` to extract `ColorMatrix1/2`, `ForwardMatrix1/2`, and `CalibrationIlluminant1/2`.
@@ -198,19 +198,19 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
 
 ---
 
-### Story 5.4: Camera-Matching Tone Profiles & DCP HueSatMap Engine
+### Story 5.4: Camera-Matching Tone Profiles & DCP HueSatMap Engine (Completed ✅)
 *   **The Feature**: Give photographers 1:1 parity with in-camera JPEGs (e.g. Canon Picture Styles, Sony Creative Looks, Nikon Picture Controls) alongside AgX Filmic.
 *   **Modular Branching Transform**:
     *   **DCP HueSatMap**: 3D HSV delta tables that selectively enhance memory colors (sky blues, skin tones, foliage).
     *   **Camera-Matching Tone Curves**: Non-linear S-curves matching camera manufacturer rendering.
     *   **Inspector Profile Selector**:
-        *   **"First Proof Neutral (AgX Filmic)"** [Default]: Uses DCP sensor calibration $\to$ AgX Inset $\to$ AgX Highlight Desaturation & Sigmoidal curve. Bypasses the DCP `ToneCurve` to prevent double tone-mapping.
+        *   **"First Proof Neutral (AgX Filmic)"**: Uses DCP sensor calibration $\to$ AgX Inset $\to$ AgX Highlight Desaturation & Sigmoidal curve. Bypasses the DCP `ToneCurve` to prevent double tone-mapping.
         *   **"Camera Standard"**: Uses DCP sensor calibration $\to$ DCP HueSatMap $\to$ DCP Manufacturer Tone Curve $\to$ Output sRGB.
         *   **"Camera Portrait / Landscape / Vivid"**: Swappable DCP profiles for alternate manufacturer looks.
 
 ---
 
-### Story 5.5: Secondary Disclosure: 3D LUT Engine (.cube) & Color Nuance
+### Story 5.5: Secondary Disclosure: 3D LUT Engine (.cube) & Color Nuance (Completed ✅)
 *   **Architectural Demotion to Secondary Disclosure**:
     *   To keep the Primary Develop Deck pure and uncluttered, creative `.cube` 3D LUT import and selective memory color adjustments (`Deep Blue`, `Foliage`) are placed inside a collapsible **"Fine Tuning & Creative Emulation"** disclosure panel.
 *   **Technical Implementation**:
@@ -220,10 +220,9 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
 
 ---
 
-### Story 5.6: Wide-Gamut Display P3 Viewport & Export Color Management
-*   **Dual-Target Export (Display P3 & sRGB)**:
-    *   Export Color Space selector in Export Sheet: **sRGB** (universal web/print compatibility) vs. **Display P3** (wide-gamut preservation for modern Apple, Android, and OLED displays).
-*   **ColorSync Proofing & Intent Control**:
+### Story 5.6: Wide-Gamut Display P3 Viewport & Export Color Management (Partially Completed / Deferred)
+*   **Dual-Target Export (Display P3 & sRGB)**: ✅ Completed. Export Color Space selector in Export Sheet: **sRGB** (universal web/print compatibility) vs. **Display P3** (wide-gamut preservation for modern Apple, Android, and OLED displays) with embedded ICC tags via `export.rs`.
+*   **ColorSync Proofing & Intent Control (Deferred)**:
     *   *Soft Proofing* mode in the Canvas toolbar to simulate sRGB and standard print gamut clipping on wide-gamut displays.
     *   Integrate LittleCMS2 (`lcms2`, Story 8.7) in the Rust export pipeline to support Perceptual vs. Relative Colorimetric rendering intents.
 
