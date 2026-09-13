@@ -24,6 +24,23 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
     b_scale = (b_scale + tint_factor * 0.5).max(0.01);
     
     let total_pixels = image.width * image.height;
+    let has_tone_recovery = edits.highlights != 0.0 || edits.shadows != 0.0 || edits.whites != 0.0 || edits.blacks != 0.0;
+    
+    // If bilateral tone recovery is active, extract the pre-adjusted linear luminance plane
+    // to separate base illumination from high-frequency detail without edge halos.
+    let luma_plane = if has_tone_recovery {
+        let mut plane = Vec::with_capacity(total_pixels);
+        for i in 0..total_pixels {
+            let idx = i * 3;
+            let r = image.data[idx] * r_scale * exposure_gain;
+            let g = image.data[idx + 1] * g_scale * exposure_gain;
+            let b = image.data[idx + 2] * b_scale * exposure_gain;
+            plane.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
+        }
+        Some(plane)
+    } else {
+        None
+    };
     
     for i in 0..total_pixels {
         let idx = i * 3;
@@ -41,14 +58,40 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
         g *= exposure_gain;
         b *= exposure_gain;
         
-        // 2b. Selective Tone Recovery (Highlights, Shadows, Whites, Blacks)
-        let (r_rec, g_rec, b_rec) = apply_tone_recovery(
-            r, g, b,
-            edits.highlights, edits.shadows, edits.whites, edits.blacks,
-        );
-        r = r_rec;
-        g = g_rec;
-        b = b_rec;
+        // 2b. Advanced Bilateral Base/Detail Tone Recovery (Highlights, Shadows, Whites, Blacks)
+        if let Some(ref luma) = luma_plane {
+            let x = i % image.width;
+            let y = i / image.width;
+            let w = image.width;
+            let h = image.height;
+            
+            let x_l = x.saturating_sub(2);
+            let x_r = (x + 2).min(w - 1);
+            let y_t = y.saturating_sub(2);
+            let y_b = (y + 2).min(h - 1);
+            
+            let y_c = luma[i];
+            let y_neighbors = [
+                luma[y * w + x_l],
+                luma[y * w + x_r],
+                luma[y_t * w + x],
+                luma[y_b * w + x],
+                luma[y_t * w + x_l],
+                luma[y_t * w + x_r],
+                luma[y_b * w + x_l],
+                luma[y_b * w + x_r],
+            ];
+            
+            let (r_rec, g_rec, b_rec) = apply_bilateral_tone_recovery_rgb(
+                r, g, b,
+                y_c,
+                &y_neighbors,
+                edits.highlights, edits.shadows, edits.whites, edits.blacks,
+            );
+            r = r_rec;
+            g = g_rec;
+            b = b_rec;
+        }
         
         // 3. AgX Filmic or Camera-Matching Tone Profiles
         // Tone profiles output sRGB (display-referred for AgX, linear sRGB for camera profiles / raw passthrough).
@@ -118,6 +161,96 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
     }
 }
 
+/// Applies advanced bilateral base/detail tone recovery (Highlights, Shadows, Whites, Blacks)
+/// to scene-referred linear RGB values using edge-preserving spatial illumination separation.
+/// y_neighbors contains 8 neighborhood luminances: 4 orthogonal (L, R, T, B) followed by 4 diagonal (TL, TR, BL, BR).
+#[inline(always)]
+pub fn apply_bilateral_tone_recovery_rgb(
+    r: f32, g: f32, b: f32,
+    y_c: f32,
+    y_neighbors: &[f32; 8],
+    highlights: f32, shadows: f32, whites: f32, blacks: f32,
+) -> (f32, f32, f32) {
+    if highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0 {
+        return (r, g, b);
+    }
+    
+    if y_c <= 1e-6 {
+        return (r, g, b);
+    }
+    
+    // Log-luminance EV relative to photographic middle gray (0.18)
+    let ev_c = (y_c.max(1e-5) / 0.18).log2();
+    
+    // Bilateral filter base illumination estimation:
+    // Spatial weights: Center = 1.0, Orthogonal (dist 1) = exp(-0.5) ~ 0.60653066, Diagonal (dist sqrt(2)) = exp(-1.0) ~ 0.36787944
+    // Range weights: Gaussian in EV stops with sigma_r = 0.85 EV (2 * sigma_r^2 = 1.445)
+    const W_S_ORTHO: f32 = 0.60653066;
+    const W_S_DIAG: f32 = 0.36787944;
+    const INV_TWO_SIGMA_R_SQ: f32 = 1.0 / 1.445;
+    
+    let mut total_weight = 1.0f32;
+    let mut weighted_ev_sum = ev_c;
+    
+    // 0..3: Orthogonal neighbors (left, right, top, bottom)
+    for i in 0..4 {
+        let ev_i = (y_neighbors[i].max(1e-5) / 0.18).log2();
+        let d_ev = ev_i - ev_c;
+        let w_r = (-(d_ev * d_ev) * INV_TWO_SIGMA_R_SQ).exp();
+        let w = W_S_ORTHO * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+    
+    // 4..7: Diagonal neighbors (top-left, top-right, bottom-left, bottom-right)
+    for i in 4..8 {
+        let ev_i = (y_neighbors[i].max(1e-5) / 0.18).log2();
+        let d_ev = ev_i - ev_c;
+        let w_r = (-(d_ev * d_ev) * INV_TWO_SIGMA_R_SQ).exp();
+        let w = W_S_DIAG * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+    
+    let ev_base = weighted_ev_sum / total_weight;
+    let mut delta_ev = 0.0f32;
+    
+    // 1. Blacks: Anchor deep shadows (ev <= -1.0)
+    if blacks != 0.0 {
+        let u = ((-ev_base - 1.0) / 3.0).clamp(0.0, 1.0);
+        let w_blacks = u * u * (3.0 - 2.0 * u);
+        delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
+    }
+    
+    // 2. Shadows: Lift lower midtones and shadow textures (ev in [-4.0, 0.0])
+    if shadows != 0.0 {
+        let u = ((ev_base + 4.0) / 4.0).clamp(0.0, 1.0);
+        let w_shadows = (std::f32::consts::PI * u).sin();
+        delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
+    }
+    
+    // 3. Highlights: Recover or boost bright areas and skies (ev in [0.0, 4.0])
+    if highlights != 0.0 {
+        let u = (ev_base / 4.0).clamp(0.0, 1.0);
+        let w_highlights = (std::f32::consts::PI * u).sin();
+        delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
+    }
+    
+    // 4. Whites: Adjust specular highlight threshold and ceiling (ev >= 1.0)
+    if whites != 0.0 {
+        let u = ((ev_base - 1.0) / 3.0).clamp(0.0, 1.0);
+        let w_whites = u * u * (3.0 - 2.0 * u);
+        delta_ev += (whites / 100.0) * 0.90 * w_whites;
+    }
+    
+    if delta_ev == 0.0 {
+        return (r, g, b);
+    }
+    
+    let gain = 2.0f32.powf(delta_ev);
+    (r * gain, g * gain, b * gain)
+}
+
 /// Applies photographic four-zone tone recovery (Highlights, Shadows, Whites, Blacks)
 /// to scene-referred linear RGB values using chromaticity-preserving luminance scaling.
 /// Each adjustment slider is in the range -100.0 .. +100.0.
@@ -129,51 +262,9 @@ pub fn apply_tone_recovery(
     if highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0 {
         return (r, g, b);
     }
-    
     let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    if lum <= 1e-6 {
-        return (r, g, b);
-    }
-    
-    // Log-luminance EV relative to photographic middle gray (0.18)
-    let ev = (lum.max(1e-5) / 0.18).log2();
-    
-    let mut delta_ev = 0.0f32;
-    
-    // 1. Blacks: Anchor deep shadows (ev <= -1.0)
-    if blacks != 0.0 {
-        let u = ((-ev - 1.0) / 3.0).clamp(0.0, 1.0);
-        let w_blacks = u * u * (3.0 - 2.0 * u);
-        delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
-    }
-    
-    // 2. Shadows: Lift lower midtones and shadow textures (ev in [-4.0, 0.0])
-    if shadows != 0.0 {
-        let u = ((ev + 4.0) / 4.0).clamp(0.0, 1.0);
-        let w_shadows = (std::f32::consts::PI * u).sin();
-        delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
-    }
-    
-    // 3. Highlights: Recover or boost bright areas and skies (ev in [0.0, 4.0])
-    if highlights != 0.0 {
-        let u = (ev / 4.0).clamp(0.0, 1.0);
-        let w_highlights = (std::f32::consts::PI * u).sin();
-        delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
-    }
-    
-    // 4. Whites: Adjust specular highlight threshold and ceiling (ev >= 1.0)
-    if whites != 0.0 {
-        let u = ((ev - 1.0) / 3.0).clamp(0.0, 1.0);
-        let w_whites = u * u * (3.0 - 2.0 * u);
-        delta_ev += (whites / 100.0) * 0.90 * w_whites;
-    }
-    
-    if delta_ev == 0.0 {
-        return (r, g, b);
-    }
-    
-    let gain = 2.0f32.powf(delta_ev);
-    (r * gain, g * gain, b * gain)
+    let neighbors = [lum; 8];
+    apply_bilateral_tone_recovery_rgb(r, g, b, lum, &neighbors, highlights, shadows, whites, blacks)
 }
 
 /// Applies photographic color adjustments (Vibrance, Saturation, Deep Blue, Foliage)

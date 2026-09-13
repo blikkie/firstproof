@@ -7,17 +7,13 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Advanced Bilateral Base/Detail Tone Recovery (P1)**: GPU Bilateral Filtering Separation into base illumination and detail layers.
-2. **Catalog Ingestion & Deduplication Precedence Engine (P1)**: Deterministic RAW-over-JPEG deduplication hierarchy.
-3. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
+1. **Catalog Ingestion & Deduplication Precedence Engine (P1)**: Deterministic RAW-over-JPEG deduplication hierarchy.
+2. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
+3. **Archival Open DNG Converter & Lossless Compression Engine (P1)**: Lossless Bayer CFA transcoding and Deflate tile compression.
 
 ---
 
 ## Phase 2: Core Darkroom Adjustments & Catalog Ingestion (P1)
-
-### 2.2 Advanced Bilateral Base/Detail Tone Recovery
-- **GPU Bilateral Filtering Separation**:
-  - Upgrade beyond parametric curves by splitting the image into a base illumination layer and high-frequency detail layer via edge-preserving bilateral filtering, allowing extreme shadow lifting and highlight recovery with zero halo artifacts.
 
 ### 2.3 Catalog Ingestion & Deduplication Precedence Engine
 - **Deterministic Deduplication Hierarchy**:

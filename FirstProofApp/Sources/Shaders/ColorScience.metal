@@ -195,40 +195,80 @@ inline float3 agxToneMapVivid(float3 rec2020Color, float contrastGain) {
     return clamp(hsv2rgb(hsv), 0.0, 1.0);
 }
 
-// MARK: - Selective Tone Recovery (Highlights, Shadows, Whites, Blacks)
-inline float3 applyToneRecovery(float3 color, float highlights, float shadows, float whites, float blacks) {
+// MARK: - Advanced Bilateral Base/Detail Tone Recovery (Highlights, Shadows, Whites, Blacks)
+inline float3 applyBilateralToneRecovery(
+    float3 color,
+    float y_c,
+    float y_neighbors[8],
+    float highlights,
+    float shadows,
+    float whites,
+    float blacks
+) {
     if (highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0) {
         return color;
     }
     
-    float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
-    if (lum <= 1e-6) {
+    if (y_c <= 1e-6) {
         return color;
     }
     
-    float ev = log2(max(lum, 1e-5) / 0.18);
+    // Log-luminance EV relative to photographic middle gray (0.18)
+    float ev_c = log2(max(y_c, 1e-5) / 0.18);
+    
+    // Bilateral filter base illumination estimation:
+    // Spatial weights: Center = 1.0, Orthogonal (dist 1) = exp(-0.5) ~ 0.60653066, Diagonal (dist sqrt(2)) = exp(-1.0) ~ 0.36787944
+    // Range weights: Gaussian in EV stops with sigma_r = 0.85 EV (2 * sigma_r^2 = 1.445)
+    constexpr float w_s_ortho = 0.60653066;
+    constexpr float w_s_diag  = 0.36787944;
+    constexpr float inv_two_sigma_r_sq = 1.0 / 1.445;
+    
+    float total_weight = 1.0;
+    float weighted_ev_sum = ev_c;
+    
+    // 0..3: Orthogonal neighbors (left, right, top, bottom)
+    for (int i = 0; i < 4; ++i) {
+        float ev_i = log2(max(y_neighbors[i], 1e-5) / 0.18);
+        float d_ev = ev_i - ev_c;
+        float w_r = exp(-(d_ev * d_ev) * inv_two_sigma_r_sq);
+        float w = w_s_ortho * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+    
+    // 4..7: Diagonal neighbors (top-left, top-right, bottom-left, bottom-right)
+    for (int i = 4; i < 8; ++i) {
+        float ev_i = log2(max(y_neighbors[i], 1e-5) / 0.18);
+        float d_ev = ev_i - ev_c;
+        float w_r = exp(-(d_ev * d_ev) * inv_two_sigma_r_sq);
+        float w = w_s_diag * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+    
+    float ev_base = weighted_ev_sum / total_weight;
     float delta_ev = 0.0;
     
     if (blacks != 0.0) {
-        float u = clamp((-ev - 1.0) / 3.0, 0.0, 1.0);
+        float u = clamp((-ev_base - 1.0) / 3.0, 0.0, 1.0);
         float w_blacks = u * u * (3.0 - 2.0 * u);
         delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
     }
     
     if (shadows != 0.0) {
-        float u = clamp((ev + 4.0) / 4.0, 0.0, 1.0);
+        float u = clamp((ev_base + 4.0) / 4.0, 0.0, 1.0);
         float w_shadows = sin(3.141592653589793 * u);
         delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
     }
     
     if (highlights != 0.0) {
-        float u = clamp(ev / 4.0, 0.0, 1.0);
+        float u = clamp(ev_base / 4.0, 0.0, 1.0);
         float w_highlights = sin(3.141592653589793 * u);
         delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
     }
     
     if (whites != 0.0) {
-        float u = clamp((ev - 1.0) / 3.0, 0.0, 1.0);
+        float u = clamp((ev_base - 1.0) / 3.0, 0.0, 1.0);
         float w_whites = u * u * (3.0 - 2.0 * u);
         delta_ev += (whites / 100.0) * 0.90 * w_whites;
     }
@@ -239,6 +279,16 @@ inline float3 applyToneRecovery(float3 color, float highlights, float shadows, f
     
     float gain = exp2(delta_ev);
     return color * gain;
+}
+
+// Pointwise fallback for backward compatibility
+inline float3 applyToneRecovery(float3 color, float highlights, float shadows, float whites, float blacks) {
+    if (highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0) {
+        return color;
+    }
+    float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+    float neighbors[8] = { lum, lum, lum, lum, lum, lum, lum, lum };
+    return applyBilateralToneRecovery(color, lum, neighbors, highlights, shadows, whites, blacks);
 }
 
 // MARK: - Color & Vibrance Adjustment Function

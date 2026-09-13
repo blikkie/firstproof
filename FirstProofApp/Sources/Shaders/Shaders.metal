@@ -114,13 +114,16 @@ fragment float4 fragmentShader(
     }
     
     // 3. White Balance & Temperature Adjustment in Wide-Gamut Space
+    float rScale = 1.0;
+    float gScale = 1.0;
+    float bScale = 1.0;
     if (abs(editTemp - 5500.0) >= 1.0 || editTint != 0.0) {
         float tempNorm = clamp(editTemp / 5500.0, 0.25, 4.0);
-        float rScale = pow(tempNorm, 0.75);
-        float bScale = pow(1.0 / tempNorm, 0.75);
+        rScale = pow(tempNorm, 0.75);
+        bScale = pow(1.0 / tempNorm, 0.75);
         
         float tintFactor = editTint * 0.002;
-        float gScale = max(1.0 - tintFactor, 0.01);
+        gScale = max(1.0 - tintFactor, 0.01);
         rScale = max(rScale + tintFactor * 0.5, 0.01);
         bScale = max(bScale + tintFactor * 0.5, 0.01);
         
@@ -131,12 +134,54 @@ fragment float4 fragmentShader(
     
     // 4. Linear Exposure Multiplication (2^EV) in Wide-Gamut Space
     float totalExposure = editExposure;
+    float exposureGain = 1.0;
     if (totalExposure != 0.0) {
-        rec2020Color *= pow(2.0, totalExposure);
+        exposureGain = pow(2.0, totalExposure);
+        rec2020Color *= exposureGain;
     }
     
-    // 4b. Selective Tone Recovery (Highlights, Shadows, Whites, Blacks)
-    rec2020Color = applyToneRecovery(rec2020Color, editHighlights, editShadows, editWhites, editBlacks);
+    // 4b. Advanced Bilateral Base/Detail Tone Recovery (Highlights, Shadows, Whites, Blacks)
+    if (editHighlights != 0.0 || editShadows != 0.0 || editWhites != 0.0 || editBlacks != 0.0) {
+        float2 texelSize = 1.0 / float2(texture.get_width(), texture.get_height());
+        float2 step = texelSize * 2.0; // 2-texel stride captures spatial base illumination
+        
+        // Sample 8 neighbors: 4 orthogonal + 4 diagonal
+        float4 s_l  = texture.sample(textureSampler, uv + float2(-step.x, 0.0));
+        float4 s_r  = texture.sample(textureSampler, uv + float2( step.x, 0.0));
+        float4 s_t  = texture.sample(textureSampler, uv + float2(0.0, -step.y));
+        float4 s_b  = texture.sample(textureSampler, uv + float2(0.0,  step.y));
+        float4 s_tl = texture.sample(textureSampler, uv + float2(-step.x, -step.y));
+        float4 s_tr = texture.sample(textureSampler, uv + float2( step.x, -step.y));
+        float4 s_bl = texture.sample(textureSampler, uv + float2(-step.x,  step.y));
+        float4 s_br = texture.sample(textureSampler, uv + float2( step.x,  step.y));
+        
+        float y_c = dot(rec2020Color, float3(0.2126, 0.7152, 0.0722));
+        float3 wbExposureScale = float3(rScale, gScale, bScale) * exposureGain;
+        
+        float4 s_neighbors[8] = { s_l, s_r, s_t, s_b, s_tl, s_tr, s_bl, s_br };
+        float y_neighbors[8];
+        for (int i = 0; i < 8; ++i) {
+            float3 c;
+            if (uniforms.isLinearRaw == 1) {
+                c = s_neighbors[i].rgb;
+            } else {
+                float3 srgbLinear = srgbGammaToLinear3(s_neighbors[i].rgb);
+                c = LINEAR_SRGB_TO_REC2020 * srgbLinear;
+            }
+            c *= wbExposureScale;
+            y_neighbors[i] = dot(c, float3(0.2126, 0.7152, 0.0722));
+        }
+        
+        rec2020Color = applyBilateralToneRecovery(
+            rec2020Color,
+            y_c,
+            y_neighbors,
+            editHighlights,
+            editShadows,
+            editWhites,
+            editBlacks
+        );
+    }
     
     // 5. AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles
     // Calibrated contrast: Ceiling 2.0x (+100), Floor 0.40x (-100) preventing flat gray collapse

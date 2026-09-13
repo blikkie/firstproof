@@ -904,3 +904,119 @@ fn test_sharpening_and_masking_parity() {
     }
 }
 
+#[test]
+fn test_bilateral_tone_recovery_metal_parity() {
+    // Metal shader simulation of applyBilateralToneRecovery
+    fn metal_apply_bilateral_tone_recovery(
+        color: (f32, f32, f32),
+        y_c: f32,
+        y_neighbors: &[f32; 8],
+        highlights: f32,
+        shadows: f32,
+        whites: f32,
+        blacks: f32,
+    ) -> (f32, f32, f32) {
+        if highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0 {
+            return color;
+        }
+        if y_c <= 1e-6 {
+            return color;
+        }
+        let ev_c = (y_c.max(1e-5) / 0.18).log2();
+        let w_s_ortho: f32 = 0.60653066;
+        let w_s_diag: f32 = 0.36787944;
+        let inv_two_sigma_r_sq: f32 = 1.0 / 1.445;
+
+        let mut total_weight = 1.0f32;
+        let mut weighted_ev_sum = ev_c;
+
+        for i in 0..4 {
+            let ev_i = (y_neighbors[i].max(1e-5) / 0.18).log2();
+            let d_ev = ev_i - ev_c;
+            let w_r = (-(d_ev * d_ev) * inv_two_sigma_r_sq).exp();
+            let w = w_s_ortho * w_r;
+            total_weight += w;
+            weighted_ev_sum += w * ev_i;
+        }
+
+        for i in 4..8 {
+            let ev_i = (y_neighbors[i].max(1e-5) / 0.18).log2();
+            let d_ev = ev_i - ev_c;
+            let w_r = (-(d_ev * d_ev) * inv_two_sigma_r_sq).exp();
+            let w = w_s_diag * w_r;
+            total_weight += w;
+            weighted_ev_sum += w * ev_i;
+        }
+
+        let ev_base = weighted_ev_sum / total_weight;
+        let mut delta_ev = 0.0f32;
+
+        if blacks != 0.0 {
+            let u = ((-ev_base - 1.0) / 3.0).clamp(0.0, 1.0);
+            let w_blacks = u * u * (3.0 - 2.0 * u);
+            delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
+        }
+        if shadows != 0.0 {
+            let u = ((ev_base + 4.0) / 4.0).clamp(0.0, 1.0);
+            let w_shadows = (std::f32::consts::PI * u).sin();
+            delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
+        }
+        if highlights != 0.0 {
+            let u = (ev_base / 4.0).clamp(0.0, 1.0);
+            let w_highlights = (std::f32::consts::PI * u).sin();
+            delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
+        }
+        if whites != 0.0 {
+            let u = ((ev_base - 1.0) / 3.0).clamp(0.0, 1.0);
+            let w_whites = u * u * (3.0 - 2.0 * u);
+            delta_ev += (whites / 100.0) * 0.90 * w_whites;
+        }
+
+        if delta_ev == 0.0 {
+            return color;
+        }
+        let gain = 2.0f32.powf(delta_ev);
+        (color.0 * gain, color.1 * gain, color.2 * gain)
+    }
+
+    let scenarios = [
+        ("neutral", (0.5, 0.4, 0.3), 0.4, [0.4; 8], 0.0, 0.0, 0.0, 0.0),
+        ("flat_shadow_lift", (0.04, 0.03, 0.02), 0.03, [0.03; 8], 0.0, 50.0, 0.0, 0.0),
+        ("flat_highlight_pull", (0.8, 0.7, 0.6), 0.7, [0.7; 8], -40.0, 0.0, 0.0, 0.0),
+        ("step_edge_silhouette", (0.03, 0.03, 0.03), 0.03, [0.03, 0.85, 0.03, 0.85, 0.03, 0.85, 0.03, 0.85], 0.0, 60.0, 0.0, 0.0),
+        ("step_edge_sky", (0.85, 0.85, 0.85), 0.85, [0.03, 0.85, 0.03, 0.85, 0.03, 0.85, 0.03, 0.85], -50.0, 0.0, 0.0, 0.0),
+        ("textured_shadow", (0.04, 0.04, 0.04), 0.04, [0.038, 0.042, 0.039, 0.041, 0.037, 0.043, 0.040, 0.041], 0.0, 45.0, 0.0, -10.0),
+        ("multi_slider_high_dynamic", (0.6, 0.5, 0.4), 0.5, [0.45, 0.55, 0.48, 0.52, 0.44, 0.56, 0.47, 0.53], -30.0, 40.0, 15.0, -20.0),
+    ];
+
+    for (name, color, y_c, neighbors, hl, sh, wh, bl) in scenarios {
+        let rust_res = firstproof_core::export::apply_bilateral_tone_recovery_rgb(
+            color.0, color.1, color.2,
+            y_c, &neighbors,
+            hl, sh, wh, bl,
+        );
+        let metal_res = metal_apply_bilateral_tone_recovery(
+            color,
+            y_c, &neighbors,
+            hl, sh, wh, bl,
+        );
+
+        let rust_8bit = [
+            (rust_res.0.clamp(0.0, 1.0) * 255.0).round() as u8,
+            (rust_res.1.clamp(0.0, 1.0) * 255.0).round() as u8,
+            (rust_res.2.clamp(0.0, 1.0) * 255.0).round() as u8,
+        ];
+        let metal_8bit = [
+            (metal_res.0.clamp(0.0, 1.0) * 255.0).round() as u8,
+            (metal_res.1.clamp(0.0, 1.0) * 255.0).round() as u8,
+            (metal_res.2.clamp(0.0, 1.0) * 255.0).round() as u8,
+        ];
+
+        assert_eq!(
+            rust_8bit, metal_8bit,
+            "Bilateral tone recovery parity failed for scenario '{}': Rust {:?} vs Metal {:?}",
+            name, rust_8bit, metal_8bit
+        );
+    }
+}
+

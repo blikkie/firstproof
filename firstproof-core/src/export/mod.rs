@@ -236,6 +236,71 @@ mod tests {
     }
 
     #[test]
+    fn test_bilateral_tone_recovery_flat_patch() {
+        let (r, g, b) = (0.05, 0.04, 0.03);
+        let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        let neighbors = [lum; 8];
+
+        let bilateral = apply_bilateral_tone_recovery_rgb(r, g, b, lum, &neighbors, -30.0, 40.0, 10.0, -15.0);
+        let pointwise = apply_tone_recovery(r, g, b, -30.0, 40.0, 10.0, -15.0);
+
+        assert!((bilateral.0 - pointwise.0).abs() < 1e-6);
+        assert!((bilateral.1 - pointwise.1).abs() < 1e-6);
+        assert!((bilateral.2 - pointwise.2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_bilateral_tone_recovery_halo_suppression_at_contrast_edge() {
+        // Dark subject (shadow) adjacent to bright sky (highlight)
+        let r_shadow = 0.03;
+        let g_shadow = 0.03;
+        let b_shadow = 0.03;
+        let y_shadow = 0.03;
+
+        // 4 orthogonal neighbors: 2 inside shadow (0.03), 2 across edge in sky (0.85)
+        // 4 diagonal neighbors: 2 inside shadow (0.03), 2 across edge in sky (0.85)
+        let edge_neighbors = [0.03, 0.85, 0.03, 0.85, 0.03, 0.85, 0.03, 0.85];
+
+        // Lift shadows by +60
+        let (r_rec, g_rec, b_rec) = apply_bilateral_tone_recovery_rgb(
+            r_shadow, g_shadow, b_shadow,
+            y_shadow, &edge_neighbors,
+            0.0, 60.0, 0.0, 0.0,
+        );
+
+        // The shadow should lift significantly (> 1.25x), proving the bright sky did NOT pull
+        // the base illumination into midtones/highlights (which would cancel shadow lift and create halos)
+        assert!(g_rec > g_shadow * 1.25, "Shadow lift at edge should remain robust: {} vs {}", g_rec, g_shadow);
+
+        // Chromaticity should be preserved exactly
+        assert!((r_rec / g_rec - 1.0).abs() < 1e-5);
+        assert!((b_rec / g_rec - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_bilateral_tone_recovery_texture_contrast_preservation() {
+        // Two adjacent pixels in a textured shadow: pixel A is 0.040, pixel B is 0.044 (ratio = 1.10)
+        let y_a = 0.040;
+        let y_b = 0.044;
+        let orig_ratio = y_b / y_a;
+
+        // Textured neighborhood with subtle variations around 0.042
+        let neighbors_a = [0.039, 0.041, 0.043, 0.042, 0.038, 0.044, 0.040, 0.041];
+        let neighbors_b = [0.041, 0.043, 0.045, 0.044, 0.040, 0.046, 0.042, 0.043];
+
+        let (_, g_rec_a, _) = apply_bilateral_tone_recovery_rgb(y_a, y_a, y_a, y_a, &neighbors_a, 0.0, 50.0, 0.0, 0.0);
+        let (_, g_rec_b, _) = apply_bilateral_tone_recovery_rgb(y_b, y_b, y_b, y_b, &neighbors_b, 0.0, 50.0, 0.0, 0.0);
+
+        let recovered_ratio = g_rec_b / g_rec_a;
+        // In bilateral base/detail tone recovery, the micro-contrast ratio should be preserved within 1%
+        assert!(
+            (recovered_ratio - orig_ratio).abs() < 0.015,
+            "Local texture contrast ratio should be preserved: orig {}, recovered {}",
+            orig_ratio, recovered_ratio
+        );
+    }
+
+    #[test]
     fn test_contrast_floor_and_tonal_recovery_limits() {
         let floor_gain = if -100.0f32 >= 0.0 {
             1.0 + (-100.0 / 100.0)
