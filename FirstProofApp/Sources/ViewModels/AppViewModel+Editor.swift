@@ -617,6 +617,12 @@ extension AppViewModel {
                 self.tint = 45.0
             }
             registerDiscreteEdit(title: "White Balance: Fluorescent", before: before)
+        case .sodiumVapor:
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.temperature = 2200.0
+                self.tint = 160.0
+            }
+            registerDiscreteEdit(title: "White Balance: Sodium Vapor", before: before)
         case .flash:
             withAnimation(.easeInOut(duration: 0.15)) {
                 self.temperature = 5500.0

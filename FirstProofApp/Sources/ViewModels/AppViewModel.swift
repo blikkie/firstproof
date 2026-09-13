@@ -97,6 +97,7 @@ public enum WhiteBalancePreset: String, CaseIterable, Identifiable {
     case shade = "Shade"
     case tungsten = "Tungsten"
     case fluorescent = "Fluorescent"
+    case sodiumVapor = "Sodium Vapor"
     case flash = "Flash"
     case custom = "Custom"
     
@@ -292,6 +293,10 @@ public final class AppViewModel {
         // Fluorescent: 3800K, +45
         if abs(temperature - 3800.0) < 25.0 && abs(tint - 45.0) < 1.0 {
             return .fluorescent
+        }
+        // Sodium Vapor: 2200K, +160
+        if abs(temperature - 2200.0) < 25.0 && abs(tint - 160.0) < 1.0 {
+            return .sodiumVapor
         }
         // Flash: 5500K, 0
         if abs(temperature - 5500.0) < 25.0 && abs(tint - 0.0) < 1.0 {
