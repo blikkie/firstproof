@@ -136,13 +136,29 @@ impl Database {
         let legacy_dir = folder.join(".lumenbox");
         let legacy_db = legacy_dir.join("catalog.db");
         
-        if !new_db.exists() && legacy_db.exists() {
+        if legacy_dir.exists() {
             let _ = std::fs::create_dir_all(&new_dir);
-            if std::fs::rename(&legacy_db, &new_db).is_err() {
-                return legacy_db;
+            if !new_db.exists() && legacy_db.exists() {
+                let _ = std::fs::rename(&legacy_db, &new_db);
+            }
+            let legacy_wal = legacy_dir.join("catalog.db-wal");
+            let new_wal = new_dir.join("catalog.db-wal");
+            if legacy_wal.exists() && !new_wal.exists() {
+                let _ = std::fs::rename(&legacy_wal, &new_wal);
+            }
+            let legacy_shm = legacy_dir.join("catalog.db-shm");
+            let new_shm = new_dir.join("catalog.db-shm");
+            if legacy_shm.exists() && !new_shm.exists() {
+                let _ = std::fs::rename(&legacy_shm, &new_shm);
             }
         }
-        new_db
+        if new_db.exists() {
+            new_db
+        } else if legacy_db.exists() {
+            legacy_db
+        } else {
+            new_db
+        }
     }
 
     /// Indexes a folder recursively, inserting/updating records in SQLite with parallel CPU processing.

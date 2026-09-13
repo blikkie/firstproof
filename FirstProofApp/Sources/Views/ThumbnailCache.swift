@@ -38,6 +38,21 @@ public final class ThumbnailCache {
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let thumbDir = cachesDir.appendingPathComponent("photo.firstproof.app/thumbnails", isDirectory: true)
         try? FileManager.default.createDirectory(at: thumbDir, withIntermediateDirectories: true, attributes: nil)
+        
+        // Migrate legacy LumenBox thumbnail cache if present
+        let legacyThumbDir = cachesDir.appendingPathComponent("com.lumenbox.app/thumbnails", isDirectory: true)
+        if FileManager.default.fileExists(atPath: legacyThumbDir.path) {
+            if let files = try? FileManager.default.contentsOfDirectory(atPath: legacyThumbDir.path) {
+                for file in files {
+                    let src = legacyThumbDir.appendingPathComponent(file)
+                    let dst = thumbDir.appendingPathComponent(file)
+                    if !FileManager.default.fileExists(atPath: dst.path) {
+                        try? FileManager.default.copyItem(at: src, to: dst)
+                    }
+                }
+            }
+        }
+        
         self.diskCacheURL = thumbDir
     }
     

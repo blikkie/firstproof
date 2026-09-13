@@ -499,8 +499,7 @@ public final class AppViewModel {
         let activeSnapshot = currentEdits
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self = self else { return }
-            let xmpPath = path.hasSuffix(".xmp") ? path : "\(path).xmp"
-            let existing = readXmp(path: xmpPath)
+            let existing = readXmp(path: path)
             let splitKeywords: [String] = keywords?
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -523,7 +522,7 @@ public final class AppViewModel {
                 longitude: currentLon,
                 edits: (path == self.currentlyLoadedPhotoPath) ? activeSnapshot : (existing?.edits ?? EditSettings.defaultIdentity)
             )
-            _ = writeXmp(path: xmpPath, record: record)
+            _ = writeXmp(path: path, record: record)
         }
     }
 }
