@@ -99,9 +99,13 @@ extension AppViewModel {
         self.currentlyLoadedPhotoPath = nil
 
         // Reset state for new scope
+        LookaheadPreloadService.shared.cancelPendingPreloads()
+        PreviewRingBuffer.shared.clear()
         self.photos = []
         self.selectedPhoto = nil
         self.previewImage = nil
+        self.rawPreviewRecord = nil
+        self.isIntermediatePreviewActive = false
         
         let catalogPath = resolveCatalogPath(folderPath: folderPath, portable: self.isExternalVolume)
         let t0 = CFAbsoluteTimeGetCurrent()

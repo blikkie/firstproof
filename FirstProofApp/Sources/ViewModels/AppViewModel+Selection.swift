@@ -7,6 +7,7 @@ import FirstProofBridge
 extension AppViewModel {
     // MARK: - Photo Selection & Preview
     public func selectPhoto(_ photo: PhotoRecord) {
+        self.lastNavDirection = .neutral
         self.selectedPhoto = photo
         if !isBulkSelectionMode {
             self.selectedPhotoPaths = [photo.filePath]
@@ -16,6 +17,7 @@ extension AppViewModel {
     }
     
     public func setActivePhoto(_ photo: PhotoRecord) {
+        self.lastNavDirection = .neutral
         self.selectedPhoto = photo
         saveLastActivePhoto(for: currentScope, path: photo.filePath)
         loadPreview(for: photo)
@@ -136,6 +138,7 @@ extension AppViewModel {
     }
     
     public func selectNextPhoto() {
+        self.lastNavDirection = .forward
         resetFilmstripFollow()
         let list = filteredPhotos
         guard !list.isEmpty else { return }
@@ -149,6 +152,7 @@ extension AppViewModel {
     }
     
     public func selectPreviousPhoto() {
+        self.lastNavDirection = .backward
         resetFilmstripFollow()
         let list = filteredPhotos
         guard !list.isEmpty else { return }
@@ -162,6 +166,13 @@ extension AppViewModel {
     }
     
     public func moveGridSelection(deltaX: Int, deltaY: Int) {
+        if deltaX > 0 || deltaY > 0 {
+            self.lastNavDirection = .forward
+        } else if deltaX < 0 || deltaY < 0 {
+            self.lastNavDirection = .backward
+        } else {
+            self.lastNavDirection = .neutral
+        }
         let list = filteredPhotos
         guard !list.isEmpty else { return }
         guard let current = selectedPhoto, let idx = list.firstIndex(where: { $0.filePath == current.filePath }) else {
@@ -260,30 +271,45 @@ extension AppViewModel {
         
         if self.selectedPhotoIsRaw {
             // RAW Workflow: 100% Honest First Proof Color. Zero Camera JPEG Flashing.
-            // Instant First Proof Intermediate: Check if we have a high-res First Proof render matching targetEdits
-            if let intermediate = ThumbnailCache.shared.intermediateImage(for: photo.filePath, edits: targetEdits) {
+            // Tier 0: In-Memory Ring Buffer Check (0ms instant transition for pre-warmed neighbor)
+            let preloadedRecord = PreviewRingBuffer.shared.getRawPreview(for: photo.filePath)
+            
+            if let preloaded = preloadedRecord {
+                self.rawPreviewRecord = preloaded
+                self.previewImage = nil
+                self.isIntermediatePreviewActive = false
+                self.isDemosaicing = false
+            } else if let intermediate = ThumbnailCache.shared.intermediateImage(for: photo.filePath, edits: targetEdits) {
+                // Tier 1: Instant First Proof Intermediate render matching targetEdits
                 self.previewImage = intermediate
                 self.rawPreviewRecord = nil
                 self.isIntermediatePreviewActive = true
+                self.isDemosaicing = false
             } else {
+                // Tier 2: Neutral dark transition with developing spinner while 10-15ms decode runs
                 self.previewImage = nil
                 self.rawPreviewRecord = nil
                 self.isIntermediatePreviewActive = false
+                self.isDemosaicing = true
             }
             
-            // Immediate 10-15ms RAW binned decode directly into Linear Rec.2020
+            // Immediate 10-15ms RAW binned decode directly into Linear Rec.2020 (if not already preloaded)
+            // Followed by full-resolution demosaic stream for 100% zoom pixel peeping
             DispatchQueue.global(qos: .userInteractive).async { [weak self] in
                 guard let self = self else { return }
                 guard self.activeDecodeToken == token else { return }
                 
-                // Stage 2A: Viewport-aware 2x2 Bayer box binning (10-15ms fast preview)
-                if let binnedRecord = decodeRawPreviewBinned(path: photo.filePath) {
-                    DispatchQueue.main.async {
-                        if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
-                            self.rawPreviewRecord = binnedRecord
-                            self.previewImage = nil
-                            self.isIntermediatePreviewActive = false
-                            self.isDemosaicing = false
+                // Stage 2A: Viewport-aware 2x2 Bayer box binning (10-15ms fast preview if uncached)
+                if preloadedRecord == nil {
+                    if let binnedRecord = decodeRawPreviewBinned(path: photo.filePath) {
+                        PreviewRingBuffer.shared.storeRawPreview(binnedRecord, for: photo.filePath)
+                        DispatchQueue.main.async {
+                            if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
+                                self.rawPreviewRecord = binnedRecord
+                                self.previewImage = nil
+                                self.isIntermediatePreviewActive = false
+                                self.isDemosaicing = false
+                            }
                         }
                     }
                 }
@@ -312,10 +338,12 @@ extension AppViewModel {
                 self.previewImage = cached
                 self.rawPreviewRecord = nil
                 self.isIntermediatePreviewActive = false
+                self.isDemosaicing = false
             } else {
                 self.previewImage = nil
                 self.rawPreviewRecord = nil
                 self.isIntermediatePreviewActive = false
+                self.isDemosaicing = true
             }
             
             DispatchQueue.global(qos: .userInteractive).async { [weak self] in
@@ -352,6 +380,16 @@ extension AppViewModel {
                     }
                 }
             }
+        }
+        
+        // Trigger asynchronous directional lookahead prefetch for adjacent neighbors
+        let currentList = self.filteredPhotos
+        if let idx = currentList.firstIndex(where: { $0.filePath == photo.filePath }) {
+            LookaheadPreloadService.shared.preloadNeighbors(
+                around: idx,
+                in: currentList,
+                direction: self.lastNavDirection
+            )
         }
     }
     

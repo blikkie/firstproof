@@ -7,19 +7,13 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Directional Neighbor Preload & LRU Ring Buffer (P0)**: Asynchronous background prefetch of $[-1, +1]$ neighbor frames into an in-memory ring buffer for 0ms culling navigation.
-2. **Per-Photo In-Memory Edit History Stack (P0)**: Scoped undo/redo per photo path (50-step cap) to eliminate accidental off-screen mutations during `Cmd+Z`.
-3. **Extended White Balance & Physical Illuminant Presets (P1)**: Expanded tint headroom (±150) and physical illuminant presets (Daylight, Cloudy, Shade, Tungsten, Fluorescent, Flash).
+1. **Per-Photo In-Memory Edit History Stack (P0)**: Scoped undo/redo per photo path (50-step cap) to eliminate accidental off-screen mutations during `Cmd+Z`.
+2. **Extended White Balance & Physical Illuminant Presets (P1)**: Expanded tint headroom (±150) and physical illuminant presets (Daylight, Cloudy, Shade, Tungsten, Fluorescent, Flash).
+3. **Split Toning & Color Grading (P1)**: Highlights and shadows split toning with optical balance anchoring.
 
 ---
 
 ## Phase 1: Performance, Fluid Culling & Workspace Architecture (P0)
-
-### 1.2 Directional Neighbor Preload & LRU Ring Buffer
-- **Bounded In-Memory Ring Buffer**:
-  - Cache decoded frames for immediate neighbors ($[-1, +1]$ or $[-2, +2]$) within a memory budget.
-- **Low-Priority Lookahead Worker**:
-  - Warm up adjacent frames asynchronously upon photo selection so arrow-key navigation feels instantaneous (0ms perceived latency).
 
 ### 1.3 Per-Photo In-Memory Edit History Stack
 - **Scoped Photo Undo Stack**:

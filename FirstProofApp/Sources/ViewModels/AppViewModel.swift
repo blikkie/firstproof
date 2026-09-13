@@ -158,6 +158,7 @@ public final class AppViewModel {
     public var filmstripScrollTrigger: UUID = UUID()
     public var gridColumnCount: Int = 4
     var currentlyLoadedPhotoPath: String? = nil
+    @ObservationIgnored public var lastNavDirection: NavigationDirection = .neutral
     
     // MARK: - Editable Metadata Properties
     public var metadataTitle: String = ""
