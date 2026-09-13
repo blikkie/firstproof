@@ -105,10 +105,6 @@ struct InspectorView: View {
                 
                 Divider()
                 
-                HistorySectionView(viewModel: viewModel)
-                
-                Divider()
-                
                 Button(action: {
                     viewModel.enterDetailMode()
                 }) {
