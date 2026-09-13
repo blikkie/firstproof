@@ -56,3 +56,12 @@
   - Folder indexing on external storage volumes stores catalogs inside `<volume>/.firstproof/catalog.db` so the catalog travels with the external media.
 
 - **Proactive Customization Encoding**: Whenever a platform-specific quirk, non-obvious workaround, multi-step pipeline recipe, or architectural convention is established during development, proactively suggest encoding it into `.agents/AGENTS.md` or as a new skill under `.agents/skills/` so subsequent chats retain it automatically.
+
+- **Token Efficiency Invariants**:
+  - Never view `firstproof_core.swift` directly (4,400+ generated lines); inspect `firstproof-core/src/lib.rs` for exported FFI signatures or specific Rust sub-modules.
+  - Slices on large files: always provide `StartLine` and `EndLine` (target ~80–120 lines per slice) when viewing files over 300 lines instead of dumping full files into context.
+  - Targeted searches: always scope `grep_search` with `Includes` (e.g. `*.swift`, `*.rs`) and specific subdirectories (`SearchPath`) rather than searching the workspace root.
+
+- **Story Completion & Backlog Hygiene**:
+  - **Top-of-File Focus**: `docs/roadmap/backlog.md` must always maintain an **Immediate Next Up** section at the very top (first 20 lines). When asked "what's next on the backlog", agents must inspect ONLY lines 1–25 (`StartLine: 1, EndLine: 25`) rather than loading the full document. Only view or load the full backlog when adding, completing, or reorganizing stories.
+  - **Archive on Completion**: Whenever a story or roadmap task is completed, move its description and verification record from the active backlog (`docs/roadmap/backlog.md`) into the archive file (`docs/roadmap/completed.md`). The active backlog must strictly retain pending, in-progress, or deferred work to preserve minimal token context.

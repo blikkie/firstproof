@@ -7,7 +7,9 @@
 **/.swiftpm/
 
 # Generated FFI Binaries
-LumenBoxBridge/Sources/LumenBoxCoreFFI/include/liblumenbox_core.a
+FirstProofBridge/Sources/FirstProofCoreFFI/include/*.a
+FirstProofBridge/Sources/FirstProofCoreFFI/include/libfirstproof_core.a
+LumenBoxBridge/Sources/LumenBoxCoreFFI/include/*.a
 
 # Rust
 **/*.rs.bk
