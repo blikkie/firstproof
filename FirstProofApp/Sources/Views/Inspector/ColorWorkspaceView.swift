@@ -16,6 +16,45 @@ public struct ColorWorkspaceView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
                 Spacer()
+                
+                Menu {
+                    ForEach(WhiteBalancePreset.allCases) { preset in
+                        if preset != .custom {
+                            Button(action: {
+                                viewModel.applyWhiteBalancePreset(preset)
+                            }) {
+                                HStack {
+                                    Text(preset.displayName)
+                                    if viewModel.activeWhiteBalancePreset == preset {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if viewModel.activeWhiteBalancePreset == .custom {
+                        Divider()
+                        Text("Custom")
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(viewModel.activeWhiteBalancePreset.displayName)
+                            .font(.caption)
+                            .foregroundColor(.primary)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(nsColor: .controlBackgroundColor))
+                    )
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                
                 Button(action: {
                     viewModel.isEyedropperActive.toggle()
                 }) {
@@ -42,7 +81,7 @@ public struct ColorWorkspaceView: View {
             SliderRow(
                 label: "Tint",
                 value: $viewModel.tint,
-                range: -100.0...100.0,
+                range: -200.0...200.0,
                 format: "%.0f",
                 onReset: { viewModel.resetSlider(.tint) },
                 onEditingChanged: { viewModel.handleSliderEditing($0, slider: .tint) }

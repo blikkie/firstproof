@@ -116,9 +116,9 @@ fragment float4 fragmentShader(
         float bScale = pow(1.0 / tempNorm, 0.75);
         
         float tintFactor = editTint * 0.002;
-        float gScale = 1.0 - tintFactor;
-        rScale += tintFactor * 0.5;
-        bScale += tintFactor * 0.5;
+        float gScale = max(1.0 - tintFactor, 0.01);
+        rScale = max(rScale + tintFactor * 0.5, 0.01);
+        bScale = max(bScale + tintFactor * 0.5, 0.01);
         
         rec2020Color.r *= rScale;
         rec2020Color.g *= gScale;

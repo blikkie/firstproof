@@ -7,19 +7,13 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Extended White Balance & Physical Illuminant Presets (P1)**: Expanded tint headroom (±150) and physical illuminant presets (Daylight, Cloudy, Shade, Tungsten, Fluorescent, Flash).
-2. **Split Toning & Color Grading (P1)**: Highlights and shadows split toning with optical balance anchoring.
-3. **Advanced Color Wheels & Selective Hue Ranges (P1)**: 3-way color grading wheels for shadows, midtones, highlights.
+1. **Split Toning & Color Grading (P1)**: Highlights and shadows split toning with optical balance anchoring.
+2. **Advanced Color Wheels & Selective Hue Ranges (P1)**: 3-way color grading wheels for shadows, midtones, highlights.
+3. **Advanced Bilateral Base/Detail Tone Recovery (P1)**: GPU Bilateral Filtering Separation into base illumination and detail layers.
 
 ---
 
 ## Phase 2: Core Darkroom Adjustments & Catalog Ingestion (P1)
-
-### 2.1 Extended White Balance & Physical Illuminant Presets
-- **Expanded Tint Headroom (±150)**:
-  - Recalibrate green-magenta compensation in `Shaders.metal` and `pipeline.rs` to handle intense spectral spikes (fluorescent mercury 546nm line, low-CRI commercial LEDs, sodium vapor) without clipping at +100.
-- **Physical Illuminant Presets**:
-  - Unobtrusive dropdown in Color inspector: `As Shot`, `Auto` (Gray-World solver), `Daylight` (5500K), `Cloudy` (6500K), `Shade` (7500K), `Tungsten` (2850K), `Fluorescent` (3800K/+45), `Flash` (5500K), and `Custom`.
 
 ### 2.2 Advanced Bilateral Base/Detail Tone Recovery
 - **GPU Bilateral Filtering Separation**:

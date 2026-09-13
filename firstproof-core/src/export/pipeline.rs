@@ -19,9 +19,9 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
     let mut b_scale = (1.0 / temp_norm).powf(0.75);
     
     let tint_factor = edits.tint * 0.002;
-    let g_scale = 1.0 - tint_factor;
-    r_scale += tint_factor * 0.5;
-    b_scale += tint_factor * 0.5;
+    let g_scale = (1.0 - tint_factor).max(0.01);
+    r_scale = (r_scale + tint_factor * 0.5).max(0.01);
+    b_scale = (b_scale + tint_factor * 0.5).max(0.01);
     
     let total_pixels = image.width * image.height;
     

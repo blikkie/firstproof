@@ -215,7 +215,7 @@ pub fn calculate_white_balance_from_sample(r: f32, g: f32, b: f32) -> WhiteBalan
     let rb_avg = (r_scaled + b_scaled) * 0.5;
 
     let tint_factor = 1.0 - (rb_avg / g.max(1e-4));
-    let target_tint = (tint_factor / 0.002).clamp(-100.0, 100.0);
+    let target_tint = (tint_factor / 0.002).clamp(-200.0, 200.0);
 
     WhiteBalanceResult {
         temperature: (target_temp / 50.0).round() * 50.0,
@@ -563,6 +563,16 @@ pub fn compute_auto_adjustments(path: String) -> Option<auto::AutoAdjustments> {
 #[uniffi::export]
 pub fn compute_auto_adjustments_from_buffer(width: u32, height: u32, data: Vec<u8>) -> Option<auto::AutoAdjustments> {
     Some(auto::compute_auto_adjustments_from_f16_buffer(width, height, &data))
+}
+
+#[uniffi::export]
+pub fn compute_auto_white_balance(path: String) -> Option<WhiteBalanceResult> {
+    auto::compute_auto_white_balance_from_path(&path)
+}
+
+#[uniffi::export]
+pub fn compute_auto_white_balance_from_buffer(width: u32, height: u32, data: Vec<u8>) -> Option<WhiteBalanceResult> {
+    Some(auto::compute_auto_white_balance_from_f16_buffer(width, height, &data))
 }
 
 #[uniffi::export]

@@ -346,10 +346,10 @@ fn test_cr2_0194_full_pipeline_parity() {
         let temp_norm = (edits.temperature / 5500.0).clamp(0.25, 4.0);
         let mut r_scale = temp_norm.powf(0.75);
         let mut b_scale = (1.0 / temp_norm).powf(0.75);
-        let tint_factor = edits.tint * 0.003;
-        let g_scale = 1.0 - tint_factor;
-        r_scale += tint_factor * 0.5;
-        b_scale += tint_factor * 0.5;
+        let tint_factor = edits.tint * 0.002;
+        let g_scale = (1.0 - tint_factor).max(0.01);
+        r_scale = (r_scale + tint_factor * 0.5).max(0.01);
+        b_scale = (b_scale + tint_factor * 0.5).max(0.01);
         r *= r_scale; g *= g_scale; b *= b_scale;
         
         // Exposure
@@ -408,7 +408,8 @@ fn test_sliders_dual_engine_parity_sweep() {
     ];
 
     // Slider configurations to sweep: (exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint, mode)
-    let test_configs: [(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, ColorProfileMode); 6] = [
+    // Slider configurations to sweep: (exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint, mode)
+    let test_configs: [(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, ColorProfileMode); 8] = [
         // Neutral
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5500.0, 0.0, ColorProfileMode::AgxVivid),
         // Saturated & Punchy with color adjustments
@@ -421,6 +422,10 @@ fn test_sliders_dual_engine_parity_sweep() {
         (0.2, -5.0, -15.0, 15.0, 0.0, 0.0, -30.0, -20.0, 5600.0, 4.0, ColorProfileMode::CameraPortrait),
         // Camera Landscape profile with deep blue and foliage
         (0.0, 25.0, -40.0, 30.0, -20.0, 10.0, 40.0, 30.0, 5200.0, -5.0, ColorProfileMode::CameraLandscape),
+        // Extreme positive tint (+190) under warm tungsten (subway/mercury spikes)
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3200.0, 190.0, ColorProfileMode::AgxVivid),
+        // Extreme negative tint (-190) under cool shade
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 7500.0, -190.0, ColorProfileMode::AgxFilmic),
     ];
 
     for (profile_idx, &(exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint, mode)) in test_configs.iter().enumerate() {
@@ -438,9 +443,9 @@ fn test_sliders_dual_engine_parity_sweep() {
             let mut r_scale = temp_norm.powf(0.75);
             let mut b_scale = (1.0 / temp_norm).powf(0.75);
             let tint_factor = tint * 0.002;
-            let g_scale = 1.0 - tint_factor;
-            r_scale += tint_factor * 0.5;
-            b_scale += tint_factor * 0.5;
+            let g_scale = (1.0 - tint_factor).max(0.01);
+            r_scale = (r_scale + tint_factor * 0.5).max(0.01);
+            b_scale = (b_scale + tint_factor * 0.5).max(0.01);
             r_gpu *= r_scale; g_gpu *= g_scale; b_gpu *= b_scale;
             
             // Exposure

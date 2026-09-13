@@ -281,14 +281,14 @@ mod tests {
 
         let green = calculate_white_balance_from_sample(0.4, 0.6, 0.4);
         assert!(green.tint > 0.0);
-        assert!(green.tint <= 100.0);
+        assert!(green.tint <= 200.0);
 
         let extreme_blue = calculate_white_balance_from_sample(0.01, 0.1, 0.99);
         assert_eq!(extreme_blue.temperature, 20000.0);
         let extreme_red = calculate_white_balance_from_sample(0.99, 0.1, 0.01);
         assert_eq!(extreme_red.temperature, 2000.0);
         let extreme_green = calculate_white_balance_from_sample(0.01, 0.99, 0.01);
-        assert_eq!(extreme_green.tint, 100.0);
+        assert_eq!(extreme_green.tint, 200.0);
     }
 
     #[test]

@@ -3805,6 +3805,30 @@ fileprivate struct FfiConverterOptionTypeTakeoutMetadataRecord: FfiConverterRust
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeWhiteBalanceResult: FfiConverterRustBuffer {
+    typealias SwiftType = WhiteBalanceResult?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeWhiteBalanceResult.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeWhiteBalanceResult.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeXmpDataRecord: FfiConverterRustBuffer {
     typealias SwiftType = XmpDataRecord?
 
@@ -4082,6 +4106,22 @@ public func computeAutoAdjustmentsFromBuffer(width: UInt32, height: UInt32, data
     )
 })
 }
+public func computeAutoWhiteBalance(path: String) -> WhiteBalanceResult? {
+    return try!  FfiConverterOptionTypeWhiteBalanceResult.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_compute_auto_white_balance(
+        FfiConverterString.lower(path),$0
+    )
+})
+}
+public func computeAutoWhiteBalanceFromBuffer(width: UInt32, height: UInt32, data: Data) -> WhiteBalanceResult? {
+    return try!  FfiConverterOptionTypeWhiteBalanceResult.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_compute_auto_white_balance_from_buffer(
+        FfiConverterUInt32.lower(width),
+        FfiConverterUInt32.lower(height),
+        FfiConverterData.lower(data),$0
+    )
+})
+}
 public func decodeExifOrientation(orientation: UInt32) -> ExifOrientationRecord {
     return try!  FfiConverterTypeExifOrientationRecord.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_decode_exif_orientation(
@@ -4298,6 +4338,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_compute_auto_adjustments_from_buffer() != 43322) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance() != 3907) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance_from_buffer() != 18312) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_decode_exif_orientation() != 46859) {

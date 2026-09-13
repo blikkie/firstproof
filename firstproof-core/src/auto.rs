@@ -4,6 +4,7 @@
 //! conservative, aesthetically pleasing exposure compensation (EV) and contrast adjustments.
 
 use crate::export::f16_to_f32;
+use crate::{calculate_white_balance_from_sample, WhiteBalanceResult};
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -89,7 +90,7 @@ pub fn compute_auto_adjustments_from_luminances(mut lums: Vec<f32>) -> AutoAdjus
     }
 }
 
-/// Computes auto adjustments from a 16-bit half-float RGBA buffer in Linear Rec.2020 space.
+/// Computes auto tone adjustments (exposure, contrast) from a 16-bit half-float RGBA buffer in Linear Rec.2020 space.
 pub fn compute_auto_adjustments_from_f16_buffer(
     width: u32,
     height: u32,
@@ -127,6 +128,63 @@ pub fn compute_auto_adjustments_from_f16_buffer(
     compute_auto_adjustments_from_luminances(lums)
 }
 
+/// Computes standalone Gray-World white balance from a 16-bit half-float RGBA buffer in Linear Rec.2020 space.
+pub fn compute_auto_white_balance_from_f16_buffer(
+    width: u32,
+    height: u32,
+    data: &[u8],
+) -> WhiteBalanceResult {
+    let pixel_count = (width * height) as usize;
+    if pixel_count == 0 || data.len() < pixel_count * 8 {
+        return WhiteBalanceResult {
+            temperature: 5500.0,
+            tint: 0.0,
+        };
+    }
+
+    let step = (pixel_count / 10_000).max(1);
+    let mut r_sum = 0.0f64;
+    let mut g_sum = 0.0f64;
+    let mut b_sum = 0.0f64;
+    let mut wb_count = 0usize;
+
+    for i in (0..pixel_count).step_by(step) {
+        let offset = i * 8;
+        if offset + 6 > data.len() {
+            break;
+        }
+        let r_u16 = u16::from_le_bytes([data[offset], data[offset + 1]]);
+        let g_u16 = u16::from_le_bytes([data[offset + 2], data[offset + 3]]);
+        let b_u16 = u16::from_le_bytes([data[offset + 4], data[offset + 5]]);
+
+        let r = f16_to_f32(r_u16);
+        let g = f16_to_f32(g_u16);
+        let b = f16_to_f32(b_u16);
+
+        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+        if y >= 0.02 && y <= 0.85 && r > 0.0 && g > 0.0 && b > 0.0 {
+            r_sum += r as f64;
+            g_sum += g as f64;
+            b_sum += b as f64;
+            wb_count += 1;
+        }
+    }
+
+    if wb_count > 0 {
+        calculate_white_balance_from_sample(
+            (r_sum / wb_count as f64) as f32,
+            (g_sum / wb_count as f64) as f32,
+            (b_sum / wb_count as f64) as f32,
+        )
+    } else {
+        WhiteBalanceResult {
+            temperature: 5500.0,
+            tint: 0.0,
+        }
+    }
+}
+
 /// Computes auto adjustments directly from an image file path (RAW or standard image).
 pub fn compute_auto_adjustments_from_path<P: AsRef<Path>>(path: P) -> Option<AutoAdjustments> {
     let demosaiced = crate::export::decode_image(path).ok()?;
@@ -152,6 +210,53 @@ pub fn compute_auto_adjustments_from_path<P: AsRef<Path>>(path: P) -> Option<Aut
     }
 
     Some(compute_auto_adjustments_from_luminances(lums))
+}
+
+/// Computes standalone Gray-World white balance directly from an image file path.
+pub fn compute_auto_white_balance_from_path<P: AsRef<Path>>(path: P) -> Option<WhiteBalanceResult> {
+    let demosaiced = crate::export::decode_image(path).ok()?;
+    let pixel_count = demosaiced.width * demosaiced.height;
+    if pixel_count == 0 || demosaiced.data.len() < pixel_count * 3 {
+        return None;
+    }
+
+    let step = (pixel_count / 10_000).max(1);
+    let mut r_sum = 0.0f64;
+    let mut g_sum = 0.0f64;
+    let mut b_sum = 0.0f64;
+    let mut wb_count = 0usize;
+
+    for i in (0..pixel_count).step_by(step) {
+        let offset = i * 3;
+        if offset + 3 > demosaiced.data.len() {
+            break;
+        }
+        let r = demosaiced.data[offset];
+        let g = demosaiced.data[offset + 1];
+        let b = demosaiced.data[offset + 2];
+
+        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+        if y >= 0.02 && y <= 0.85 && r > 0.0 && g > 0.0 && b > 0.0 {
+            r_sum += r as f64;
+            g_sum += g as f64;
+            b_sum += b as f64;
+            wb_count += 1;
+        }
+    }
+
+    if wb_count > 0 {
+        Some(calculate_white_balance_from_sample(
+            (r_sum / wb_count as f64) as f32,
+            (g_sum / wb_count as f64) as f32,
+            (b_sum / wb_count as f64) as f32,
+        ))
+    } else {
+        Some(WhiteBalanceResult {
+            temperature: 5500.0,
+            tint: 0.0,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -200,4 +305,44 @@ mod tests {
         let adj = compute_auto_adjustments_from_luminances(lums);
         assert!(adj.contrast >= 0.0, "Low contrast image should receive positive contrast, got {}", adj.contrast);
     }
+
+    #[test]
+    fn test_auto_white_balance_from_f16_buffer() {
+        use crate::export::f32_to_f16;
+
+        // Create a 10x10 test image with a warm cast (R=0.6, G=0.4, B=0.2)
+        let mut warm_data = Vec::new();
+        let r16 = f32_to_f16(0.60);
+        let g16 = f32_to_f16(0.40);
+        let b16 = f32_to_f16(0.20);
+        let a16 = f32_to_f16(1.00);
+
+        for _ in 0..100 {
+            warm_data.extend_from_slice(&r16.to_le_bytes());
+            warm_data.extend_from_slice(&g16.to_le_bytes());
+            warm_data.extend_from_slice(&b16.to_le_bytes());
+            warm_data.extend_from_slice(&a16.to_le_bytes());
+        }
+
+        let wb = compute_auto_white_balance_from_f16_buffer(10, 10, &warm_data);
+        assert!(wb.temperature < 5500.0, "Warm image should cool down temperature, got {}", wb.temperature);
+
+        let adj = compute_auto_adjustments_from_f16_buffer(10, 10, &warm_data);
+        assert!(adj.exposure.is_finite());
+
+        // Test with green cast (R=0.3, G=0.7, B=0.3)
+        let mut green_data = Vec::new();
+        let r16_g = f32_to_f16(0.30);
+        let g16_g = f32_to_f16(0.70);
+        let b16_g = f32_to_f16(0.30);
+        for _ in 0..100 {
+            green_data.extend_from_slice(&r16_g.to_le_bytes());
+            green_data.extend_from_slice(&g16_g.to_le_bytes());
+            green_data.extend_from_slice(&b16_g.to_le_bytes());
+            green_data.extend_from_slice(&a16.to_le_bytes());
+        }
+        let wb_green = compute_auto_white_balance_from_f16_buffer(10, 10, &green_data);
+        assert!(wb_green.tint > 0.0, "Green cast should require positive magenta tint compensation, got {}", wb_green.tint);
+    }
 }
+

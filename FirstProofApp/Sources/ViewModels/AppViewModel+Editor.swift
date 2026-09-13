@@ -544,6 +544,90 @@ extension AppViewModel {
         }
     }
     
+    // MARK: - Auto White Balance & Presets
+    public func applyAutoWhiteBalance() {
+        guard let photo = selectedPhoto else { return }
+        let before = currentEdits
+        
+        // 1. Fast-path: Calculate from already decoded half-float preview buffer
+        if let rawRecord = rawPreviewRecord {
+            if let wb = computeAutoWhiteBalanceFromBuffer(width: rawRecord.width, height: rawRecord.height, data: rawRecord.data) {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    self.temperature = wb.temperature
+                    self.tint = wb.tint
+                }
+                registerDiscreteEdit(title: "Auto White Balance", before: before)
+                return
+            }
+        }
+        
+        // 2. Background path: Decode from file
+        let path = photo.filePath
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let wb = computeAutoWhiteBalance(path: path) else { return }
+            DispatchQueue.main.async {
+                guard let self = self, self.selectedPhoto?.filePath == path else { return }
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    self.temperature = wb.temperature
+                    self.tint = wb.tint
+                }
+                self.registerDiscreteEdit(title: "Auto White Balance", before: before)
+            }
+        }
+    }
+    
+    public func applyWhiteBalancePreset(_ preset: WhiteBalancePreset) {
+        let before = currentEdits
+        switch preset {
+        case .asShot:
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.temperature = self.asShotTemperature
+                self.tint = self.asShotTint
+            }
+            registerDiscreteEdit(title: "White Balance: As Shot", before: before)
+        case .auto:
+            applyAutoWhiteBalance()
+        case .daylight:
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.temperature = 5500.0
+                self.tint = 10.0
+            }
+            registerDiscreteEdit(title: "White Balance: Daylight", before: before)
+        case .cloudy:
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.temperature = 6500.0
+                self.tint = 10.0
+            }
+            registerDiscreteEdit(title: "White Balance: Cloudy", before: before)
+        case .shade:
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.temperature = 7500.0
+                self.tint = 10.0
+            }
+            registerDiscreteEdit(title: "White Balance: Shade", before: before)
+        case .tungsten:
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.temperature = 2850.0
+                self.tint = 0.0
+            }
+            registerDiscreteEdit(title: "White Balance: Tungsten", before: before)
+        case .fluorescent:
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.temperature = 3800.0
+                self.tint = 45.0
+            }
+            registerDiscreteEdit(title: "White Balance: Fluorescent", before: before)
+        case .flash:
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.temperature = 5500.0
+                self.tint = 0.0
+            }
+            registerDiscreteEdit(title: "White Balance: Flash", before: before)
+        case .custom:
+            break
+        }
+    }
+    
     // MARK: - Slider Reset Helpers
     public func resetSlider(_ type: EditSliderType) {
         let before = currentEdits

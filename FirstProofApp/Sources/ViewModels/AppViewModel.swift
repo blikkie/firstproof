@@ -89,6 +89,21 @@ public enum CropAspectRatioPreset: String, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
+public enum WhiteBalancePreset: String, CaseIterable, Identifiable {
+    case asShot = "As Shot"
+    case auto = "Auto"
+    case daylight = "Daylight"
+    case cloudy = "Cloudy"
+    case shade = "Shade"
+    case tungsten = "Tungsten"
+    case fluorescent = "Fluorescent"
+    case flash = "Flash"
+    case custom = "Custom"
+    
+    public var id: String { rawValue }
+    public var displayName: String { rawValue }
+}
+
 public enum CanvasMode: Hashable {
     case grid
     case detail
@@ -251,7 +266,39 @@ public final class AppViewModel {
 
     public var isEyedropperActive: Bool = false
     public var temperature: Float = 5500.0 // 2000K .. 20000K
-    public var tint: Float = 0.0          // -100 .. +100
+    public var tint: Float = 0.0          // -200 .. +200
+    
+    public var activeWhiteBalancePreset: WhiteBalancePreset {
+        // Compare against As Shot
+        if abs(temperature - asShotTemperature) < 25.0 && abs(tint - asShotTint) < 1.0 {
+            return .asShot
+        }
+        // Daylight: 5500K, +10
+        if abs(temperature - 5500.0) < 25.0 && abs(tint - 10.0) < 1.0 {
+            return .daylight
+        }
+        // Cloudy: 6500K, +10
+        if abs(temperature - 6500.0) < 25.0 && abs(tint - 10.0) < 1.0 {
+            return .cloudy
+        }
+        // Shade: 7500K, +10
+        if abs(temperature - 7500.0) < 25.0 && abs(tint - 10.0) < 1.0 {
+            return .shade
+        }
+        // Tungsten: 2850K, 0
+        if abs(temperature - 2850.0) < 25.0 && abs(tint - 0.0) < 1.0 {
+            return .tungsten
+        }
+        // Fluorescent: 3800K, +45
+        if abs(temperature - 3800.0) < 25.0 && abs(tint - 45.0) < 1.0 {
+            return .fluorescent
+        }
+        // Flash: 5500K, 0
+        if abs(temperature - 5500.0) < 25.0 && abs(tint - 0.0) < 1.0 {
+            return .flash
+        }
+        return .custom
+    }
     public var straightenAngle: Float = 0.0 // -45 .. +45 deg
     public var cropLeft: Float = 0.0
     public var cropTop: Float = 0.0
