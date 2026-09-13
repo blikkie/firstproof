@@ -1440,10 +1440,15 @@ public struct EditSettings {
     public var grainRoughness: Float
     public var grainChroma: Float
     public var curves: ToneCurvesRecord
+    public var splitToningShadowHue: Float
+    public var splitToningShadowSat: Float
+    public var splitToningHighlightHue: Float
+    public var splitToningHighlightSat: Float
+    public var splitToningBalance: Float
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, grainAmount: Float, grainSize: Float, grainRoughness: Float, grainChroma: Float, curves: ToneCurvesRecord) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, grainAmount: Float, grainSize: Float, grainRoughness: Float, grainChroma: Float, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -1479,6 +1484,11 @@ public struct EditSettings {
         self.grainRoughness = grainRoughness
         self.grainChroma = grainChroma
         self.curves = curves
+        self.splitToningShadowHue = splitToningShadowHue
+        self.splitToningShadowSat = splitToningShadowSat
+        self.splitToningHighlightHue = splitToningHighlightHue
+        self.splitToningHighlightSat = splitToningHighlightSat
+        self.splitToningBalance = splitToningBalance
     }
 }
 
@@ -1591,6 +1601,21 @@ extension EditSettings: Equatable, Hashable {
         if lhs.curves != rhs.curves {
             return false
         }
+        if lhs.splitToningShadowHue != rhs.splitToningShadowHue {
+            return false
+        }
+        if lhs.splitToningShadowSat != rhs.splitToningShadowSat {
+            return false
+        }
+        if lhs.splitToningHighlightHue != rhs.splitToningHighlightHue {
+            return false
+        }
+        if lhs.splitToningHighlightSat != rhs.splitToningHighlightSat {
+            return false
+        }
+        if lhs.splitToningBalance != rhs.splitToningBalance {
+            return false
+        }
         return true
     }
 
@@ -1630,6 +1655,11 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(grainRoughness)
         hasher.combine(grainChroma)
         hasher.combine(curves)
+        hasher.combine(splitToningShadowHue)
+        hasher.combine(splitToningShadowSat)
+        hasher.combine(splitToningHighlightHue)
+        hasher.combine(splitToningHighlightSat)
+        hasher.combine(splitToningBalance)
     }
 }
 
@@ -1675,7 +1705,12 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 grainSize: FfiConverterFloat.read(from: &buf), 
                 grainRoughness: FfiConverterFloat.read(from: &buf), 
                 grainChroma: FfiConverterFloat.read(from: &buf), 
-                curves: FfiConverterTypeToneCurvesRecord.read(from: &buf)
+                curves: FfiConverterTypeToneCurvesRecord.read(from: &buf), 
+                splitToningShadowHue: FfiConverterFloat.read(from: &buf), 
+                splitToningShadowSat: FfiConverterFloat.read(from: &buf), 
+                splitToningHighlightHue: FfiConverterFloat.read(from: &buf), 
+                splitToningHighlightSat: FfiConverterFloat.read(from: &buf), 
+                splitToningBalance: FfiConverterFloat.read(from: &buf)
         )
     }
 
@@ -1715,6 +1750,11 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.grainRoughness, into: &buf)
         FfiConverterFloat.write(value.grainChroma, into: &buf)
         FfiConverterTypeToneCurvesRecord.write(value.curves, into: &buf)
+        FfiConverterFloat.write(value.splitToningShadowHue, into: &buf)
+        FfiConverterFloat.write(value.splitToningShadowSat, into: &buf)
+        FfiConverterFloat.write(value.splitToningHighlightHue, into: &buf)
+        FfiConverterFloat.write(value.splitToningHighlightSat, into: &buf)
+        FfiConverterFloat.write(value.splitToningBalance, into: &buf)
     }
 }
 

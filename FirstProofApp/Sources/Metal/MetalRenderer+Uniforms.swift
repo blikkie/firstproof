@@ -48,6 +48,11 @@ extension MetalRenderer {
         uniforms.grainSize = edits.grainSize
         uniforms.grainRoughness = edits.grainRoughness
         uniforms.grainChroma = edits.grainChroma
+        uniforms.splitToningShadowHue = edits.splitToningShadowHue
+        uniforms.splitToningShadowSat = edits.splitToningShadowSat
+        uniforms.splitToningHighlightHue = edits.splitToningHighlightHue
+        uniforms.splitToningHighlightSat = edits.splitToningHighlightSat
+        uniforms.splitToningBalance = edits.splitToningBalance
         uniforms.cropLeft = edits.cropLeft
         uniforms.cropTop = edits.cropTop
         uniforms.cropRight = edits.cropRight

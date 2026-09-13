@@ -3,6 +3,7 @@ import FirstProofBridge
 
 public struct ColorWorkspaceView: View {
     @Bindable public var viewModel: AppViewModel
+    @State private var isSplitToningExpanded: Bool = false
     
     public init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -129,6 +130,103 @@ public struct ColorWorkspaceView: View {
                 onReset: { viewModel.resetSlider(.foliage) },
                 onEditingChanged: { viewModel.handleSliderEditing($0, slider: .foliage) }
             )
+            
+            Divider()
+            
+            DisclosureGroup(isExpanded: $isSplitToningExpanded) {
+                VStack(spacing: 12) {
+                    HStack {
+                        Text("Chemical Preset")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        
+                        Menu {
+                            Button("Custom / Off") {
+                                viewModel.applySplitToningPreset(nil)
+                            }
+                            Divider()
+                            ForEach(SplitToningPreset.builtInPresets) { preset in
+                                Button(action: {
+                                    viewModel.applySplitToningPreset(preset)
+                                }) {
+                                    HStack {
+                                        Text(preset.name)
+                                        if viewModel.selectedSplitToningPresetId == preset.id {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                let activeName = SplitToningPreset.builtInPresets.first(where: { $0.id == viewModel.selectedSplitToningPresetId })?.name ?? (viewModel.splitToningShadowSat > 0 || viewModel.splitToningHighlightSat > 0 ? "Custom" : "Off")
+                                Text(activeName)
+                                    .font(.caption)
+                                    .foregroundColor(.primary)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color(nsColor: .controlBackgroundColor))
+                            )
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                    }
+                    
+                    // Dual 2D Color Wheels: Shadows and Highlights side-by-side
+                    HStack(spacing: 16) {
+                        ColorWheelView(
+                            title: "Shadows",
+                            hue: $viewModel.splitToningShadowHue,
+                            saturation: $viewModel.splitToningShadowSat,
+                            onReset: { viewModel.resetSlider(.splitToningShadowSat) },
+                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .splitToningShadowSat) }
+                        )
+                        
+                        ColorWheelView(
+                            title: "Highlights",
+                            hue: $viewModel.splitToningHighlightHue,
+                            saturation: $viewModel.splitToningHighlightSat,
+                            onReset: { viewModel.resetSlider(.splitToningHighlightSat) },
+                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .splitToningHighlightSat) }
+                        )
+                    }
+                    .padding(.vertical, 2)
+                    
+                    SliderRow(
+                        label: "Balance",
+                        value: $viewModel.splitToningBalance,
+                        range: -100.0...100.0,
+                        format: "%+.0f",
+                        onReset: { viewModel.resetSlider(.splitToningBalance) },
+                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .splitToningBalance) }
+                    )
+                }
+                .padding(.top, 6)
+            } label: {
+                HStack {
+                    Text("SPLIT TONING")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    if viewModel.splitToningShadowSat > 0 || viewModel.splitToningHighlightSat > 0 {
+                        Text("Active")
+                            .font(.caption2)
+                            .foregroundColor(.accentColor)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.accentColor.opacity(0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                    }
+                }
+            }
             
             Divider()
             

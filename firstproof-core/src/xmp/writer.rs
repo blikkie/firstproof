@@ -56,6 +56,11 @@ pub fn generate_xmp(data: &XmpData) -> String {
     writer.element("saturation", pm_ns.clone()).value(format!("{:.4}", data.edits.saturation).as_str());
     writer.element("deepBlue", pm_ns.clone()).value(format!("{:.4}", data.edits.deep_blue).as_str());
     writer.element("foliage", pm_ns.clone()).value(format!("{:.4}", data.edits.foliage).as_str());
+    writer.element("splitToningShadowHue", pm_ns.clone()).value(format!("{:.4}", data.edits.split_toning_shadow_hue).as_str());
+    writer.element("splitToningShadowSat", pm_ns.clone()).value(format!("{:.4}", data.edits.split_toning_shadow_sat).as_str());
+    writer.element("splitToningHighlightHue", pm_ns.clone()).value(format!("{:.4}", data.edits.split_toning_highlight_hue).as_str());
+    writer.element("splitToningHighlightSat", pm_ns.clone()).value(format!("{:.4}", data.edits.split_toning_highlight_sat).as_str());
+    writer.element("splitToningBalance", pm_ns.clone()).value(format!("{:.4}", data.edits.split_toning_balance).as_str());
     writer.element("sharpeningAmount", pm_ns.clone()).value(format!("{:.4}", data.edits.sharpening_amount).as_str());
     writer.element("sharpeningRadius", pm_ns.clone()).value(format!("{:.4}", data.edits.sharpening_radius).as_str());
     writer.element("sharpeningMasking", pm_ns.clone()).value(format!("{:.4}", data.edits.sharpening_masking).as_str());

@@ -7,9 +7,9 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Split Toning & Color Grading (P1)**: Highlights and shadows split toning with optical balance anchoring.
-2. **Advanced Color Wheels & Selective Hue Ranges (P1)**: 3-way color grading wheels for shadows, midtones, highlights.
-3. **Advanced Bilateral Base/Detail Tone Recovery (P1)**: GPU Bilateral Filtering Separation into base illumination and detail layers.
+1. **Advanced Bilateral Base/Detail Tone Recovery (P1)**: GPU Bilateral Filtering Separation into base illumination and detail layers.
+2. **Catalog Ingestion & Deduplication Precedence Engine (P1)**: Deterministic RAW-over-JPEG deduplication hierarchy.
+3. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
 
 ---
 
@@ -46,6 +46,7 @@ This document strictly tracks pending and deferred features calibrated against o
   - *Pure Silver Gelatin*: Achromatic neutral silver.
   - *Selenium Toning*: Increases shadow D-max with subtle cool plum-black tones while keeping highlights clean silver-white.
   - *Warm Platinum*: Subtle warm paper base tone with soft, luminous highlights.
+  - *Architecture Reusability*: Directly reuses the bit-parity split toning engine (`apply_split_toning`, `applySplitToning`) and interactive 2D color wheels (`ColorWheelView.swift`) implemented in Story 2.2, applied specifically across the achromatic silver density curve where chemical toning authentically belongs.
 - **Anti-Slop Invariant**:
   - Strictly grounded in optical physics and chemical darkroom print making. Zero arbitrary digital "filter presets" or crushed-black Instagram effects.
 

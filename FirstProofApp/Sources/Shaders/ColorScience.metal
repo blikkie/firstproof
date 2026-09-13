@@ -316,4 +316,46 @@ inline float3 applyColorAdjustments(
     return clamp(c, 0.0, 1.0);
 }
 
+// MARK: - Split Toning & Color Grading with Optical Balance Anchoring
+inline float3 applySplitToning(
+    float3 rgb,
+    float shadowHue,
+    float shadowSat,
+    float highlightHue,
+    float highlightSat,
+    float balance
+) {
+    if (shadowSat <= 0.0 && highlightSat <= 0.0) {
+        return rgb;
+    }
+
+    float lum = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+    float yClamp = clamp(lum, 0.0, 1.0);
+
+    // Midpoint threshold shifted by balance (-100..+100)
+    float t = clamp(0.5 - (balance / 100.0) * 0.25, 0.1, 0.9);
+
+    float3 delta = float3(0.0);
+
+    // Shadow Toning
+    if (shadowSat > 0.0 && yClamp < t) {
+        float u_s = (t - yClamp) / t;
+        float w_s = u_s * u_s * (3.0 - 2.0 * u_s) * (shadowSat / 100.0);
+        float3 tintRgb = hsv2rgb(float3(shadowHue, 1.0, 1.0));
+        float tLum = 0.2126 * tintRgb.r + 0.7152 * tintRgb.g + 0.0722 * tintRgb.b;
+        delta += w_s * (tintRgb - float3(tLum));
+    }
+
+    // Highlight Toning
+    if (highlightSat > 0.0 && yClamp > t) {
+        float u_h = (yClamp - t) / (1.0 - t);
+        float w_h = u_h * u_h * (3.0 - 2.0 * u_h) * (highlightSat / 100.0);
+        float3 tintRgb = hsv2rgb(float3(highlightHue, 1.0, 1.0));
+        float tLum = 0.2126 * tintRgb.r + 0.7152 * tintRgb.g + 0.0722 * tintRgb.b;
+        delta += w_h * (tintRgb - float3(tLum));
+    }
+
+    return clamp(rgb + delta, 0.0, 1.0);
+}
+
 #endif /* ColorScience_metal */

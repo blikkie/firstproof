@@ -71,6 +71,11 @@ struct ShaderUniforms {
     float grainRoughness;    // 0.0 .. 100.0 (default 50.0)
     float grainChroma;       // 0.0 .. 100.0 (default 0.0)
     int32_t isIntermediate;  // 1 = pre-rendered intermediate preview (bypass all shader color/tone/geometry)
+    float splitToningShadowHue;    // 0.0 .. 360.0 (degrees, default 215.0)
+    float splitToningShadowSat;    // 0.0 .. 100.0 (default 0.0)
+    float splitToningHighlightHue; // 0.0 .. 360.0 (degrees, default 45.0)
+    float splitToningHighlightSat; // 0.0 .. 100.0 (default 0.0)
+    float splitToningBalance;      // -100.0 .. +100.0 (default 0.0)
 };
 
 #endif /* ShaderTypes_h */

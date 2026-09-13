@@ -335,6 +335,44 @@ mod tests {
     }
 
     #[test]
+    fn test_split_toning_math() {
+        // 1. Identity when saturations are zero
+        let (r0, g0, b0) = apply_split_toning(0.2, 0.5, 0.8, 215.0, 0.0, 45.0, 0.0, 0.0);
+        assert_eq!((r0, g0, b0), (0.2, 0.5, 0.8));
+
+        // 2. Shadows toning with selenium/cool blue hue (215 deg)
+        // Shadow tone (lum = 0.20 < 0.50 pivot)
+        let (r_sh, _g_sh, b_sh) = apply_split_toning(0.2, 0.2, 0.2, 215.0, 50.0, 45.0, 0.0, 0.0);
+        assert!(b_sh > r_sh, "Shadows should be tinted blue (selenium)");
+
+        // Highlight should remain untouched when highlight_sat is 0
+        let (r_hl, g_hl, b_hl) = apply_split_toning(0.8, 0.8, 0.8, 215.0, 50.0, 45.0, 0.0, 0.0);
+        assert_eq!((r_hl, g_hl, b_hl), (0.8, 0.8, 0.8), "Highlights untouched when highlight_sat is 0");
+
+        // 3. Highlight toning with warm amber/gold hue (45 deg)
+        let (r_hl2, g_hl2, b_hl2) = apply_split_toning(0.8, 0.8, 0.8, 215.0, 0.0, 45.0, 50.0, 0.0);
+        assert!(r_hl2 > b_hl2, "Highlights should be warm (R > B)");
+        assert!(g_hl2 > b_hl2, "Highlights should be warm (G > B)");
+
+        // 4. Optical balance anchoring: positive balance shifts pivot downward, extending highlights into midtones
+        let mid = (0.4, 0.4, 0.4);
+        // Neutral balance (pivot 0.50): midtone 0.4 is in shadow territory
+        let (_, _, b_mid_bal0) = apply_split_toning(mid.0, mid.1, mid.2, 215.0, 50.0, 45.0, 0.0, 0.0);
+        assert!(b_mid_bal0 > mid.2, "Midtone at 0.4 tinted blue with balance 0");
+
+        // High positive balance (+100, pivot shifts down to 0.25): midtone 0.4 is now in highlight territory!
+        let (r_mid_bal_plus, _, b_mid_bal_plus) = apply_split_toning(mid.0, mid.1, mid.2, 215.0, 50.0, 45.0, 50.0, 100.0);
+        assert!(r_mid_bal_plus > b_mid_bal_plus, "Midtone at 0.4 now receives highlight warm toning under +100 balance");
+
+        // 5. Photometric luminance preservation: split toning adds pure chrominance
+        let gray = 0.35f32;
+        let lum_before = 0.2126 * gray + 0.7152 * gray + 0.0722 * gray;
+        let (rt, gt, bt) = apply_split_toning(gray, gray, gray, 215.0, 40.0, 45.0, 0.0, 0.0);
+        let lum_after = 0.2126 * rt + 0.7152 * gt + 0.0722 * bt;
+        assert!((lum_after - lum_before).abs() < 1e-3, "Photometric luminance should be preserved");
+    }
+
+    #[test]
     fn test_detail_and_sharpening_math() {
         let (r0, g0, b0) = apply_detail_and_sharpening_rgb(0.5, 0.4, 0.3, 0.4, 0.3, 0.5, 0.3, 0.5, 0.0, 0.0, 0.0);
         assert_eq!((r0, g0, b0), (0.5, 0.4, 0.3));

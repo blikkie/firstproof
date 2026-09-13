@@ -42,7 +42,12 @@ extension AppViewModel {
             grainSize: self.grainSize,
             grainRoughness: self.grainRoughness,
             grainChroma: self.grainChroma,
-            curves: self.curves
+            curves: self.curves,
+            splitToningShadowHue: self.splitToningShadowHue,
+            splitToningShadowSat: self.splitToningShadowSat,
+            splitToningHighlightHue: self.splitToningHighlightHue,
+            splitToningHighlightSat: self.splitToningHighlightSat,
+            splitToningBalance: self.splitToningBalance
         )
     }
 }
@@ -84,7 +89,12 @@ extension EditSettings {
             grainSize: 1.0,
             grainRoughness: 50.0,
             grainChroma: 0.0,
-            curves: ToneCurvesRecord.defaultIdentity
+            curves: ToneCurvesRecord.defaultIdentity,
+            splitToningShadowHue: 215.0,
+            splitToningShadowSat: 0.0,
+            splitToningHighlightHue: 45.0,
+            splitToningHighlightSat: 0.0,
+            splitToningBalance: 0.0
         )
     }
 }
@@ -126,6 +136,11 @@ extension AppViewModel {
         self.grainRoughness = edits.grainRoughness
         self.grainChroma = edits.grainChroma
         self.curves = edits.curves
+        self.splitToningShadowHue = edits.splitToningShadowHue
+        self.splitToningShadowSat = edits.splitToningShadowSat
+        self.splitToningHighlightHue = edits.splitToningHighlightHue
+        self.splitToningHighlightSat = edits.splitToningHighlightSat
+        self.splitToningBalance = edits.splitToningBalance
         
         // Update or clear selectedGrainPresetId matching the loaded photo's grain settings
         if edits.grainAmount <= 0.0 {
@@ -233,6 +248,16 @@ extension AppViewModel {
                 title = "Grain Color (\(Int(grainChroma)))"
             case .lutIntensity:
                 title = "LUT Intensity (\(Int(lutIntensity * 100))%)"
+            case .splitToningShadowHue:
+                title = "Shadow Hue (\(Int(splitToningShadowHue))°)"
+            case .splitToningShadowSat:
+                title = "Shadow Saturation (\(Int(splitToningShadowSat)))"
+            case .splitToningHighlightHue:
+                title = "Highlight Hue (\(Int(splitToningHighlightHue))°)"
+            case .splitToningHighlightSat:
+                title = "Highlight Saturation (\(Int(splitToningHighlightSat)))"
+            case .splitToningBalance:
+                title = "Split Balance (\(splitToningBalance >= 0 ? "+" : "")\(Int(splitToningBalance)))"
             }
             endSliderScrub(actionName: title)
         }
@@ -690,8 +715,42 @@ extension AppViewModel {
             perspectiveHorizontal = 0.0
         case .lutIntensity:
             lutIntensity = 1.0
+        case .splitToningShadowHue:
+            splitToningShadowHue = 215.0
+            selectedSplitToningPresetId = nil
+        case .splitToningShadowSat:
+            splitToningShadowSat = 0.0
+            selectedSplitToningPresetId = nil
+        case .splitToningHighlightHue:
+            splitToningHighlightHue = 45.0
+            selectedSplitToningPresetId = nil
+        case .splitToningHighlightSat:
+            splitToningHighlightSat = 0.0
+            selectedSplitToningPresetId = nil
+        case .splitToningBalance:
+            splitToningBalance = 0.0
+            selectedSplitToningPresetId = nil
         }
         registerDiscreteEdit(title: "Reset \(type.displayName)", before: before)
+    }
+    
+    public func applySplitToningPreset(_ preset: SplitToningPreset?) {
+        let before = currentEdits
+        guard let p = preset else {
+            selectedSplitToningPresetId = nil
+            splitToningShadowSat = 0.0
+            splitToningHighlightSat = 0.0
+            splitToningBalance = 0.0
+            registerDiscreteEdit(title: "Split Toning (Off)", before: before)
+            return
+        }
+        selectedSplitToningPresetId = p.id
+        splitToningShadowHue = p.shadowHue
+        splitToningShadowSat = p.shadowSat
+        splitToningHighlightHue = p.highlightHue
+        splitToningHighlightSat = p.highlightSat
+        splitToningBalance = p.balance
+        registerDiscreteEdit(title: "Split Toning: \(p.name)", before: before)
     }
     
     public func applyGrainPreset(_ preset: FilmGrainPreset?) {
@@ -753,6 +812,11 @@ extension AppViewModel {
         selectedLutName = nil
         lutIntensity = 1.0
         curves = .defaultIdentity
+        splitToningShadowHue = 215.0
+        splitToningShadowSat = 0.0
+        splitToningHighlightHue = 45.0
+        splitToningHighlightSat = 0.0
+        splitToningBalance = 0.0
         registerDiscreteEdit(title: "Reset All Edits", before: before)
         notifyThumbnailChanged()
     }

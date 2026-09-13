@@ -268,6 +268,61 @@ pub fn apply_color_adjustments(
     (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
 }
 
+/// Applies Split Toning & Color Grading with optical balance anchoring.
+/// Uses pure chrominance vectors (zero photometric luminance shift) and smooth
+/// cubic Hermite transitions anchored to the perceptual luminance midpoint.
+#[inline(always)]
+pub fn apply_split_toning(
+    r: f32, g: f32, b: f32,
+    shadow_hue: f32,
+    shadow_sat: f32,
+    highlight_hue: f32,
+    highlight_sat: f32,
+    balance: f32,
+) -> (f32, f32, f32) {
+    if shadow_sat <= 0.0 && highlight_sat <= 0.0 {
+        return (r, g, b);
+    }
+
+    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let y_clamp = lum.clamp(0.0, 1.0);
+
+    // Midpoint threshold shifted by balance (-100..+100)
+    let t = (0.5 - (balance / 100.0) * 0.25).clamp(0.1, 0.9);
+
+    let mut delta_r = 0.0f32;
+    let mut delta_g = 0.0f32;
+    let mut delta_b = 0.0f32;
+
+    // Shadow Toning
+    if shadow_sat > 0.0 && y_clamp < t {
+        let u_s = (t - y_clamp) / t;
+        let w_s = u_s * u_s * (3.0 - 2.0 * u_s) * (shadow_sat / 100.0);
+        let (tr, tg, tb) = crate::color::hsv_to_rgb(shadow_hue, 1.0, 1.0);
+        let t_lum = 0.2126 * tr + 0.7152 * tg + 0.0722 * tb;
+        delta_r += w_s * (tr - t_lum);
+        delta_g += w_s * (tg - t_lum);
+        delta_b += w_s * (tb - t_lum);
+    }
+
+    // Highlight Toning
+    if highlight_sat > 0.0 && y_clamp > t {
+        let u_h = (y_clamp - t) / (1.0 - t);
+        let w_h = u_h * u_h * (3.0 - 2.0 * u_h) * (highlight_sat / 100.0);
+        let (tr, tg, tb) = crate::color::hsv_to_rgb(highlight_hue, 1.0, 1.0);
+        let t_lum = 0.2126 * tr + 0.7152 * tg + 0.0722 * tb;
+        delta_r += w_h * (tr - t_lum);
+        delta_g += w_h * (tg - t_lum);
+        delta_b += w_h * (tb - t_lum);
+    }
+
+    (
+        (r + delta_r).clamp(0.0, 1.0),
+        (g + delta_g).clamp(0.0, 1.0),
+        (b + delta_b).clamp(0.0, 1.0),
+    )
+}
+
 /// Samples a 256-entry 1D curve LUT with linear interpolation matching hardware sampler.
 #[inline(always)]
 pub fn sample_curve_lut(lut: &[f32], v: f32) -> f32 {

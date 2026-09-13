@@ -148,6 +148,31 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
             data.edits.foliage = val;
         }
     }
+    if let Some(sh_hue_str) = get(pm, "splitToningShadowHue") {
+        if let Ok(val) = sh_hue_str.parse::<f32>() {
+            data.edits.split_toning_shadow_hue = val;
+        }
+    }
+    if let Some(sh_sat_str) = get(pm, "splitToningShadowSat") {
+        if let Ok(val) = sh_sat_str.parse::<f32>() {
+            data.edits.split_toning_shadow_sat = val;
+        }
+    }
+    if let Some(hl_hue_str) = get(pm, "splitToningHighlightHue") {
+        if let Ok(val) = hl_hue_str.parse::<f32>() {
+            data.edits.split_toning_highlight_hue = val;
+        }
+    }
+    if let Some(hl_sat_str) = get(pm, "splitToningHighlightSat") {
+        if let Ok(val) = hl_sat_str.parse::<f32>() {
+            data.edits.split_toning_highlight_sat = val;
+        }
+    }
+    if let Some(bal_str) = get(pm, "splitToningBalance") {
+        if let Ok(val) = bal_str.parse::<f32>() {
+            data.edits.split_toning_balance = val;
+        }
+    }
     if let Some(s_str) = get(pm, "sharpeningAmount") {
         if let Ok(val) = s_str.parse::<f32>() {
             data.edits.sharpening_amount = val;
@@ -351,6 +376,33 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         if let Some(sat_str) = desc.attribute(( crs_ns, "Saturation" )) {
             if let Ok(val) = sat_str.parse::<f32>() {
                 data.edits.saturation = val;
+            }
+        }
+    }
+    if data.edits.split_toning_shadow_sat == 0.0 && data.edits.split_toning_highlight_sat == 0.0 {
+        if let Some(sh_hue_str) = desc.attribute(( crs_ns, "SplitToningShadowHue" )) {
+            if let Ok(val) = sh_hue_str.parse::<f32>() {
+                data.edits.split_toning_shadow_hue = val;
+            }
+        }
+        if let Some(sh_sat_str) = desc.attribute(( crs_ns, "SplitToningShadowSaturation" )) {
+            if let Ok(val) = sh_sat_str.parse::<f32>() {
+                data.edits.split_toning_shadow_sat = val;
+            }
+        }
+        if let Some(hl_hue_str) = desc.attribute(( crs_ns, "SplitToningHighlightHue" )) {
+            if let Ok(val) = hl_hue_str.parse::<f32>() {
+                data.edits.split_toning_highlight_hue = val;
+            }
+        }
+        if let Some(hl_sat_str) = desc.attribute(( crs_ns, "SplitToningHighlightSaturation" )) {
+            if let Ok(val) = hl_sat_str.parse::<f32>() {
+                data.edits.split_toning_highlight_sat = val;
+            }
+        }
+        if let Some(bal_str) = desc.attribute(( crs_ns, "SplitToningBalance" )) {
+            if let Ok(val) = bal_str.parse::<f32>() {
+                data.edits.split_toning_balance = val;
             }
         }
     }

@@ -8,7 +8,7 @@ use image::codecs::tiff::TiffEncoder;
 use crate::{EditSettings, ExportColorSpace, ExportRenderingIntent};
 use crate::color::linear_to_srgb_gamma;
 use super::decode::{decode_image, sample_bilinear};
-use super::pipeline::{apply_color_adjustments, apply_detail_and_sharpening_rgb, apply_edits, apply_film_grain_rgb};
+use super::pipeline::{apply_color_adjustments, apply_detail_and_sharpening_rgb, apply_edits, apply_film_grain_rgb, apply_split_toning};
 use super::icc::{create_display_p3_profile, inject_icc_profile_into_jpeg};
 
 /// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing, color space management, and Lensfun distortion correction.
@@ -201,6 +201,17 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             r_disp = r_adj;
             g_disp = g_adj;
             b_disp = b_adj;
+
+            // 2b.1 Split Toning & Color Grading
+            let (r_st, g_st, b_st) = apply_split_toning(
+                r_disp, g_disp, b_disp,
+                edits.split_toning_shadow_hue, edits.split_toning_shadow_sat,
+                edits.split_toning_highlight_hue, edits.split_toning_highlight_sat,
+                edits.split_toning_balance,
+            );
+            r_disp = r_st;
+            g_disp = g_st;
+            b_disp = b_st;
 
             // 2c. RGB Tone Curves (Master + R + G + B)
             if has_any_curve {

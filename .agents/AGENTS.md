@@ -12,7 +12,12 @@
 
 - **Adversarial Code Reviews**: Before every commit and check-in, perform an adversarial review (probing diffs for race conditions, memory leaks/retain cycles, error boundary misses, out-of-order async responses, and main-thread bottlenecks).
 
-- **Educational & Interactive Commit Tours**: Before every commit/PR check-in, provide a tour of the code changes and use it as a learning opportunity. Compare Rust and Swift concepts against Python and JavaScript (e.g., ownership vs garbage collection, static typing, FFI, memory layout, concurrency). Include clear code snippets, explain syntax/architecture decisions, and end with 1-2 interactive quiz questions to reinforce fluency in desktop app engineering.
+- **Verification Gatekeeping Before Commit Tours**:
+  - Whenever implementation work is completed, ALWAYS first prompt the user with the concrete manual verification steps committed to in the implementation plan (e.g. running the app, testing UI controls, validating shortcuts or image renders).
+  - Explicitly pause and remind the user to perform these manual tests so we verify that the tool works as intended in the real environment.
+  - Only after manual verification is confirmed should the adversarial review and educational commit tour be generated.
+
+- **Educational & Interactive Commit Tours**: Once manual verification is confirmed and before every commit/PR check-in, provide a tour of the code changes and use it as a learning opportunity. Compare Rust and Swift concepts against Python and JavaScript (e.g., ownership vs garbage collection, static typing, FFI, memory layout, concurrency). Include clear code snippets, explain syntax/architecture decisions, and end with 1-2 interactive quiz questions to reinforce fluency in desktop app engineering.
 
 - **Desktop Keyboard Architecture & First-Responder Shielding**:
   - Single-key shortcuts (`1`..`5` for ratings, `P`/`X`/`U` for flags, `C` for crop, `Z` for zoom, `[`/`]` for rotation, `\` for original peek) must **never** fire while the user is actively typing in editable text fields (e.g. Title, Caption, Keywords, Creator in the metadata panel).

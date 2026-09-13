@@ -19,6 +19,11 @@ extension ShaderUniforms {
         u.cropConstrain = 1
         u.edrHeadroom = 1.0
         u.edrEnabled = 1
+        u.splitToningShadowHue = 215.0
+        u.splitToningShadowSat = 0.0
+        u.splitToningHighlightHue = 45.0
+        u.splitToningHighlightSat = 0.0
+        u.splitToningBalance = 0.0
         return u
     }
 }

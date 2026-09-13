@@ -33,6 +33,11 @@ mod tests {
         data.edits.saturation = -10.0;
         data.edits.deep_blue = 40.0;
         data.edits.foliage = 30.0;
+        data.edits.split_toning_shadow_hue = 210.0;
+        data.edits.split_toning_shadow_sat = 35.0;
+        data.edits.split_toning_highlight_hue = 42.0;
+        data.edits.split_toning_highlight_sat = 25.0;
+        data.edits.split_toning_balance = 15.0;
         data.edits.sharpening_amount = 45.0;
         data.edits.sharpening_radius = 1.5;
         data.edits.sharpening_masking = 25.0;
@@ -76,6 +81,11 @@ mod tests {
         assert_eq!(parsed.edits.saturation, -10.0);
         assert_eq!(parsed.edits.deep_blue, 40.0);
         assert_eq!(parsed.edits.foliage, 30.0);
+        assert_eq!(parsed.edits.split_toning_shadow_hue, 210.0);
+        assert_eq!(parsed.edits.split_toning_shadow_sat, 35.0);
+        assert_eq!(parsed.edits.split_toning_highlight_hue, 42.0);
+        assert_eq!(parsed.edits.split_toning_highlight_sat, 25.0);
+        assert_eq!(parsed.edits.split_toning_balance, 15.0);
         assert_eq!(parsed.edits.sharpening_amount, 45.0);
         assert_eq!(parsed.edits.sharpening_radius, 1.5);
         assert_eq!(parsed.edits.sharpening_masking, 25.0);
@@ -143,6 +153,28 @@ mod tests {
         let parsed = parse_xmp(adobe_xmp).unwrap();
         assert_eq!(parsed.edits.vibrance, 35.0);
         assert_eq!(parsed.edits.saturation, -15.0);
+    }
+
+    #[test]
+    fn test_xmp_adobe_split_toning_ingestion() {
+        let adobe_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:SplitToningShadowHue="220"
+    crs:SplitToningShadowSaturation="40"
+    crs:SplitToningHighlightHue="50"
+    crs:SplitToningHighlightSaturation="30"
+    crs:SplitToningBalance="+20">
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+        let parsed = parse_xmp(adobe_xmp).unwrap();
+        assert_eq!(parsed.edits.split_toning_shadow_hue, 220.0);
+        assert_eq!(parsed.edits.split_toning_shadow_sat, 40.0);
+        assert_eq!(parsed.edits.split_toning_highlight_hue, 50.0);
+        assert_eq!(parsed.edits.split_toning_highlight_sat, 30.0);
+        assert_eq!(parsed.edits.split_toning_balance, 20.0);
     }
 
     #[test]

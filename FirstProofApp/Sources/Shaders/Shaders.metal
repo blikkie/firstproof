@@ -79,6 +79,8 @@ fragment float4 fragmentShader(
                           (uniforms.saturation == 0.0) &&
                           (uniforms.deepBlue == 0.0) &&
                           (uniforms.foliage == 0.0) && 
+                          (uniforms.splitToningShadowSat == 0.0) &&
+                          (uniforms.splitToningHighlightSat == 0.0) &&
                           (uniforms.lutEnabled == 0) &&
                           (uniforms.sharpeningAmount == 0.0) &&
                           (uniforms.noiseReduction == 0.0);
@@ -99,6 +101,8 @@ fragment float4 fragmentShader(
     float editSaturation = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.saturation;
     float editDeepBlue = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.deepBlue;
     float editFoliage = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.foliage;
+    float editSplitShadowSat = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.splitToningShadowSat;
+    float editSplitHighlightSat = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.splitToningHighlightSat;
     
     // 2. Decode texture to Linear Rec.2020 working space
     float3 rec2020Color;
@@ -171,6 +175,16 @@ fragment float4 fragmentShader(
     
     // 6b. Color & Vibrance Adjustments
     finalColor = applyColorAdjustments(finalColor, editVibrance, editSaturation, editDeepBlue, editFoliage);
+    
+    // 6b.1 Split Toning & Color Grading with Optical Balance Anchoring
+    finalColor = applySplitToning(
+        finalColor,
+        uniforms.splitToningShadowHue,
+        editSplitShadowSat,
+        uniforms.splitToningHighlightHue,
+        editSplitHighlightSat,
+        uniforms.splitToningBalance
+    );
     
     // 6c. RGB Tone Curves (Master + R + G + B)
     if (uniforms.hasCurves != 0 && uniforms.isOriginal < 0.5) {

@@ -129,6 +129,11 @@ pub struct EditSettings {
     pub grain_roughness: f32,
     pub grain_chroma: f32,
     pub curves: ToneCurvesRecord,
+    pub split_toning_shadow_hue: f32,
+    pub split_toning_shadow_sat: f32,
+    pub split_toning_highlight_hue: f32,
+    pub split_toning_highlight_sat: f32,
+    pub split_toning_balance: f32,
 }
 
 impl Default for EditSettings {
@@ -169,6 +174,11 @@ impl Default for EditSettings {
             grain_roughness: 50.0,
             grain_chroma: 0.0,
             curves: ToneCurvesRecord::default(),
+            split_toning_shadow_hue: 215.0,
+            split_toning_shadow_sat: 0.0,
+            split_toning_highlight_hue: 45.0,
+            split_toning_highlight_sat: 0.0,
+            split_toning_balance: 0.0,
         }
     }
 }

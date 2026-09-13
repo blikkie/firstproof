@@ -47,6 +47,11 @@ public enum EditSliderType {
     case grainSize
     case grainRoughness
     case grainChroma
+    case splitToningShadowHue
+    case splitToningShadowSat
+    case splitToningHighlightHue
+    case splitToningHighlightSat
+    case splitToningBalance
     
     public var displayName: String {
         switch self {
@@ -74,6 +79,11 @@ public enum EditSliderType {
         case .grainSize: return "Grain Size"
         case .grainRoughness: return "Grain Roughness"
         case .grainChroma: return "Grain Color"
+        case .splitToningShadowHue: return "Shadow Hue"
+        case .splitToningShadowSat: return "Shadow Saturation"
+        case .splitToningHighlightHue: return "Highlight Hue"
+        case .splitToningHighlightSat: return "Highlight Saturation"
+        case .splitToningBalance: return "Split Toning Balance"
         }
     }
 }
@@ -250,6 +260,12 @@ public final class AppViewModel {
     public var grainSize: Float = 1.0            // 0.5 .. 3.0
     public var grainRoughness: Float = 50.0      // 0 .. 100
     public var grainChroma: Float = 0.0          // 0 .. 100
+    public var splitToningShadowHue: Float = 215.0      // 0 .. 360
+    public var splitToningShadowSat: Float = 0.0        // 0 .. 100
+    public var splitToningHighlightHue: Float = 45.0    // 0 .. 360
+    public var splitToningHighlightSat: Float = 0.0     // 0 .. 100
+    public var splitToningBalance: Float = 0.0          // -100 .. +100
+    public var selectedSplitToningPresetId: String? = nil
     public var selectedGrainPresetId: String? = nil
 
     public var defaultSharpeningAmount: Float {

@@ -188,3 +188,68 @@ fn test_extreme_dynamic_range_robustness() {
     assert!(!out.b().is_nan() && !out.b().is_infinite());
     assert!(out.r() <= 1.0 && out.g() <= 1.0 && out.b() <= 1.0);
 }
+
+#[test]
+fn test_metal_rust_split_toning_parity() {
+    use firstproof_core::export::apply_split_toning;
+
+    let test_pixels = [
+        (0.05, 0.05, 0.08), // deep shadow
+        (0.25, 0.20, 0.18), // shadow midtone
+        (0.50, 0.50, 0.50), // neutral gray
+        (0.75, 0.70, 0.65), // warm highlight
+        (0.95, 0.95, 0.95), // near white
+    ];
+
+    let test_params = [
+        // (sh_hue, sh_sat, hl_hue, hl_sat, balance)
+        (215.0, 40.0, 45.0, 30.0, 0.0),
+        (215.0, 60.0, 45.0, 0.0, -50.0),
+        (180.0, 0.0, 60.0, 50.0, 50.0),
+        (300.0, 75.0, 30.0, 65.0, 25.0),
+    ];
+
+    for &(sh_h, sh_s, hl_h, hl_s, bal) in &test_params {
+        for &(r, g, b) in &test_pixels {
+            let rust_out = apply_split_toning(r, g, b, sh_h, sh_s, hl_h, hl_s, bal);
+
+            // Simulated Metal shader logic matching ColorScience.metal
+            let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            let y_clamp = lum.clamp(0.0, 1.0);
+            let t = (0.5 - (bal / 100.0) * 0.25).clamp(0.1, 0.9);
+
+            let mut delta_r = 0.0f32;
+            let mut delta_g = 0.0f32;
+            let mut delta_b = 0.0f32;
+
+            if sh_s > 0.0 && y_clamp < t {
+                let u_s = (t - y_clamp) / t;
+                let w_s = u_s * u_s * (3.0 - 2.0 * u_s) * (sh_s / 100.0);
+                let (tr, tg, tb) = firstproof_core::color::hsv_to_rgb(sh_h, 1.0, 1.0);
+                let t_lum = 0.2126 * tr + 0.7152 * tg + 0.0722 * tb;
+                delta_r += w_s * (tr - t_lum);
+                delta_g += w_s * (tg - t_lum);
+                delta_b += w_s * (tb - t_lum);
+            }
+            if hl_s > 0.0 && y_clamp > t {
+                let u_h = (y_clamp - t) / (1.0 - t);
+                let w_h = u_h * u_h * (3.0 - 2.0 * u_h) * (hl_s / 100.0);
+                let (tr, tg, tb) = firstproof_core::color::hsv_to_rgb(hl_h, 1.0, 1.0);
+                let t_lum = 0.2126 * tr + 0.7152 * tg + 0.0722 * tb;
+                delta_r += w_h * (tr - t_lum);
+                delta_g += w_h * (tg - t_lum);
+                delta_b += w_h * (tb - t_lum);
+            }
+
+            let metal_out = (
+                (r + delta_r).clamp(0.0, 1.0),
+                (g + delta_g).clamp(0.0, 1.0),
+                (b + delta_b).clamp(0.0, 1.0),
+            );
+
+            assert!((rust_out.0 - metal_out.0).abs() < 1e-6);
+            assert!((rust_out.1 - metal_out.1).abs() < 1e-6);
+            assert!((rust_out.2 - metal_out.2).abs() < 1e-6);
+        }
+    }
+}

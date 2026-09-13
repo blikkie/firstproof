@@ -113,6 +113,49 @@ public struct TemperatureSliderRow: View {
     }
 }
 
+public struct HueSliderRow: View {
+    public let label: String
+    @Binding public var hue: Float
+    public let onReset: () -> Void
+    public var onEditingChanged: ((Bool) -> Void)? = nil
+    
+    public init(
+        label: String,
+        hue: Binding<Float>,
+        onReset: @escaping () -> Void,
+        onEditingChanged: ((Bool) -> Void)? = nil
+    ) {
+        self.label = label
+        self._hue = hue
+        self.onReset = onReset
+        self.onEditingChanged = onEditingChanged
+    }
+    
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(hue: Double(hue) / 360.0, saturation: 0.85, brightness: 0.95))
+                        .frame(width: 8, height: 8)
+                    Text(label)
+                        .font(.subheadline)
+                        .onTapGesture(count: 2, perform: onReset)
+                }
+                Spacer()
+                Text(String(format: "%.0f°", hue))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundColor(.secondary)
+            }
+            
+            Slider(value: $hue, in: 0.0...360.0) { isEditing in
+                onEditingChanged?(isEditing)
+            }
+        }
+    }
+}
+
 public struct MetadataRow: View {
     public let label: String
     public let value: String
