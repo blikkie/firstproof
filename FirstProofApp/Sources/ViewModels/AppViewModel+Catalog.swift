@@ -101,6 +101,7 @@ extension AppViewModel {
         // Reset state for new scope
         LookaheadPreloadService.shared.cancelPendingPreloads()
         PreviewRingBuffer.shared.clear()
+        undoHistory.clearAll()
         self.photos = []
         self.selectedPhoto = nil
         self.previewImage = nil

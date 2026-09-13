@@ -242,29 +242,36 @@ extension AppViewModel {
         guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
         let after = currentEdits
         if before != after {
-            undoHistory.registerAction(title: title, photoPath: path, payload: .edits(before: before, after: after))
+            undoHistory.registerEdit(title: title, photoPath: path, before: before, after: after)
         }
         saveCurrentEdits()
     }
     
     public func undo() {
-        guard let entry = undoHistory.popUndo() else { return }
+        let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
+        guard let entry = undoHistory.popUndo(isDetailMode: canvasMode == .detail, activePhotoPath: activePath) else { return }
         executeUndoPayload(entry.payload, isUndo: true, primaryPath: entry.primaryPhotoPath)
     }
     
     public func redo() {
-        guard let entry = undoHistory.popRedo() else { return }
+        let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
+        guard let entry = undoHistory.popRedo(isDetailMode: canvasMode == .detail, activePhotoPath: activePath) else { return }
         executeUndoPayload(entry.payload, isUndo: false, primaryPath: entry.primaryPhotoPath)
     }
     
     public func jumpToHistoryStep(_ targetEntry: UndoEntry) {
-        if let targetIdx = undoHistory.undoStack.firstIndex(where: { $0.id == targetEntry.id }) {
-            let stepsToUndo = undoHistory.undoStack.count - 1 - targetIdx
+        let isDetail = (canvasMode == .detail)
+        let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
+        let uStack = undoHistory.undoStack(for: isDetail ? activePath : nil)
+        let rStack = undoHistory.redoStack(for: isDetail ? activePath : nil)
+        
+        if let targetIdx = uStack.firstIndex(where: { $0.id == targetEntry.id }) {
+            let stepsToUndo = uStack.count - 1 - targetIdx
             for _ in 0..<stepsToUndo {
                 undo()
             }
-        } else if let targetIdx = undoHistory.redoStack.firstIndex(where: { $0.id == targetEntry.id }) {
-            let stepsToRedo = undoHistory.redoStack.count - targetIdx
+        } else if let targetIdx = rStack.firstIndex(where: { $0.id == targetEntry.id }) {
+            let stepsToRedo = rStack.count - targetIdx
             for _ in 0..<stepsToRedo {
                 redo()
             }
@@ -272,9 +279,11 @@ extension AppViewModel {
     }
     
     private func executeUndoPayload(_ payload: UndoActionPayload, isUndo: Bool, primaryPath: String) {
-        if let currentPath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath, currentPath != primaryPath {
-            if let matching = photos.first(where: { $0.filePath == primaryPath }) {
-                selectPhoto(matching)
+        if canvasMode == .grid {
+            if let currentPath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath, currentPath != primaryPath {
+                if let matching = photos.first(where: { $0.filePath == primaryPath }) {
+                    selectPhoto(matching)
+                }
             }
         }
         

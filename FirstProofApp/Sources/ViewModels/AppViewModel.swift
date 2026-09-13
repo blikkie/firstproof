@@ -283,10 +283,22 @@ public final class AppViewModel {
     // MARK: - Undo/Redo & Session History
     public var undoHistory = UndoHistoryManager()
     
-    public var canUndo: Bool { undoHistory.canUndo }
-    public var canRedo: Bool { undoHistory.canRedo }
-    public var undoActionTitle: String { undoHistory.undoTitle }
-    public var redoActionTitle: String { undoHistory.redoTitle }
+    public var canUndo: Bool {
+        let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
+        return undoHistory.canUndo(isDetailMode: canvasMode == .detail, activePhotoPath: activePath)
+    }
+    public var canRedo: Bool {
+        let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
+        return undoHistory.canRedo(isDetailMode: canvasMode == .detail, activePhotoPath: activePath)
+    }
+    public var undoActionTitle: String {
+        let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
+        return undoHistory.undoTitle(isDetailMode: canvasMode == .detail, activePhotoPath: activePath)
+    }
+    public var redoActionTitle: String {
+        let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
+        return undoHistory.redoTitle(isDetailMode: canvasMode == .detail, activePhotoPath: activePath)
+    }
     
     // MARK: - Viewport Zoom & Pan
     public var zoomScale: Float = 1.0

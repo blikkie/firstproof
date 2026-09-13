@@ -7,21 +7,9 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Per-Photo In-Memory Edit History Stack (P0)**: Scoped undo/redo per photo path (50-step cap) to eliminate accidental off-screen mutations during `Cmd+Z`.
-2. **Extended White Balance & Physical Illuminant Presets (P1)**: Expanded tint headroom (±150) and physical illuminant presets (Daylight, Cloudy, Shade, Tungsten, Fluorescent, Flash).
-3. **Split Toning & Color Grading (P1)**: Highlights and shadows split toning with optical balance anchoring.
-
----
-
-## Phase 1: Performance, Fluid Culling & Workspace Architecture (P0)
-
-### 1.3 Per-Photo In-Memory Edit History Stack
-- **Scoped Photo Undo Stack**:
-  - Isolate darkroom slider/curve/crop undo/redo stacks per photo path with a 50-step depth cap. Prevents unexpected off-screen mutations when pressing `Cmd+Z` in Detail view.
-- **Session-Only History Invariant**:
-  - In-memory undo/redo during the session; non-destructive state persists via XMP sidecars without cross-restart history tree serialization bloat.
-- **Darkroom vs. Catalog Undo Routing**:
-  - Route Detail view `Cmd+Z` to active photo stack; route Grid view batch culling `Cmd+Z` to catalog session stack.
+1. **Extended White Balance & Physical Illuminant Presets (P1)**: Expanded tint headroom (±150) and physical illuminant presets (Daylight, Cloudy, Shade, Tungsten, Fluorescent, Flash).
+2. **Split Toning & Color Grading (P1)**: Highlights and shadows split toning with optical balance anchoring.
+3. **Advanced Color Wheels & Selective Hue Ranges (P1)**: 3-way color grading wheels for shadows, midtones, highlights.
 
 ---
 

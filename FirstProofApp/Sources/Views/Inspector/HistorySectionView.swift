@@ -13,6 +13,14 @@ public struct HistorySectionView: View {
         viewModel.currentlyLoadedPhotoPath ?? viewModel.selectedPhoto?.filePath
     }
     
+    private var uStack: [UndoEntry] {
+        viewModel.undoHistory.undoStack(for: activePath)
+    }
+    
+    private var rStack: [UndoEntry] {
+        viewModel.undoHistory.redoStack(for: activePath)
+    }
+    
     public var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 6) {
@@ -38,8 +46,8 @@ public struct HistorySectionView: View {
                     
                     Spacer()
                     
-                    if !viewModel.undoHistory.undoStack.isEmpty || !viewModel.undoHistory.redoStack.isEmpty {
-                        Text("\(viewModel.undoHistory.undoStack.count) step\(viewModel.undoHistory.undoStack.count == 1 ? "" : "s")")
+                    if !uStack.isEmpty || !rStack.isEmpty {
+                        Text("\(uStack.count) step\(uStack.count == 1 ? "" : "s")")
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
@@ -52,10 +60,10 @@ public struct HistorySectionView: View {
                     historyRow(
                         title: "Original (As-Shot)",
                         icon: "camera.aperture",
-                        isActive: viewModel.undoHistory.undoStack.isEmpty,
+                        isActive: uStack.isEmpty,
                         isFuture: false,
                         action: {
-                            // Undo all steps
+                            // Undo all steps for active photo
                             while viewModel.canUndo {
                                 viewModel.undo()
                             }
@@ -63,8 +71,8 @@ public struct HistorySectionView: View {
                     )
                     
                     // 2. Applied Undo Stack (Oldest -> Newest)
-                    ForEach(Array(viewModel.undoHistory.undoStack.enumerated()), id: \.element.id) { index, entry in
-                        let isLatest = (index == viewModel.undoHistory.undoStack.count - 1)
+                    ForEach(Array(uStack.enumerated()), id: \.element.id) { index, entry in
+                        let isLatest = (index == uStack.count - 1)
                         historyRow(
                             title: entry.title,
                             icon: iconForPayload(entry.payload, title: entry.title),
@@ -77,7 +85,7 @@ public struct HistorySectionView: View {
                     }
                     
                     // 3. Undone Redo Stack (Available to Redo, shown dimmed)
-                    ForEach(viewModel.undoHistory.redoStack.reversed(), id: \.id) { entry in
+                    ForEach(rStack.reversed(), id: \.id) { entry in
                         historyRow(
                             title: entry.title,
                             icon: iconForPayload(entry.payload, title: entry.title),
@@ -100,8 +108,8 @@ public struct HistorySectionView: View {
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.secondary)
                 Spacer()
-                if viewModel.undoHistory.undoStack.count > 0 {
-                    Text("\(viewModel.undoHistory.undoStack.count)")
+                if uStack.count > 0 {
+                    Text("\(uStack.count)")
                         .font(.system(size: 9, weight: .semibold))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
