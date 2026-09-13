@@ -146,3 +146,31 @@ This document strictly tracks pending and deferred features calibrated against o
 - **Strict Anti-Bloat Invariant (Zero Video Editing)**:
   - Explicit non-goal: No video grading, color adjustments, cutting, or re-encoding. Master video files remain completely read-only.
   - Dedicated "Open in External NLE / Player" shortcut (`Cmd+Return`) to hand off clips directly to QuickTime, DaVinci Resolve, or Final Cut Pro.
+
+### 5.3 Hardware Filtering, Manual Collections & Dynamic Smart Albums (Post-v1)
+- **Per-Camera Sidebar Line Items & Grid Format Triage**:
+  - **Sidebar Camera List**: Dynamic list of every camera model detected in the current catalog (e.g. `Sony ILCE-7M4 (530)`, `Fujifilm X100V (412)`, `Google Pixel 8 Pro (306)`), allowing instant 1-click scoping by capture device.
+  - **Grid-Level "RAWs Only" Toggle**: An unobtrusive toggle/segmented control in the contact sheet grid header (`[ All Formats | RAW Only ]` or `Hide JPEGs`) that filters out raster JPEGs when the photographer is focused purely on sensor darkroom grading, while keeping in-camera JPEGs accessible whenever needed.
+- **Manual Albums & Custom Print Sequencing**:
+  - Non-destructive album collections (`albums`, `album_photos`) stored in local `.firstproof/catalog.db` with dual XMP collection synchronization.
+  - Support for `Sort By: Custom Sequence` with drag-and-drop reordering for photobook pagination, exhibition layouts, and print runs.
+- **Dynamic Smart Albums (Tonal & Curation Predicate Engine)**:
+  - Fast, SQL-compiled smart queries matching any/all rules: Rating (`>= 4★`), Status (`Pick`), Date Range, Camera Model, Lens, Focal Length, and Edit State (`Has Edits`).
+  - Streamlines pre-print proofing (e.g. "All 4★+ picks taken on 50mm between Oct–Dec").
+
+### 5.4 Offline Search, Time-Proximity Geotagging & Spatial Discovery (Post-v1 / Post-v2)
+- **Time-Proximity Geotagging ("Borrow GPS from Mobile")**:
+  - Correlate GPS coordinates from companion mobile photos within an adjustable time window (e.g. $\pm 30$–$60$ min) for camera RAWs lacking onboard GPS hardware.
+  - Linear spatial trajectory interpolation when a RAW shot is bracketed between two mobile GPS locations.
+  - Camera clock drift calibration slider (`±MM:SS`) with reference photo alignment.
+  - Transparent metadata auditing: Distinguish exact hardware coordinates from approximate inferred locations (`FIRSTPROOF_TIME_PROXIMITY_INFERRED` in XMP sidecars and muted pin badge in inspector).
+- **Invisible Concrete Object Search (Apple Neural Engine `VNClassifyImageRequest`)**:
+  - Sub-millisecond background classification on Apple Silicon during folder index; categorizes 1,300+ concrete objects (e.g. "dog", "bicycle", "boat", "car", "mountain") into SQLite `photo_classifications`.
+  - Zero UI clutter: no bounding boxes or tags drawn on the artist's canvas; full-text search bar returns matching photos instantly.
+- **Restrained Archival MapKit Bounding Box Search**:
+  - Muted, dark-slate native macOS MapKit canvas matching First Proof's `#1E1E1E` darkroom palette.
+  - Dynamic viewport bounding-box synchronization: panning/zooming the map instantly updates the contact sheet grid.
+- **Archival Portrait Clustering (MWG/IPTC Standard Regions)**:
+  - 100% offline, on-device portrait face clustering via Apple `Vision` framework.
+  - Unidentified sitter triage deck: *"Found X photos of this person. Who is this sitter?"*
+  - Serializes coordinates directly into open-standard [MWG (Metadata Working Group) / IPTC XMP Face Regions](file:///Users/blikkie/src/LumenBox/docs/values.md#L43) (`mwg-rs:Regions`), avoiding proprietary database lock-in.
