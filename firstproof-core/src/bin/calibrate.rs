@@ -1,5 +1,4 @@
 use std::env;
-use std::path::Path;
 use image::{RgbImage, Rgb, imageops};
 use firstproof_core::export::decode_raw_preview_buffer;
 use firstproof_core::raw::extract_preview_jpeg;

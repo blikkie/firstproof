@@ -271,6 +271,218 @@ fn test_gpu_preview_vs_export_parity() {
 
 #[test]
 #[ignore = "Slow real RAW disk decode"]
+fn test_cr2_0058_binned_vs_export() {
+    use std::path::Path;
+    use firstproof_core::color::{Color3, agx_tone_map_vivid};
+    use firstproof_core::export::{decode_image, decode_raw_preview_binned_buffer, apply_edits};
+    use firstproof_core::xmp::read_xmp_file;
+
+    let path = Path::new("/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0058.CR2");
+    if !path.exists() {
+        println!("File does not exist: {:?}", path);
+        return;
+    }
+
+    let xmp = match read_xmp_file(path) {
+        Ok(x) => x,
+        Err(_) => {
+            println!("No XMP sidecar found for 0058, skipping test");
+            return;
+        }
+    };
+    println!("XMP Edits for 0058: temp={}, tint={}, exposure={}, contrast={}, highlights={}, shadows={}",
+        xmp.edits.temperature, xmp.edits.tint, xmp.edits.exposure, xmp.edits.contrast, xmp.edits.highlights, xmp.edits.shadows);
+
+    // 1. Decode binned (Display)
+    let (bw, bh, binned_bytes) = decode_raw_preview_binned_buffer(path).unwrap();
+    println!("Binned dimensions: {}x{}, bytes: {}", bw, bh, binned_bytes.len());
+
+    // 2. Decode full (Export)
+    let mut export_img = decode_image(path).unwrap();
+    println!("Export dimensions: {}x{}", export_img.width, export_img.height);
+
+    // Compare at several relative coordinates (e.g. face at x=35%, y=50%; wall at x=60%, y=15%; seat at x=15%, y=30%)
+    let test_points = [
+        ("Girl Cheek", 0.35f32, 0.55f32),
+        ("Subway Wall", 0.60f32, 0.15f32),
+        ("Orange Seat", 0.15f32, 0.30f32),
+        ("Girl Forehead", 0.30f32, 0.40f32),
+    ];
+
+    for (label, rx, ry) in test_points {
+        let ex = ((export_img.width as f32) * rx) as usize;
+        let ey = ((export_img.height as f32) * ry) as usize;
+        let e_idx = (ey * export_img.width + ex) * 3;
+        println!("Full Raw Rec2020 at {}: [{:.4}, {:.4}, {:.4}]",
+            label, export_img.data[e_idx], export_img.data[e_idx + 1], export_img.data[e_idx + 2]);
+    }
+
+    // Apply edits to export image
+    apply_edits(&mut export_img, &xmp.edits);
+
+    // Simulate Metal shader on binned buffer
+    let temp_norm = (xmp.edits.temperature / 5500.0).clamp(0.25, 4.0);
+    let mut r_scale = temp_norm.powf(0.75);
+    let mut b_scale = (1.0 / temp_norm).powf(0.75);
+    let tint_factor = xmp.edits.tint * 0.002;
+    let g_scale = (1.0 - tint_factor).max(0.01);
+    r_scale = (r_scale + tint_factor * 0.5).max(0.01);
+    b_scale = (b_scale + tint_factor * 0.5).max(0.01);
+    let exposure_gain = 2.0f32.powf(xmp.edits.exposure);
+    let contrast_gain = if xmp.edits.contrast >= 0.0 {
+        1.0 + (xmp.edits.contrast / 100.0)
+    } else {
+        1.0 + (xmp.edits.contrast / 100.0) * 0.60
+    };
+
+    println!("\n=== COLOR COMPARISON (Binned/Display vs Full/Export) ===");
+    for (label, rx, ry) in test_points {
+        // Sample binned:
+        let bx = ((bw as f32) * rx) as usize;
+        let by = ((bh as f32) * ry) as usize;
+        let b_idx = (by * (bw as usize) + bx) * 8; // 4 half-floats = 8 bytes
+        let r_f16 = u16::from_ne_bytes([binned_bytes[b_idx], binned_bytes[b_idx + 1]]);
+        let g_f16 = u16::from_ne_bytes([binned_bytes[b_idx + 2], binned_bytes[b_idx + 3]]);
+        let b_f16 = u16::from_ne_bytes([binned_bytes[b_idx + 4], binned_bytes[b_idx + 5]]);
+        let mut r_binned = firstproof_core::export::f16_to_f32(r_f16);
+        let mut g_binned = firstproof_core::export::f16_to_f32(g_f16);
+        let mut b_binned = firstproof_core::export::f16_to_f32(b_f16);
+
+        println!("Raw Rec2020 at {}: Binned=[{:.4}, {:.4}, {:.4}]", label, r_binned, g_binned, b_binned);
+
+        // Apply shader math
+        r_binned *= r_scale;
+        g_binned *= g_scale;
+        b_binned *= b_scale;
+        r_binned *= exposure_gain;
+        g_binned *= exposure_gain;
+        b_binned *= exposure_gain;
+        let (r_rec, g_rec, b_rec) = firstproof_core::export::apply_tone_recovery(
+            r_binned, g_binned, b_binned,
+            xmp.edits.highlights, xmp.edits.shadows, xmp.edits.whites, xmp.edits.blacks,
+        );
+        let binned_tone_mapped = agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
+        let binned_8bit = [
+            (binned_tone_mapped.r().clamp(0.0, 1.0) * 255.0).round() as u8,
+            (binned_tone_mapped.g().clamp(0.0, 1.0) * 255.0).round() as u8,
+            (binned_tone_mapped.b().clamp(0.0, 1.0) * 255.0).round() as u8,
+        ];
+
+        // Sample export:
+        let ex = ((export_img.width as f32) * rx) as usize;
+        let ey = ((export_img.height as f32) * ry) as usize;
+        let e_idx = (ey * export_img.width + ex) * 3;
+        let export_8bit = [
+            (export_img.data[e_idx].clamp(0.0, 1.0) * 255.0).round() as u8,
+            (export_img.data[e_idx + 1].clamp(0.0, 1.0) * 255.0).round() as u8,
+            (export_img.data[e_idx + 2].clamp(0.0, 1.0) * 255.0).round() as u8,
+        ];
+
+        println!("{}: Display(Binned)={:?}, Export(Full)={:?}, Delta=[{}, {}, {}]",
+            label, binned_8bit, export_8bit,
+            export_8bit[0] as i16 - binned_8bit[0] as i16,
+            export_8bit[1] as i16 - binned_8bit[1] as i16,
+            export_8bit[2] as i16 - binned_8bit[2] as i16,
+        );
+    }
+
+    let ldb = firstproof_core::lensfun::LensfunDatabase::new();
+    let meta = firstproof_core::raw::extract_metadata(path).ok();
+    let lens_coeffs = meta.as_ref().map(|m| {
+        ldb.resolve_coefficients(
+            m.camera_make.as_deref().unwrap_or(""),
+            m.camera_model.as_deref().unwrap_or(""),
+            m.lens_model.as_deref().unwrap_or(""),
+            m.focal_length.unwrap_or(0.0),
+            m.aperture,
+        )
+    });
+    let dist_tuple = lens_coeffs.as_ref().and_then(|c| {
+        if c.has_distortion {
+            Some((c.distortion.as_slice(), c.distortion_model.as_str()))
+        } else {
+            None
+        }
+    });
+
+    let new_desktop_jpg = Path::new("/Users/blikkie/Desktop/20250409_0058_FirstProof_New.jpg");
+    firstproof_core::export::export_photo_file(
+        path,
+        new_desktop_jpg,
+        &xmp.edits,
+        dist_tuple,
+        95,
+        None,
+        firstproof_core::ExportColorSpace::Srgb,
+        firstproof_core::ExportRenderingIntent::RelativeColorimetric,
+        true,
+    ).expect("Failed to export new photo");
+
+    let screenshot_jpg = Path::new("/Users/blikkie/.gemini/antigravity-ide/brain/be942130-01a3-4c51-a22d-2126d19f7aee/.user_uploaded/media_1789332136643.jpg");
+    let desktop_jpg = Path::new("/Users/blikkie/Desktop/20250409_0058_FirstProof.jpg");
+
+    if screenshot_jpg.exists() && new_desktop_jpg.exists() {
+        let shot_img = image::open(screenshot_jpg).unwrap().to_rgb8();
+        let old_desk_img = if desktop_jpg.exists() { Some(image::open(desktop_jpg).unwrap().to_rgb8()) } else { None };
+        let new_desk_img = image::open(new_desktop_jpg).unwrap().to_rgb8();
+
+        println!("\n=== FACE REGION SCAN: SCREENSHOT vs OLD EXPORT vs NEW EXPORT ===");
+        let mut total_shot_r = 0u64;
+        let mut total_shot_g = 0u64;
+        let mut total_shot_b = 0u64;
+        let mut total_old_r = 0u64;
+        let mut total_old_g = 0u64;
+        let mut total_old_b = 0u64;
+        let mut total_new_r = 0u64;
+        let mut total_new_g = 0u64;
+        let mut total_new_b = 0u64;
+        let mut count = 0u64;
+
+        for step_x in 0..10 {
+            for step_y in 0..10 {
+                let rx = 0.28 + (step_x as f32) * 0.015;
+                let ry = 0.42 + (step_y as f32) * 0.020;
+                let sx = ((shot_img.width() as f32) * rx) as u32;
+                let sy = ((shot_img.height() as f32) * ry) as u32;
+                let sp = shot_img.get_pixel(sx, sy);
+
+                let nx = ((new_desk_img.width() as f32) * rx) as u32;
+                let ny = ((new_desk_img.height() as f32) * ry) as u32;
+                let np = new_desk_img.get_pixel(nx, ny);
+
+                total_shot_r += sp.0[0] as u64;
+                total_shot_g += sp.0[1] as u64;
+                total_shot_b += sp.0[2] as u64;
+                total_new_r += np.0[0] as u64;
+                total_new_g += np.0[1] as u64;
+                total_new_b += np.0[2] as u64;
+
+                if let Some(ref old_desk) = old_desk_img {
+                    let ox = ((old_desk.width() as f32) * rx) as u32;
+                    let oy = ((old_desk.height() as f32) * ry) as u32;
+                    let op = old_desk.get_pixel(ox, oy);
+                    total_old_r += op.0[0] as u64;
+                    total_old_g += op.0[1] as u64;
+                    total_old_b += op.0[2] as u64;
+                }
+                count += 1;
+            }
+        }
+
+        let avg_shot = [total_shot_r / count, total_shot_g / count, total_shot_b / count];
+        let avg_new = [total_new_r / count, total_new_g / count, total_new_b / count];
+        println!("Face Region Average (100 sample points):");
+        println!("  Screenshot (Display): R={}, G={}, B={}  (G/R = {:.3})", avg_shot[0], avg_shot[1], avg_shot[2], avg_shot[1] as f64 / avg_shot[0] as f64);
+        if old_desk_img.is_some() {
+            let avg_old = [total_old_r / count, total_old_g / count, total_old_b / count];
+            println!("  Old Export (Pre-Fix): R={}, G={}, B={}  (G/R = {:.3})", avg_old[0], avg_old[1], avg_old[2], avg_old[1] as f64 / avg_old[0] as f64);
+        }
+        println!("  New Export (Post-Fix): R={}, G={}, B={}  (G/R = {:.3})", avg_new[0], avg_new[1], avg_new[2], avg_new[1] as f64 / avg_new[0] as f64);
+    }
+}
+
+#[test]
+#[ignore = "Slow real RAW disk decode"]
 fn test_cr2_0194_full_pipeline_parity() {
     use std::path::Path;
     use firstproof_core::color::{Color3, agx_tone_map_vivid};

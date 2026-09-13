@@ -169,7 +169,7 @@ pub fn agx_tone_map_vivid(c: Color3, contrast_gain: f32) -> Color3 {
     }
     
     // Vibrant midtone chroma with sky saturation normalized and delicate skin tones protected
-    s = (s * (1.18 - 0.35 * skin_weight - 0.15 * sky_weight)).clamp(0.0, 1.0);
+    s = (s * (1.18 - 0.20 * skin_weight - 0.15 * sky_weight)).clamp(0.0, 1.0);
     
     let (r, g, b) = super::hsv_to_rgb(h, s, v);
     Color3::new(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))

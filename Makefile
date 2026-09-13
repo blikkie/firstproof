@@ -46,6 +46,9 @@ bundle: build-app
 test:
 	GIT_CONFIG_GLOBAL=/dev/null cargo test --target $(RUST_TARGET) -p firstproof-core
 
+test-parity:
+	GIT_CONFIG_GLOBAL=/dev/null cargo test --target $(RUST_TARGET) -p firstproof-core --test dual_engine_synthetic_parity -- --nocapture
+
 test-calibration:
 	GIT_CONFIG_GLOBAL=/dev/null cargo run --manifest-path firstproof-core/Cargo.toml --target $(RUST_TARGET) --bin calibrate
 

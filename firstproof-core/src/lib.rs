@@ -14,6 +14,7 @@ pub mod auto;
 pub mod lut;
 pub mod curve;
 pub mod gainmap;
+pub mod synthetic;
 
 pub use curve::{evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, CurvePointRecord, ToneCurvesRecord};
 

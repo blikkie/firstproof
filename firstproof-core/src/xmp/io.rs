@@ -67,7 +67,7 @@ pub fn resolve_xmp_read_path<P: AsRef<Path>>(path: P) -> Option<PathBuf> {
         // If both have edits, pick the one modified more recently
         let stem_mtime = std::fs::metadata(&xmp_stem).and_then(|m| m.modified()).ok();
         let sidecar_mtime = std::fs::metadata(&xmp_sidecar).and_then(|m| m.modified()).ok();
-        if stem_mtime > sidecar_mtime {
+        if stem_mtime >= sidecar_mtime {
             return Some(xmp_stem);
         }
         return Some(xmp_sidecar);
@@ -80,6 +80,37 @@ pub fn resolve_xmp_read_path<P: AsRef<Path>>(path: P) -> Option<PathBuf> {
         return Some(xmp_stem);
     }
     None
+}
+
+/// Helper to merge non-destructive metadata from secondary sidecar into primary if missing.
+fn merge_metadata(primary: &mut XmpData, secondary: &XmpData) {
+    if primary.rating.is_none() && secondary.rating.is_some() {
+        primary.rating = secondary.rating;
+    }
+    if (primary.status == "None" || primary.status.is_empty()) && (secondary.status != "None" && !secondary.status.is_empty()) {
+        primary.status = secondary.status.clone();
+    }
+    if primary.title.is_none() && secondary.title.is_some() {
+        primary.title = secondary.title.clone();
+    }
+    if primary.description.is_none() && secondary.description.is_some() {
+        primary.description = secondary.description.clone();
+    }
+    if primary.creator.is_none() && secondary.creator.is_some() {
+        primary.creator = secondary.creator.clone();
+    }
+    if primary.copyright.is_none() && secondary.copyright.is_some() {
+        primary.copyright = secondary.copyright.clone();
+    }
+    if primary.keywords.is_empty() && !secondary.keywords.is_empty() {
+        primary.keywords = secondary.keywords.clone();
+    }
+    if primary.latitude.is_none() && secondary.latitude.is_some() {
+        primary.latitude = secondary.latitude;
+    }
+    if primary.longitude.is_none() && secondary.longitude.is_some() {
+        primary.longitude = secondary.longitude;
+    }
 }
 
 /// Resolves the sidecar file path for writing XMP.
@@ -129,38 +160,27 @@ pub fn read_xmp_file<P: AsRef<Path>>(path: P) -> std::io::Result<XmpData> {
     };
 
     match (sidecar_data, stem_data) {
-        (Some(mut sidecar), Some(stem)) => {
+        (Some(sidecar), Some(stem)) => {
             let sidecar_has_edits = has_custom_adjustments(&sidecar);
             let stem_has_edits = has_custom_adjustments(&stem);
 
-            if stem_has_edits && !sidecar_has_edits {
-                // stem (e.g. foo.xmp) has real edits, sidecar (e.g. foo.CR2.xmp) does not!
-                if stem.creator.is_none() {
-                    let mut s = stem;
-                    s.creator = sidecar.creator;
-                    if s.keywords.is_empty() { s.keywords = sidecar.keywords; }
-                    return Ok(s);
-                }
-                return Ok(stem);
+            let (mut primary, secondary) = if stem_has_edits && !sidecar_has_edits {
+                (stem, sidecar)
             } else if sidecar_has_edits && !stem_has_edits {
-                if sidecar.creator.is_none() { sidecar.creator = stem.creator; }
-                if sidecar.keywords.is_empty() { sidecar.keywords = stem.keywords; }
-                return Ok(sidecar);
+                (sidecar, stem)
             } else {
-                // Both or neither have edits: merge non-default edits and metadata
-                if !sidecar_has_edits && stem_has_edits {
-                    sidecar.edits = stem.edits;
+                // Both or neither have edits: pick the file modified more recently
+                let stem_mtime = std::fs::metadata(&xmp_stem).and_then(|m| m.modified()).ok();
+                let sidecar_mtime = std::fs::metadata(&xmp_sidecar).and_then(|m| m.modified()).ok();
+                if stem_mtime >= sidecar_mtime {
+                    (stem, sidecar)
+                } else {
+                    (sidecar, stem)
                 }
-                if sidecar.rating.is_none() && stem.rating.is_some() {
-                    sidecar.rating = stem.rating;
-                }
-                if (sidecar.status == "None" || sidecar.status.is_empty()) && (stem.status != "None" && !stem.status.is_empty()) {
-                    sidecar.status = stem.status;
-                }
-                if sidecar.creator.is_none() { sidecar.creator = stem.creator; }
-                if sidecar.keywords.is_empty() { sidecar.keywords = stem.keywords; }
-                return Ok(sidecar);
-            }
+            };
+
+            merge_metadata(&mut primary, &secondary);
+            Ok(primary)
         }
         (Some(data), None) => Ok(data),
         (None, Some(data)) => Ok(data),

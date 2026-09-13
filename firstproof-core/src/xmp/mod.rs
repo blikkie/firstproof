@@ -189,6 +189,39 @@ mod tests {
     }
 
     #[test]
+    fn test_dual_sidecar_mtime_precedence_and_metadata_merge() {
+        let photo = "test_dual_mtime.CR2";
+        let sidecar_old = "test_dual_mtime.CR2.xmp";
+        let sidecar_new = "test_dual_mtime.xmp";
+
+        let mut old_data = XmpData::default();
+        old_data.edits.temperature = 3800.0;
+        old_data.edits.exposure = 0.6;
+        old_data.creator = Some("Darktable User".to_string());
+        old_data.keywords = vec!["subway".to_string()];
+        std::fs::write(sidecar_old, generate_xmp(&old_data)).unwrap();
+
+        // Brief delay to ensure distinct filesystem modification timestamps
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        let mut new_data = XmpData::default();
+        new_data.edits.temperature = 7400.0;
+        new_data.edits.exposure = 0.6;
+        // creator and keywords left empty in newer file
+        std::fs::write(sidecar_new, generate_xmp(&new_data)).unwrap();
+
+        let read_back = read_xmp_file(photo).unwrap();
+        // Newer file edits win
+        assert_eq!(read_back.edits.temperature, 7400.0);
+        // Metadata from older file is safely preserved
+        assert_eq!(read_back.creator, Some("Darktable User".to_string()));
+        assert_eq!(read_back.keywords, vec!["subway".to_string()]);
+
+        let _ = std::fs::remove_file(sidecar_old);
+        let _ = std::fs::remove_file(sidecar_new);
+    }
+
+    #[test]
     fn test_xmp_third_party_orientation_hints() {
         let lr_xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">

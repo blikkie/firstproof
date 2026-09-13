@@ -77,6 +77,48 @@ fn test_metal_rust_dual_engine_parity() {
     }
 }
 
+/// Simulates the exact single-precision Metal shader implementation (`agxToneMapVivid` in ColorScience.metal)
+fn metal_shader_agx_vivid_sim(rec2020_r: f32, rec2020_g: f32, rec2020_b: f32, contrast_gain: f32) -> (f32, f32, f32) {
+    let (br, bg, bb) = metal_shader_agx_sim(rec2020_r, rec2020_g, rec2020_b, contrast_gain * 1.15);
+    let (mut h, mut s, v) = firstproof_core::color::rgb_to_hsv(br, bg, bb);
+    let skin_weight = (1.0 - (h - 25.0).abs() / 20.0).clamp(0.0, 1.0);
+    let sky_weight = (1.0 - (h - 235.0).abs() / 35.0).clamp(0.0, 1.0);
+    h -= 18.0 * sky_weight;
+    h -= 3.0 * skin_weight;
+    if h < 0.0 { h += 360.0; }
+    if h >= 360.0 { h -= 360.0; }
+    s = (s * (1.18 - 0.20 * skin_weight - 0.15 * sky_weight)).clamp(0.0, 1.0);
+    let (r, g, b) = firstproof_core::color::hsv_to_rgb(h, s, v);
+    (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
+}
+
+#[test]
+fn test_metal_rust_agx_vivid_parity() {
+    let test_levels = [0.005, 0.02, 0.10, 0.18, 0.50, 1.0, 2.5, 8.0];
+    let test_contrasts = [0.8, 1.0, 1.2];
+
+    for &contrast in &test_contrasts {
+        for &r in &test_levels {
+            for &g in &test_levels {
+                for &b in &test_levels {
+                    let rust_out = firstproof_core::color::agx_tone_map_vivid(Color3::new(r, g, b), contrast);
+                    let (metal_r, metal_g, metal_b) = metal_shader_agx_vivid_sim(r, g, b, contrast);
+
+                    let diff_r = (rust_out.r() - metal_r).abs();
+                    let diff_g = (rust_out.g() - metal_g).abs();
+                    let diff_b = (rust_out.b() - metal_b).abs();
+
+                    assert!(
+                        diff_r < 1e-4 && diff_g < 1e-4 && diff_b < 1e-4,
+                        "AgX Vivid parity divergence at ({}, {}, {}) with contrast {}: Rust=({}, {}, {}), Metal=({}, {}, {})",
+                        r, g, b, contrast, rust_out.r(), rust_out.g(), rust_out.b(), metal_r, metal_g, metal_b
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn test_neutral_axis_achromatic_preservation() {
     // Across 16 stops of exposure, neutral input must yield neutral output

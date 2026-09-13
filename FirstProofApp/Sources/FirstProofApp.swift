@@ -51,6 +51,9 @@ struct FirstProofApp: App {
         WindowGroup {
             MainView(viewModel: viewModel)
                 .navigationTitle("First Proof - Editorial RAW Developer")
+                .onAppear {
+                    DebugIPCService.shared.start(with: viewModel)
+                }
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)

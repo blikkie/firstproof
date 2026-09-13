@@ -74,7 +74,12 @@ Always run Rust core tests before check-in:
 # Run all unit tests and integration tests
 cargo test --manifest-path firstproof-core/Cargo.toml
 
-# Run GPU Metal vs CPU Rust dual-engine parity test
+# Run zero-I/O synthetic dual-engine parity regression suite (Macbeth 24 & neutral ramp)
+make test-parity
+# or directly:
+cargo test --manifest-path firstproof-core/Cargo.toml --test dual_engine_synthetic_parity
+
+# Run GPU Metal vs CPU Rust AgX parity test
 cargo test --manifest-path firstproof-core/Cargo.toml --test agx_shader_parity
 
 # Run camera color profile parity tests

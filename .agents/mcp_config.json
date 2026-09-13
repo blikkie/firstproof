@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "firstproof": {
+      "command": "python3",
+      "args": ["tools/mcp/firstproof_mcp.py"]
+    }
+  }
+}
