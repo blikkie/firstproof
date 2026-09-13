@@ -540,6 +540,22 @@ pub fn decode_raw_preview(path: String, max_dimension: Option<u32>) -> Option<Ra
 }
 
 #[uniffi::export]
+pub fn decode_raw_preview_binned(path: String) -> Option<RawPreviewRecord> {
+    match export::decode_raw_preview_binned_buffer(&path) {
+        Ok((width, height, data)) => Some(RawPreviewRecord {
+            width,
+            height,
+            data,
+            is_linear_float: true,
+        }),
+        Err(e) => {
+            eprintln!("Failed to decode binned RAW preview for {}: {}", path, e);
+            None
+        }
+    }
+}
+
+#[uniffi::export]
 pub fn compute_auto_adjustments(path: String) -> Option<auto::AutoAdjustments> {
     auto::compute_auto_adjustments_from_path(&path)
 }

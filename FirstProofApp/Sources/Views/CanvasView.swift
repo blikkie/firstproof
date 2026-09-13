@@ -274,7 +274,7 @@ struct CanvasView: View {
                                 Color(NSColor.underPageBackgroundColor)
                                     .edgesIgnoringSafeArea(.all)
                                 
-                                if viewModel.previewImage != nil {
+                                if viewModel.previewImage != nil || viewModel.rawPreviewRecord != nil {
                                     DetailMetalCanvasContainer(viewModel: viewModel, isShowingOriginal: viewModel.isShowingOriginal)
                                         .padding(16)
                                         .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
@@ -294,7 +294,7 @@ struct CanvasView: View {
                                             .padding(.top, 24) : nil
                                         )
                                         .overlay(alignment: .bottom) {
-                                            if viewModel.isDemosaicing {
+                                            if viewModel.isDemosaicing && viewModel.rawPreviewRecord == nil {
                                                 HStack(spacing: 8) {
                                                     ProgressView()
                                                         .controlSize(.small)

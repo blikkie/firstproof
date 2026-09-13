@@ -53,6 +53,12 @@ fragment float4 fragmentShader(
     // Sample texture
     float4 sampledColor = texture.sample(textureSampler, uv);
     
+    // Fast-path: When displaying an already-rendered intermediate preview snapshot,
+    // return the sampled color directly without re-applying tone mapping, curves, or color transforms.
+    if (uniforms.isIntermediate == 1) {
+        return sampledColor;
+    }
+    
     // If user is holding '\' for original as-shot comparison:
     // For JPEG thumbnails, return sampledColor directly.
     if (uniforms.isOriginal > 0.5 && uniforms.isLinearRaw == 0) {

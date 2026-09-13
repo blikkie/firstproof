@@ -7,7 +7,7 @@ using namespace metal;
 
 // MARK: - Viewport Geometry, Perspective & Lens Distortion Transform
 inline float2 transformGeometry(float2 uv, constant ShaderUniforms &uniforms) {
-    if (uniforms.isOriginal >= 0.5) {
+    if (uniforms.isOriginal >= 0.5 || uniforms.isIntermediate == 1) {
         return uv;
     }
     

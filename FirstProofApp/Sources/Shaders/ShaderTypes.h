@@ -70,7 +70,7 @@ struct ShaderUniforms {
     float grainSize;         // 0.5 .. 3.0 (default 1.0)
     float grainRoughness;    // 0.0 .. 100.0 (default 50.0)
     float grainChroma;       // 0.0 .. 100.0 (default 0.0)
-    int32_t _padding;
+    int32_t isIntermediate;  // 1 = pre-rendered intermediate preview (bypass all shader color/tone/geometry)
 };
 
 #endif /* ShaderTypes_h */

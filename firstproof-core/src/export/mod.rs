@@ -3,12 +3,14 @@ pub mod decode;
 pub mod pipeline;
 pub mod encoders;
 pub mod batch;
+pub mod arena;
 
 pub use icc::*;
 pub use decode::*;
 pub use pipeline::*;
 pub use encoders::*;
 pub use batch::*;
+pub use arena::*;
 
 #[cfg(test)]
 mod tests {

@@ -4097,6 +4097,13 @@ public func decodeRawPreview(path: String, maxDimension: UInt32?) -> RawPreviewR
     )
 })
 }
+public func decodeRawPreviewBinned(path: String) -> RawPreviewRecord? {
+    return try!  FfiConverterOptionTypeRawPreviewRecord.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_decode_raw_preview_binned(
+        FfiConverterString.lower(path),$0
+    )
+})
+}
 /**
  * Returns a deterministic signature of all edit settings for cache keying and invalidation.
  * Automatically serializes all current and future fields without manual tracking.
@@ -4297,6 +4304,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_decode_raw_preview() != 25928) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_decode_raw_preview_binned() != 554) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_edits_cache_signature() != 39833) {

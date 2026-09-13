@@ -6,6 +6,7 @@
   - **First Proof** (`firstproof.photo`) is dedicated to photographic restraint, authentic color, and pure capture: *"Pure capture. Honest color. Zero digital plastic."*
   - The color engine must do the heavy lifting so photos look 90% finished immediately without requiring 40 micro-adjustments or plastic HDR/AI filters.
   - Never add synthetic AI pixel generation, sky replacements, or hallucinatory filters. Every adjustment must correspond to real optical, sensor, or chemical darkroom principles.
+  - **Constructive Pushback & Values Alignment Guardrail**: When a suggested feature, adjustment, or roadmap change risks violating the product philosophy (e.g. introduces plastic aesthetics, hallucinatory AI, slider bloat, or deviates from optical/chemical darkroom fundamentals), do not blindly comply. Pause and constructively push back: articulate the tension with First Proof's core values, uncover the underlying photographic intent, and propose an alternative that stays true to honest capture, restraint, and optical integrity.
 
 - **Toolchain Sandbox Permissions**: Commands involving the Darwin linker or Swift compiler (`swift build`, `make bundle`) require `BypassSandbox: true`. Pure Rust tests (`cargo test --manifest-path firstproof-core/Cargo.toml`) and git inspection can run in standard sandboxed mode.
 
@@ -35,6 +36,13 @@
 - **Real-Time Viewport Thumbnail Invalidation**:
   - Viewport adjustments (sliders, curves, rotation) must never trigger slow disk re-renders or LibRaw demosaicing.
   - Thumbnails are updated via sub-millisecond GPU viewport snapshots (`captureThumbnailSnapshot`) into in-memory `ThumbnailCache`, followed by `NotificationCenter.default.post(name: .thumbnailDidChange, object: path)`. Disk serialization is deferred until save or closing the photo.
+
+- **Zero Camera-JPEG Viewport Flashing & High-Res Intermediates**:
+  - The viewport canvas must **never** display or flash the camera manufacturer's baked JPEG (`extractPreview`) for RAW files. Embedded camera JPEGs carry proprietary non-linear tone curves, artificial saturation boosts, and consumer sharpening that destroy the photographer's visual adaptation during burst culling.
+  - RAW photo selection must stream directly into First Proof's 10–15ms 2×2 Bayer box binning engine (`decodeRawPreviewBinned`).
+  - Intermediate preview lookups must strictly query First Proof's high-res rendered intermediates (`intermediateImage`), preserving authentic Linear Rec.2020 / AgX color from frame 0.
+  - **Intermediate Bypass & Idempotence Invariant**: High-res intermediate snapshots (`renderThumbnailSnapshot`) have geometry (crop, rotation) and tone-mapping already baked into pixels. When rendered in `MetalCanvasView`, they must pass `isIntermediate = 1` in `ShaderUniforms` and identity geometry (`rotation: 0`, `crop: [0,0,1,1]`) to bypass all fragment color transforms (`sampledColor` returned directly) and vertex rotation. Never pass intermediate textures through AgX or geometry transforms a second time.
+  - **Up-Front Edit Staging & Predictable Dark Transitions**: When switching photos in `loadPreview(for:)`, baseline EXIF orientation and XMP edit records must always be resolved and applied *before* updating preview state so stale edits from previous photos never flash. If a photo has no cached intermediate, immediately clear to the neutral dark canvas with the developing spinner for the 10–15ms until atomic promotion, avoiding visual confusion from retaining previous photo pixels.
 
 - **Desktop Gesture Architecture & Hit Testing**:
   - Never attach `DragGesture` to dynamically repositioned or animated child views (e.g. views using `.position(point)` where `point` mutates during `.onChanged`). In macOS AppKit/SwiftUI hosting, moving the view anchor under the pointer causes the window server to drop pointer tracking or fire cancellation events, silently dropping `.onEnded` and breaking undo history.

@@ -363,6 +363,11 @@ RustBuffer uniffi_firstproof_core_fn_func_decode_exif_orientation(uint32_t orien
 RustBuffer uniffi_firstproof_core_fn_func_decode_raw_preview(RustBuffer path, RustBuffer max_dimension, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DECODE_RAW_PREVIEW_BINNED
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DECODE_RAW_PREVIEW_BINNED
+RustBuffer uniffi_firstproof_core_fn_func_decode_raw_preview_binned(RustBuffer path, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EDITS_CACHE_SIGNATURE
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EDITS_CACHE_SIGNATURE
 RustBuffer uniffi_firstproof_core_fn_func_edits_cache_signature(RustBuffer edits, RustCallStatus *_Nonnull out_status
@@ -777,6 +782,12 @@ uint16_t uniffi_firstproof_core_checksum_func_decode_exif_orientation(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DECODE_RAW_PREVIEW
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DECODE_RAW_PREVIEW
 uint16_t uniffi_firstproof_core_checksum_func_decode_raw_preview(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DECODE_RAW_PREVIEW_BINNED
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DECODE_RAW_PREVIEW_BINNED
+uint16_t uniffi_firstproof_core_checksum_func_decode_raw_preview_binned(void
     
 );
 #endif

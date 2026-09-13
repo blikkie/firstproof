@@ -146,10 +146,12 @@ public final class AppViewModel {
     public var isBulkSelectionMode: Bool = false
     public var previewImage: NSImage? = nil
     public var rawPreviewRecord: RawPreviewRecord? = nil
+    public var isIntermediatePreviewActive: Bool = false
     public var currentGainMapRecord: GainMapRecord? = nil
     public var isDemosaicing: Bool = false
     @ObservationIgnored var activeDecodeToken: UUID = UUID()
     @ObservationIgnored public var captureThumbnailSnapshot: (() -> NSImage?)? = nil
+    @ObservationIgnored public var captureIntermediateSnapshot: (() -> NSImage?)? = nil
     public var isExportSheetPresented: Bool = false
     public var isExportPackageSheetPresented: Bool = false
     public var isFilmstripFollowingSelection: Bool = true

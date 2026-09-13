@@ -103,6 +103,68 @@ public final class ThumbnailCache {
         cache.setObject(image, forKey: path as NSString)
     }
     
+    // MARK: - High-Resolution Rendered Intermediate Cache (2560px)
+    public func intermediateImage(for filePath: String, edits: EditSettings? = nil) -> NSImage? {
+        let key = "inter_" + ThumbnailCache.cacheKey(filePath: filePath, edits: edits)
+        
+        // Tier 1: In-memory NSCache
+        if let mem = cache.object(forKey: key as NSString) {
+            return mem
+        }
+        if let mem = cache.object(forKey: ("inter_" + filePath) as NSString) {
+            return mem
+        }
+        
+        // Tier 2: Persistent On-Disk Cache
+        let fileURL = diskCacheURL.appendingPathComponent("\(key).jpg")
+        if FileManager.default.fileExists(atPath: fileURL.path),
+           let diskImg = NSImage(contentsOf: fileURL) {
+            cache.setObject(diskImg, forKey: key as NSString)
+            cache.setObject(diskImg, forKey: ("inter_" + filePath) as NSString)
+            queue.addOperation {
+                try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: fileURL.path)
+            }
+            return diskImg
+        }
+        
+        // Fallback: If edits was specified but not found on disk, check for base intermediate on disk
+        if edits != nil {
+            let baseKey = "inter_" + ThumbnailCache.cacheKey(filePath: filePath, edits: nil)
+            let baseURL = diskCacheURL.appendingPathComponent("\(baseKey).jpg")
+            if FileManager.default.fileExists(atPath: baseURL.path),
+               let diskImg = NSImage(contentsOf: baseURL) {
+                cache.setObject(diskImg, forKey: key as NSString)
+                cache.setObject(diskImg, forKey: ("inter_" + filePath) as NSString)
+                return diskImg
+            }
+        }
+        
+        return nil
+    }
+    
+    public func saveIntermediate(_ image: NSImage, for filePath: String, edits: EditSettings? = nil) {
+        let key = "inter_" + ThumbnailCache.cacheKey(filePath: filePath, edits: edits)
+        cache.setObject(image, forKey: key as NSString)
+        cache.setObject(image, forKey: ("inter_" + filePath) as NSString)
+        
+        let targetURL = diskCacheURL.appendingPathComponent("\(key).jpg")
+        let baseKey = "inter_" + ThumbnailCache.cacheKey(filePath: filePath, edits: nil)
+        let baseURL = diskCacheURL.appendingPathComponent("\(baseKey).jpg")
+        
+        queue.addOperation { [weak self] in
+            guard let self = self else { return }
+            if let tiff = image.tiffRepresentation,
+               let rep = NSBitmapImageRep(data: tiff),
+               let jpegData = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.90]) {
+                try? jpegData.write(to: targetURL, options: .atomic)
+                if targetURL != baseURL {
+                    try? jpegData.write(to: baseURL, options: .atomic)
+                }
+            }
+            self.enforceDiskCacheLimitIfNeeded()
+        }
+    }
+    
     // MARK: - Save Edited Thumbnail & Invalidate Views
     public func saveEditedThumbnail(_ image: NSImage, for filePath: String, edits: EditSettings, broadcast: Bool = true) {
         let key = ThumbnailCache.cacheKey(filePath: filePath, edits: edits)

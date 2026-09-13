@@ -129,20 +129,34 @@ public struct MetalCanvasView: NSViewRepresentable {
         }
         
         // 2. Transmit Slider & Lensfun Uniforms to GPU
-        let imageW = Float(viewModel.previewImage?.size.width ?? 4000.0)
-        let imageH = Float(viewModel.previewImage?.size.height ?? 3000.0)
+        let imageW: Float
+        let imageH: Float
+        if let raw = viewModel.rawPreviewRecord {
+            imageW = Float(raw.width)
+            imageH = Float(raw.height)
+        } else if let img = viewModel.previewImage {
+            imageW = Float(img.size.width)
+            imageH = Float(img.size.height)
+        } else {
+            imageW = 4000.0
+            imageH = 3000.0
+        }
         let imageAspect = imageW / max(imageH, 1.0)
         
+        let isLinearRaw = viewModel.rawPreviewRecord != nil
+        let editsForUniforms = viewModel.isIntermediatePreviewActive ? EditSettings.defaultIdentity : edits
+        
         renderer.updateUniforms(
-            from: edits,
+            from: editsForUniforms,
             imageAspect: imageAspect,
-            isLinearRaw: viewModel.rawPreviewRecord != nil,
+            isLinearRaw: isLinearRaw,
             isOriginal: isShowingOriginal,
             isCropToolActive: isCropToolActive,
-            lensCorrectionEnabled: viewModel.lensCorrectionEnabled,
-            lensCoefficients: viewModel.lensCoefficients,
+            lensCorrectionEnabled: viewModel.isIntermediatePreviewActive ? false : viewModel.lensCorrectionEnabled,
+            lensCoefficients: viewModel.isIntermediatePreviewActive ? nil : viewModel.lensCoefficients,
             edrHeadroom: viewModel.isScreenHdrCapable ? viewModel.edrHeadroom : 1.0,
-            edrEnabled: viewModel.isScreenHdrCapable && viewModel.isHdrEnabled
+            edrEnabled: viewModel.isScreenHdrCapable && viewModel.isHdrEnabled,
+            isIntermediate: viewModel.isIntermediatePreviewActive
         )
         
         // 3. Update 3D LUT texture if LUT selection changed
@@ -178,13 +192,31 @@ public struct MetalCanvasView: NSViewRepresentable {
         
         // Trigger immediate synchronous draw call on MTKView
         nsView.draw()
+        
+        // Real-time intermediate capture for subsequent burst scrubbing
+        if rawChanged, let path = viewModel.selectedPhoto?.filePath, viewModel.rawPreviewRecord != nil {
+            let currentEdits = viewModel.currentEdits
+            if let intermediate = renderer.renderThumbnailSnapshot(maxDimension: 2560) {
+                ThumbnailCache.shared.saveIntermediate(intermediate, for: path, edits: currentEdits)
+            }
+        }
     }
     
     private static func setupCaptureClosure(for viewModel: AppViewModel, renderer: MetalRenderer) {
         viewModel.captureThumbnailSnapshot = { [weak renderer, weak viewModel] in
             guard let renderer = renderer, let vm = viewModel else { return nil }
-            let imageW = Float(vm.previewImage?.size.width ?? 4000.0)
-            let imageH = Float(vm.previewImage?.size.height ?? 3000.0)
+            let imageW: Float
+            let imageH: Float
+            if let raw = vm.rawPreviewRecord {
+                imageW = Float(raw.width)
+                imageH = Float(raw.height)
+            } else if let img = vm.previewImage {
+                imageW = Float(img.size.width)
+                imageH = Float(img.size.height)
+            } else {
+                imageW = 4000.0
+                imageH = 3000.0
+            }
             let imageAspect = imageW / max(imageH, 1.0)
             
             renderer.updateUniforms(
@@ -197,6 +229,35 @@ public struct MetalCanvasView: NSViewRepresentable {
                 lensCoefficients: vm.lensCoefficients
             )
             return renderer.renderThumbnailSnapshot(maxDimension: 320)
+        }
+        
+        viewModel.captureIntermediateSnapshot = { [weak renderer, weak viewModel] in
+            guard let renderer = renderer, let vm = viewModel else { return nil }
+            guard vm.rawPreviewRecord != nil else { return nil }
+            let imageW: Float
+            let imageH: Float
+            if let raw = vm.rawPreviewRecord {
+                imageW = Float(raw.width)
+                imageH = Float(raw.height)
+            } else if let img = vm.previewImage {
+                imageW = Float(img.size.width)
+                imageH = Float(img.size.height)
+            } else {
+                imageW = 4000.0
+                imageH = 3000.0
+            }
+            let imageAspect = imageW / max(imageH, 1.0)
+            
+            renderer.updateUniforms(
+                from: vm.currentEdits,
+                imageAspect: imageAspect,
+                isLinearRaw: true,
+                isOriginal: false,
+                isCropToolActive: false,
+                lensCorrectionEnabled: vm.lensCorrectionEnabled,
+                lensCoefficients: vm.lensCoefficients
+            )
+            return renderer.renderThumbnailSnapshot(maxDimension: 2560)
         }
     }
     

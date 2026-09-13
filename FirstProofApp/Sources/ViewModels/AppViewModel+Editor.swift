@@ -60,7 +60,7 @@ extension EditSettings {
             saturation: 0.0,
             deepBlue: 0.0,
             foliage: 0.0,
-            temperature: 5000.0,
+            temperature: 5500.0,
             tint: 0.0,
             cropLeft: 0.0,
             cropTop: 0.0,
@@ -146,13 +146,16 @@ extension AppViewModel {
         guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
         let editsSnapshot = currentEdits
         
-        // Real-time sub-millisecond GPU thumbnail capture for active viewport
+        // Real-time sub-millisecond GPU thumbnail & intermediate capture for active viewport
         if let snapshot = captureThumbnailSnapshot?() {
             ThumbnailCache.shared.saveEditedThumbnail(snapshot, for: path, edits: editsSnapshot)
         } else {
             // Fallback for edits outside active Metal canvas
             ThumbnailCache.shared.removeImage(for: path)
             NotificationCenter.default.post(name: .thumbnailDidChange, object: path)
+        }
+        if let intermediate = captureIntermediateSnapshot?() {
+            ThumbnailCache.shared.saveIntermediate(intermediate, for: path, edits: editsSnapshot)
         }
         
         DispatchQueue.global(qos: .utility).async { [weak self] in

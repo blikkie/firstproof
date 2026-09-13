@@ -144,6 +144,7 @@ extension AppViewModel {
             return
         }
         let nextIdx = min(idx + 1, list.count - 1)
+        guard nextIdx != idx else { return }
         navigateToPhoto(at: nextIdx, in: list)
     }
     
@@ -156,6 +157,7 @@ extension AppViewModel {
             return
         }
         let prevIdx = max(idx - 1, 0)
+        guard prevIdx != idx else { return }
         navigateToPhoto(at: prevIdx, in: list)
     }
     
@@ -168,11 +170,15 @@ extension AppViewModel {
         }
         let cols = max(1, gridColumnCount)
         let targetIdx = max(0, min(list.count - 1, idx + deltaX + (deltaY * cols)))
+        guard targetIdx != idx else { return }
         navigateToPhoto(at: targetIdx, in: list)
     }
     
     func navigateToPhoto(at index: Int, in list: [PhotoRecord]) {
         let target = list[index]
+        guard target.filePath != selectedPhoto?.filePath || (previewImage == nil && rawPreviewRecord == nil) else {
+            return
+        }
         self.selectedPhoto = target
         if !isBulkSelectionMode {
             self.selectedPhotoPaths = [target.filePath]
@@ -194,11 +200,12 @@ extension AppViewModel {
         self.loadMetadataForSelectedPhoto()
         
         // Resolve Lensfun lens distortion coefficients
+        let resolvedCoeffs: LensCorrectionCoefficientsRecord?
         if let make = photo.cameraMake,
            let model = photo.cameraModel,
            let lens = photo.lensModel,
            let focal = photo.focalLength {
-            self.lensCoefficients = self.lensfun?.resolveCoefficients(
+            resolvedCoeffs = self.lensfun?.resolveCoefficients(
                 cameraMake: make,
                 cameraModel: model,
                 lensModel: lens,
@@ -206,129 +213,145 @@ extension AppViewModel {
                 aperture: photo.aperture
             )
         } else {
-            self.lensCoefficients = nil
+            resolvedCoeffs = nil
+        }
+        
+        // 1. Determine baseline EXIF camera orientation
+        let exifRotation: Int
+        let exifFlipH: Bool
+        let exifFlipV: Bool
+        if let meta = extractMetadata(path: photo.filePath), let orient = meta.orientation {
+            let dec = decodeExifOrientation(orientation: orient)
+            exifRotation = Int(dec.rotation)
+            exifFlipH = dec.flipHorizontal
+            exifFlipV = dec.flipVertical
+        } else {
+            exifRotation = 0
+            exifFlipH = false
+            exifFlipV = false
+        }
+        
+        // 2. Resolve target edits from XMP sidecar or baseline defaults
+        let targetEdits: EditSettings
+        if let xmp = readXmp(path: photo.filePath) {
+            targetEdits = xmp.edits
+        } else {
+            var defaultEdits = EditSettings.defaultIdentity
+            defaultEdits.rotation = Int32(exifRotation)
+            defaultEdits.flipHorizontal = exifFlipH
+            defaultEdits.flipVertical = exifFlipV
+            defaultEdits.sharpeningAmount = photo.isRaw ? 20.0 : 0.0
+            defaultEdits.sharpeningMasking = photo.isRaw ? 15.0 : 0.0
+            targetEdits = defaultEdits
         }
         
         let token = UUID()
         self.activeDecodeToken = token
         self.isDemosaicing = true
         
-        self.rawPreviewRecord = nil
+        self.currentlyLoadedPhotoPath = photo.filePath
+        self.defaultExifRotation = exifRotation
+        self.defaultExifFlipH = exifFlipH
+        self.defaultExifFlipV = exifFlipV
+        self.lensCoefficients = resolvedCoeffs
+        self.applyEdits(targetEdits)
+        self.isCropToolActive = false
         self.currentGainMapRecord = nil
         
-        // Fast switch: immediately present cached thumbnail so user can scrub instantly
-        if let cached = ThumbnailCache.shared.image(for: photo.filePath) {
-            self.previewImage = cached
+        if self.selectedPhotoIsRaw {
+            // RAW Workflow: 100% Honest First Proof Color. Zero Camera JPEG Flashing.
+            // Instant First Proof Intermediate: Check if we have a high-res First Proof render matching targetEdits
+            if let intermediate = ThumbnailCache.shared.intermediateImage(for: photo.filePath, edits: targetEdits) {
+                self.previewImage = intermediate
+                self.rawPreviewRecord = nil
+                self.isIntermediatePreviewActive = true
+            } else {
+                self.previewImage = nil
+                self.rawPreviewRecord = nil
+                self.isIntermediatePreviewActive = false
+            }
+            
+            // Immediate 10-15ms RAW binned decode directly into Linear Rec.2020
+            DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+                guard let self = self else { return }
+                guard self.activeDecodeToken == token else { return }
+                
+                // Stage 2A: Viewport-aware 2x2 Bayer box binning (10-15ms fast preview)
+                if let binnedRecord = decodeRawPreviewBinned(path: photo.filePath) {
+                    DispatchQueue.main.async {
+                        if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
+                            self.rawPreviewRecord = binnedRecord
+                            self.previewImage = nil
+                            self.isIntermediatePreviewActive = false
+                            self.isDemosaicing = false
+                        }
+                    }
+                }
+                
+                // Stage 2B: Full-resolution demosaic stream for 100% zoom pixel peeping
+                if let fullRecord = decodeRawPreview(path: photo.filePath, maxDimension: nil) {
+                    DispatchQueue.main.async {
+                        if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
+                            self.rawPreviewRecord = fullRecord
+                            self.isIntermediatePreviewActive = false
+                            self.isDemosaicing = false
+                        }
+                    }
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    if self.activeDecodeToken == token {
+                        self.isDemosaicing = false
+                    }
+                }
+            }
         } else {
-            self.previewImage = nil
-        }
-        
-        // Decode in background: extract clean lower-res camera JPEG preview
-        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
-            guard let self = self else { return }
-            guard self.activeDecodeToken == token else { return }
+            // Non-RAW Workflow: Standard master images (PNG, TIFF, JPEG)
+            if let cached = ThumbnailCache.shared.image(for: photo.filePath) {
+                self.previewImage = cached
+                self.rawPreviewRecord = nil
+                self.isIntermediatePreviewActive = false
+            } else {
+                self.previewImage = nil
+                self.rawPreviewRecord = nil
+                self.isIntermediatePreviewActive = false
+            }
             
-            var preview: NSImage? = nil
-            var gainMap: GainMapRecord? = nil
-            
-            if !self.selectedPhotoIsRaw {
+            DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+                guard let self = self else { return }
+                guard self.activeDecodeToken == token else { return }
+                
+                var preview: NSImage? = nil
+                var gainMap: GainMapRecord? = nil
+                
                 let ext = (photo.filePath as NSString).pathExtension.lowercased()
                 if ext == "jpg" || ext == "jpeg" {
                     if hasUltraHdrGainMap(filePath: photo.filePath) {
                         gainMap = extractUltraHdrGainMap(filePath: photo.filePath)
                     }
                 }
-            }
-            
-            // 1. Fast Embedded Camera JPEG Preview (<15ms, exact camera color profile)
-            if let previewData = extractPreview(path: photo.filePath) {
-                if let src = CGImageSourceCreateWithData(previewData as CFData, nil) {
-                    let options: [CFString: Any] = [
-                        kCGImageSourceCreateThumbnailFromImageAlways: true,
-                        kCGImageSourceCreateThumbnailWithTransform: true,
-                        kCGImageSourceThumbnailMaxPixelSize: 2560,
-                        kCGImageSourceShouldCacheImmediately: true
-                    ]
-                    if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
-                        preview = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
-                    }
-                }
-            }
-            
-            // 2. Fallback for non-RAW master images (PNG, TIFF, JPEG)
-            if preview == nil && !self.selectedPhotoIsRaw {
+                
                 let url = URL(fileURLWithPath: photo.filePath) as CFURL
                 if let src = CGImageSourceCreateWithURL(url, nil) {
                     if let cgThumb = CGImageSourceCreateImageAtIndex(src, 0, nil) {
                         preview = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
                     }
                 }
-            }
-            
-            DispatchQueue.main.async {
-                if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
-                    self.currentGainMapRecord = gainMap
-                    if let finalImage = preview {
-                        if !(self.selectedPhotoIsRaw && !self.isDemosaicing) {
+                
+                DispatchQueue.main.async {
+                    if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
+                        self.currentGainMapRecord = gainMap
+                        if let finalImage = preview {
                             self.previewImage = finalImage
+                            ThumbnailCache.shared.setImage(finalImage, for: photo.filePath)
                         }
-                        ThumbnailCache.shared.setImage(finalImage, for: photo.filePath)
-                    }
-                    if !self.selectedPhotoIsRaw {
+                        self.rawPreviewRecord = nil
+                        self.isIntermediatePreviewActive = false
                         self.isDemosaicing = false
                     }
                 }
             }
-            
-            // 3. Stage 2 Progressive Hybrid Promotion: Stream linear RAW half-float buffer to GPU
-            if self.selectedPhotoIsRaw {
-                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                    guard let self = self else { return }
-                    guard self.activeDecodeToken == token else { return }
-                    
-                    if let rawRecord = decodeRawPreview(path: photo.filePath, maxDimension: nil) {
-                        DispatchQueue.main.async {
-                            if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
-                                self.rawPreviewRecord = rawRecord
-                                self.isDemosaicing = false
-                            }
-                        }
-                        return
-                    }
-                    
-                    DispatchQueue.main.async {
-                        if self.activeDecodeToken == token {
-                            self.isDemosaicing = false
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Determine baseline EXIF camera orientation
-        if let meta = extractMetadata(path: photo.filePath), let orient = meta.orientation {
-            let dec = decodeExifOrientation(orientation: orient)
-            self.defaultExifRotation = Int(dec.rotation)
-            self.defaultExifFlipH = dec.flipHorizontal
-            self.defaultExifFlipV = dec.flipVertical
-        } else {
-            self.defaultExifRotation = 0
-            self.defaultExifFlipH = false
-            self.defaultExifFlipV = false
-        }
-        
-        // Sync XMP edit sliders if sidecar exists
-        if let xmp = readXmp(path: photo.filePath) {
-            self.applyEdits(xmp.edits)
-        } else {
-            var defaultEdits = EditSettings.defaultIdentity
-            defaultEdits.rotation = Int32(self.defaultExifRotation)
-            defaultEdits.flipHorizontal = self.defaultExifFlipH
-            defaultEdits.flipVertical = self.defaultExifFlipV
-            defaultEdits.sharpeningAmount = photo.isRaw ? 20.0 : 0.0
-            defaultEdits.sharpeningMasking = photo.isRaw ? 15.0 : 0.0
-            self.applyEdits(defaultEdits)
-            self.isCropToolActive = false
         }
     }
     
