@@ -90,6 +90,9 @@ public struct ImportSheetView: View {
                 }
             }
         }
+        .onDisappear {
+            viewModel.importSelectedPaths = []
+        }
     }
     
     // MARK: - Configuration Form
@@ -293,8 +296,12 @@ public struct ImportSheetView: View {
                 Spacer()
                 
                 Button("Show in Main Library") {
+                    let firstImportedName = viewModel.importSelectedPaths.first.map { URL(fileURLWithPath: $0).lastPathComponent }
                     dismiss()
-                    viewModel.selectScope(.mainLibrary)
+                    viewModel.ratingFilter = nil
+                    viewModel.statusFilter = nil
+                    viewModel.enterGridMode()
+                    viewModel.selectScope(.mainLibrary, preferredPhotoPath: firstImportedName)
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)

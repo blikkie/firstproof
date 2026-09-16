@@ -5,15 +5,15 @@ import FirstProofBridge
 
 extension AppViewModel {
     // MARK: - Scope Switching
-    public func selectScope(_ scope: LibraryScope) {
+    public func selectScope(_ scope: LibraryScope, preferredPhotoPath: String? = nil) {
         self.currentScope = scope
         switch scope {
         case .mainLibrary:
             UserDefaults.standard.set("main_library", forKey: "lastSelectedScope")
-            openDirectory(at: mainLibraryPath, isMain: true)
+            openDirectory(at: mainLibraryPath, isMain: true, preferredPhotoPath: preferredPhotoPath)
         case .session(let folderPath):
             UserDefaults.standard.set(folderPath, forKey: "lastSelectedScope")
-            openDirectory(at: folderPath, isMain: false)
+            openDirectory(at: folderPath, isMain: false, preferredPhotoPath: preferredPhotoPath)
         }
     }
     
@@ -52,6 +52,47 @@ extension AppViewModel {
         }
     }
     
+    @discardableResult
+    public func handleDroppedURLs(_ urls: [URL]) -> Bool {
+        guard !urls.isEmpty else { return false }
+        
+        // Grab application and window focus immediately when receiving a drop from Finder
+        DispatchQueue.main.async {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            if let window = NSApplication.shared.windows.first(where: { $0.canBecomeKey && $0.isVisible }) {
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
+        
+        let directories = urls.filter { url in
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+        }
+        
+        if !directories.isEmpty {
+            for dir in directories {
+                addFolder(at: dir.path)
+            }
+            return true
+        }
+        
+        let supportedExtensions: Set<String> = [
+            "cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "raf", "pef", "raw",
+            "jpg", "jpeg", "png", "heic", "tiff", "tif"
+        ]
+        let imageFiles = urls.filter { url in
+            supportedExtensions.contains(url.pathExtension.lowercased())
+        }
+        
+        if !imageFiles.isEmpty {
+            let parentDir = imageFiles.first?.deletingLastPathComponent().path
+            promptImport(from: parentDir, selectedPaths: imageFiles.map(\.path))
+            return true
+        }
+        
+        return false
+    }
+    
     // MARK: - Last Active Image Tracking Per Library
     public func saveLastActivePhoto(for scope: LibraryScope, path: String) {
         let key = scopeKey(for: scope)
@@ -76,7 +117,7 @@ extension AppViewModel {
     }
     
     // MARK: - Directory Indexing & Loading
-    public func openDirectory(at folderPath: String, isMain: Bool = false) {
+    public func openDirectory(at folderPath: String, isMain: Bool = false, preferredPhotoPath: String? = nil) {
         if !isMain {
             UserDefaults.standard.set(folderPath, forKey: "lastOpenedDirectory")
         }
@@ -128,7 +169,10 @@ extension AppViewModel {
                 if !cachedPhotos.isEmpty {
                     DispatchQueue.main.async {
                         self.photos = cachedPhotos
-                        if self.selectedPhoto == nil {
+                        if let target = preferredPhotoPath,
+                           let match = cachedPhotos.first(where: { $0.filePath == target || URL(fileURLWithPath: $0.filePath).lastPathComponent == target }) {
+                            self.selectPhoto(match)
+                        } else if self.selectedPhoto == nil {
                             if let savedPath = self.lastActivePhoto(for: self.currentScope),
                                let saved = cachedPhotos.first(where: { $0.filePath == savedPath }) {
                                 self.selectPhoto(saved)
@@ -151,7 +195,10 @@ extension AppViewModel {
                     self.photos = finalPhotos
                     self.isScanning = false
                     self.scanningStatusMessage = nil
-                    if self.selectedPhoto == nil || !finalPhotos.contains(where: { $0.filePath == self.selectedPhoto?.filePath }) {
+                    if let target = preferredPhotoPath,
+                       let match = finalPhotos.first(where: { $0.filePath == target || URL(fileURLWithPath: $0.filePath).lastPathComponent == target }) {
+                        self.selectPhoto(match)
+                    } else if self.selectedPhoto == nil || !finalPhotos.contains(where: { $0.filePath == self.selectedPhoto?.filePath }) {
                         if let savedPath = self.lastActivePhoto(for: self.currentScope),
                            let saved = finalPhotos.first(where: { $0.filePath == savedPath }) {
                             self.selectPhoto(saved)

@@ -5,6 +5,7 @@ import FirstProofBridge
 struct CanvasView: View {
     @Bindable var viewModel: AppViewModel
     @State private var showHdrUnavailablePopover: Bool = false
+    @State private var isDropTargeted: Bool = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -160,10 +161,10 @@ struct CanvasView: View {
                     Image(systemName: "photo.on.rectangle.angled")
                         .font(.system(size: 48))
                         .foregroundColor(.secondary)
-                    Text("No Photos Selected")
+                    Text("No Photos in Library")
                         .font(.title2)
                         .fontWeight(.semibold)
-                    Text("Open a directory from the left sidebar to start indexing RAW photos.")
+                    Text("Drag and drop a folder or RAW files here, or open a session from the sidebar.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
@@ -420,6 +421,43 @@ struct CanvasView: View {
                         .allowsHitTesting(true)
                     }
                 }
+            }
+        }
+        .overlay {
+            if isDropTargeted {
+                ZStack {
+                    Color.black.opacity(0.45)
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [8]))
+                        .padding(16)
+                    
+                    VStack(spacing: 12) {
+                        Image(systemName: "arrow.down.doc.fill")
+                            .font(.system(size: 44))
+                            .foregroundColor(.accentColor)
+                        Text("Drop to Open Session or Import")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        Text("Drop folders to open as a session, or RAW files to import")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    .padding(24)
+                    .background(.ultraThinMaterial)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(16)
+                    .shadow(radius: 20)
+                }
+                .allowsHitTesting(false)
+                .transition(.opacity.animation(.easeInOut(duration: 0.15)))
+            }
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            return viewModel.handleDroppedURLs(urls)
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isDropTargeted = targeted
             }
         }
     }

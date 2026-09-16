@@ -5,6 +5,7 @@ import FirstProofBridge
 public struct LibrarySidebarView: View {
     @Bindable public var viewModel: AppViewModel
     @State private var hoveredFolderPath: String? = nil
+    @State private var isDropTargeted: Bool = false
     
     public init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -76,17 +77,24 @@ public struct LibrarySidebarView: View {
                 .padding(.horizontal, 12)
                 
                 if viewModel.openedFolders.isEmpty {
-                    Button(action: { viewModel.promptOpenFolder() }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "folder.badge.plus")
-                            Text("Open Session...")
+                    VStack(spacing: 4) {
+                        Button(action: { viewModel.promptOpenFolder() }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "folder.badge.plus")
+                                Text("Open Session...")
+                            }
+                            .font(.caption)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
                         }
-                        .font(.caption)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                        .buttonStyle(.bordered)
+                        
+                        Text("or drag folders here")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 2)
                     }
-                    .buttonStyle(.bordered)
                     .padding(.horizontal, 8)
                 } else {
                     ScrollView {
@@ -102,6 +110,21 @@ public struct LibrarySidebarView: View {
                         .padding(.horizontal, 4)
                     }
                     .frame(maxHeight: 180)
+                }
+            }
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(isDropTargeted ? Color.accentColor : Color.clear, style: StrokeStyle(lineWidth: 1.5, dash: [4]))
+                    .background(isDropTargeted ? Color.accentColor.opacity(0.08) : Color.clear)
+            )
+            .padding(.horizontal, 4)
+            .dropDestination(for: URL.self) { urls, _ in
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                return viewModel.handleDroppedURLs(urls)
+            } isTargeted: { targeted in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isDropTargeted = targeted
                 }
             }
             
