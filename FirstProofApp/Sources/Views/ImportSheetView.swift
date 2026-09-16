@@ -8,9 +8,9 @@ public struct ImportSheetView: View {
     
     @State private var subfolderName: String = ""
     @State private var moveFiles: Bool = false
-    @State private var consolidateSidecars: Bool = true
-    @State private var deduplicateRawOverJpeg: Bool = true
-    @State private var skipDuplicates: Bool = true
+    @AppStorage("defaultConsolidateSidecars") private var consolidateSidecars: Bool = true
+    @AppStorage("defaultDeduplicateRawOverJpeg") private var deduplicateRawOverJpeg: Bool = true
+    @AppStorage("defaultSkipDuplicates") private var skipDuplicates: Bool = true
     @State private var deleteFromCard: Bool = false
     
     @State private var isImporting: Bool = false

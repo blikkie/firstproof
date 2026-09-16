@@ -146,6 +146,17 @@ struct MainView: View {
                 }
             }
             
+            // If the Settings window is active, Escape dismisses it and canvas hotkeys are shielded
+            if let keyWindow = NSApp.keyWindow, isSettingsWindow(keyWindow) {
+                if event.keyCode == 53 && event.type == .keyDown {
+                    if keyWindow.attachedSheet == nil {
+                        keyWindow.close()
+                        return nil
+                    }
+                }
+                return event
+            }
+            
             // If an export sheet is presented, let Escape dismiss it and don't trigger canvas hotkeys
             if viewModel.isExportSheetPresented {
                 if event.keyCode == 53 && event.type == .keyDown {
@@ -327,6 +338,12 @@ struct MainView: View {
             
             return event
         }
+    }
+    
+    private func isSettingsWindow(_ window: NSWindow) -> Bool {
+        let title = window.title.lowercased()
+        let identifier = window.identifier?.rawValue.lowercased() ?? ""
+        return title.contains("settings") || title.contains("preferences") || identifier.contains("settings")
     }
 }
 

@@ -5,153 +5,106 @@ public struct SettingsView: View {
     var viewModel: AppViewModel
     
     @AppStorage("autoDetectMemoryCards") private var autoDetectMemoryCards: Bool = true
-    @AppStorage("defaultImportMoveFiles") private var defaultImportMoveFiles: Bool = false
     @AppStorage("defaultDeduplicateRawOverJpeg") private var defaultDeduplicateRawOverJpeg: Bool = true
     @AppStorage("defaultSkipDuplicates") private var defaultSkipDuplicates: Bool = true
     @AppStorage("defaultConsolidateSidecars") private var defaultConsolidateSidecars: Bool = true
     @AppStorage("customMainLibraryPath") private var customMainLibraryPath: String = ""
     
-    @State private var selectedTab: SettingsTab = .general
+    @State private var pendingNewLibraryPath: String? = nil
+    @State private var showingChangeConfirmation: Bool = false
+    @State private var showingResetConfirmation: Bool = false
     
     public init(viewModel: AppViewModel) {
         self.viewModel = viewModel
     }
     
-    public enum SettingsTab: String, CaseIterable, Identifiable {
-        case general = "General"
-        case ingestion = "Import & Cards"
-        case darkroom = "Darkroom & Display"
-        
-        public var id: String { rawValue }
-        
-        public var systemImage: String {
-            switch self {
-            case .general: return "gearshape.fill"
-            case .ingestion: return "square.and.arrow.down.fill"
-            case .darkroom: return "slider.horizontal.3"
-            }
-        }
-    }
-    
     public var body: some View {
-        TabView(selection: $selectedTab) {
-            generalTab
-                .tabItem {
-                    Label("General", systemImage: "gearshape.fill")
-                }
-                .tag(SettingsTab.general)
-            
-            ingestionTab
-                .tabItem {
-                    Label("Import & Cards", systemImage: "square.and.arrow.down.fill")
-                }
-                .tag(SettingsTab.ingestion)
-            
-            darkroomTab
-                .tabItem {
-                    Label("Darkroom", systemImage: "slider.horizontal.3")
-                }
-                .tag(SettingsTab.darkroom)
-        }
-        .frame(width: 540, height: 380)
-        .padding(20)
-    }
-    
-    // MARK: - General Tab
-    private var generalTab: some View {
-        Form {
-            Section(header: Text("Primary Library Location").font(.headline)) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("First Proof stores its master negative index and non-destructive catalog database in this primary library.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 18) {
+            // MARK: - Library Location
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Library Location")
+                    .font(.headline)
+                
+                HStack {
+                    Text(currentLibraryDisplay)
+                        .font(.system(.body, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .padding(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(NSColor.controlBackgroundColor))
+                        .cornerRadius(4)
                     
-                    HStack {
-                        Text(currentLibraryDisplay)
-                            .font(.system(.body, design: .monospaced))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .padding(6)
-                            .background(Color(NSColor.controlBackgroundColor))
-                            .cornerRadius(4)
-                        
-                        Button("Choose...") {
-                            chooseCustomLibraryFolder()
+                    Button("Choose...") {
+                        chooseCustomLibraryFolder()
+                    }
+                    
+                    if !customMainLibraryPath.isEmpty {
+                        Button("Reset") {
+                            showingResetConfirmation = true
                         }
-                        
-                        if !customMainLibraryPath.isEmpty {
-                            Button("Reset") {
-                                customMainLibraryPath = ""
-                            }
-                            .help("Reset to ~/Pictures/First Proof Library")
-                        }
+                        .help("Reset to ~/Pictures/First Proof Library")
                     }
                 }
-                .padding(.vertical, 4)
-            }
-            
-            Divider()
-            
-            Section(header: Text("Philosophy & Color Science").font(.headline)) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("\"Pure capture. Honest color. Zero digital plastic.\"")
-                        .font(.caption)
-                        .italic()
-                        .foregroundColor(.secondary)
-                    Text("First Proof processes camera Bayer sensor pixels directly in Linear Rec.2020 wide-gamut color space with analog chemical film roll-off via AgX.")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.vertical, 4)
-            }
-        }
-    }
-    
-    // MARK: - Ingestion & Memory Cards Tab
-    private var ingestionTab: some View {
-        Form {
-            Section(header: Text("Memory Card Detection").font(.headline)) {
-                Toggle("Prompt to import when a camera card is connected", isOn: $autoDetectMemoryCards)
-                Text("Detects removable media and volumes containing a DCIM folder (Canon, Sony, Nikon, Leica, Fuji).")
-                    .font(.caption2)
+                
+                Text("New imports will be saved here. Photos in previous locations remain intact on disk and can be opened anytime via File > Open Session.")
+                    .font(.caption)
                     .foregroundColor(.secondary)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             
             Divider()
             
-            Section(header: Text("Deduplication & Precedence").font(.headline)) {
-                Toggle("Prefer RAW over JPEG when both exist for the same photo", isOn: $defaultDeduplicateRawOverJpeg)
-                Toggle("Skip duplicate photos already present in destination library", isOn: $defaultSkipDuplicates)
-                Toggle("Consolidate third-party sidecars into unified First Proof XMP", isOn: $defaultConsolidateSidecars)
-                    .help("Merges Adobe CRS, Darktable, and Google Takeout metadata into a single clean standard XMP sidecar.")
-            }
-            
-            Divider()
-            
-            Section(header: Text("Safety & Negatives").font(.headline)) {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.shield.fill")
-                        .foregroundColor(.green)
-                    Text("Safe Ingest: Portable sessions and camera cards are copied by default, preserving source folders intact as your field backup. Moving negatives requires explicit user opt-in and bit-level cryptographic checksum verification.")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
+            // MARK: - Importing Options
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Importing")
+                    .font(.headline)
+                
+                Toggle("Prompt to import when a camera card is connected", isOn: $autoDetectMemoryCards)
+                Toggle("Prefer RAW over JPEG when both exist for a photo", isOn: $defaultDeduplicateRawOverJpeg)
+                Toggle("Skip duplicate photos already present in library", isOn: $defaultSkipDuplicates)
+                Toggle("Consolidate third-party sidecars into First Proof XMP", isOn: $defaultConsolidateSidecars)
             }
         }
-    }
-    
-    // MARK: - Darkroom & Display Tab
-    private var darkroomTab: some View {
-        Form {
-            Section(header: Text("Display Calibration").font(.headline)) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Viewport Dynamic Range Default")
-                        .font(.subheadline)
-                    Text("Print & Web First: The viewport canvas always initializes to standard dynamic range (SDR) so tonal adjustments remain calibrated for universal viewing and physical darkroom prints. EDR highlights can be inspected on demand.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+        .padding(20)
+        .frame(width: 500)
+        .fixedSize(horizontal: true, vertical: true)
+        .alert("Change Library Location?", isPresented: $showingChangeConfirmation) {
+            Button("Change Location") {
+                if let path = pendingNewLibraryPath {
+                    applyNewLibraryPath(path)
                 }
             }
+            Button("Cancel", role: .cancel) {
+                pendingNewLibraryPath = nil
+            }
+        } message: {
+            if let path = pendingNewLibraryPath {
+                Text("New imports will be saved to \"\(URL(fileURLWithPath: path).lastPathComponent)\". Photos in your current library remain in their existing folder and can still be opened via File > Open Session.")
+            }
+        }
+        .alert("Reset Library Location?", isPresented: $showingResetConfirmation) {
+            Button("Reset Location") {
+                resetLibraryPath()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Reset library path to ~/Pictures/First Proof Library? Photos in your current folder remain intact on disk.")
+        }
+        .background(
+            Button("") {
+                closeSettingsWindow()
+            }
+            .keyboardShortcut(.cancelAction)
+            .opacity(0)
+            .frame(width: 0, height: 0)
+        )
+    }
+    
+    private func closeSettingsWindow() {
+        if let keyWindow = NSApp.keyWindow, keyWindow.attachedSheet == nil {
+            keyWindow.close()
         }
     }
     
@@ -169,8 +122,24 @@ public struct SettingsView: View {
         panel.allowsMultipleSelection = false
         panel.prompt = "Select Library Folder"
         if panel.runModal() == .OK, let url = panel.url {
-            customMainLibraryPath = url.path
-            viewModel.openDirectory(at: url.path, isMain: true)
+            guard url.path != currentLibraryDisplay else { return }
+            pendingNewLibraryPath = url.path
+            showingChangeConfirmation = true
+        }
+    }
+    
+    private func applyNewLibraryPath(_ path: String) {
+        customMainLibraryPath = path
+        if case .mainLibrary = viewModel.currentScope {
+            viewModel.openDirectory(at: path, isMain: true)
+        }
+        pendingNewLibraryPath = nil
+    }
+    
+    private func resetLibraryPath() {
+        customMainLibraryPath = ""
+        if case .mainLibrary = viewModel.currentScope {
+            viewModel.openDirectory(at: viewModel.mainLibraryPath, isMain: true)
         }
     }
 }
