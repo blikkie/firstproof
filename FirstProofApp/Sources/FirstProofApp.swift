@@ -66,6 +66,11 @@ struct FirstProofApp: App {
                 }
                 .keyboardShortcut("o", modifiers: [.command])
                 
+                Button("Import into Main Library...") {
+                    viewModel.promptImport()
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
+                
                 Divider()
                 
                 Button("Export Photo...") {
@@ -255,6 +260,10 @@ struct FirstProofApp: App {
                     .keyboardShortcut("5", modifiers: [.command, .option])
                 }
             }
+        }
+        
+        Settings {
+            SettingsView(viewModel: viewModel)
         }
     }
 }

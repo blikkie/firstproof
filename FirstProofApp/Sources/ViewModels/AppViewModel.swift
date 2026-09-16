@@ -159,6 +159,9 @@ public final class AppViewModel {
     
     // Main Library Path (~/Pictures/First Proof Library)
     public var mainLibraryPath: String {
+        if let custom = UserDefaults.standard.string(forKey: "customMainLibraryPath"), !custom.isEmpty {
+            return custom
+        }
         let pictures = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Pictures")
         let firstProofLib = pictures.appendingPathComponent("First Proof Library")
         try? FileManager.default.createDirectory(at: firstProofLib, withIntermediateDirectories: true)
@@ -180,6 +183,14 @@ public final class AppViewModel {
     @ObservationIgnored public var captureIntermediateSnapshot: (() -> NSImage?)? = nil
     public var isExportSheetPresented: Bool = false
     public var isExportPackageSheetPresented: Bool = false
+    
+    // MARK: - Ingestion & Import State (Story 2.3)
+    public var isImportSheetPresented: Bool = false
+    public var importSourcePath: String? = nil
+    public var importSelectedPaths: [String] = []
+    public var isCameraCardBannerPresented: Bool = false
+    public var detectedCameraCard: CameraCardInfo? = nil
+    
     public var isFilmstripFollowingSelection: Bool = true
     public var filmstripScrollTrigger: UUID = UUID()
     public var gridColumnCount: Int = 4
@@ -219,6 +230,7 @@ public final class AppViewModel {
     public var isScreenHdrCapable: Bool = false
     @ObservationIgnored private var screenChangeObserver: NSObjectProtocol?
     @ObservationIgnored private var windowChangeObserver: NSObjectProtocol?
+    @ObservationIgnored private var appTerminationObserver: NSObjectProtocol?
     
     public func cancelBatchExport() {
         self.isBatchExportCancelled = true
@@ -414,8 +426,10 @@ public final class AppViewModel {
         // Restore multi-project opened folder list (preserves disconnected external drive sessions)
         self.openedFolders = UserDefaults.standard.stringArray(forKey: "openedFolders") ?? []
         
-        let lastPath = UserDefaults.standard.string(forKey: "lastOpenedDirectory")
-        if let target = lastPath, FileManager.default.fileExists(atPath: target) {
+        let lastScope = UserDefaults.standard.string(forKey: "lastSelectedScope") ?? UserDefaults.standard.string(forKey: "lastOpenedDirectory")
+        if lastScope == "main_library" {
+            selectScope(.mainLibrary)
+        } else if let target = lastScope, FileManager.default.fileExists(atPath: target) {
             if !self.openedFolders.contains(target) {
                 self.openedFolders.append(target)
             }
@@ -427,6 +441,51 @@ public final class AppViewModel {
         }
         
         setupScreenObservers()
+        setupMediaDetection()
+        setupTerminationObserver()
+    }
+    
+    private func setupTerminationObserver() {
+        appTerminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.saveCurrentEdits()
+            self?.checkpointDatabase()
+        }
+    }
+    
+    // MARK: - Ingestion & Camera Card Detection (Story 2.3)
+    private func setupMediaDetection() {
+        let detector = MediaDetectionService.shared
+        detector.onCameraCardDetected = { [weak self] card in
+            guard let self = self else { return }
+            let autoPrompt = UserDefaults.standard.object(forKey: "autoDetectMemoryCards") as? Bool ?? true
+            if autoPrompt {
+                self.detectedCameraCard = card
+                self.isCameraCardBannerPresented = true
+            }
+        }
+        detector.onVolumeUnmounted = { [weak self] path in
+            guard let self = self else { return }
+            if self.detectedCameraCard?.path == path {
+                self.isCameraCardBannerPresented = false
+                self.detectedCameraCard = nil
+            }
+        }
+        detector.start()
+    }
+    
+    public func promptImport(from sourcePath: String? = nil, selectedPaths: [String] = []) {
+        self.importSourcePath = sourcePath ?? currentFolderPath
+        self.importSelectedPaths = selectedPaths
+        self.isImportSheetPresented = true
+    }
+    
+    // MARK: - Safe Database Checkpoint & Close
+    public func checkpointDatabase() {
+        db?.close()
     }
     
     deinit {
@@ -436,6 +495,10 @@ public final class AppViewModel {
         if let observer = windowChangeObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        if let observer = appTerminationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        checkpointDatabase()
     }
     
     // MARK: - Display & EDR Headroom Detection

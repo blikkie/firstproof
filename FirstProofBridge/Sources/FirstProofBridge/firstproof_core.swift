@@ -564,11 +564,15 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 public protocol FirstProofDatabaseProtocol : AnyObject {
     
+    func close() 
+    
     func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool) throws  -> ExportPackageReport
     
     func getAllPhotos()  -> [PhotoRecord]
     
     func getPhoto(filePath: String)  -> PhotoRecord?
+    
+    func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord) throws  -> ImportReportRecord
     
     func indexFolder(folderPath: String)  -> UInt32
     
@@ -638,6 +642,12 @@ public static func `open`(dbPath: String)throws  -> FirstProofDatabase {
     
 
     
+open func close() {try! rustCall() {
+    uniffi_firstproof_core_fn_method_firstproofdatabase_close(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
 open func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool)throws  -> ExportPackageReport {
     return try  FfiConverterTypeExportPackageReport.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
     uniffi_firstproof_core_fn_method_firstproofdatabase_export_portable_package(self.uniffiClonePointer(),
@@ -659,6 +669,16 @@ open func getPhoto(filePath: String) -> PhotoRecord? {
     return try!  FfiConverterOptionTypePhotoRecord.lift(try! rustCall() {
     uniffi_firstproof_core_fn_method_firstproofdatabase_get_photo(self.uniffiClonePointer(),
         FfiConverterString.lower(filePath),$0
+    )
+})
+}
+    
+open func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord)throws  -> ImportReportRecord {
+    return try  FfiConverterTypeImportReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
+    uniffi_firstproof_core_fn_method_firstproofdatabase_import_to_library(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(sourcePathsOrFolders),
+        FfiConverterString.lower(destinationFolder),
+        FfiConverterTypeImportOptionsRecord.lower(options),$0
     )
 })
 }
@@ -2293,6 +2313,218 @@ public func FfiConverterTypeImageMetadata_lift(_ buf: RustBuffer) throws -> Imag
 #endif
 public func FfiConverterTypeImageMetadata_lower(_ value: ImageMetadata) -> RustBuffer {
     return FfiConverterTypeImageMetadata.lower(value)
+}
+
+
+public struct ImportOptionsRecord {
+    public var moveFiles: Bool
+    public var consolidateSidecars: Bool
+    public var deduplicateRawOverJpeg: Bool
+    public var skipDuplicates: Bool
+    public var verifyChecksum: Bool
+    public var subfolderName: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(moveFiles: Bool, consolidateSidecars: Bool, deduplicateRawOverJpeg: Bool, skipDuplicates: Bool, verifyChecksum: Bool, subfolderName: String?) {
+        self.moveFiles = moveFiles
+        self.consolidateSidecars = consolidateSidecars
+        self.deduplicateRawOverJpeg = deduplicateRawOverJpeg
+        self.skipDuplicates = skipDuplicates
+        self.verifyChecksum = verifyChecksum
+        self.subfolderName = subfolderName
+    }
+}
+
+
+
+extension ImportOptionsRecord: Equatable, Hashable {
+    public static func ==(lhs: ImportOptionsRecord, rhs: ImportOptionsRecord) -> Bool {
+        if lhs.moveFiles != rhs.moveFiles {
+            return false
+        }
+        if lhs.consolidateSidecars != rhs.consolidateSidecars {
+            return false
+        }
+        if lhs.deduplicateRawOverJpeg != rhs.deduplicateRawOverJpeg {
+            return false
+        }
+        if lhs.skipDuplicates != rhs.skipDuplicates {
+            return false
+        }
+        if lhs.verifyChecksum != rhs.verifyChecksum {
+            return false
+        }
+        if lhs.subfolderName != rhs.subfolderName {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(moveFiles)
+        hasher.combine(consolidateSidecars)
+        hasher.combine(deduplicateRawOverJpeg)
+        hasher.combine(skipDuplicates)
+        hasher.combine(verifyChecksum)
+        hasher.combine(subfolderName)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportOptionsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportOptionsRecord {
+        return
+            try ImportOptionsRecord(
+                moveFiles: FfiConverterBool.read(from: &buf), 
+                consolidateSidecars: FfiConverterBool.read(from: &buf), 
+                deduplicateRawOverJpeg: FfiConverterBool.read(from: &buf), 
+                skipDuplicates: FfiConverterBool.read(from: &buf), 
+                verifyChecksum: FfiConverterBool.read(from: &buf), 
+                subfolderName: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportOptionsRecord, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.moveFiles, into: &buf)
+        FfiConverterBool.write(value.consolidateSidecars, into: &buf)
+        FfiConverterBool.write(value.deduplicateRawOverJpeg, into: &buf)
+        FfiConverterBool.write(value.skipDuplicates, into: &buf)
+        FfiConverterBool.write(value.verifyChecksum, into: &buf)
+        FfiConverterOptionString.write(value.subfolderName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportOptionsRecord_lift(_ buf: RustBuffer) throws -> ImportOptionsRecord {
+    return try FfiConverterTypeImportOptionsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportOptionsRecord_lower(_ value: ImportOptionsRecord) -> RustBuffer {
+    return FfiConverterTypeImportOptionsRecord.lower(value)
+}
+
+
+public struct ImportReportRecord {
+    public var totalFound: UInt32
+    public var importedCount: UInt32
+    public var skippedDuplicates: UInt32
+    public var rawOverJpegSuppressed: UInt32
+    public var consolidatedSidecars: UInt32
+    public var errorCount: UInt32
+    public var destinationCatalogPath: String
+    public var errorMessages: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(totalFound: UInt32, importedCount: UInt32, skippedDuplicates: UInt32, rawOverJpegSuppressed: UInt32, consolidatedSidecars: UInt32, errorCount: UInt32, destinationCatalogPath: String, errorMessages: [String]) {
+        self.totalFound = totalFound
+        self.importedCount = importedCount
+        self.skippedDuplicates = skippedDuplicates
+        self.rawOverJpegSuppressed = rawOverJpegSuppressed
+        self.consolidatedSidecars = consolidatedSidecars
+        self.errorCount = errorCount
+        self.destinationCatalogPath = destinationCatalogPath
+        self.errorMessages = errorMessages
+    }
+}
+
+
+
+extension ImportReportRecord: Equatable, Hashable {
+    public static func ==(lhs: ImportReportRecord, rhs: ImportReportRecord) -> Bool {
+        if lhs.totalFound != rhs.totalFound {
+            return false
+        }
+        if lhs.importedCount != rhs.importedCount {
+            return false
+        }
+        if lhs.skippedDuplicates != rhs.skippedDuplicates {
+            return false
+        }
+        if lhs.rawOverJpegSuppressed != rhs.rawOverJpegSuppressed {
+            return false
+        }
+        if lhs.consolidatedSidecars != rhs.consolidatedSidecars {
+            return false
+        }
+        if lhs.errorCount != rhs.errorCount {
+            return false
+        }
+        if lhs.destinationCatalogPath != rhs.destinationCatalogPath {
+            return false
+        }
+        if lhs.errorMessages != rhs.errorMessages {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(totalFound)
+        hasher.combine(importedCount)
+        hasher.combine(skippedDuplicates)
+        hasher.combine(rawOverJpegSuppressed)
+        hasher.combine(consolidatedSidecars)
+        hasher.combine(errorCount)
+        hasher.combine(destinationCatalogPath)
+        hasher.combine(errorMessages)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportReportRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportReportRecord {
+        return
+            try ImportReportRecord(
+                totalFound: FfiConverterUInt32.read(from: &buf), 
+                importedCount: FfiConverterUInt32.read(from: &buf), 
+                skippedDuplicates: FfiConverterUInt32.read(from: &buf), 
+                rawOverJpegSuppressed: FfiConverterUInt32.read(from: &buf), 
+                consolidatedSidecars: FfiConverterUInt32.read(from: &buf), 
+                errorCount: FfiConverterUInt32.read(from: &buf), 
+                destinationCatalogPath: FfiConverterString.read(from: &buf), 
+                errorMessages: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportReportRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.totalFound, into: &buf)
+        FfiConverterUInt32.write(value.importedCount, into: &buf)
+        FfiConverterUInt32.write(value.skippedDuplicates, into: &buf)
+        FfiConverterUInt32.write(value.rawOverJpegSuppressed, into: &buf)
+        FfiConverterUInt32.write(value.consolidatedSidecars, into: &buf)
+        FfiConverterUInt32.write(value.errorCount, into: &buf)
+        FfiConverterString.write(value.destinationCatalogPath, into: &buf)
+        FfiConverterSequenceString.write(value.errorMessages, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportReportRecord_lift(_ buf: RustBuffer) throws -> ImportReportRecord {
+    return try FfiConverterTypeImportReportRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportReportRecord_lower(_ value: ImportReportRecord) -> RustBuffer {
+    return FfiConverterTypeImportReportRecord.lower(value)
 }
 
 
@@ -4301,6 +4533,15 @@ public func hasUltraHdrGainMap(filePath: String) -> Bool {
     )
 })
 }
+public func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord)throws  -> ImportReportRecord {
+    return try  FfiConverterTypeImportReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
+    uniffi_firstproof_core_fn_func_import_to_library(
+        FfiConverterSequenceString.lower(sourcePathsOrFolders),
+        FfiConverterString.lower(destinationFolder),
+        FfiConverterTypeImportOptionsRecord.lower(options),$0
+    )
+})
+}
 public func loadCubeLut(path: String) -> CubeLutRecord? {
     return try!  FfiConverterOptionTypeCubeLutRecord.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_load_cube_lut(
@@ -4434,6 +4675,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_has_ultra_hdr_gain_map() != 37776) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_func_import_to_library() != 29064) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_func_load_cube_lut() != 34905) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4455,6 +4699,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_write_xmp() != 11511) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_close() != 33348) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_method_firstproofdatabase_export_portable_package() != 10662) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4462,6 +4709,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_method_firstproofdatabase_get_photo() != 43637) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_import_to_library() != 26453) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_method_firstproofdatabase_index_folder() != 21580) {

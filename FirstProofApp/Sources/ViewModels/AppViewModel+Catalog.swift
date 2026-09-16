@@ -9,8 +9,10 @@ extension AppViewModel {
         self.currentScope = scope
         switch scope {
         case .mainLibrary:
+            UserDefaults.standard.set("main_library", forKey: "lastSelectedScope")
             openDirectory(at: mainLibraryPath, isMain: true)
         case .session(let folderPath):
+            UserDefaults.standard.set(folderPath, forKey: "lastSelectedScope")
             openDirectory(at: folderPath, isMain: false)
         }
     }
@@ -94,8 +96,9 @@ extension AppViewModel {
         self.isScanning = true
         self.scanningStatusMessage = "Scanning \(isMain ? "Main Library" : URL(fileURLWithPath: folderPath).lastPathComponent)..."
         
-        // Save any pending edits before changing directory
+        // Save any pending edits and cleanly checkpoint current catalog before changing directory
         saveCurrentEdits()
+        checkpointDatabase()
         self.currentlyLoadedPhotoPath = nil
 
         // Reset state for new scope
@@ -159,7 +162,26 @@ extension AppViewModel {
                 }
             } catch {
                 print("Failed to open database at \(catalogPath): \(error)")
+                // Self-healing fallback: if opening failed, clean corrupt catalog and retry once
+                try? FileManager.default.removeItem(atPath: catalogPath)
+                try? FileManager.default.removeItem(atPath: "\(catalogPath)-wal")
+                try? FileManager.default.removeItem(atPath: "\(catalogPath)-shm")
+                if let retryDb = try? FirstProofDatabase.open(dbPath: catalogPath) {
+                    self.db = retryDb
+                    _ = retryDb.indexFolder(folderPath: folderPath)
+                    let freshPhotos = retryDb.getAllPhotos()
+                    DispatchQueue.main.async {
+                        self.photos = freshPhotos
+                        self.isScanning = false
+                        self.scanningStatusMessage = nil
+                        if let first = freshPhotos.first {
+                            self.selectPhoto(first)
+                        }
+                    }
+                    return
+                }
                 DispatchQueue.main.async {
+                    self.photos = []
                     self.isScanning = false
                     self.scanningStatusMessage = nil
                 }

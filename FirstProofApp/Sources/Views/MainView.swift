@@ -8,6 +8,55 @@ struct MainView: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            // Camera Card Detection Banner
+            if viewModel.isCameraCardBannerPresented, let card = viewModel.detectedCameraCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "externaldrive.fill.badge.plus")
+                        .foregroundColor(.accentColor)
+                        .font(.title3)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Camera Card Detected: \(card.name)")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        Text("Import master negatives into your Primary Library with sidecar consolidation and duplicate suppression.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Button("Import Photos...") {
+                        viewModel.isCameraCardBannerPresented = false
+                        viewModel.promptImport(from: card.path)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    
+                    Button("Open as Session") {
+                        viewModel.isCameraCardBannerPresented = false
+                        viewModel.addFolder(at: card.path)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    
+                    Button(action: {
+                        viewModel.isCameraCardBannerPresented = false
+                    }) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 4)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.accentColor.opacity(0.12))
+                .overlay(Divider(), alignment: .bottom)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            
             // MARK: - Upper 3-Pane Split (Sidebar, Canvas, Inspector)
             HSplitView {
                 SidebarView(viewModel: viewModel)
@@ -27,6 +76,15 @@ struct MainView: View {
         }
         .frame(minWidth: 900, minHeight: 600)
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    viewModel.promptImport()
+                }) {
+                    Label("Import", systemImage: "square.and.arrow.down")
+                }
+                .help("Import photos into Main Library (Cmd+Shift+I)")
+            }
+            
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button(action: {
@@ -51,6 +109,9 @@ struct MainView: View {
                 .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
                 .help("Export Rendered Photo (Cmd+E) or Portable Package (Cmd+Shift+E)")
             }
+        }
+        .sheet(isPresented: $viewModel.isImportSheetPresented) {
+            ImportSheetView(viewModel: viewModel)
         }
         .sheet(isPresented: $viewModel.isExportSheetPresented) {
             ExportSheetView(viewModel: viewModel)

@@ -280,6 +280,8 @@ private struct SessionItemRowView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if isAvailable {
+                viewModel.ratingFilter = nil
+                viewModel.statusFilter = nil
                 viewModel.selectScope(.session(folderPath: folderPath))
             }
         }
@@ -287,6 +289,10 @@ private struct SessionItemRowView: View {
             hoveredFolderPath = isHovered ? folderPath : nil
         }
         .contextMenu {
+            Button("Import into Main Library...") {
+                viewModel.promptImport(from: folderPath)
+            }
+            Divider()
             Button("Reveal in Finder") {
                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderPath)
             }

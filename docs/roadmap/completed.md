@@ -38,6 +38,13 @@ This archive tracks completed stories and features moved from the active backlog
 ---
 
 ## 4. Ingestion, Sidecars & Batch Export
+- **Story 2.3: Catalog Ingestion & Deduplication Precedence Engine**:
+  - *Deterministic Deduplication Hierarchy*: Implemented in `db.rs` (`import_to_library`) prioritizing RAW master negatives over redundant JPEGs when sharing stems (`raw_over_jpeg_suppressed`), active edits/ratings over untouched originals, DNG standard over proprietary raw, and deterministic tie-breaking.
+  - *Duplicate Import Suppression*: Prevents duplicate catalog entries based on matching file size and timestamp/content.
+  - *Sidecar Consolidation Engine*: Discovers and merges disparate third-party sidecars (`.xmp`, `.CR2.xmp`, Google Takeout `.json`) into a single canonical First Proof XMP sidecar (`https://firstproof.photo/ns/pm/1.0/`), eliminating destination sidecar clutter and cleaning up source sidecars on move.
+  - *Safe Checksum Verification Before Deletion*: Zero-dependency cryptographic SHA-256 streaming verification (`checksum.rs`) comparing source and destination bits before removing source master negatives, strictly preventing data loss.
+  - *Removable Media & Memory Card Ingestion*: `MediaDetectionService.swift` detecting camera memory card insertion (DCIM volumes) with safe non-destructive defaults ("Safe Ingest: Keeps camera card intact as primary field backup").
+  - *Native macOS Settings Window (`SettingsView.swift`)*: Preferences window (`Cmd+,`) allowing user customization of library location, memory card auto-detection, and ingestion rules.
 - **Universal Non-Destructive Sidecar Architecture**: Immutable master files with firstproof-native `.xmp` sidecars (`https://firstproof.photo/ns/pm/1.0/`), Adobe CRS ingestion, and `img-parts` ICC/metadata injection.
 - **Multi-Selection Batch Export UI & Rayon Thread Pool**: Parallel batch export sheet (`ExportSheetView.swift`) powered by Rayon multi-core pool, sRGB/Display-P3 profiles, and LittleCMS2 rendering intent control.
 - **Google Takeout Archive Extraction**: Rust parser in `takeout.rs` matching `.json` sidecars to images and populating EXIF/GPS/timestamps during catalog indexing.

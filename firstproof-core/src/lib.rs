@@ -15,6 +15,7 @@ pub mod lut;
 pub mod curve;
 pub mod gainmap;
 pub mod synthetic;
+pub mod checksum;
 
 pub use curve::{evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, CurvePointRecord, ToneCurvesRecord};
 
@@ -720,6 +721,73 @@ impl FirstProofDatabase {
             .map(Into::into)
             .map_err(|e| FirstProofError::DatabaseError { reason: e })
     }
+
+    pub fn import_to_library(
+        &self,
+        source_paths_or_folders: Vec<String>,
+        destination_folder: String,
+        options: ImportOptionsRecord,
+    ) -> Result<ImportReportRecord, FirstProofError> {
+        let opts: db::ImportOptions = options.into();
+        self.inner
+            .import_to_library(&source_paths_or_folders, &destination_folder, &opts)
+            .map(Into::into)
+            .map_err(|e| FirstProofError::DatabaseError { reason: e })
+    }
+
+    pub fn close(&self) {
+        self.inner.checkpoint_and_close();
+    }
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct ImportOptionsRecord {
+    pub move_files: bool,
+    pub consolidate_sidecars: bool,
+    pub deduplicate_raw_over_jpeg: bool,
+    pub skip_duplicates: bool,
+    pub verify_checksum: bool,
+    pub subfolder_name: Option<String>,
+}
+
+impl From<ImportOptionsRecord> for db::ImportOptions {
+    fn from(r: ImportOptionsRecord) -> Self {
+        Self {
+            move_files: r.move_files,
+            consolidate_sidecars: r.consolidate_sidecars,
+            deduplicate_raw_over_jpeg: r.deduplicate_raw_over_jpeg,
+            skip_duplicates: r.skip_duplicates,
+            verify_checksum: r.verify_checksum,
+            subfolder_name: r.subfolder_name,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct ImportReportRecord {
+    pub total_found: u32,
+    pub imported_count: u32,
+    pub skipped_duplicates: u32,
+    pub raw_over_jpeg_suppressed: u32,
+    pub consolidated_sidecars: u32,
+    pub error_count: u32,
+    pub destination_catalog_path: String,
+    pub error_messages: Vec<String>,
+}
+
+impl From<db::ImportReport> for ImportReportRecord {
+    fn from(r: db::ImportReport) -> Self {
+        Self {
+            total_found: r.total_found,
+            imported_count: r.imported_count,
+            skipped_duplicates: r.skipped_duplicates,
+            raw_over_jpeg_suppressed: r.raw_over_jpeg_suppressed,
+            consolidated_sidecars: r.consolidated_sidecars,
+            error_count: r.error_count,
+            destination_catalog_path: r.destination_catalog_path,
+            error_messages: r.error_messages,
+        }
+    }
 }
 
 #[derive(uniffi::Record, Clone, Debug)]
@@ -741,6 +809,35 @@ impl From<db::ExportPackageStats> for ExportPackageReport {
             error_messages: s.error_messages,
         }
     }
+}
+
+#[uniffi::export]
+pub fn import_to_library(
+    source_paths_or_folders: Vec<String>,
+    destination_folder: String,
+    options: ImportOptionsRecord,
+) -> Result<ImportReportRecord, FirstProofError> {
+    if let Some(first_path) = source_paths_or_folders.first() {
+        let p = Path::new(first_path);
+        let parent = if p.is_dir() { Some(p) } else { p.parent() };
+        if let Some(parent_dir) = parent {
+            let cat_path = db::Database::resolve_catalog_path(parent_dir, true);
+            if let Ok(db) = db::Database::open(&cat_path) {
+                let opts: db::ImportOptions = options.into();
+                return db
+                    .import_to_library(&source_paths_or_folders, &destination_folder, &opts)
+                    .map(Into::into)
+                    .map_err(|e| FirstProofError::DatabaseError { reason: e });
+            }
+        }
+    }
+    let temp_db = db::Database::open_in_memory()
+        .map_err(|e| FirstProofError::DatabaseError { reason: e.to_string() })?;
+    let opts: db::ImportOptions = options.into();
+    temp_db
+        .import_to_library(&source_paths_or_folders, &destination_folder, &opts)
+        .map(Into::into)
+        .map_err(|e| FirstProofError::DatabaseError { reason: e })
 }
 
 #[uniffi::export]

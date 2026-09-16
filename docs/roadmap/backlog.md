@@ -7,21 +7,9 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Catalog Ingestion & Deduplication Precedence Engine (P1)**: Deterministic RAW-over-JPEG deduplication hierarchy.
-2. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
-3. **Archival Open DNG Converter & Lossless Compression Engine (P1)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-
----
-
-## Phase 2: Core Darkroom Adjustments & Catalog Ingestion (P1)
-
-### 2.3 Catalog Ingestion & Deduplication Precedence Engine
-- **Deterministic Deduplication Hierarchy**:
-  1. *Duplicate Import Suppression*: Match by folder path, content hash, or file stem + capture timestamp to prevent duplicate catalog entries.
-  2. *RAW Over JPEG*: When a RAW and JPEG share the same base stem (e.g. `IMG_001.CR2` and `IMG_001.JPG`), the RAW file wins as the master negative.
-  3. *Active Edits Win*: Between multiple raw formats, the candidate with existing sidecar edits/ratings wins over untouched originals.
-  4. *DNG Preference*: If both candidates possess edits (or in computational/DNG conversions), prefer open standard `.dng`.
-  5. *Deterministic Tie-Break*: Pick first discovered candidate, prioritizing First Proof namespace sidecars (`https://firstproof.photo/ns/pm/1.0/`) over third-party Adobe CRS sidecars.
+1. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
+2. **Archival Open DNG Converter & Lossless Compression Engine (P1)**: Lossless Bayer CFA transcoding and Deflate tile compression.
+3. **Chemical Emulsion Profiles (C-41, E-6 & ECN-2 Chemistry) (P2)**: Non-linear film stock modeling with subtractive dye layer response.
 
 ---
 

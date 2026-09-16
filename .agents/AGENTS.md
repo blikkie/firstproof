@@ -17,7 +17,10 @@
   - Explicitly pause and remind the user to perform these manual tests so we verify that the tool works as intended in the real environment.
   - Only after manual verification is confirmed should the adversarial review and educational commit tour be generated.
 
-- **Educational & Interactive Commit Tours**: Once manual verification is confirmed and before every commit/PR check-in, provide a tour of the code changes and use it as a learning opportunity. Compare Rust and Swift concepts against Python and JavaScript (e.g., ownership vs garbage collection, static typing, FFI, memory layout, concurrency). Include clear code snippets, explain syntax/architecture decisions, and end with 1-2 interactive quiz questions to reinforce fluency in desktop app engineering.
+- **Educational Commit Tours (No Quizzes)**: Once manual verification is confirmed and before every commit/PR check-in, provide a tour of the code changes:
+  - Focus strictly on what was built and explain the concrete rationale behind each change made.
+  - Whenever a new concept, system primitive, or pattern is introduced into the codebase, provide an educational deep-dive explaining how that concept works under the hood.
+  - Do not include quizzes or external language comparisons unless directly relevant to understanding the architecture.
 
 - **Desktop Keyboard Architecture & First-Responder Shielding**:
   - Single-key shortcuts (`1`..`5` for ratings, `P`/`X`/`U` for flags, `C` for crop, `Z` for zoom, `[`/`]` for rotation, `\` for original peek) must **never** fire while the user is actively typing in editable text fields (e.g. Title, Caption, Keywords, Creator in the metadata panel).
