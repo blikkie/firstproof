@@ -7,16 +7,47 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
-2. **Archival Open DNG Converter & Lossless Compression Engine (P1)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-3. **Chemical Emulsion Profiles (C-41, E-6 & ECN-2 Chemistry) (P2)**: Non-linear film stock modeling with subtractive dye layer response.
+1. **Modern SwiftUI & macOS 14 Architecture Modernization (Immediate / P1)**: Drag-and-drop ingestion (`.dropDestination`), `@Environment(AppViewModel.self)` DI, native `.inspector(isPresented:)`, Swift Concurrency (`.task(id:)`), and `Layout` protocol aspect containment.
+2. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
+3. **Archival Open DNG Converter & Lossless Compression Engine (P1)**: Lossless Bayer CFA transcoding and Deflate tile compression.
+4. **Upstream Recording Emulsions (C-41, E-6, K-14 & ECN-2 Chemistry) (P2)**: Non-linear film stock modeling with subtractive dye layer response and DIR couplers.
+
+---
+
+## Phase 2.5: Modern SwiftUI & macOS 14 Architecture Modernization (P1)
+
+### 2.5.1 Desktop Drag-and-Drop Ingestion (`.dropDestination`)
+- Support dragging folders and camera cards directly from Finder/Desktop into `LibrarySidebarView` and `CanvasView` to auto-open sessions.
+- Dropping individual RAW files triggers the Import Sheet targeting the active library.
+
+### 2.5.2 Dependency Injection via `@Environment(AppViewModel.self)`
+- Inject `AppViewModel` once at the `WindowGroup` scene level via `.environment(viewModel)`.
+- Strip 25+ view `init(viewModel:)` prop-drilling initializers across all workspace, sidebar, canvas, and inspector views.
+- Adopt view-local `@Bindable var viewModel = viewModel` only where bindings are generated.
+
+### 2.5.3 Native macOS 14 `.inspector(isPresented:)` Container
+- Replace legacy AppKit `HSplitView` in `MainView.swift` with SwiftUI's native macOS 14 `NavigationSplitView` and `.inspector(isPresented:)`.
+- Wire up standard macOS Inspector toggle toolbar item and menu shortcut (<kbd>Cmd</kbd> + <kbd>Option</kbd> + <kbd>I</kbd>).
+
+### 2.5.4 Swift Structured Concurrency & Cooperative Cancellation
+- Annotate `AppViewModel` with `@MainActor` for compile-time verified main-thread UI state mutations.
+- Replace legacy Grand Central Dispatch callbacks (`DispatchQueue.global(qos:).async`) with `async/await` and `Task.detached`.
+- Use `.task(id: selectedPhoto?.filePath)` for view-driven image decoding, automatically cancelling obsolete background decodes during rapid arrow-key culling.
+
+### 2.5.5 Custom `Layout` Protocol for Aspect-Ratio Containment
+- Replace greedy nested `GeometryReader`s in `ToneCurveView` and `ColorWheelView` with declarative `SquareAspectLayout: Layout` to maintain strict aspect ratio without layout overflow into adjacent disclosure groups.
 
 ---
 
 ## Phase 3: Fine-Art Darkroom Chemistry & Archival Formats (P1 / P2)
 
+> **Physical Darkroom Architecture: Recording vs. Printing Decoupling**  
+> In physical photography, the *recording medium* (in-camera film negative) and the *printing medium* (darkroom enlarger filtration, paper chemistry, and toner baths) are two orthogonal stages. Story 3.3 models the upstream in-camera negative chemistry; Story 3.1 models the downstream darkroom print tray. A photographer can print a clean digital RAW or a chemical negative onto silver gelatin paper with archival toning without either stage overriding the other.
+
 ### 3.1 Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)
-- **Spectral Filtration in Linear Rec.2020 (Physical Lens Filters)**:
+- **Downstream Darkroom Print Medium**:
+  - Treats the captured frame (whether clean digital RAW or chemical negative) as an archival print-making negative exposed through an enlarger onto fine-art silver paper.
+- **Spectral Filtration in Linear Rec.2020 (Physical Optical / Enlarger Filters)**:
   - Replace harsh digital desaturation with physical optical filtration:
     - *Neutral Panchromatic*: Standard wide-gamut linear luminance ($Y = 0.2627 R + 0.6780 G + 0.0593 B$).
     - *Yellow Filter (K2)*: Darkens blue skies subtly to emphasize clouds; clears facial haze.
@@ -25,7 +56,7 @@ This document strictly tracks pending and deferred features calibrated against o
     - *Green Filter (X1)*: Lightens foliage and flora, separates skin tones under warm light.
     - *Orthochromatic (Vintage)*: Blind to red ($w_r = 0$), sensitive strictly to blue/green for historic 19th/early-20th century look.
 - **Silver Halide Emulsion Characteristic Curve (Smooth Tonal Roll-Off)**:
-  - Model the continuous logarithmic shoulder of analog silver gelatin paper (Hurter & Driffield / D-log H curve) through our AgX tonemapper, preventing harsh digital highlight blowout and preserving velvety shadow detail without muddy midtones.
+  - Model the continuous logarithmic shoulder of analog silver gelatin paper (Hurter & Driffield / D-log H paper curve) through our AgX tonemapper, preventing harsh digital highlight blowout and preserving velvety shadow detail without muddy midtones.
 - **Archival Chemical Print Toning**:
   - *Pure Silver Gelatin*: Achromatic neutral silver.
   - *Selenium Toning*: Increases shadow D-max with subtle cool plum-black tones while keeping highlights clean silver-white.
@@ -45,16 +76,24 @@ This document strictly tracks pending and deferred features calibrated against o
 - **Metadata & Sidecar Integration**:
   - Embed existing First Proof XMP edits, color adjustments, IPTC tags, and ratings into the DNG IFDs, or preserve adjacent `.xmp` according to catalog preferences.
 
-### 3.3 Chemical Emulsion Profiles (C-41, E-6 & ECN-2 Chemistry) (P2)
+### 3.3 Upstream Recording Emulsions: C-41, E-6, K-14 & ECN-2 Chemistry (P2)
+- **Upstream In-Camera Recording Medium**:
+  - Models the photochemical behavior of the latent image on multi-layer camera negative/reversal film prior to any print enlargement or display mapping.
 - **Spectral Inter-Layer Inhibition (DIR Coupler Physics)**:
   - Model Development Inhibitor Releasing (DIR) couplers via 3×3 spectral cross-talk matrices directly in linear Rec.2020 to produce luminous, non-clashing skin tones and soft highlight desaturation.
-- **Physical Chemistry Archetypes (Trademark-Clean)**:
-  - *CN-400 Portrait (C-41)*: Gentle contrast, luminous skin tone separation via inter-layer dye coupling, soft pastel highlight roll-off.
-  - *CR-50 Vivid Chrome (E-6 Reversal)*: High micro-contrast, rich saturated primaries with clean neutral shadows, inspired by slide chemistry.
-  - *ECN-500 Cinema (ECN-2)*: Low-contrast linear negative with gentle highlight compression designed for wide-gamut digital grading.
-  - *Gold-200 Daylight*: Warm, earthy golden-hour daylight response with restrained blue density.
-- **Organic Synergy with Procedural Grain**:
-  - Bind each chemical profile directly to its corresponding physically-modeled `FilmGrainPreset` (e.g. `CN-400` paired with `P-400 Portrait` grain) for coherent, integrated analog physics.
+- **Curated Geographic Archetypes (Historic Plant Homage & Sensitometric Grounding)**:
+  - Grounded strictly in published manufacturer sensitometric data sheets (characteristic D-log H curves, spectral dye density, and layer sensitivity curves):
+    - *Rochester Portrait 400* (C-41, Kodak Park, Rochester NY): Gentle portrait contrast, luminous skin tone separation via DIR couplers, pastel highlight roll-off.
+    - *Ashigara Chrome 50* (E-6 Reversal, Minamiashigara, Japan): High micro-contrast, rich saturated primaries with clean neutral shadows, inspired by slide chemistry.
+    - *Rochester K-14 Chrome 64* (K-14 Non-Substantive Reversal, Rochester NY): Ultra-deep ink-black D-max ($D_{\text{max}} > 3.2$), vivid warm red/yellow separation, and razor edge acutance modeled from Kodak Pub E-88.
+    - *Rochester Cinema 500* (ECN-2 Tungsten, Rochester NY): Low-contrast linear negative with gentle highlight compression designed for wide-gamut digital grading.
+    - *Rochester Daylight 200* (C-41, Rochester NY): Warm, earthy golden-hour daylight response with restrained blue density.
+    - *Mobberley Silver 400* (Panchromatic B&W, Mobberley, Cheshire, UK): Classic silver halide negative with linear midtone acutance.
+- **Curated Restraint & Anti-Gimmick Invariants**:
+  - *Strict Neutral Default*: Emulsion profiles are 100% opt-in creative tools. The pipeline default is always unadorned, neutral optical sensor capture (Camera DCP + AgX).
+  - *Anti-Preset Restraint*: Strictly bounded to 6 foundational, deeply researched chemical archetypes across the major 20th-century processes. Zero bloated "preset packs" or arbitrary digital LUT styling.
+- **Decoupled Grain with Optional Recommended Linkage**:
+  - The procedural organic grain engine (`Detail.metal`) remains physically decoupled and adjustable to 0. Activating an emulsion profile optionally offers its historically paired grain preset (e.g. *Rochester Portrait 400* suggests `P-400 Portrait`), but grain is never forced or permanently baked into the color transform.
 
 ### 3.4 ColorSync Soft Proofing (P2)
 - **Canvas Soft Proofing Mode**:
@@ -162,4 +201,22 @@ This document strictly tracks pending and deferred features calibrated against o
   - **Virtual Optical Notch Filtering**: Emulate physical chemical glass filters (such as didymium/neodymium glass that sharply absorbs the $580\text{–}590\,\text{nm}$ sodium doublet, or analog FL-D/FL-W magenta glass) to selectively suppress line-emission spikes without distorting continuous adjacent spectral channels.
   - **Targeted Hue-Band De-Spiking**: Parametric narrow-band chromaticity qualifiers in the color engine that can gently attenuate saturated line-emission spikes toward natural warm amber/tungsten, anchored to known physical emission wavelengths.
   - **Strict Anti-Slop Guardrail**: Never attempt synthetic multi-source AI auto-hallucination. Any future tool must remain a conscious, physical optical emulation with predictable, manual photographer control.
+
+---
+
+## Phase 6: Modern Platform Architecture & macOS 27 Alignment (P2)
+
+### 6.1 Minimum Deployment Target Bump (N-2 Window on macOS 27 Launch)
+- **Target Bump & Toolchain Modernization**:
+  - Upon general availability of macOS 27, bump minimum deployment target in `Package.swift` from `.macOS(.v14)` to `.macOS(.v25)`.
+  - Preserves the standard "N-2" pro-photographer workstation support window (supporting macOS 25, 26, and 27).
+  - Resolves Darwin linker skew warnings (`built for newer 'macOS' version than being linked`).
+  - Enables strict Swift 6 concurrency runtime isolation checks across the bridge and view models without false positives.
+- **Layout & Render Work Unlocked**:
+  - **Adopt `.onGeometryChange(for:of:action:)`**: Completely eliminate `GeometryReader` across `ToneCurveView`, `ColorWheelView`, and crop interaction layers in favor of direct render-tree size observation, eliminating layout recursion and frame jitter.
+  - **Native `.windowDraggable()`**: Clean canvas window movement without AppKit window tracking overrides.
+- **Anti-Slop Guardrail (Rejection of "Liquid Glass" Translucency)**:
+  - Proactively reject refractive translucent materials ("liquid glass") in inspector sidebars or canvas chrome.
+  - Maintain First Proof's strict opaque, matte dark slate palette (`#181818` / `#1E1E1E`). Desktop wallpaper or background window radiance must never bleed into the photographer's peripheral vision and distort neutral chromatic adaptation.
+
 

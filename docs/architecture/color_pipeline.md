@@ -26,13 +26,15 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
                   └─────────────────┬─────────────────┘
                                     │
                                     ▼
-     [ 4. Creative Film Emulation & Nuance ] (Portra/Tri-X/CineStill LUTs, .cube, Memory Colors)
+      [ 4. Analog Emulsion & Darkroom Printmaking ]
+      • Recording: Rochester/Ashigara/Mobberley DIR Coupler Chemistry
+      • Printing: Silver Halide Paper D-log H & Archival Selenium/Platinum Toning
                                     │
                                     ▼
-     [ 5. Procedural Organic Film Grain ] (Physical Zone V Midtone Clumping & Tri-Layer Chemistry)
+      [ 5. Procedural Organic Film Grain ] (Physical Zone V Midtone Clumping & Tri-Layer Chemistry)
                                     │
                                     ▼
-        [ 6. Display & Print Target ] (Display P3, sRGB, or Print ICC)
+         [ 6. Display & Print Target ] (Display P3, sRGB, or Print ICC)
 ```
 
 ---
@@ -53,3 +55,7 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
 
 4. **Print & Web First (SDR Default)**:
    - Viewport initializes to standard dynamic range (`isHdrEnabled = false`). EDR/XDR is an explicit user opt-in inspection mode.
+
+5. **Capture & Print Decoupling (Strict Neutral Default)**:
+   - Emulsion profiles and darkroom print toners are strictly opt-in creative tools. The pipeline default is always pure optical sensor capture (Camera DCP + AgX).
+   - Upstream in-camera recording chemistry (DIR couplers) and downstream darkroom printmaking (enlarger filtration, silver paper D-log H, archival toning) are orthogonal stages. Neither replaces or overrides the other.
