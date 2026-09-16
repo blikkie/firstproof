@@ -299,14 +299,16 @@ pub fn apply_color_adjustments(
         let min_c = r.min(g).min(b);
         let chroma = max_c - min_c; // in [0, 1]
 
-        // Detect human skin tones in RGB: R > G > B with warm golden/peach hue
+        // Detect human skin tones in Linear Rec.2020 using normalized (r_n, g_n) chromaticity locus:
+        // Universal across the entire human melanin spectrum (Fitzpatrick I-VI / MST 01-10) from fair to deep dark.
+        let sum = r + g + b;
         let is_warm = (r > g) && (g > b);
-        let skin_metric = if is_warm && lum > 0.05 {
-            let rg = (r - g) / lum.max(0.1);
-            let gb = (g - b) / lum.max(0.1);
-            let d_rg = (rg - 0.35).abs();
-            let d_gb = (gb - 0.25).abs();
-            (1.0 - (d_rg * 3.0 + d_gb * 3.0)).clamp(0.0, 1.0)
+        let skin_metric = if is_warm && sum > 0.015 {
+            let r_n = r / sum;
+            let g_n = g / sum;
+            let d_r = (r_n - 0.44).abs();
+            let d_g = (g_n - 0.32).abs();
+            (1.0 - (d_r * 4.5 + d_g * 9.0)).clamp(0.0, 1.0)
         } else {
             0.0
         };

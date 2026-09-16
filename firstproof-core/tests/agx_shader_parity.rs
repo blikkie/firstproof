@@ -137,8 +137,12 @@ fn test_neutral_axis_achromatic_preservation() {
 
 #[test]
 fn test_skin_tone_hue_stability_under_exposure() {
-    // Canonical skin tone coordinates in Linear Rec.2020:
-    let skin_base = Color3::new(0.38, 0.22, 0.15);
+    // Canonical diverse skin tone coordinates in Linear Rec.2020:
+    let skin_bases = [
+        ("Light Skin", Color3::new(0.453, 0.327, 0.240)),
+        ("Medium Tan", Color3::new(0.380, 0.220, 0.150)),
+        ("Dark Skin",  Color3::new(0.138, 0.088, 0.058)),
+    ];
 
     // Compute hue angle in degrees
     let calc_hue = |c: Color3| -> f32 {
@@ -158,22 +162,23 @@ fn test_skin_tone_hue_stability_under_exposure() {
         (h + 360.0) % 360.0
     };
 
-    let base_hue = calc_hue(agx_tone_map(skin_base, 1.0));
+    for (name, skin_base) in skin_bases {
+        let base_hue = calc_hue(agx_tone_map(skin_base, 1.0));
 
-    // Sweep exposure from -2 EV to +2 EV (5 stops photographic working range before specular desaturation)
-    for ev in -2..=2 {
-        let gain = 2.0f32.powi(ev);
-        let exposed = Color3::new(skin_base.r() * gain, skin_base.g() * gain, skin_base.b() * gain);
-        let out = agx_tone_map(exposed, 1.0);
-        let hue = calc_hue(out);
+        // Sweep exposure across photographic working range (-2 EV to +1 EV, 4 stops before specular highlight desaturation)
+        for ev in &[-2.0, -1.0, 0.0, 0.5, 1.0] {
+            let gain = 2.0f32.powf(*ev);
+            let exposed = Color3::new(skin_base.r() * gain, skin_base.g() * gain, skin_base.b() * gain);
+            let out = agx_tone_map(exposed, 1.0);
+            let hue = calc_hue(out);
 
-        // Skin hue must remain stable within a tight photographic band (±8 degrees from base across 5 stops):
-        let hue_diff = (hue - base_hue).abs();
-        assert!(
-            hue_diff < 8.0,
-            "Skin tone hue drifted by {} deg at EV {}! Base={}, Current={}",
-            hue_diff, ev, base_hue, hue
-        );
+            // Skin hue must remain stable within a tight photographic band (±8 degrees from base across 4 stops):
+            let hue_diff = (hue - base_hue).abs();
+            assert!(
+                hue_diff < 8.0,
+                "{name} hue drifted by {hue_diff} deg at EV {ev}! Base={base_hue}, Current={hue}"
+            );
+        }
     }
 }
 

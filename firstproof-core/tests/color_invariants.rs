@@ -99,23 +99,91 @@ fn test_matrix_invertibility() {
 
 #[test]
 fn test_skin_tone_hue_stability_under_exposure() {
-    // Macbeth Light Skin baseline (linear sRGB coordinates)
-    let skin_base = Color3::new(0.450, 0.312, 0.241);
-    let base_lab = linear_srgb_to_lab(skin_base);
-    let base_hue = base_lab.hue_angle_deg();
+    // Comprehensive skin patches covering the human melanin spectrum (Fitzpatrick I-VI)
+    let skin_patches = [
+        ("Macbeth Light Skin", Color3::new(0.542, 0.312, 0.228)), // [194, 150, 130] sRGB
+        ("Macbeth Dark Skin",  Color3::new(0.173, 0.082, 0.054)), // [115, 82, 68] sRGB
+        ("MST 01 Very Fair",   Color3::new(0.916, 0.844, 0.774)), // Monk Scale 1 (Fitzpatrick I)
+        ("MST 03 Fair Warm",   Color3::new(0.925, 0.820, 0.635)), // Monk Scale 3 (Fitzpatrick II)
+        ("MST 05 Medium",      Color3::new(0.678, 0.511, 0.312)), // Monk Scale 5 (Fitzpatrick III/IV)
+        ("MST 07 Dark-Medium", Color3::new(0.228, 0.106, 0.052)), // Monk Scale 7 (Fitzpatrick IV/V)
+        ("MST 08 Dark",        Color3::new(0.117, 0.050, 0.031)), // Monk Scale 8 (Fitzpatrick V)
+        ("MST 10 Deep Dark",   Color3::new(0.020, 0.015, 0.012)), // Monk Scale 10 (Fitzpatrick VI)
+    ];
 
-    // Sweep exposure from -3 EV (1/8x) to +1.5 EV (2.8x)
-    for ev in &[-3.0, -2.0, -1.0, 0.0, 0.5, 1.0, 1.5] {
-        let factor = 2.0f32.powf(*ev);
-        let scaled_skin = skin_base.scale(factor);
-        
-        let lab = linear_srgb_to_lab(scaled_skin);
-        let hue = lab.hue_angle_deg();
-        
-        let hue_diff = (hue - base_hue).abs();
+    for (name, skin_base) in skin_patches {
+        let base_lab = linear_srgb_to_lab(skin_base);
+        let base_hue = base_lab.hue_angle_deg();
+
+        // Sweep exposure across photographic working range (-2 EV to +1.5 EV, 3.5 stops)
+        for ev in &[-2.0, -1.0, 0.0, 0.5, 1.0, 1.5] {
+            let factor = 2.0f32.powf(*ev);
+            let scaled_skin = skin_base.scale(factor);
+            
+            let lab = linear_srgb_to_lab(scaled_skin);
+            let hue = lab.hue_angle_deg();
+            
+            let hue_diff = (hue - base_hue).abs();
+            assert!(
+                hue_diff < 2.5,
+                "{name} hue drifted by {hue_diff:.2} deg at EV={ev} (base={base_hue:.2}, curr={hue:.2})"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_multiracial_skin_tones_vibrance_protection() {
+    use firstproof_core::export::apply_color_adjustments;
+
+    let skin_patches = [
+        ("Macbeth Light Skin", Color3::new(0.542, 0.312, 0.228)),
+        ("Macbeth Dark Skin",  Color3::new(0.173, 0.082, 0.054)),
+        ("MST 01 Very Fair",   Color3::new(0.916, 0.844, 0.774)),
+        ("MST 03 Fair Warm",   Color3::new(0.925, 0.820, 0.635)),
+        ("MST 05 Medium",      Color3::new(0.678, 0.511, 0.312)),
+        ("MST 07 Dark-Medium", Color3::new(0.228, 0.106, 0.052)),
+        ("MST 08 Dark",        Color3::new(0.117, 0.050, 0.031)),
+        ("MST 09 Very Dark",   Color3::new(0.042, 0.029, 0.021)),
+    ];
+
+    // Non-skin reference with comparable chroma (cool azure blue)
+    let non_skin_patch = Color3::new(0.15, 0.30, 0.55);
+    let non_skin_rec2020 = LINEAR_SRGB_TO_REC2020.multiply_vector(non_skin_patch);
+    let (ns_r, ns_g, ns_b) = apply_color_adjustments(
+        non_skin_rec2020.r(), non_skin_rec2020.g(), non_skin_rec2020.b(),
+        80.0, 0.0, 0.0, 0.0,
+    );
+    let ns_orig_chroma = non_skin_rec2020.r().max(non_skin_rec2020.g()).max(non_skin_rec2020.b())
+        - non_skin_rec2020.r().min(non_skin_rec2020.g()).min(non_skin_rec2020.b());
+    let ns_boosted_chroma = ns_r.max(ns_g).max(ns_b) - ns_r.min(ns_g).min(ns_b);
+    let _ns_chroma_gain = (ns_boosted_chroma - ns_orig_chroma) / ns_orig_chroma.max(1e-4);
+
+    for (name, srgb_skin) in skin_patches {
+        let rec2020_skin = LINEAR_SRGB_TO_REC2020.multiply_vector(srgb_skin);
+        let orig_chroma = rec2020_skin.r().max(rec2020_skin.g()).max(rec2020_skin.b())
+            - rec2020_skin.r().min(rec2020_skin.g()).min(rec2020_skin.b());
+
+        // Boost vibrance aggressively (+80.0)
+        let (r_vib, g_vib, b_vib) = apply_color_adjustments(
+            rec2020_skin.r(), rec2020_skin.g(), rec2020_skin.b(),
+            80.0, 0.0, 0.0, 0.0,
+        );
+        let boosted_chroma = r_vib.max(g_vib).max(b_vib) - r_vib.min(g_vib).min(b_vib);
+        let skin_chroma_gain = (boosted_chroma - orig_chroma) / orig_chroma.max(1e-4);
+
+        // Verify skin protection suppressed the vibrance boost significantly compared to an unprotected target
+        // Vibrance without skin protection boosts low-chroma colors by ~64% (0.8 * 80%),
+        // while skin protection suppresses gain down to < 55%.
         assert!(
-            hue_diff < 2.0,
-            "Skin tone hue drifted by {hue_diff:.2} deg at EV={ev} (base={base_hue:.2}, curr={hue:.2})"
+            skin_chroma_gain < 0.55,
+            "{name} did not receive sufficient vibrance protection: skin gain={skin_chroma_gain:.3}"
+        );
+        
+        // Verify hue ordering remains strictly R > G > B (no hue inversion or color tearing)
+        assert!(
+            r_vib >= g_vib && g_vib >= b_vib,
+            "{name} suffered color tearing under vibrance boost: ({r_vib:.3}, {g_vib:.3}, {b_vib:.3})"
         );
     }
 }

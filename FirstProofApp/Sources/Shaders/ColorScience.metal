@@ -317,12 +317,13 @@ inline float3 applyColorAdjustments(
         float chroma = maxC - minC;
 
         float skinProtect = 1.0;
-        if (c.r > c.g && c.g > c.b && lum > 0.05) {
-            float rg = (c.r - c.g) / max(lum, 0.1);
-            float gb = (c.g - c.b) / max(lum, 0.1);
-            float dRg = abs(rg - 0.35);
-            float dGb = abs(gb - 0.25);
-            float skinMetric = clamp(1.0 - (dRg * 3.0 + dGb * 3.0), 0.0, 1.0);
+        float sum = c.r + c.g + c.b;
+        if (c.r > c.g && c.g > c.b && sum > 0.015) {
+            float rN = c.r / sum;
+            float gN = c.g / sum;
+            float dR = abs(rN - 0.44);
+            float dG = abs(gN - 0.32);
+            float skinMetric = clamp(1.0 - (dR * 4.5 + dG * 9.0), 0.0, 1.0);
             skinProtect = 1.0 - 0.6 * skinMetric;
         }
 
