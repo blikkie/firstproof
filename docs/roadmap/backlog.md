@@ -79,8 +79,9 @@ This document strictly tracks pending and deferred features calibrated against o
 ### 3.3 Upstream Recording Emulsions: C-41, E-6, K-14 & ECN-2 Chemistry (P2)
 - **Upstream In-Camera Recording Medium**:
   - Models the photochemical behavior of the latent image on multi-layer camera negative/reversal film prior to any print enlargement or display mapping.
-- **Spectral Inter-Layer Inhibition (DIR Coupler Physics)**:
-  - Model Development Inhibitor Releasing (DIR) couplers via 3×3 spectral cross-talk matrices directly in linear Rec.2020 to produce luminous, non-clashing skin tones and soft highlight desaturation.
+- **Distinct Photochemical Pathways (Color Dye Couplers vs. Pure Silver Halide)**:
+  - *Color Emulsions (Rochester & Ashigara)*: Model Development Inhibitor Releasing (DIR) couplers via 3×3 spectral cross-talk matrices directly in linear Rec.2020 to produce luminous, non-clashing skin tones, soft highlight desaturation, and organic translucent dye clouds.
+  - *Pure Monochrome Silver Halide (Mobberley Silver 400)*: Direct panchromatic spectral sensitivity integration ($S(\lambda)$) to a 1D exposure scalar, followed by a 1D metallic silver $D\text{-}\log H$ curve with zero chromatic variation and crisp metallic grain acutance (no inter-layer dye interactions).
 - **Curated Geographic Archetypes (Historic Plant Homage & Sensitometric Grounding)**:
   - Grounded strictly in published manufacturer sensitometric data sheets (characteristic D-log H curves, spectral dye density, and layer sensitivity curves):
     - *Rochester Portrait 400* (C-41, Kodak Park, Rochester NY): Gentle portrait contrast, luminous skin tone separation via DIR couplers, pastel highlight roll-off.

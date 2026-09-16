@@ -27,7 +27,7 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
                                     │
                                     ▼
       [ 4. Analog Emulsion & Darkroom Printmaking ]
-      • Recording: Rochester/Ashigara/Mobberley DIR Coupler Chemistry
+      • Recording: Color DIR Coupler Chemistry (Rochester/Ashigara) & Silver Halide Density (Mobberley)
       • Printing: Silver Halide Paper D-log H & Archival Selenium/Platinum Toning
                                     │
                                     ▼
