@@ -2,12 +2,10 @@ import SwiftUI
 import FirstProofBridge
 
 public struct HistorySectionView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     @State private var isExpanded: Bool = true
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     private var activePath: String? {
         viewModel.currentlyLoadedPhotoPath ?? viewModel.selectedPhoto?.filePath

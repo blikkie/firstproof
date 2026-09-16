@@ -1,13 +1,12 @@
 import SwiftUI
 
 public struct LightWorkspaceView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     public var body: some View {
+        @Bindable var viewModel = viewModel
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("LIGHT & TONE")
@@ -90,7 +89,7 @@ public struct LightWorkspaceView: View {
             Divider()
                 .padding(.vertical, 2)
             
-            ToneCurveView(viewModel: viewModel)
+            ToneCurveView()
         }
         .padding(.top, 4)
     }

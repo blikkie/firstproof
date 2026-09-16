@@ -2,14 +2,13 @@ import SwiftUI
 import FirstProofBridge
 
 public struct ColorWorkspaceView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     @State private var isSplitToningExpanded: Bool = false
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     public var body: some View {
+        @Bindable var viewModel = viewModel
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("WHITE BALANCE")

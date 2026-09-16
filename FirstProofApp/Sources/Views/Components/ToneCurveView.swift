@@ -20,15 +20,13 @@ public enum ToneCurveChannel: String, CaseIterable, Identifiable {
 }
 
 public struct ToneCurveView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     @State private var selectedChannel: ToneCurveChannel = .master
     @State private var draggingPointIndex: Int? = nil
     @State private var hoveredPointIndex: Int? = nil
     @State private var activeCoordinates: (input: Int, output: Int)? = nil
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     // MARK: - Current Channel Points Helper
     private var currentPoints: [CurvePointRecord] {

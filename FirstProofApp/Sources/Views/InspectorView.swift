@@ -3,7 +3,7 @@ import AppKit
 import FirstProofBridge
 
 struct InspectorView: View {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
     private var isBulkSelection: Bool {
         viewModel.selectedPhotoPaths.count > 1
@@ -18,7 +18,7 @@ struct InspectorView: View {
             VStack(alignment: .leading, spacing: 14) {
                 if isBulkSelection {
                     // MARK: - Multi-Selection Bulk Culling Panel
-                    BulkCullingPanel(viewModel: viewModel)
+                    BulkCullingPanel()
                 } else if let photo = viewModel.selectedPhoto {
                     // MARK: - Single Photo (Detail View & Grid Single-Selection)
                     singlePhotoPanel(for: photo)
@@ -52,6 +52,7 @@ struct InspectorView: View {
     // MARK: - Single Photo Panel (Context-Aware: Metadata in Grid, Workspace Tabs in Detail)
     @ViewBuilder
     private func singlePhotoPanel(for photo: PhotoRecord) -> some View {
+        @Bindable var viewModel = viewModel
         VStack(alignment: .leading, spacing: 12) {
             // 1. Permanent Filename & Header Card (Always Visible)
             PermanentHeaderCard(photo: photo)
@@ -85,23 +86,23 @@ struct InspectorView: View {
                 // Active Workspace Tab View
                 switch viewModel.selectedInspectorTab {
                 case .light:
-                    LightWorkspaceView(viewModel: viewModel)
+                    LightWorkspaceView()
                 case .color:
-                    ColorWorkspaceView(viewModel: viewModel)
+                    ColorWorkspaceView()
                 case .optics:
-                    OpticsGeometryWorkspaceView(viewModel: viewModel)
+                    OpticsGeometryWorkspaceView()
                 case .detail:
-                    DetailWorkspaceView(viewModel: viewModel)
+                    DetailWorkspaceView()
                 case .metadata:
-                    MetadataWorkspaceView(viewModel: viewModel, photo: photo)
+                    MetadataWorkspaceView(photo: photo)
                 }
                 
                 Divider()
                 
-                HistorySectionView(viewModel: viewModel)
+                HistorySectionView()
             } else {
                 // In Grid Mode: Metadata editing only (Rating, Flags, EXIF, Takeout)
-                MetadataWorkspaceView(viewModel: viewModel, photo: photo)
+                MetadataWorkspaceView(photo: photo)
                 
                 Divider()
                 

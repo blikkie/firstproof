@@ -2,11 +2,12 @@ import SwiftUI
 import AppKit
 
 struct MainView: View {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
     @State private var keyMonitor: Any? = nil
     
     var body: some View {
+        @Bindable var viewModel = viewModel
         VStack(spacing: 0) {
             // Camera Card Detection Banner
             if viewModel.isCameraCardBannerPresented, let card = viewModel.detectedCameraCard {
@@ -59,18 +60,18 @@ struct MainView: View {
             
             // MARK: - Upper 3-Pane Split (Sidebar, Canvas, Inspector)
             HSplitView {
-                SidebarView(viewModel: viewModel)
+                SidebarView()
                 
-                CanvasView(viewModel: viewModel)
+                CanvasView()
                     .frame(minWidth: 400, idealWidth: 600, maxWidth: .infinity)
                 
-                InspectorView(viewModel: viewModel)
+                InspectorView()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             // MARK: - Bottom Filmstrip Carousel Pane (Only in Detail View)
             if viewModel.canvasMode == .detail {
-                FilmstripView(viewModel: viewModel)
+                FilmstripView()
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -111,13 +112,13 @@ struct MainView: View {
             }
         }
         .sheet(isPresented: $viewModel.isImportSheetPresented) {
-            ImportSheetView(viewModel: viewModel)
+            ImportSheetView()
         }
         .sheet(isPresented: $viewModel.isExportSheetPresented) {
-            ExportSheetView(viewModel: viewModel)
+            ExportSheetView()
         }
         .sheet(isPresented: $viewModel.isExportPackageSheetPresented) {
-            ExportPackageSheetView(viewModel: viewModel)
+            ExportPackageSheetView()
         }
         .onAppear {
             setupKeyboardMonitor()

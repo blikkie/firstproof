@@ -4,7 +4,12 @@ import MetalKit
 import FirstProofBridge
 
 public struct MetalCanvasView: NSViewRepresentable {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var envViewModel
+    private var explicitViewModel: AppViewModel? = nil
+    
+    var viewModel: AppViewModel {
+        explicitViewModel ?? envViewModel
+    }
     let edits: EditSettings
     let zoomScale: Float
     let panOffset: CGPoint
@@ -12,14 +17,14 @@ public struct MetalCanvasView: NSViewRepresentable {
     let isCropToolActive: Bool
     
     public init(
-        viewModel: AppViewModel,
+        viewModel: AppViewModel? = nil,
         edits: EditSettings,
         zoomScale: Float,
         panOffset: CGPoint,
         isShowingOriginal: Bool,
         isCropToolActive: Bool = false
     ) {
-        self.viewModel = viewModel
+        self.explicitViewModel = viewModel
         self.edits = edits
         self.zoomScale = zoomScale
         self.panOffset = panOffset

@@ -3,13 +3,11 @@ import AppKit
 import FirstProofBridge
 
 public struct LibrarySidebarView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     @State private var hoveredFolderPath: String? = nil
     @State private var isDropTargeted: Bool = false
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -101,7 +99,6 @@ public struct LibrarySidebarView: View {
                         VStack(spacing: 2) {
                             ForEach(viewModel.openedFolders, id: \.self) { folderPath in
                                 SessionItemRowView(
-                                    viewModel: viewModel,
                                     folderPath: folderPath,
                                     hoveredFolderPath: $hoveredFolderPath
                                 )
@@ -237,7 +234,7 @@ public struct LibrarySidebarView: View {
 }
 
 private struct SessionItemRowView: View {
-    var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     let folderPath: String
     @Binding var hoveredFolderPath: String?
     

@@ -49,7 +49,8 @@ struct FirstProofApp: App {
     
     var body: some Scene {
         WindowGroup {
-            MainView(viewModel: viewModel)
+            MainView()
+                .environment(viewModel)
                 .navigationTitle("First Proof - Editorial RAW Developer")
                 .onAppear {
                     DebugIPCService.shared.start(with: viewModel)
@@ -213,12 +214,6 @@ struct FirstProofApp: App {
                 .keyboardShortcut("z", modifiers: [])
                 .disabled(viewModel.canvasMode != .detail)
                 
-                Button("Zoom 200% (2:1 Loupe)") {
-                    viewModel.zoomTo200()
-                }
-                .keyboardShortcut("2", modifiers: [.command, .option])
-                .disabled(viewModel.canvasMode != .detail)
-                
                 Button("Zoom In") {
                     viewModel.zoomIn()
                 }
@@ -263,7 +258,8 @@ struct FirstProofApp: App {
         }
         
         Settings {
-            SettingsView(viewModel: viewModel)
+            SettingsView()
+                .environment(viewModel)
         }
     }
 }

@@ -3,7 +3,7 @@ import AppKit
 import FirstProofBridge
 
 public struct ExportSheetView: View {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     @Environment(\.dismiss) private var dismiss
     
     @State private var selectedDestination: String = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path ?? "/Users"
@@ -17,9 +17,7 @@ public struct ExportSheetView: View {
     @State private var isExporting: Bool = false
     @State private var exportResultMessage: String? = nil
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     private var targetPhotos: [PhotoRecord] {
         viewModel.selectedPhotosList

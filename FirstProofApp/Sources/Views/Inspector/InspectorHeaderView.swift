@@ -67,11 +67,9 @@ public struct PermanentHeaderCard: View {
 }
 
 public struct RatingControlsView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     public var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -117,11 +115,9 @@ public struct RatingControlsView: View {
 }
 
 public struct FlagControlsView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -193,11 +189,9 @@ public struct FlagControlsView: View {
 }
 
 public struct BulkCullingPanel: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     private var selectedCount: Int {
         viewModel.selectedPhotoPaths.count > 0 ? viewModel.selectedPhotoPaths.count : (viewModel.selectedPhoto != nil ? 1 : 0)
@@ -223,8 +217,8 @@ public struct BulkCullingPanel: View {
             .background(Color.secondary.opacity(0.1))
             .cornerRadius(6)
             
-            RatingControlsView(viewModel: viewModel)
-            FlagControlsView(viewModel: viewModel)
+            RatingControlsView()
+            FlagControlsView()
             
             Divider()
             

@@ -1,14 +1,13 @@
 import SwiftUI
 
 public struct DetailWorkspaceView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     @State private var isGrainExpanded: Bool = false
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     public var body: some View {
+        @Bindable var viewModel = viewModel
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("DETAIL & SHARPENING")

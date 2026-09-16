@@ -3,7 +3,7 @@ import AppKit
 import FirstProofBridge
 
 public struct ExportPackageSheetView: View {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     @Environment(\.dismiss) private var dismiss
     
     @State private var selectedDestination: String = (FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first?.appendingPathComponent("First Proof Export").path) ?? (NSHomeDirectory() + "/Pictures/First Proof Export")
@@ -13,9 +13,7 @@ public struct ExportPackageSheetView: View {
     @State private var report: ExportPackageReport? = nil
     @State private var errorMessage: String? = nil
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     private var targetCount: Int {
         let count = viewModel.selectedPhotoPaths.count

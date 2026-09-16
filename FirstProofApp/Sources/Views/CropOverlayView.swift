@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 public struct CropOverlayView: View {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
     // Interactive drag state tracking
     @State private var activeHandle: DragHandle? = nil
@@ -23,11 +23,10 @@ public struct CropOverlayView: View {
         case rotate
     }
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     public var body: some View {
+        @Bindable var viewModel = viewModel
         GeometryReader { geometry in
             let viewSize = geometry.size
             let isOrthogonal = (viewModel.rotationDegrees == 90 || viewModel.rotationDegrees == 270)
@@ -477,7 +476,8 @@ public struct CropOverlayView: View {
     
     // MARK: - Floating Action Bar HUD
     private func floatingActionBar(imageAspect: CGFloat) -> some View {
-        HStack(spacing: 12) {
+        @Bindable var viewModel = viewModel
+        return HStack(spacing: 12) {
             // Aspect Ratio Picker
             Picker("Aspect", selection: $viewModel.cropAspectRatioPreset) {
                 ForEach(CropAspectRatioPreset.allCases) { preset in

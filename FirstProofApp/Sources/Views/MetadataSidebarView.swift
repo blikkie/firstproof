@@ -3,17 +3,16 @@ import AppKit
 import FirstProofBridge
 
 public struct MetadataSidebarView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     @State private var isContentExpanded: Bool = true
     @State private var isExposureExpanded: Bool = true
     @State private var isLocationExpanded: Bool = true
     @State private var isFileSpecsExpanded: Bool = false
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     public var body: some View {
+        @Bindable var viewModel = viewModel
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 // MARK: - 1. Top Navigation & Active Session Header

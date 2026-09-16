@@ -1,13 +1,12 @@
 import SwiftUI
 
 public struct OpticsGeometryWorkspaceView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     public var body: some View {
+        @Bindable var viewModel = viewModel
         VStack(alignment: .leading, spacing: 14) {
             // MARK: 1. Crop & Aspect Ratio
             VStack(alignment: .leading, spacing: 8) {

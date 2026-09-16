@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 public struct SettingsView: View {
-    var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
     @AppStorage("autoDetectMemoryCards") private var autoDetectMemoryCards: Bool = true
     @AppStorage("defaultDeduplicateRawOverJpeg") private var defaultDeduplicateRawOverJpeg: Bool = true
@@ -14,9 +14,7 @@ public struct SettingsView: View {
     @State private var showingChangeConfirmation: Bool = false
     @State private var showingResetConfirmation: Bool = false
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     public var body: some View {
         VStack(alignment: .leading, spacing: 18) {

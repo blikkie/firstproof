@@ -3,7 +3,7 @@ import AppKit
 import FirstProofBridge
 
 public struct ImportSheetView: View {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     @Environment(\.dismiss) private var dismiss
     
     @State private var subfolderName: String = ""
@@ -17,9 +17,7 @@ public struct ImportSheetView: View {
     @State private var report: ImportReportRecord? = nil
     @State private var errorMessage: String? = nil
     
-    public init(viewModel: AppViewModel) {
-        self.viewModel = viewModel
-    }
+    public init() {}
     
     private var sourcePath: String {
         viewModel.importSourcePath ?? viewModel.currentFolderPath ?? ""

@@ -66,3 +66,17 @@ This archive tracks completed stories and features moved from the active backlog
   - *Isolated Darkroom History (`PhotoEditHistory`)*: Dedicated per-photo undo/redo stacks capped at 50 steps (<15 KB RAM per photo). Completely eliminates accidental off-screen mutations when pressing `Cmd+Z` in Detail view.
   - *Darkroom vs. Catalog Undo Routing*: Detail view `Cmd+Z` strictly targets the active photo's adjustment history; Grid view `Cmd+Z` targets the catalog session stack (batch ratings, flags).
   - *Session-Only Memory Invariant*: History lives in memory for fluid session workflow; non-destructive edits persist permanently to XMP sidecars without cross-restart history tree serialization bloat.
+
+---
+
+## 6. Modern SwiftUI & macOS Architecture Modernization
+- **Phase 2.5.1: Desktop Drag-and-Drop Ingestion (`.dropDestination`)**:
+  - Implemented macOS 14 native `.dropDestination(for: URL.self)` on both `LibrarySidebarView` and `CanvasView`.
+  - Folders and camera cards dropped anywhere on the sidebar or canvas instantly open as active sessions with visual drop highlighting and window activation focus transfer (`NSApplication.shared.activate(ignoringOtherApps: true)`).
+  - Dropping loose RAW/JPEG master negatives opens the Import Sheet pre-populated with target files.
+  - Added "Show in Main Library" action in Import Sheet navigating cleanly to Grid mode and focusing the first imported photo.
+- **Phase 2.5.2: Dependency Injection via `@Environment(AppViewModel.self)`**:
+  - Injected `@Observable` `AppViewModel` once at the scene level in `FirstProofApp.swift` (`WindowGroup` and `Settings`).
+  - Completely stripped 25+ view `init(viewModel:)` prop-drilling initializers across all workspace, sidebar, canvas, inspector, and sheet views.
+  - Subviews adopt fine-grained `@Environment(AppViewModel.self) private var viewModel` and view-local `@Bindable var viewModel = viewModel`, minimizing SwiftUI redraw scope.
+  - Eliminated keyboard shortcut conflict on <kbd>⌘⌥2</kbd> (removed redundant blind 200% zoom button to preserve dedicated <kbd>⌘⌥2</kbd> switching for *Color & Look* tab, while keeping double-click contextual loupe).

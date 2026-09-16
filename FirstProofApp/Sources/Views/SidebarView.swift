@@ -3,13 +3,13 @@ import AppKit
 import FirstProofBridge
 
 struct SidebarView: View {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
     var body: some View {
         if viewModel.canvasMode == .detail {
-            MetadataSidebarView(viewModel: viewModel)
+            MetadataSidebarView()
         } else {
-            LibrarySidebarView(viewModel: viewModel)
+            LibrarySidebarView()
         }
     }
 }

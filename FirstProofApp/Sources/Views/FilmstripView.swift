@@ -3,7 +3,7 @@ import AppKit
 import FirstProofBridge
 
 struct FilmstripView: View {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     
     var body: some View {
         VStack(spacing: 0) {

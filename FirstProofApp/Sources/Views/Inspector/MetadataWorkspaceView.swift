@@ -2,18 +2,17 @@ import SwiftUI
 import FirstProofBridge
 
 public struct MetadataWorkspaceView: View {
-    @Bindable public var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     public let photo: PhotoRecord
     
-    public init(viewModel: AppViewModel, photo: PhotoRecord) {
-        self.viewModel = viewModel
+    public init(photo: PhotoRecord) {
         self.photo = photo
     }
     
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            RatingControlsView(viewModel: viewModel)
-            FlagControlsView(viewModel: viewModel)
+            RatingControlsView()
+            FlagControlsView()
             Divider()
             metadataRows
         }

@@ -16,15 +16,6 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ## Phase 2.5: Modern SwiftUI & macOS 14 Architecture Modernization (P1)
 
-### 2.5.1 Desktop Drag-and-Drop Ingestion (`.dropDestination`)
-- Support dragging folders and camera cards directly from Finder/Desktop into `LibrarySidebarView` and `CanvasView` to auto-open sessions.
-- Dropping individual RAW files triggers the Import Sheet targeting the active library.
-
-### 2.5.2 Dependency Injection via `@Environment(AppViewModel.self)`
-- Inject `AppViewModel` once at the `WindowGroup` scene level via `.environment(viewModel)`.
-- Strip 25+ view `init(viewModel:)` prop-drilling initializers across all workspace, sidebar, canvas, and inspector views.
-- Adopt view-local `@Bindable var viewModel = viewModel` only where bindings are generated.
-
 ### 2.5.3 Native macOS 14 `.inspector(isPresented:)` Container
 - Replace legacy AppKit `HSplitView` in `MainView.swift` with SwiftUI's native macOS 14 `NavigationSplitView` and `.inspector(isPresented:)`.
 - Wire up standard macOS Inspector toggle toolbar item and menu shortcut (<kbd>Cmd</kbd> + <kbd>Option</kbd> + <kbd>I</kbd>).

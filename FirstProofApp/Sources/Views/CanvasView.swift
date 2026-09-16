@@ -3,11 +3,12 @@ import AppKit
 import FirstProofBridge
 
 struct CanvasView: View {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     @State private var showHdrUnavailablePopover: Bool = false
     @State private var isDropTargeted: Bool = false
     
     var body: some View {
+        @Bindable var viewModel = viewModel
         VStack(spacing: 0) {
             // MARK: - Toolbar Header
             HStack(spacing: 12) {
@@ -276,7 +277,7 @@ struct CanvasView: View {
                                     .edgesIgnoringSafeArea(.all)
                                 
                                 if viewModel.previewImage != nil || viewModel.rawPreviewRecord != nil {
-                                    DetailMetalCanvasContainer(viewModel: viewModel, isShowingOriginal: viewModel.isShowingOriginal)
+                                    DetailMetalCanvasContainer(isShowingOriginal: viewModel.isShowingOriginal)
                                         .padding(16)
                                         .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
                                         .overlay(
@@ -769,7 +770,7 @@ struct GridThumbnailCell: View, Equatable {
 // Evaluated independently by SwiftUI to track live slider and orientation changes at 120 FPS
 // without invalidating the parent CanvasView or the background LazyVGrid hierarchy.
 struct DetailMetalCanvasContainer: View {
-    @Bindable var viewModel: AppViewModel
+    @Environment(AppViewModel.self) private var viewModel
     let isShowingOriginal: Bool
     
     var body: some View {
@@ -784,7 +785,7 @@ struct DetailMetalCanvasContainer: View {
             )
             
             if viewModel.isCropToolActive && !isShowingOriginal {
-                CropOverlayView(viewModel: viewModel)
+                CropOverlayView()
             }
         }
     }
