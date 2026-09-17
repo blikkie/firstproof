@@ -155,59 +155,65 @@ extension AppViewModel {
         let catalogPath = resolveCatalogPath(folderPath: folderPath, portable: self.isExternalVolume)
         let t0 = CFAbsoluteTimeGetCurrent()
         
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        activeCatalogTask?.cancel()
+        activeCatalogTask = Task { [weak self] in
             guard let self = self else { return }
             do {
-                let database = try FirstProofDatabase.open(dbPath: catalogPath)
-                self.db = database
+                let (database, cachedPhotos) = try await Task.detached(priority: .userInitiated) { () throws -> (FirstProofDatabase, [PhotoRecord]) in
+                    let db = try FirstProofDatabase.open(dbPath: catalogPath)
+                    let cached = db.getAllPhotos()
+                    return (db, cached)
+                }.value
                 
-                // 1. Instant Async Initial Load: Read cached photos off main thread
-                let cachedPhotos = database.getAllPhotos()
+                guard !Task.isCancelled else { return }
+                self.db = database
                 let tCached = CFAbsoluteTimeGetCurrent()
                 print("⚡ [PERF] Cached photos loaded: \(cachedPhotos.count) photos in \(String(format: "%.1f", (tCached - t0) * 1000.0)) ms")
                 
                 if !cachedPhotos.isEmpty {
-                    DispatchQueue.main.async {
-                        self.photos = cachedPhotos
-                        if let target = preferredPhotoPath,
-                           let match = cachedPhotos.first(where: { $0.filePath == target || URL(fileURLWithPath: $0.filePath).lastPathComponent == target }) {
-                            self.selectPhoto(match)
-                        } else if self.selectedPhoto == nil {
-                            if let savedPath = self.lastActivePhoto(for: self.currentScope),
-                               let saved = cachedPhotos.first(where: { $0.filePath == savedPath }) {
-                                self.selectPhoto(saved)
-                            } else if let first = cachedPhotos.first {
-                                self.selectPhoto(first)
-                            }
+                    self.photos = cachedPhotos
+                    if let target = preferredPhotoPath,
+                       let match = cachedPhotos.first(where: { $0.filePath == target || URL(fileURLWithPath: $0.filePath).lastPathComponent == target }) {
+                        self.selectPhoto(match)
+                    } else if self.selectedPhoto == nil {
+                        if let savedPath = self.lastActivePhoto(for: self.currentScope),
+                           let saved = cachedPhotos.first(where: { $0.filePath == savedPath }) {
+                            self.selectPhoto(saved)
+                        } else if let first = cachedPhotos.first {
+                            self.selectPhoto(first)
                         }
                     }
                 }
                 
                 // 2. Background Batched Directory Indexer
-                let count = database.indexFolder(folderPath: folderPath)
+                guard !Task.isCancelled else { return }
+                let (count, finalPhotos) = await Task.detached(priority: .userInitiated) { () -> (UInt32, [PhotoRecord]) in
+                    let indexedCount = database.indexFolder(folderPath: folderPath)
+                    let all = database.getAllPhotos()
+                    return (indexedCount, all)
+                }.value
+                
+                guard !Task.isCancelled else { return }
                 let tIndexed = CFAbsoluteTimeGetCurrent()
                 print("📦 [PERF] Indexing complete: \(count) files in \(String(format: "%.1f", (tIndexed - tCached) * 1000.0)) ms")
                 
                 // 3. Publish Final Indexed Photos
-                let finalPhotos = database.getAllPhotos()
-                
-                DispatchQueue.main.async {
-                    self.photos = finalPhotos
-                    self.isScanning = false
-                    self.scanningStatusMessage = nil
-                    if let target = preferredPhotoPath,
-                       let match = finalPhotos.first(where: { $0.filePath == target || URL(fileURLWithPath: $0.filePath).lastPathComponent == target }) {
-                        self.selectPhoto(match)
-                    } else if self.selectedPhoto == nil || !finalPhotos.contains(where: { $0.filePath == self.selectedPhoto?.filePath }) {
-                        if let savedPath = self.lastActivePhoto(for: self.currentScope),
-                           let saved = finalPhotos.first(where: { $0.filePath == savedPath }) {
-                            self.selectPhoto(saved)
-                        } else if let first = finalPhotos.first {
-                            self.selectPhoto(first)
-                        }
+                self.photos = finalPhotos
+                self.isScanning = false
+                self.scanningStatusMessage = nil
+                if let target = preferredPhotoPath,
+                   let match = finalPhotos.first(where: { $0.filePath == target || URL(fileURLWithPath: $0.filePath).lastPathComponent == target }) {
+                    self.selectPhoto(match)
+                } else if self.selectedPhoto == nil || !finalPhotos.contains(where: { $0.filePath == self.selectedPhoto?.filePath }) {
+                    if let savedPath = self.lastActivePhoto(for: self.currentScope),
+                       let saved = finalPhotos.first(where: { $0.filePath == savedPath }) {
+                        self.selectPhoto(saved)
+                    } else if let first = finalPhotos.first {
+                        self.selectPhoto(first)
                     }
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 print("Failed to open database at \(catalogPath): \(error)")
                 // Self-healing fallback: if opening failed, clean corrupt catalog and retry once
                 try? FileManager.default.removeItem(atPath: catalogPath)
@@ -217,21 +223,17 @@ extension AppViewModel {
                     self.db = retryDb
                     _ = retryDb.indexFolder(folderPath: folderPath)
                     let freshPhotos = retryDb.getAllPhotos()
-                    DispatchQueue.main.async {
-                        self.photos = freshPhotos
-                        self.isScanning = false
-                        self.scanningStatusMessage = nil
-                        if let first = freshPhotos.first {
-                            self.selectPhoto(first)
-                        }
+                    self.photos = freshPhotos
+                    self.isScanning = false
+                    self.scanningStatusMessage = nil
+                    if let first = freshPhotos.first {
+                        self.selectPhoto(first)
                     }
                     return
                 }
-                DispatchQueue.main.async {
-                    self.photos = []
-                    self.isScanning = false
-                    self.scanningStatusMessage = nil
-                }
+                self.photos = []
+                self.isScanning = false
+                self.scanningStatusMessage = nil
             }
         }
     }
@@ -252,41 +254,39 @@ extension AppViewModel {
             return
         }
         
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task { [weak self] in
             guard let self = self else { return }
             do {
-                let report = try exportPortablePackage(
-                    sourcePhotoPaths: targets,
-                    destinationFolder: destinationFolder,
-                    moveFiles: moveFiles
-                )
+                let report = try await Task.detached(priority: .userInitiated) {
+                    try exportPortablePackage(
+                        sourcePhotoPaths: targets,
+                        destinationFolder: destinationFolder,
+                        moveFiles: moveFiles
+                    )
+                }.value
                 
-                DispatchQueue.main.async {
-                    if moveFiles {
-                        let movedSet = Set(targets)
-                        self.photos.removeAll { movedSet.contains($0.filePath) }
-                        self.selectedPhotoPaths.subtract(movedSet)
-                        if let current = self.selectedPhoto, movedSet.contains(current.filePath) {
-                            self.selectedPhoto = self.photos.first
-                            if let first = self.photos.first {
-                                self.loadPreview(for: first)
-                            } else {
-                                self.previewImage = nil
-                            }
+                if moveFiles {
+                    let movedSet = Set(targets)
+                    self.photos.removeAll { movedSet.contains($0.filePath) }
+                    self.selectedPhotoPaths.subtract(movedSet)
+                    if let current = self.selectedPhoto, movedSet.contains(current.filePath) {
+                        self.selectedPhoto = self.photos.first
+                        if let first = self.photos.first {
+                            self.loadPreview(for: first)
+                        } else {
+                            self.previewImage = nil
                         }
                     }
-                    
-                    if openAfter {
-                        self.addFolder(at: destinationFolder)
-                    }
-                    
-                    completion(report)
                 }
+                
+                if openAfter {
+                    self.addFolder(at: destinationFolder)
+                }
+                
+                completion(report)
             } catch {
                 print("Failed to export portable package: \(error)")
-                DispatchQueue.main.async {
-                    completion(nil)
-                }
+                completion(nil)
             }
         }
     }

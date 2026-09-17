@@ -164,40 +164,42 @@ public final class DebugIPCService {
         var result: [String: Any] = [:]
         
         DispatchQueue.main.sync {
-            guard let vm = self.viewModel else {
-                result["status"] = "error"
-                result["message"] = "ViewModel not attached"
-                return
-            }
-            
-            result["status"] = "ok"
-            result["selectedPhoto"] = vm.selectedPhoto?.filePath
-            result["isRaw"] = vm.selectedPhotoIsRaw
-            result["canvasMode"] = "\(vm.canvasMode)"
-            result["lensCorrectionEnabled"] = vm.lensCorrectionEnabled
-            
-            let e = vm.currentEdits
-            result["edits"] = [
-                "temperature": e.temperature,
-                "tint": e.tint,
-                "exposure": e.exposure,
-                "contrast": e.contrast,
-                "highlights": e.highlights,
-                "shadows": e.shadows,
-                "whites": e.whites,
-                "blacks": e.blacks,
-                "saturation": e.saturation,
-                "vibrance": e.vibrance,
-                "rotation": e.rotation,
-                "crop": [e.cropLeft, e.cropTop, e.cropRight, e.cropBottom]
-            ]
-            
-            if let lens = vm.lensCoefficients {
-                result["lensCoefficients"] = [
-                    "model": lens.distortionModel,
-                    "distortion": lens.distortion,
-                    "hasDistortion": lens.hasDistortion
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else {
+                    result["status"] = "error"
+                    result["message"] = "ViewModel not attached"
+                    return
+                }
+                
+                result["status"] = "ok"
+                result["selectedPhoto"] = vm.selectedPhoto?.filePath
+                result["isRaw"] = vm.selectedPhotoIsRaw
+                result["canvasMode"] = "\(vm.canvasMode)"
+                result["lensCorrectionEnabled"] = vm.lensCorrectionEnabled
+                
+                let e = vm.currentEdits
+                result["edits"] = [
+                    "temperature": e.temperature,
+                    "tint": e.tint,
+                    "exposure": e.exposure,
+                    "contrast": e.contrast,
+                    "highlights": e.highlights,
+                    "shadows": e.shadows,
+                    "whites": e.whites,
+                    "blacks": e.blacks,
+                    "saturation": e.saturation,
+                    "vibrance": e.vibrance,
+                    "rotation": e.rotation,
+                    "crop": [e.cropLeft, e.cropTop, e.cropRight, e.cropBottom]
                 ]
+                
+                if let lens = vm.lensCoefficients {
+                    result["lensCoefficients"] = [
+                        "model": lens.distortionModel,
+                        "distortion": lens.distortion,
+                        "hasDistortion": lens.hasDistortion
+                    ]
+                }
             }
         }
         
@@ -210,20 +212,22 @@ public final class DebugIPCService {
         var resolvedPath = ""
         
         DispatchQueue.main.sync {
-            guard let vm = self.viewModel else { return }
-            
-            if let path = photoPath {
-                if let target = vm.photos.first(where: { $0.filePath == path }) ??
-                                 vm.filteredPhotos.first(where: { $0.filePath == path }) {
-                    vm.selectPhoto(target)
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                
+                if let path = photoPath {
+                    if let target = vm.photos.first(where: { $0.filePath == path }) ??
+                                     vm.filteredPhotos.first(where: { $0.filePath == path }) {
+                        vm.selectPhoto(target)
+                        vm.enterDetailMode()
+                        resolvedPath = target.filePath
+                        success = true
+                    }
+                } else {
                     vm.enterDetailMode()
-                    resolvedPath = target.filePath
+                    resolvedPath = vm.selectedPhoto?.filePath ?? ""
                     success = true
                 }
-            } else {
-                vm.enterDetailMode()
-                resolvedPath = vm.selectedPhoto?.filePath ?? ""
-                success = true
             }
         }
         
@@ -239,17 +243,19 @@ public final class DebugIPCService {
         var imageSize: CGSize = .zero
         
         DispatchQueue.main.sync {
-            guard let vm = self.viewModel else { return }
-            
-            let snapshot = vm.captureIntermediateSnapshot?() ?? vm.captureThumbnailSnapshot?()
-            if let img = snapshot {
-                imageSize = img.size
-                if let tiffData = img.tiffRepresentation,
-                   let bitmap = NSBitmapImageRep(data: tiffData),
-                   let pngData = bitmap.representation(using: .png, properties: [:]) {
-                    let url = URL(fileURLWithPath: outputPath)
-                    try? pngData.write(to: url)
-                    success = true
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                
+                let snapshot = vm.captureIntermediateSnapshot?() ?? vm.captureThumbnailSnapshot?()
+                if let img = snapshot {
+                    imageSize = img.size
+                    if let tiffData = img.tiffRepresentation,
+                       let bitmap = NSBitmapImageRep(data: tiffData),
+                       let pngData = bitmap.representation(using: .png, properties: [:]) {
+                        let url = URL(fileURLWithPath: outputPath)
+                        try? pngData.write(to: url)
+                        success = true
+                    }
                 }
             }
         }
@@ -265,33 +271,34 @@ public final class DebugIPCService {
         var samples: [[String: Any]] = []
         
         DispatchQueue.main.sync {
-            guard let vm = self.viewModel else { return }
-            guard let img = vm.captureIntermediateSnapshot?() ?? vm.captureThumbnailSnapshot?() else { return }
-            guard let tiffData = img.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiffData) else { return }
-            
-            let w = bitmap.pixelsWide
-            let h = bitmap.pixelsHigh
-            
-            for pt in points {
-                guard pt.count >= 2 else { continue }
-                let u = pt[0]
-                let v = pt[1]
-                let px = min(max(Int(Double(w) * u), 0), w - 1)
-                let py = min(max(Int(Double(h) * v), 0), h - 1)
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                guard let img = vm.captureIntermediateSnapshot?() ?? vm.captureThumbnailSnapshot?() else { return }
+                guard let tiffData = img.tiffRepresentation,
+                      let bitmap = NSBitmapImageRep(data: tiffData) else { return }
                 
-                if let color = bitmap.colorAt(x: px, y: py) {
-                    let r = Int((color.redComponent * 255.0).rounded())
-                    let g = Int((color.greenComponent * 255.0).rounded())
-                    let b = Int((color.blueComponent * 255.0).rounded())
-                    let gr = (r > 0) ? Double(g) / Double(r) : 0.0
+                let w = bitmap.pixelsWide
+                let h = bitmap.pixelsHigh
+                
+                for pt in points {
+                    guard pt.count >= 2 else { continue }
+                    let u = pt[0]
+                    let v = pt[1]
+                    let px = min(max(Int(Double(w) * u), 0), w - 1)
+                    let py = min(max(Int(Double(h) * v), 0), h - 1)
                     
-                    samples.append([
-                        "uv": [u, v],
-                        "pixel": [px, py],
-                        "rgb": [r, g, b],
-                        "gr_ratio": gr
-                    ])
+                    if let color = bitmap.colorAt(x: px, y: py) {
+                        let r = Int((color.redComponent * 255.0).rounded())
+                        let g = Int((color.greenComponent * 255.0).rounded())
+                        let b = Int((color.blueComponent * 255.0).rounded())
+                        let gr = (r > 0) ? Double(g) / Double(r) : 0.0
+                        
+                        samples.append([
+                            "uv": [u, v],
+                            "rgb": [r, g, b],
+                            "green_red_ratio": gr
+                        ])
+                    }
                 }
             }
         }

@@ -145,6 +145,7 @@ public enum InspectorTab: String, CaseIterable, Identifiable {
     }
 }
 
+@MainActor
 @Observable
 public final class AppViewModel {
     // MARK: - Navigation & Directory State
@@ -179,6 +180,8 @@ public final class AppViewModel {
     public var currentGainMapRecord: GainMapRecord? = nil
     public var isDemosaicing: Bool = false
     @ObservationIgnored var activeDecodeToken: UUID = UUID()
+    @ObservationIgnored var activeDecodeTask: Task<Void, Never>? = nil
+    @ObservationIgnored var activeCatalogTask: Task<Void, Never>? = nil
     @ObservationIgnored public var captureThumbnailSnapshot: (() -> NSImage?)? = nil
     @ObservationIgnored public var captureIntermediateSnapshot: (() -> NSImage?)? = nil
     public var isExportSheetPresented: Bool = false
@@ -212,7 +215,8 @@ public final class AppViewModel {
     public var metadataCreator: String = ""
     public var metadataCopyright: String = ""
     public var metadataKeywords: String = ""
-    @ObservationIgnored var metadataSaveWorkItem: DispatchWorkItem? = nil
+    @ObservationIgnored private var metadataSaveTask: Task<Void, Never>? = nil
+    @ObservationIgnored private var pendingMetadataSaveBlock: (() -> Void)? = nil
     
     // MARK: - Batch Export Engine State
     public var isBatchExporting: Bool = false
@@ -221,7 +225,7 @@ public final class AppViewModel {
     public var batchExportStatusText: String = ""
     public var batchExportProgress: Double = 0.0
     public var lastBatchExportResults: [BatchExportResultRecord] = []
-    @ObservationIgnored public var isBatchExportCancelled: Bool = false
+    @ObservationIgnored nonisolated(unsafe) public var isBatchExportCancelled: Bool = false
     
     public var selectedPhotosList: [PhotoRecord] {
         if !selectedPhotoPaths.isEmpty {
@@ -460,8 +464,10 @@ public final class AppViewModel {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.saveCurrentEdits()
-            self?.checkpointDatabase()
+            MainActor.assumeIsolated {
+                self?.saveCurrentEdits()
+                self?.checkpointDatabase()
+            }
         }
     }
     
@@ -507,7 +513,6 @@ public final class AppViewModel {
         if let observer = appTerminationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
-        checkpointDatabase()
     }
     
     // MARK: - Display & EDR Headroom Detection
@@ -554,7 +559,9 @@ public final class AppViewModel {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.updateScreenCapabilities()
+            MainActor.assumeIsolated {
+                self?.updateScreenCapabilities()
+            }
         }
         
         windowChangeObserver = NotificationCenter.default.addObserver(
@@ -563,7 +570,9 @@ public final class AppViewModel {
             queue: .main
         ) { [weak self] note in
             let win = note.object as? NSWindow
-            self?.updateScreenCapabilities(for: win)
+            MainActor.assumeIsolated {
+                self?.updateScreenCapabilities(for: win)
+            }
         }
     }
     
@@ -586,7 +595,7 @@ public final class AppViewModel {
 
     public func scheduleMetadataSave() {
         guard let path = selectedPhoto?.filePath else { return }
-        metadataSaveWorkItem?.cancel()
+        metadataSaveTask?.cancel()
 
         let title = metadataTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let description = metadataDescription.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -594,9 +603,8 @@ public final class AppViewModel {
         let copyright = metadataCopyright.trimmingCharacters(in: .whitespacesAndNewlines)
         let keywords = metadataKeywords.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let item = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
-            self.saveMetadata(
+        let saveAction: () -> Void = { [weak self] in
+            self?.saveMetadata(
                 for: path,
                 title: title.isEmpty ? nil : title,
                 description: description.isEmpty ? nil : description,
@@ -605,14 +613,22 @@ public final class AppViewModel {
                 keywords: keywords.isEmpty ? nil : keywords
             )
         }
-        metadataSaveWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: item)
+        self.pendingMetadataSaveBlock = saveAction
+
+        metadataSaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            self?.pendingMetadataSaveBlock = nil
+            saveAction()
+        }
     }
 
     public func flushPendingMetadataSave() {
-        if let workItem = metadataSaveWorkItem {
-            workItem.perform()
-            metadataSaveWorkItem = nil
+        metadataSaveTask?.cancel()
+        metadataSaveTask = nil
+        if let action = pendingMetadataSaveBlock {
+            pendingMetadataSaveBlock = nil
+            action()
         }
     }
 
@@ -650,32 +666,32 @@ public final class AppViewModel {
             selectedPhoto?.keywords = keywords
         }
 
-        // Sync to XMP sidecar
+        // Sync to XMP sidecar off main thread
         let activeSnapshot = currentEdits
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self else { return }
+        let currentRating = photos.first(where: { $0.filePath == path })?.rating
+        let currentStatus = photos.first(where: { $0.filePath == path })?.status ?? "None"
+        let currentLat = photos.first(where: { $0.filePath == path })?.latitude
+        let currentLon = photos.first(where: { $0.filePath == path })?.longitude
+        let isCurrent = (path == currentlyLoadedPhotoPath)
+
+        Task.detached(priority: .utility) {
             let existing = readXmp(path: path)
             let splitKeywords: [String] = keywords?
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty } ?? existing?.keywords ?? []
 
-            let currentRating = self.photos.first(where: { $0.filePath == path })?.rating ?? existing?.rating
-            let currentStatus = self.photos.first(where: { $0.filePath == path })?.status ?? existing?.status ?? "None"
-            let currentLat = self.photos.first(where: { $0.filePath == path })?.latitude ?? existing?.latitude
-            let currentLon = self.photos.first(where: { $0.filePath == path })?.longitude ?? existing?.longitude
-
             let record = XmpDataRecord(
-                rating: currentRating,
+                rating: currentRating ?? existing?.rating,
                 status: currentStatus,
                 title: title ?? existing?.title,
                 description: description ?? existing?.description,
                 creator: creator ?? existing?.creator,
                 copyright: copyright ?? existing?.copyright,
                 keywords: splitKeywords,
-                latitude: currentLat,
-                longitude: currentLon,
-                edits: (path == self.currentlyLoadedPhotoPath) ? activeSnapshot : (existing?.edits ?? EditSettings.defaultIdentity)
+                latitude: currentLat ?? existing?.latitude,
+                longitude: currentLon ?? existing?.longitude,
+                edits: isCurrent ? activeSnapshot : (existing?.edits ?? EditSettings.defaultIdentity)
             )
             _ = writeXmp(path: path, record: record)
         }

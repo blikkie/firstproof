@@ -203,9 +203,7 @@ extension AppViewModel {
         if let prevPath = currentlyLoadedPhotoPath, prevPath != photo.filePath {
             self.flushPendingMetadataSave()
             let editsSnapshot = currentEdits
-            DispatchQueue.global(qos: .utility).async { [weak self] in
-                self?.syncXmp(for: prevPath, rating: nil, status: nil, edits: editsSnapshot)
-            }
+            self.syncXmp(for: prevPath, rating: nil, status: nil, edits: editsSnapshot)
         }
         self.currentlyLoadedPhotoPath = photo.filePath
         self.loadMetadataForSelectedPhoto()
@@ -258,6 +256,7 @@ extension AppViewModel {
         
         let token = UUID()
         self.activeDecodeToken = token
+        self.activeDecodeTask?.cancel()
         self.isDemosaicing = true
         
         self.currentlyLoadedPhotoPath = photo.filePath
@@ -295,41 +294,44 @@ extension AppViewModel {
             
             // Immediate 10-15ms RAW binned decode directly into Linear Rec.2020 (if not already preloaded)
             // Followed by full-resolution demosaic stream for 100% zoom pixel peeping
-            DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+            self.activeDecodeTask = Task { [weak self] in
                 guard let self = self else { return }
                 guard self.activeDecodeToken == token else { return }
                 
                 // Stage 2A: Viewport-aware 2x2 Bayer box binning (10-15ms fast preview if uncached)
                 if preloadedRecord == nil {
-                    if let binnedRecord = decodeRawPreviewBinned(path: photo.filePath) {
+                    let binned = await Task.detached(priority: .userInitiated) {
+                        decodeRawPreviewBinned(path: photo.filePath)
+                    }.value
+                    
+                    guard !Task.isCancelled, self.activeDecodeToken == token else { return }
+                    if let binnedRecord = binned {
                         PreviewRingBuffer.shared.storeRawPreview(binnedRecord, for: photo.filePath)
-                        DispatchQueue.main.async {
-                            if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
-                                self.rawPreviewRecord = binnedRecord
-                                self.previewImage = nil
-                                self.isIntermediatePreviewActive = false
-                                self.isDemosaicing = false
-                            }
-                        }
-                    }
-                }
-                
-                // Stage 2B: Full-resolution demosaic stream for 100% zoom pixel peeping
-                if let fullRecord = decodeRawPreview(path: photo.filePath, maxDimension: nil) {
-                    DispatchQueue.main.async {
-                        if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
-                            self.rawPreviewRecord = fullRecord
+                        if self.selectedPhoto?.filePath == photo.filePath {
+                            self.rawPreviewRecord = binnedRecord
+                            self.previewImage = nil
                             self.isIntermediatePreviewActive = false
                             self.isDemosaicing = false
                         }
                     }
-                    return
                 }
                 
-                DispatchQueue.main.async {
-                    if self.activeDecodeToken == token {
+                guard !Task.isCancelled, self.activeDecodeToken == token else { return }
+                
+                // Stage 2B: Full-resolution demosaic stream for 100% zoom pixel peeping
+                let full = await Task.detached(priority: .userInitiated) {
+                    decodeRawPreview(path: photo.filePath, maxDimension: nil)
+                }.value
+                
+                guard !Task.isCancelled, self.activeDecodeToken == token else { return }
+                if let fullRecord = full {
+                    if self.selectedPhoto?.filePath == photo.filePath {
+                        self.rawPreviewRecord = fullRecord
+                        self.isIntermediatePreviewActive = false
                         self.isDemosaicing = false
                     }
+                } else {
+                    self.isDemosaicing = false
                 }
             }
         } else {
@@ -346,38 +348,40 @@ extension AppViewModel {
                 self.isDemosaicing = true
             }
             
-            DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+            self.activeDecodeTask = Task { [weak self] in
                 guard let self = self else { return }
                 guard self.activeDecodeToken == token else { return }
                 
-                var preview: NSImage? = nil
-                var gainMap: GainMapRecord? = nil
-                
-                let ext = (photo.filePath as NSString).pathExtension.lowercased()
-                if ext == "jpg" || ext == "jpeg" {
-                    if hasUltraHdrGainMap(filePath: photo.filePath) {
-                        gainMap = extractUltraHdrGainMap(filePath: photo.filePath)
-                    }
-                }
-                
-                let url = URL(fileURLWithPath: photo.filePath) as CFURL
-                if let src = CGImageSourceCreateWithURL(url, nil) {
-                    if let cgThumb = CGImageSourceCreateImageAtIndex(src, 0, nil) {
-                        preview = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
-                    }
-                }
-                
-                DispatchQueue.main.async {
-                    if self.activeDecodeToken == token && self.selectedPhoto?.filePath == photo.filePath {
-                        self.currentGainMapRecord = gainMap
-                        if let finalImage = preview {
-                            self.previewImage = finalImage
-                            ThumbnailCache.shared.setImage(finalImage, for: photo.filePath)
+                let (preview, gainMap) = await Task.detached(priority: .userInitiated) { () -> (NSImage?, GainMapRecord?) in
+                    var preview: NSImage? = nil
+                    var gainMap: GainMapRecord? = nil
+                    
+                    let ext = (photo.filePath as NSString).pathExtension.lowercased()
+                    if ext == "jpg" || ext == "jpeg" {
+                        if hasUltraHdrGainMap(filePath: photo.filePath) {
+                            gainMap = extractUltraHdrGainMap(filePath: photo.filePath)
                         }
-                        self.rawPreviewRecord = nil
-                        self.isIntermediatePreviewActive = false
-                        self.isDemosaicing = false
                     }
+                    
+                    let url = URL(fileURLWithPath: photo.filePath) as CFURL
+                    if let src = CGImageSourceCreateWithURL(url, nil) {
+                        if let cgThumb = CGImageSourceCreateImageAtIndex(src, 0, nil) {
+                            preview = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
+                        }
+                    }
+                    return (preview, gainMap)
+                }.value
+                
+                guard !Task.isCancelled, self.activeDecodeToken == token else { return }
+                if self.selectedPhoto?.filePath == photo.filePath {
+                    self.currentGainMapRecord = gainMap
+                    if let finalImage = preview {
+                        self.previewImage = finalImage
+                        ThumbnailCache.shared.setImage(finalImage, for: photo.filePath)
+                    }
+                    self.rawPreviewRecord = nil
+                    self.isIntermediatePreviewActive = false
+                    self.isDemosaicing = false
                 }
             }
         }
@@ -440,12 +444,9 @@ extension AppViewModel {
         
         let activeSnapshot = currentEdits
         let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self else { return }
-            for path in targets {
-                let edits = (path == activePath) ? activeSnapshot : nil
-                self.syncXmp(for: path, rating: newRating, status: nil, edits: edits)
-            }
+        for path in targets {
+            let edits = (path == activePath) ? activeSnapshot : nil
+            self.syncXmp(for: path, rating: newRating, status: nil, edits: edits)
         }
     }
     
@@ -495,18 +496,13 @@ extension AppViewModel {
         
         let activeSnapshot = currentEdits
         let activePath = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let self = self else { return }
-            for path in targets {
-                let edits = (path == activePath) ? activeSnapshot : nil
-                self.syncXmp(for: path, rating: nil, status: newStatus, edits: edits)
-            }
+        for path in targets {
+            let edits = (path == activePath) ? activeSnapshot : nil
+            self.syncXmp(for: path, rating: nil, status: newStatus, edits: edits)
         }
     }
     
     func syncXmp(for filePath: String, rating: Int32??, status: String?, edits: EditSettings? = nil) {
-        let existingXmp = readXmp(path: filePath)
-        
         let currentPhoto = photos.first(where: { $0.filePath == filePath })
         let finalRating: Int32?
         if let r = rating {
@@ -515,29 +511,38 @@ extension AppViewModel {
             finalRating = currentPhoto?.rating
         }
         let finalStatus = status ?? currentPhoto?.status ?? "none"
-        
-        let finalEdits = edits ?? existingXmp?.edits ?? EditSettings.defaultIdentity
-        
-        let splitKeywords: [String]
-        if let kw = currentPhoto?.keywords {
-            splitKeywords = kw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        } else {
-            splitKeywords = existingXmp?.keywords ?? []
+        let photoKeywords = currentPhoto?.keywords
+        let photoTitle = currentPhoto?.title
+        let photoDescription = currentPhoto?.description
+        let photoCreator = currentPhoto?.creator
+        let photoCopyright = currentPhoto?.copyright
+        let photoLat = currentPhoto?.latitude
+        let photoLon = currentPhoto?.longitude
+
+        Task.detached(priority: .utility) {
+            let existingXmp = readXmp(path: filePath)
+            let finalEdits = edits ?? existingXmp?.edits ?? EditSettings.defaultIdentity
+            let splitKeywords: [String]
+            if let kw = photoKeywords {
+                splitKeywords = kw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            } else {
+                splitKeywords = existingXmp?.keywords ?? []
+            }
+
+            let record = XmpDataRecord(
+                rating: finalRating ?? existingXmp?.rating,
+                status: finalStatus,
+                title: photoTitle ?? existingXmp?.title,
+                description: photoDescription ?? existingXmp?.description,
+                creator: photoCreator ?? existingXmp?.creator,
+                copyright: photoCopyright ?? existingXmp?.copyright,
+                keywords: splitKeywords,
+                latitude: photoLat ?? existingXmp?.latitude,
+                longitude: photoLon ?? existingXmp?.longitude,
+                edits: finalEdits
+            )
+            _ = writeXmp(path: filePath, record: record)
         }
-        
-        let record = XmpDataRecord(
-            rating: finalRating,
-            status: finalStatus,
-            title: currentPhoto?.title ?? existingXmp?.title,
-            description: currentPhoto?.description ?? existingXmp?.description,
-            creator: currentPhoto?.creator ?? existingXmp?.creator,
-            copyright: currentPhoto?.copyright ?? existingXmp?.copyright,
-            keywords: splitKeywords,
-            latitude: currentPhoto?.latitude,
-            longitude: currentPhoto?.longitude,
-            edits: finalEdits
-        )
-        _ = writeXmp(path: filePath, record: record)
     }
     
     // MARK: - Viewport Zoom & Pan

@@ -173,9 +173,7 @@ extension AppViewModel {
             ThumbnailCache.shared.saveIntermediate(intermediate, for: path, edits: editsSnapshot)
         }
         
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            self?.syncXmp(for: path, rating: nil, status: nil, edits: editsSnapshot)
-        }
+        syncXmp(for: path, rating: nil, status: nil, edits: editsSnapshot)
     }
     
     public var hasCustomEdits: Bool {
@@ -556,16 +554,16 @@ extension AppViewModel {
         
         // 2. Background path: Decode from file
         let path = photo.filePath
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let adj = computeAutoAdjustments(path: path) else { return }
-            DispatchQueue.main.async {
-                guard let self = self, self.selectedPhoto?.filePath == path else { return }
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    self.exposure = adj.exposure
-                    self.contrast = adj.contrast
-                }
-                self.registerDiscreteEdit(title: "Auto Tone", before: before)
+        Task { [weak self] in
+            let adj = await Task.detached(priority: .userInitiated) {
+                computeAutoAdjustments(path: path)
+            }.value
+            guard let self = self, self.selectedPhoto?.filePath == path, let adj = adj else { return }
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.exposure = adj.exposure
+                self.contrast = adj.contrast
             }
+            self.registerDiscreteEdit(title: "Auto Tone", before: before)
         }
     }
     
@@ -588,16 +586,16 @@ extension AppViewModel {
         
         // 2. Background path: Decode from file
         let path = photo.filePath
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let wb = computeAutoWhiteBalance(path: path) else { return }
-            DispatchQueue.main.async {
-                guard let self = self, self.selectedPhoto?.filePath == path else { return }
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    self.temperature = wb.temperature
-                    self.tint = wb.tint
-                }
-                self.registerDiscreteEdit(title: "Auto White Balance", before: before)
+        Task { [weak self] in
+            let wb = await Task.detached(priority: .userInitiated) {
+                computeAutoWhiteBalance(path: path)
+            }.value
+            guard let self = self, self.selectedPhoto?.filePath == path, let wb = wb else { return }
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.temperature = wb.temperature
+                self.tint = wb.tint
             }
+            self.registerDiscreteEdit(title: "Auto White Balance", before: before)
         }
     }
     

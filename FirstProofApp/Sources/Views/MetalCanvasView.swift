@@ -266,6 +266,7 @@ public struct MetalCanvasView: NSViewRepresentable {
         }
     }
     
+    @MainActor
     public class Coordinator {
         var renderer: MetalRenderer?
         weak var nsView: CanvasMTKView?

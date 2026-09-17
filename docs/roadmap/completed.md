@@ -85,3 +85,9 @@ This archive tracks completed stories and features moved from the active backlog
   - Configured native column boundaries: `.navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)` on the leading sidebar and `.inspectorColumnWidth(min: 240, ideal: 270, max: 320)` on the trailing darkroom inspector.
   - Removed hardcoded min/max width frame constraints across sidebar and inspector child views to eliminate layout conflicts.
   - Wired native toolbar inspector toggle button (<kbd>sidebar.trailing</kbd>), `InspectorCommands()`, and standard <kbd>⌘⌥I</kbd> menu toggle for full-bleed proofing on 14" screens.
+- **Phase 2.5.4: Swift Structured Concurrency & Cooperative Cancellation**:
+  - Annotated `AppViewModel` with `@MainActor` for compile-time verified main-thread UI state isolation and safe `@Observable` state binding.
+  - Replaced legacy Grand Central Dispatch callbacks (`DispatchQueue.global(qos:).async`) with structured `Task` and `Task.detached(priority:)` off-actor work units.
+  - Implemented cooperative cancellation with `activeDecodeTask?.cancel()` and `Task.isCancelled` guards in `loadPreview(for:)`, cleanly cancelling obsolete Bayer decodes during rapid arrow-key culling.
+  - Structured catalog indexing in `openDirectory` via `activeCatalogTask?.cancel()`, ensuring fast folder switching never allows stale background directory scans to overwrite newly selected session photos.
+  - Modernized metadata saving debouncing with a cancellable structured `metadataSaveTask` and `Task.sleep(nanoseconds: 400_000_000)`, with flush-on-exit semantics and non-blocking background XMP sidecar persistence.

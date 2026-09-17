@@ -17,11 +17,6 @@ This document strictly tracks pending and deferred features calibrated against o
 ## Phase 2.5: Modern SwiftUI & macOS 14 Architecture Modernization (P1)
 
 
-### 2.5.4 Swift Structured Concurrency & Cooperative Cancellation
-- Annotate `AppViewModel` with `@MainActor` for compile-time verified main-thread UI state mutations.
-- Replace legacy Grand Central Dispatch callbacks (`DispatchQueue.global(qos:).async`) with `async/await` and `Task.detached`.
-- Use `.task(id: selectedPhoto?.filePath)` for view-driven image decoding, automatically cancelling obsolete background decodes during rapid arrow-key culling.
-
 ### 2.5.5 Custom `Layout` Protocol for Aspect-Ratio Containment
 - Replace greedy nested `GeometryReader`s in `ToneCurveView` and `ColorWheelView` with declarative `SquareAspectLayout: Layout` to maintain strict aspect ratio without layout overflow into adjacent disclosure groups.
 
