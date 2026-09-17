@@ -91,3 +91,8 @@ This archive tracks completed stories and features moved from the active backlog
   - Implemented cooperative cancellation with `activeDecodeTask?.cancel()` and `Task.isCancelled` guards in `loadPreview(for:)`, cleanly cancelling obsolete Bayer decodes during rapid arrow-key culling.
   - Structured catalog indexing in `openDirectory` via `activeCatalogTask?.cancel()`, ensuring fast folder switching never allows stale background directory scans to overwrite newly selected session photos.
   - Modernized metadata saving debouncing with a cancellable structured `metadataSaveTask` and `Task.sleep(nanoseconds: 400_000_000)`, with flush-on-exit semantics and non-blocking background XMP sidecar persistence.
+- **Phase 2.5.5: Custom `Layout` Protocol for Aspect-Ratio Containment**:
+  - Implemented reusable `SquareAspectLayout: Layout` participating natively in SwiftUI's layout negotiation via `sizeThatFits` and `placeSubviews`.
+  - Replaced legacy `Color.clear.aspectRatio(1.0, contentMode: .fit).overlay(GeometryReader ...)` pattern in `ToneCurveView` and `ColorWheelView`.
+  - Guaranteed deterministic vertical space reservation inside inspector `ScrollView` and `VStack` containers, eliminating layout jitter and overflow into adjacent disclosure groups during window and sidebar resizing.
+  - Updated architectural guidelines in `.agents/AGENTS.md` to establish `SquareAspectLayout` as the standard pattern for square aspect containment.

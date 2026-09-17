@@ -7,18 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Modern SwiftUI & macOS 14 Architecture Modernization (Immediate / P1)**: Drag-and-drop ingestion (`.dropDestination`), `@Environment(AppViewModel.self)` DI, native `.inspector(isPresented:)`, Swift Concurrency (`.task(id:)`), and `Layout` protocol aspect containment.
-2. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
-3. **Archival Open DNG Converter & Lossless Compression Engine (P1)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-4. **Upstream Recording Emulsions (C-41, E-6, K-14 & ECN-2 Chemistry) (P2)**: Non-linear film stock modeling with subtractive dye layer response and DIR couplers.
-
----
-
-## Phase 2.5: Modern SwiftUI & macOS 14 Architecture Modernization (P1)
-
-
-### 2.5.5 Custom `Layout` Protocol for Aspect-Ratio Containment
-- Replace greedy nested `GeometryReader`s in `ToneCurveView` and `ColorWheelView` with declarative `SquareAspectLayout: Layout` to maintain strict aspect ratio without layout overflow into adjacent disclosure groups.
+1. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
+2. **Archival Open DNG Converter & Lossless Compression Engine (P1)**: Lossless Bayer CFA transcoding and Deflate tile compression.
+3. **Upstream Recording Emulsions (C-41, E-6, K-14 & ECN-2 Chemistry) (P2)**: Non-linear film stock modeling with subtractive dye layer response and DIR couplers.
+4. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
 
 ---
 

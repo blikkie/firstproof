@@ -58,15 +58,15 @@
   - Always guarantee cleanup on exit: whenever closing an interactive tool (via "Done" button, Return, Escape, or `.onDisappear`), commit any pending drag scrub (`if undoHistory.scrubStartEdits != nil { endSliderScrub(...) }`).
 
 - **Inspector Layout & Aspect-Ratio Containment**:
-  - In inspector sidebars (`ScrollView`/`VStack`), `GeometryReader` is greedy and unconstrained. Never place a square interactive graph (e.g. Tone Curve) in an arbitrary height frame without strict aspect-ratio containment.
-  - Always use the bounded container pattern:
+  - In inspector sidebars (`ScrollView`/`VStack`), `GeometryReader` is greedy and unconstrained along the vertical axis. Never place a square interactive graph (e.g. Tone Curve, Color Wheel) in an arbitrary height frame without strict aspect-ratio containment.
+  - Always use the native `SquareAspectLayout` container pattern (`SquareAspectLayout: Layout`):
     ```swift
-    Color.clear
-        .aspectRatio(1.0, contentMode: .fit)
-        .overlay(GeometryReader { geo in ... })
-        .clipped()
+    SquareAspectLayout {
+        GeometryReader { geo in ... }
+    }
+    .clipped()
     ```
-  - This guarantees the layout engine allocates exact vertical space matching horizontal width, preventing layout overflow into adjacent disclosure groups.
+  - This natively participates in SwiftUI's layout negotiation (`sizeThatFits` computes exact width matching height), reserving exact vertical space in scroll views and preventing layout overflow or jitter into adjacent disclosure groups.
 
 - **Portable Catalogs on External Drives (`.firstproof/`)**:
   - Folder indexing on external storage volumes stores catalogs inside `<volume>/.firstproof/catalog.db` so the catalog travels with the external media.
