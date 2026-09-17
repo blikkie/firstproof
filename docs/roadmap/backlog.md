@@ -8,8 +8,8 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ## 🚀 Immediate Next Up
 1. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
-2. **Archival Open DNG Converter & Lossless Compression Engine (P1)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-3. **Upstream Recording Emulsions (C-41, E-6, K-14 & ECN-2 Chemistry) (P2)**: Non-linear film stock modeling with subtractive dye layer response and DIR couplers.
+2. **Upstream Recording Emulsions (C-41, E-6, K-14 & ECN-2 Chemistry) (P1)**: Non-linear film stock modeling with subtractive dye layer response and DIR couplers.
+3. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
 4. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
 
 ---
@@ -17,7 +17,7 @@ This document strictly tracks pending and deferred features calibrated against o
 ## Phase 3: Fine-Art Darkroom Chemistry & Archival Formats (P1 / P2)
 
 > **Physical Darkroom Architecture: Recording vs. Printing Decoupling**  
-> In physical photography, the *recording medium* (in-camera film negative) and the *printing medium* (darkroom enlarger filtration, paper chemistry, and toner baths) are two orthogonal stages. Story 3.3 models the upstream in-camera negative chemistry; Story 3.1 models the downstream darkroom print tray. A photographer can print a clean digital RAW or a chemical negative onto silver gelatin paper with archival toning without either stage overriding the other.
+> In physical photography, the *recording medium* (in-camera film negative) and the *printing medium* (darkroom enlarger filtration, paper chemistry, and toner baths) are two orthogonal stages. Story 3.2 models the upstream in-camera negative chemistry; Story 3.1 models the downstream darkroom print tray. A photographer can print a clean digital RAW or a chemical negative onto silver gelatin paper with archival toning without either stage overriding the other.
 
 ### 3.1 Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)
 - **Downstream Darkroom Print Medium**:
@@ -40,18 +40,7 @@ This document strictly tracks pending and deferred features calibrated against o
 - **Anti-Slop Invariant**:
   - Strictly grounded in optical physics and chemical darkroom print making. Zero arbitrary digital "filter presets" or crushed-black Instagram effects.
 
-### 3.2 Archival Open DNG Converter & Lossless Compression Engine (P1)
-- **Lossless Bayer CFA Transcoding**:
-  - Convert proprietary camera RAWs (`.cr2`, `.nef`, `.arw`, `.rw2`) into open standard Adobe DNG (1.4+ / TIFF-EP).
-  - Encapsulate raw Bayer mosaic unaltered, preserving exact sensor CFA layout, active sensor crop, black/white saturation levels, and daylight/tungsten color calibration matrices.
-- **Deflate (ZIP) Tile Compression**:
-  - Apply lossless Deflate / ZIP tile compression (`flate2`) across raw sensor data, reclaiming 20–35% disk storage with mathematically identical (zero-loss) reconstruction.
-- **Bit-for-Bit Verification Safeguard**:
-  - Validate decompressed CFA sensor payload against the original proprietary RAW via SHA-256 / CRC32 before committing conversion, ensuring zero risk of archive corruption.
-- **Metadata & Sidecar Integration**:
-  - Embed existing First Proof XMP edits, color adjustments, IPTC tags, and ratings into the DNG IFDs, or preserve adjacent `.xmp` according to catalog preferences.
-
-### 3.3 Upstream Recording Emulsions: C-41, E-6, K-14 & ECN-2 Chemistry (P2)
+### 3.2 Upstream Recording Emulsions: C-41, E-6, K-14 & ECN-2 Chemistry (P1)
 - **Upstream In-Camera Recording Medium**:
   - Models the photochemical behavior of the latent image on multi-layer camera negative/reversal film prior to any print enlargement or display mapping.
 - **Distinct Photochemical Pathways (Color Dye Couplers vs. Pure Silver Halide)**:
@@ -70,6 +59,17 @@ This document strictly tracks pending and deferred features calibrated against o
   - *Anti-Preset Restraint*: Strictly bounded to 6 foundational, deeply researched chemical archetypes across the major 20th-century processes. Zero bloated "preset packs" or arbitrary digital LUT styling.
 - **Decoupled Grain with Optional Recommended Linkage**:
   - The procedural organic grain engine (`Detail.metal`) remains physically decoupled and adjustable to 0. Activating an emulsion profile optionally offers its historically paired grain preset (e.g. *Rochester Portrait 400* suggests `P-400 Portrait`), but grain is never forced or permanently baked into the color transform.
+
+### 3.3 Archival Open DNG Converter & Lossless Compression Engine (P2)
+- **Lossless Bayer CFA Transcoding**:
+  - Convert proprietary camera RAWs (`.cr2`, `.nef`, `.arw`, `.rw2`) into open standard Adobe DNG (1.4+ / TIFF-EP).
+  - Encapsulate raw Bayer mosaic unaltered, preserving exact sensor CFA layout, active sensor crop, black/white saturation levels, and daylight/tungsten color calibration matrices.
+- **Deflate (ZIP) Tile Compression**:
+  - Apply lossless Deflate / ZIP tile compression (`flate2`) across raw sensor data, reclaiming 20–35% disk storage with mathematically identical (zero-loss) reconstruction.
+- **Bit-for-Bit Verification Safeguard**:
+  - Validate decompressed CFA sensor payload against the original proprietary RAW via SHA-256 / CRC32 before committing conversion, ensuring zero risk of archive corruption.
+- **Metadata & Sidecar Integration**:
+  - Embed existing First Proof XMP edits, color adjustments, IPTC tags, and ratings into the DNG IFDs, or preserve adjacent `.xmp` according to catalog preferences.
 
 ### 3.4 ColorSync Soft Proofing (P2)
 - **Canvas Soft Proofing Mode**:
