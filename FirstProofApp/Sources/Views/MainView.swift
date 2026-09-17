@@ -8,71 +8,73 @@ struct MainView: View {
     
     var body: some View {
         @Bindable var viewModel = viewModel
-        VStack(spacing: 0) {
-            // Camera Card Detection Banner
-            if viewModel.isCameraCardBannerPresented, let card = viewModel.detectedCameraCard {
-                HStack(spacing: 12) {
-                    Image(systemName: "externaldrive.fill.badge.plus")
-                        .foregroundColor(.accentColor)
-                        .font(.title3)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Camera Card Detected: \(card.name)")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                        Text("Import master negatives into your Primary Library with sidecar consolidation and duplicate suppression.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+        NavigationSplitView(columnVisibility: $viewModel.columnVisibility) {
+            SidebarView()
+                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
+        } detail: {
+            VStack(spacing: 0) {
+                // Camera Card Detection Banner
+                if viewModel.isCameraCardBannerPresented, let card = viewModel.detectedCameraCard {
+                    HStack(spacing: 12) {
+                        Image(systemName: "externaldrive.fill.badge.plus")
+                            .foregroundColor(.accentColor)
+                            .font(.title3)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Camera Card Detected: \(card.name)")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            Text("Import master negatives into your Primary Library with sidecar consolidation and duplicate suppression.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Button("Import Photos...") {
+                            viewModel.isCameraCardBannerPresented = false
+                            viewModel.promptImport(from: card.path)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        
+                        Button("Open as Session") {
+                            viewModel.isCameraCardBannerPresented = false
+                            viewModel.addFolder(at: card.path)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        
+                        Button(action: {
+                            viewModel.isCameraCardBannerPresented = false
+                        }) {
+                            Image(systemName: "xmark")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.leading, 4)
                     }
-                    
-                    Spacer()
-                    
-                    Button("Import Photos...") {
-                        viewModel.isCameraCardBannerPresented = false
-                        viewModel.promptImport(from: card.path)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    
-                    Button("Open as Session") {
-                        viewModel.isCameraCardBannerPresented = false
-                        viewModel.addFolder(at: card.path)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    
-                    Button(action: {
-                        viewModel.isCameraCardBannerPresented = false
-                    }) {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.leading, 4)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.accentColor.opacity(0.12))
+                    .overlay(Divider(), alignment: .bottom)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.accentColor.opacity(0.12))
-                .overlay(Divider(), alignment: .bottom)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-            
-            // MARK: - Upper 3-Pane Split (Sidebar, Canvas, Inspector)
-            HSplitView {
-                SidebarView()
                 
                 CanvasView()
                     .frame(minWidth: 400, idealWidth: 600, maxWidth: .infinity)
                 
-                InspectorView()
+                // MARK: - Bottom Filmstrip Carousel Pane (Only in Detail View)
+                if viewModel.canvasMode == .detail {
+                    FilmstripView()
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            // MARK: - Bottom Filmstrip Carousel Pane (Only in Detail View)
-            if viewModel.canvasMode == .detail {
-                FilmstripView()
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            .inspector(isPresented: $viewModel.isInspectorPresented) {
+                InspectorView()
+                    .inspectorColumnWidth(min: 240, ideal: 270, max: 320)
             }
         }
         .frame(minWidth: 900, minHeight: 600)
@@ -109,6 +111,15 @@ struct MainView: View {
                 }
                 .disabled(viewModel.selectedPhoto == nil && viewModel.selectedPhotoPaths.isEmpty)
                 .help("Export Rendered Photo (Cmd+E) or Portable Package (Cmd+Shift+E)")
+            }
+            
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    viewModel.toggleInspector()
+                }) {
+                    Label("Toggle Inspector", systemImage: "sidebar.trailing")
+                }
+                .help("Toggle Inspector (Cmd+Option+I)")
             }
         }
         .sheet(isPresented: $viewModel.isImportSheetPresented) {

@@ -16,9 +16,6 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ## Phase 2.5: Modern SwiftUI & macOS 14 Architecture Modernization (P1)
 
-### 2.5.3 Native macOS 14 `.inspector(isPresented:)` Container
-- Replace legacy AppKit `HSplitView` in `MainView.swift` with SwiftUI's native macOS 14 `NavigationSplitView` and `.inspector(isPresented:)`.
-- Wire up standard macOS Inspector toggle toolbar item and menu shortcut (<kbd>Cmd</kbd> + <kbd>Option</kbd> + <kbd>I</kbd>).
 
 ### 2.5.4 Swift Structured Concurrency & Cooperative Cancellation
 - Annotate `AppViewModel` with `@MainActor` for compile-time verified main-thread UI state mutations.

@@ -80,3 +80,8 @@ This archive tracks completed stories and features moved from the active backlog
   - Completely stripped 25+ view `init(viewModel:)` prop-drilling initializers across all workspace, sidebar, canvas, inspector, and sheet views.
   - Subviews adopt fine-grained `@Environment(AppViewModel.self) private var viewModel` and view-local `@Bindable var viewModel = viewModel`, minimizing SwiftUI redraw scope.
   - Eliminated keyboard shortcut conflict on <kbd>⌘⌥2</kbd> (removed redundant blind 200% zoom button to preserve dedicated <kbd>⌘⌥2</kbd> switching for *Color & Look* tab, while keeping double-click contextual loupe).
+- **Phase 2.5.3: Native macOS 14 `.inspector(isPresented:)` Container & `NavigationSplitView`**:
+  - Replaced legacy AppKit `HSplitView` in `MainView.swift` with SwiftUI's native `NavigationSplitView` and `.inspector(isPresented:)`.
+  - Configured native column boundaries: `.navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)` on the leading sidebar and `.inspectorColumnWidth(min: 240, ideal: 270, max: 320)` on the trailing darkroom inspector.
+  - Removed hardcoded min/max width frame constraints across sidebar and inspector child views to eliminate layout conflicts.
+  - Wired native toolbar inspector toggle button (<kbd>sidebar.trailing</kbd>), `InspectorCommands()`, and standard <kbd>⌘⌥I</kbd> menu toggle for full-bleed proofing on 14" screens.

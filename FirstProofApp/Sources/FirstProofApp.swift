@@ -61,6 +61,7 @@ struct FirstProofApp: App {
         .defaultSize(width: 1280, height: 800)
         .commands {
             SidebarCommands()
+            InspectorCommands()
             CommandGroup(replacing: .newItem) {
                 Button("Open Folder...") {
                     viewModel.promptOpenFolder()
@@ -227,6 +228,11 @@ struct FirstProofApp: App {
                 .disabled(viewModel.canvasMode != .detail)
                 
                 Divider()
+                
+                Button(viewModel.isInspectorPresented ? "Hide Inspector" : "Show Inspector") {
+                    viewModel.toggleInspector()
+                }
+                .keyboardShortcut("i", modifiers: [.command, .option])
                 
                 Menu("Inspector Workspace") {
                     Button("Light & Tone") {

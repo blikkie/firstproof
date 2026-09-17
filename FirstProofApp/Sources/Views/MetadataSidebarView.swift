@@ -419,7 +419,7 @@ public struct MetadataSidebarView: View {
                 Spacer(minLength: 20)
             }
         }
-        .frame(minWidth: 230, idealWidth: 260, maxWidth: 300)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(NSColor.controlBackgroundColor))
     }
     

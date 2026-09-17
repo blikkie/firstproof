@@ -194,6 +194,15 @@ public final class AppViewModel {
     public var isFilmstripFollowingSelection: Bool = true
     public var filmstripScrollTrigger: UUID = UUID()
     public var gridColumnCount: Int = 4
+    
+    // MARK: - Navigation & Inspector State (macOS 14 Modernization)
+    public var isInspectorPresented: Bool = true
+    public var columnVisibility: NavigationSplitViewVisibility = .all
+    
+    public func toggleInspector() {
+        isInspectorPresented.toggle()
+    }
+    
     var currentlyLoadedPhotoPath: String? = nil
     @ObservationIgnored public var lastNavDirection: NavigationDirection = .neutral
     

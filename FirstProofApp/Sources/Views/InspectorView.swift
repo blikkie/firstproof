@@ -31,7 +31,7 @@ struct InspectorView: View {
             }
             .padding(14)
         }
-        .frame(minWidth: 240, idealWidth: 260, maxWidth: 320)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(NSColor.controlBackgroundColor))
     }
     

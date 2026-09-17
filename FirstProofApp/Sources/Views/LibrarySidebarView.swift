@@ -228,7 +228,7 @@ public struct LibrarySidebarView: View {
                 .padding(.bottom, 8)
             }
         }
-        .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(NSColor.controlBackgroundColor))
     }
 }
