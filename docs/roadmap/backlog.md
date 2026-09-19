@@ -116,6 +116,9 @@ This document strictly tracks pending and deferred features calibrated against o
   - *Independence*: Photographers can export high-quality edge-demosaiced files with fast analytical film grain (fast batch turnaround), or opt into the full 3D volumetric simulation when preparing exhibition masters.
 - **Strict WYSIWYG Tonal & Color Parity Invariant**:
   - The live 120fps viewport shader remains the first-order analytical integral of the deep 3D simulation. Viewport and archival export match bit-for-bit in global tone curve, AgX mapping, color separation, and White Balance.
+- **Batch Export Short-Circuit Invariant (Zero Performance Penalty for Pure Digital RAWs)**:
+  - When "3D Volumetric Emulsion Simulation" is enabled in a multi-photo batch export, the Rayon export pipeline evaluates the simulation conditionally per photo.
+  - Any photo with no active film emulsion or print medium (`emulsion == nil` / `bypass`) immediately short-circuits the volumetric depth pass and renders at standard high-speed throughput (150–500ms). Pure digital RAW captures in a mixed batch never incur a thermal, battery, or latency penalty.
 - **Dignified UI Simplicity**:
   - Clean, uncluttered layout in the export sheet: one segmented picker for demosaicing quality, and one clear toggle for 3D volumetric simulation when an emulsion is active. Zero slider bloat or esoteric algorithm lists.
 
