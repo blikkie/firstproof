@@ -9,8 +9,9 @@ This document strictly tracks pending and deferred features calibrated against o
 ## 🚀 Immediate Next Up
 1. **Curated Fine-Art Print Media Archetypes: Color & Monochrome (P1)**: Optical print media (RA-4, Cibachrome, Silver Gelatin, Platinum) and spectral filtration as an optional fine-art treat.
 2. **Upstream Recording Emulsions & Photochemical Grain Mechanics (P1)**: Non-linear film stock modeling, DIR chemical couplers, subtractive Beer-Lambert grain, and mock-LUT/standalone grain de-bloat.
-3. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-4. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
+3. **Cross-Platform Linux Toolchain & Headless Development Engine (P1 - Pulled Forward)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
+4. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
+5. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
 
 ---
 
@@ -121,6 +122,24 @@ This document strictly tracks pending and deferred features calibrated against o
   - Any photo with no active film emulsion or print medium (`emulsion == nil` / `bypass`) immediately short-circuits the volumetric depth pass and renders at standard high-speed throughput (150–500ms). Pure digital RAW captures in a mixed batch never incur a thermal, battery, or latency penalty.
 - **Dignified UI Simplicity**:
   - Clean, uncluttered layout in the export sheet: one segmented picker for demosaicing quality, and one clear toggle for 3D volumetric simulation when an emulsion is active. Zero slider bloat or esoteric algorithm lists.
+
+### 3.6 Cross-Platform Linux Toolchain & Headless Development Engine (P1 - Pulled Forward)
+- **Kubuntu & Multi-Arch Linux Toolchain (x86_64 / aarch64)**:
+  - Validate and guarantee that `firstproof-core` compiles and passes all unit tests natively on Linux (tested on Kubuntu / Ubuntu 24.04 LTS).
+  - Document required Linux development packages (`build-essential`, `libclang-dev`, `liblcms2-dev`, `pkg-config`).
+  - Purge any remaining macOS/Darwin-specific assumptions from the Rust core (e.g. hardcoded `/Users/...` path expectations, case-insensitivity assumptions, or Darwin linker flags).
+- **Headless `firstproof-cli` Developer Binary**:
+  - Implement an ergonomic CLI developer tool (`firstproof-cli` in `firstproof-core/src/bin/cli.rs`) that allows running the full RAW darkroom pipeline directly from the Linux terminal:
+    ```bash
+    cargo run --bin firstproof-cli -- develop input.cr2 --out preview.tiff --exposure +0.5 --profile agx-vivid
+    ```
+  - Enables direct, headless development and visual verification of color science, raw demosaicing, AgX tone mapping, and upcoming film emulsions on Linux (opening output in KDE Gwenview or GIMP) without needing a macOS desktop or GPU canvas.
+- **Cross-Platform CI Gate (GitHub Actions)**:
+  - Add a GitHub Actions workflow running `cargo test --all-targets` across both `ubuntu-latest` and `macos-latest`.
+  - Enforces cross-platform portability as a hard merge gate for all future core Rust development.
+- **Clean Architectural Decoupling (Keeping Us Honest)**:
+  - Keeps the core color science, SQLite catalog database, XMP sidecar parser, and export pipeline 100% platform-agnostic and decoupled from macOS AppKit/SwiftUI.
+  - Lays the architectural groundwork for a future native Linux desktop GUI (e.g. Qt/KDE or Rust/WGPU) sharing the exact same `firstproof-core` engine.
 
 ---
 
