@@ -27,11 +27,11 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
                                     │
                                     ▼
       [ 4. Analog Emulsion & Darkroom Printmaking ]
-      • Recording: Color DIR Coupler Chemistry (Rochester/Ashigara) & Silver Halide Density (Mobberley)
+      • Recording: Color DIR Couplers (Rochester/Ashigara), Silver Halide Density (Mobberley) & Instant Dye Diffusion (Cambridge)
       • Printing: Silver Halide Paper D-log H & Archival Selenium/Platinum Toning
                                     │
                                     ▼
-      [ 5. Procedural Organic Film Grain ] (Physical Zone V Midtone Clumping & Tri-Layer Chemistry)
+      [ 5. Subtractive Optical Density Grain ] (Beer-Lambert Transmission, T-Grain/Cubic Halide & Dye Clouds)
                                     │
                                     ▼
          [ 6. Display & Print Target ] (Display P3, sRGB, or Print ICC)

@@ -7,8 +7,8 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)**: Physical lens filtration and archival print toning (selenium, sepia, platinum) in Linear Rec.2020.
-2. **Upstream Recording Emulsions (C-41, E-6, K-14 & ECN-2 Chemistry) (P1)**: Non-linear film stock modeling with subtractive dye layer response and DIR couplers.
+1. **Curated Fine-Art Print Media Archetypes: Color & Monochrome (P1)**: Optical print media (RA-4, Cibachrome, Silver Gelatin, Platinum) and spectral filtration as an optional fine-art treat.
+2. **Upstream Recording Emulsions & Photochemical Grain Mechanics (P1)**: Non-linear film stock modeling, DIR chemical couplers, subtractive Beer-Lambert grain, and mock-LUT/standalone grain de-bloat.
 3. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
 4. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
 
@@ -16,36 +16,60 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ## Phase 3: Fine-Art Darkroom Chemistry & Archival Formats (P1 / P2)
 
-> **Physical Darkroom Architecture: Recording vs. Printing Decoupling**  
-> In physical photography, the *recording medium* (in-camera film negative) and the *printing medium* (darkroom enlarger filtration, paper chemistry, and toner baths) are two orthogonal stages. Story 3.2 models the upstream in-camera negative chemistry; Story 3.1 models the downstream darkroom print tray. A photographer can print a clean digital RAW or a chemical negative onto silver gelatin paper with archival toning without either stage overriding the other.
+> **Product Invariant: The Primary Engine vs. The Fine-Art "Treat"**  
+> First Proof's primary workhorse default is **pure optical RAW capture via AgX filmic tone mapping**. The core workspaces (**Light**, **Color**, **Detail**, **Optics**) are dedicated strictly to sensor reality: standard White Balance (Temperature & Tint), exposure, tone recovery, and sensor sharpness. Photos look 90% finished immediately without any analog styling.  
+> 
+> Film stock and print media emulation are **not** the main workflow and **not** a complex simulator. They are an exquisite, 100% opt-in **fine-art treat and differentiator** housed in a dedicated **Emulsion** workspace tab (`InspectorTab.emulsion`). Default state is always `None / Bypass`. When activated, the engine does all the heavy lifting under the hood so the photographer simply selects a curated stock or print medium without fiddling with chemical dials.
 
-### 3.1 Fine-Art Monochromatic Darkroom & Spectral Filtration Engine (P1)
-- **Downstream Darkroom Print Medium**:
-  - Treats the captured frame (whether clean digital RAW or chemical negative) as an archival print-making negative exposed through an enlarger onto fine-art silver paper.
-- **Spectral Filtration in Linear Rec.2020 (Physical Optical / Enlarger Filters)**:
-  - Replace harsh digital desaturation with physical optical filtration:
+### 3.1 Curated Fine-Art Print Media Archetypes: Color & Monochrome (P1)
+- **Downstream Darkroom Print Medium (The Fine-Art Treat)**:
+  - Treats the captured frame (clean digital RAW or chemical emulsion) as an archival gallery print exposed onto authentic fine-art paper chemistry.
+  - Quarantined inside the optional **Emulsion** tab; default is always clean digital display mapping.
+- **Curated Color Print Media Archetypes**:
+  - *Endura / Fujicolor Type-C (RA-4 Chromogenic)*: The classic gallery C-print standard. Creamy highlight roll-off, natural skin tone density, and organic cyan/magenta/yellow dye coupling that prevents digital clipping.
+  - *Ilfochrome / Cibachrome Classic (Silver Dye-Bleach Reversal)*: Legendary high-gloss slide print process with pure azo dyes. Ultra-deep shadow density ($D_{\text{max}} > 3.0$), high micro-contrast, and glowing gem-like jewel tones.
+  - *Archival Fine-Art Cotton Rag (Mineral Pigment)*: 100% unbleached cotton base, velvety matte shadow floor ($D_{\text{max}} \approx 1.65$), warm natural paper reflectance ($W_{\text{base}}$), and glare-free tonal breadth.
+- **Curated Monochrome Print Media Archetypes & Toning**:
+  - *Baryta Silver Gelatin FB*: Neutral barium sulfate ($\text{BaSO}_4$) base, deep $D_{\text{max}} \approx 2.2$, crisp midtone silver separation, and pure neutral silver blacks.
+  - *Warmtone Chlorobromide (Selenium Toned)*: Subtle warm fiber base, deep velvety shadow D-max ($D_{\text{max}} \approx 2.3$) with cool plum-black depths, warm charcoal midtones, and soft highlights.
+  - *Platinum / Palladium (Hand-Coated Cotton Rag)*: Noble metal embedded directly into cotton fibers. Long, delicate midtone graduation with non-clipping highlight roll-off ($D_{\text{max}} \approx 1.6$).
+  - *Historic Cyanotype*: Authentic 1842 Prussian blue iron-salt spectral response and tonal scale.
+- **Physical Enlarger Spectral Filtration (B&W Conversion)**:
+  - When printing to monochrome media, replaces harsh digital desaturation with physical optical filtration:
     - *Neutral Panchromatic*: Standard wide-gamut linear luminance ($Y = 0.2627 R + 0.6780 G + 0.0593 B$).
     - *Yellow Filter (K2)*: Darkens blue skies subtly to emphasize clouds; clears facial haze.
     - *Orange Filter*: Moderate contrast, cuts atmospheric haze, smooths portraits.
     - *Red Filter (25A)*: High-contrast drama, near-black dramatic skies, architectural separation.
     - *Green Filter (X1)*: Lightens foliage and flora, separates skin tones under warm light.
     - *Orthochromatic (Vintage)*: Blind to red ($w_r = 0$), sensitive strictly to blue/green for historic 19th/early-20th century look.
-- **Silver Halide Emulsion Characteristic Curve (Smooth Tonal Roll-Off)**:
-  - Model the continuous logarithmic shoulder of analog silver gelatin paper (Hurter & Driffield / D-log H paper curve) through our AgX tonemapper, preventing harsh digital highlight blowout and preserving velvety shadow detail without muddy midtones.
-- **Archival Chemical Print Toning**:
-  - *Pure Silver Gelatin*: Achromatic neutral silver.
-  - *Selenium Toning*: Increases shadow D-max with subtle cool plum-black tones while keeping highlights clean silver-white.
-  - *Warm Platinum*: Subtle warm paper base tone with soft, luminous highlights.
-  - *Architecture Reusability*: Directly reuses the bit-parity split toning engine (`apply_split_toning`, `applySplitToning`) and interactive 2D color wheels (`ColorWheelView.swift`) implemented in Story 2.2, applied specifically across the achromatic silver density curve where chemical toning authentically belongs.
-- **Anti-Slop Invariant**:
-  - Strictly grounded in optical physics and chemical darkroom print making. Zero arbitrary digital "filter presets" or crushed-black Instagram effects.
+- **Restrained "Rule of Three" Darkroom Controls (Zero Overload)**:
+  - When an archetype is selected, it renders 90% finished immediately at default `0`. The user has exactly three high-leverage physical darkroom sliders:
+    1. *Paper Grade / Hardness* (`-2.0` to `+2.0`, centered at `0` / Grade 2 Normal): Adjusts the slope and shoulder/toe steepness of the paper D-log H curve. Lower grades soften contrast to preserve delicate specular highlights; higher grades add graphic midtone punch.
+    2. *Base Warmth* (`-100` to `+100`, centered at `0`): Subtle trim of the paper substrate reflectance ($W_{\text{base}}$)—from cool, crisp optical-brightened baryta to warm, unbleached natural cotton rag.
+    3. *Process Depth* (`0%` to `100%`, default `100%`): Governs chemical toner bath immersion (untuned silver $\rightarrow$ deep archival selenium/platinum) for monochrome, or dye saturation depth for color.
+  - *No Simulator Bloat*: Absolutely zero dichroic YMC dials, agitation rates, or 20-slider chemical chemistry panels.
+- **Anti-Kitsch Guardrail**:
+  - Absolutely zero fake torn paper edges, faux white frames, artificial canvas textures, or digital grunge. Strictly physical sensitometric D-log H paper curves, base paper spectral reflectance ($W_{\text{base}}$), and authentic darkroom toner chemistry.
 
-### 3.2 Upstream Recording Emulsions: C-41, E-6, K-14 & ECN-2 Chemistry (P1)
+### 3.2 Upstream Recording Emulsions & Photochemical Grain Mechanics (P1)
 - **Upstream In-Camera Recording Medium**:
-  - Models the photochemical behavior of the latent image on multi-layer camera negative/reversal film prior to any print enlargement or display mapping.
-- **Distinct Photochemical Pathways (Color Dye Couplers vs. Pure Silver Halide)**:
-  - *Color Emulsions (Rochester & Ashigara)*: Model Development Inhibitor Releasing (DIR) couplers via 3×3 spectral cross-talk matrices directly in linear Rec.2020 to produce luminous, non-clashing skin tones, soft highlight desaturation, and organic translucent dye clouds.
-  - *Pure Monochrome Silver Halide (Mobberley Silver 400)*: Direct panchromatic spectral sensitivity integration ($S(\lambda)$) to a 1D exposure scalar, followed by a 1D metallic silver $D\text{-}\log H$ curve with zero chromatic variation and crisp metallic grain acutance (no inter-layer dye interactions).
+  - Models the photochemical behavior of the latent image on multi-layer camera negative/reversal and instant diffusion film prior to any print enlargement or display mapping.
+- **Legacy Mock-LUT & Standalone Grain Rip-Out**:
+  - *Mock-LUT Deprecation*: Purge hardcoded procedural pseudo-LUTs (`classic_chrome`, `warm_portra`, `cine_teal_orange`, `tri_x_bw`, `vintage_fade`) from `lut.rs`. Retain strictly the neutral `.cube` file parser for user-supplied technical calibration LUTs, cleanly separating technical looks from chemical darkroom science.
+  - *Detail Panel De-Bloat*: Rip out standalone 2D additive noise sliders (`grainAmount`, `grainSize`, `grainRoughness`, `grainChroma`) from `DetailWorkspaceView.swift`, `Detail.metal`, and `pipeline.rs`. Detail workspace is restored to pure sensor optical acutance (Sharpening & Noise Reduction).
+- **Photochemical Inter-Image Physics (DIR Couplers & Chemical Crosstalk)**:
+  - Replace static LUT warping with active chemical cross-talk matrices ($3 \times 3$ $\mathbf{C}_{\text{DIR}}$) evaluated in linear Rec.2020 density space.
+  - Models vertical diffusion of Development Inhibitor Releasing (DIR) couplers where intense exposure in one layer suppresses dye development in adjacent layers, creating dynamic color separation, glowing skin tones, and pastel highlight desaturation.
+  - Formulated as a closed-form SIMD matrix transform across Metal GPU and Rust CPU pipelines (100% bit-parity, $O(1)$ per fragment, zero texture lookups, zero 60/120fps viewport latency penalty).
+- **Subtractive Optical Density Grain Model (Beer-Lambert Absorption)**:
+  - Transition from additive RGB noise (`color + grain`) to physical optical density transmission:
+    $$T = 10^{-(D + \Delta D_{\text{grain}})}$$
+  - Naturally integrates grain into the physical tone curve—dense in midtones, soft in highlights, and optically absorbed into deep shadow blacks.
+- **Crystal Morphology & Dye Cloud Synthesis**:
+  - *Tabular (T-Grain) vs. Cubic Halide*: Modern tabular planar crystals (high-frequency needle grain) vs. classic organic multi-octave cubic silver clumping.
+  - *Colloidal Dye Clouds vs. Opaque Filaments*: C-41/E-6 renders soft overlapping dye clouds (bleached silver simulation); B&W renders crisp metallic silver filaments.
+  - *Lateral Dye Diffusion*: Instant film models dye migration through aqueous gelatin spacing layers rather than metallic halide clumping.
+  - *Physical Format Scaling*: Grain scale is driven by authentic photographic format (35mm, 120 6×7, 4×5 Large Format) rather than arbitrary digital sliders.
 - **Curated Geographic Archetypes (Historic Plant Homage & Sensitometric Grounding)**:
   - Grounded strictly in published manufacturer sensitometric data sheets (characteristic D-log H curves, spectral dye density, and layer sensitivity curves):
     - *Rochester Portrait 400* (C-41, Kodak Park, Rochester NY): Gentle portrait contrast, luminous skin tone separation via DIR couplers, pastel highlight roll-off.
@@ -53,12 +77,12 @@ This document strictly tracks pending and deferred features calibrated against o
     - *Rochester K-14 Chrome 64* (K-14 Non-Substantive Reversal, Rochester NY): Ultra-deep ink-black D-max ($D_{\text{max}} > 3.2$), vivid warm red/yellow separation, and razor edge acutance modeled from Kodak Pub E-88.
     - *Rochester Cinema 500* (ECN-2 Tungsten, Rochester NY): Low-contrast linear negative with gentle highlight compression designed for wide-gamut digital grading.
     - *Rochester Daylight 200* (C-41, Rochester NY): Warm, earthy golden-hour daylight response with restrained blue density.
-    - *Mobberley Silver 400* (Panchromatic B&W, Mobberley, Cheshire, UK): Classic silver halide negative with linear midtone acutance.
+    - *Mobberley Silver 400* (Panchromatic B&W, Mobberley, Cheshire, UK): Classic silver halide negative with linear midtone acutance and cubic crystal clumping.
+    - *Cambridge Diffusion 100* (Instant Dye Diffusion, Kendall Square, Cambridge MA): Reversal dye-developer immobilization with reflective $\text{TiO}_2$ base tone, luminous pastel greens, and soft dye diffusion acutance (Ansel Adams / Edwin Land lineage; strictly borderless and pure capture).
 - **Curated Restraint & Anti-Gimmick Invariants**:
   - *Strict Neutral Default*: Emulsion profiles are 100% opt-in creative tools. The pipeline default is always unadorned, neutral optical sensor capture (Camera DCP + AgX).
-  - *Anti-Preset Restraint*: Strictly bounded to 6 foundational, deeply researched chemical archetypes across the major 20th-century processes. Zero bloated "preset packs" or arbitrary digital LUT styling.
-- **Decoupled Grain with Optional Recommended Linkage**:
-  - The procedural organic grain engine (`Detail.metal`) remains physically decoupled and adjustable to 0. Activating an emulsion profile optionally offers its historically paired grain preset (e.g. *Rochester Portrait 400* suggests `P-400 Portrait`), but grain is never forced or permanently baked into the color transform.
+  - *Anti-Preset Restraint*: Strictly bounded to 7 foundational, deeply researched chemical archetypes across the major 20th-century processes. Zero bloated "preset packs" or arbitrary digital styling.
+  - *Anti-Kitsch Guardrail*: Absolutely zero faux borders, white frames, fake light leaks, or artificial dust/scratches. All archetypes are pure optical and chemical image transformations.
 
 ### 3.3 Archival Open DNG Converter & Lossless Compression Engine (P2)
 - **Lossless Bayer CFA Transcoding**:
@@ -75,6 +99,25 @@ This document strictly tracks pending and deferred features calibrated against o
 - **Canvas Soft Proofing Mode**:
   - Canvas toolbar mode simulating sRGB and standard print gamut clipping (e.g., ISO Coated v2 / US Web Coated SWOP) on wide-gamut displays.
   - Gamut warning overlay highlighting out-of-gamut pixels in high-contrast overlay color.
+
+### 3.5 Archival High-Precision Multi-Pass Export Engine (P2)
+- **Decoupled Quality Controls in Export Sheet**:
+  - Cleanly separate general optical RAW demosaicing precision from physical 3D film simulation in `ExportSheetView.swift`:
+    1. *RAW Demosaicing Precision*: `Standard (Fast)` vs. `Archival (Edge-Adaptive AMaZE / RCD)`.
+    2. *Volumetric 3D Emulsion Simulation*: A distinct, dedicated toggle (active when a film stock or print medium is applied).
+- **Control 1: Multi-Pass Edge-Directed Demosaicing (AMaZE / RCD)**:
+  - *Standard (Fast)*: Near-instant batch exports (150–250ms per RAW) using optimized cubic Bayer demosaicing.
+  - *Archival (Edge-Adaptive)*: Directional edge-adaptive demosaicing (AMaZE / RCD) with chromatic moiré suppression passes (~500ms per RAW). Eliminates "zipper" artifacts, maze patterns, and false color fringing on high-frequency fabrics, architectural grids, and bird feathers on 45–61MP sensors.
+- **Control 2: Deep 3D Volumetric Film Simulation (Distinct Toggle)**:
+  - *Offline Rayon Simulation*: When enabled on photos with active emulsion/print media, the engine switches from the real-time analytical projection to full numerical physics:
+    - *Volumetric Gelatin Depth-Integration*: Multi-slice Beer-Lambert ray transmission through a 3D Boolean Random Field of crystal populations or colloidal dye cloud spheres ($z \in [0, z_{\text{emulsion}}]$). Captures inter-crystal 3D shadowing, turbidity (optical depth scattering), and exposure-dependent volumetric clumping.
+    - *Spatial Lateral Chemical Diffusion*: Extends vertical DIR coupling to spatial inhibitor diffusion across contrasting borders, recreating authentic photochemical Mackie lines / developer exhaustion boundaries for edge acutance without digital unsharp masking.
+    - *Sub-Pixel Jittered Supersampling*: 2×2 jittered sub-pixel integration across the volumetric emulsion layer, preventing spatial beat frequencies (aliasing) on 300+ DPI large-format archival prints.
+  - *Independence*: Photographers can export high-quality edge-demosaiced files with fast analytical film grain (fast batch turnaround), or opt into the full 3D volumetric simulation when preparing exhibition masters.
+- **Strict WYSIWYG Tonal & Color Parity Invariant**:
+  - The live 120fps viewport shader remains the first-order analytical integral of the deep 3D simulation. Viewport and archival export match bit-for-bit in global tone curve, AgX mapping, color separation, and White Balance.
+- **Dignified UI Simplicity**:
+  - Clean, uncluttered layout in the export sheet: one segmented picker for demosaicing quality, and one clear toggle for 3D volumetric simulation when an emulsion is active. Zero slider bloat or esoteric algorithm lists.
 
 ---
 
