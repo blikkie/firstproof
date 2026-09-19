@@ -2,20 +2,23 @@
 
 This document strictly tracks pending and deferred features calibrated against our core philosophy: **"Pure capture. Honest color. Zero digital plastic. Print & web first."**
 
-> **Note**: For completed stories, see [completed.md](file:///Users/blikkie/src/LumenBox/docs/roadmap/completed.md). For color pipeline specifications, see [color_pipeline.md](file:///Users/blikkie/src/LumenBox/docs/architecture/color_pipeline.md).
+> **Note**: For completed stories, see [completed.md](file:///Users/blikkie/src/LumenBox/docs/roadmap/completed.md). For color pipeline specifications, see [color_pipeline.md](file:///Users/blikkie/src/LumenBox/docs/architecture/color_pipeline.md). For web architecture, see [web_architecture.md](file:///home/remco/src/firstproof/docs/architecture/web_architecture.md).
 
 ---
 
 ## 🚀 Immediate Next Up
-1. **Cross-Platform Linux Toolchain & Headless Development Engine (P1 - Pulled Forward)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
-2. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-3. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
-4. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
-5. **Archival High-Precision Multi-Pass Export Engine (P2)**: Multi-pass AMaZE/RCD demosaicing and 2D spatial developer exhaustion diffusion.
+1. **WebAssembly Darkroom Engine & Static Web Launch (P0 / P1 - Pulled Forward)**: Compile core color science and preview extraction to WebAssembly (`firstproof-wasm`), build WebGL 2 develop shader pipeline, pre-allocated decode scratchpad, local folder intake (`showDirectoryPicker`), and deploy static interactive test drive on GitHub Pages (`firstproof.photo`).
+2. **Cross-Platform Linux Toolchain & Headless Development Engine (P1)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
+3. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
+4. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
+5. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
+6. **Archival High-Precision Multi-Pass Export Engine (P2)**: Multi-pass AMaZE/RCD demosaicing and 2D spatial developer exhaustion diffusion.
+
+> **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
 
 ---
 
-## Phase 3: Fine-Art Darkroom Chemistry & Archival Formats (P1 / P2)
+## Phase 3: Fine-Art Darkroom Chemistry, Archival Formats & Web Playground (P1 / P2)
 
 
 > **Product Invariant: The Primary Engine vs. The Fine-Art "Treat"**  
@@ -70,6 +73,25 @@ This document strictly tracks pending and deferred features calibrated against o
   - Keeps the core color science, SQLite catalog database, XMP sidecar parser, and export pipeline 100% platform-agnostic and decoupled from macOS AppKit/SwiftUI.
   - Lays the architectural groundwork for a future native Linux desktop GUI (e.g. Qt/KDE or Rust/WGPU) sharing the exact same `firstproof-core` engine.
 
+### 3.7 WebAssembly Darkroom Engine & Static Web Launch (P0 / P1 - Pulled Forward)
+- **`firstproof-wasm` Core Crate Scaffolding**:
+  - Extract lightweight WebAssembly bindings target using `wasm-bindgen` and `wasm-pack`.
+  - Compiles pure Rust color science (`color/`), AgX filmic tonemapping, Fritsch-Carlson tone curves (`curve.rs`), and fast RAW preview extraction (`raw_decoder.rs`).
+  - Pre-allocated RAM scratchpad buffer to eliminate browser garbage collection (GC) stutter and memory fragmentation.
+- **Zero-Copy WebGL 2 Shader Pipeline**:
+  - GLSL 3.00 ES fragment shader port of `ColorScience.metal` and `Shaders.metal`.
+  - Uniform Buffer Objects (UBO) matching `EditSettings` (Exposure, Contrast, WB Temp/Tint, Bilateral Tone Recovery, Curves, Emulsion presets).
+  - Direct pointer access into WASM linear memory (`wasm.memory.buffer`) for zero-copy texture upload via `gl.texSubImage2D`.
+- **Local Folder Intake & Bi-Directional XMP Sync**:
+  - **Folder Selection**: Integrate File System Access API (`window.showDirectoryPicker()`) with fallback to `<input type="file" webkitdirectory>`.
+  - **Lazy Streaming Ingestion**: Handle 500+ RAW folders without loading multi-gigabyte payloads into browser RAM.
+  - **Direct Sidecar Write-Back**: When granted directory permission, edits and star ratings write back directly to disk as adjacent `.xmp` sidecars.
+  - **In-Memory Filmstrip**: Horizontal thumbnail carousel with single-key rating shortcuts (`1`–`5`, `P`/`X`) and keyboard navigation.
+- **Static Web Distribution & Privacy-First Ethos (`firstproof.photo`)**:
+  - Host statically on GitHub Pages via GitHub Actions CI. Zero backend servers, 100% private on-device processing.
+  - Clean, typography-driven landing page embedding the interactive web darkroom.
+  - Strict anti-marketing principles: Zero email address capture, zero tracking scripts, zero waitlists. Direct link to open source repo and binaries when ready.
+
 ---
 
 ## Phase 4: Pre-Release IP Audit, Code Cleanliness & Distribution (P2)
@@ -98,7 +120,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ### 4.3 Web Distribution & Release Site (`firstproof.photo`)
 - **Craft-First, Zero Sales Pitch Design**:
   - Restrained, typography-driven static page (deep neutral darks, editorial layout, zero marketing popups, tracking cookies, or conversion fluff).
-  - Unadorned native macOS application screenshots showing the actual darkroom interface and workflow.
+  - Unadorned application screenshots showing the actual darkroom interface and workflow.
+  - Zero email harvesting or lead capture forms: pure, quiet software craft.
+- **Integrated In-Browser Test Drive**:
+  - Photographers can drag and drop their own RAW files or click "Open Folder" to test First Proof instantly without downloading anything.
 - **Visual Proof Gallery & Optical Comparison**:
   - Curated gallery of real photographic captures demonstrating authentic color rendition, natural skin tones, and subtle tonal gradations.
   - Side-by-side inspection: In-Camera JPEG (cooked 8-bit sRGB with blown highlights) vs. First Proof (16-bit linear Rec.2020 AgX output).
@@ -109,8 +134,12 @@ This document strictly tracks pending and deferred features calibrated against o
     - **Dave Coffin & RAW Decoding Pioneers**: `dcraw`, `libraw`, and `rawler` for reversing proprietary camera Bayer sensor formats.
     - **Torsten Bronger & Lensfun Community**: Open lens database and optical distortion modeling.
     - **CIE Colorimetry & Open Standards**: CIE 1931/1976 colorimetric observers, Planckian locus math, and open standard specifications.
-- **Direct, Quiet Download**:
-  - Simple Apple Silicon `.dmg` / `.zip` download link with SHA-256 checksums and clear macOS 14+ (Apple Silicon) compatibility requirements.
+
+### 4.4 macOS Desktop Binary Release & Packaging Pipeline (Deferred / Standalone Initiative)
+- **Decoupled macOS Release Milestone**:
+  - Packaging the standalone native macOS application (compiling `libfirstproof_core.a`, running `uniffi-bindgen`, building the SwiftUI `.app` bundle, Developer ID code signing, and Apple `notarytool` stapling) is explicitly preserved as a dedicated release-readiness milestone.
+  - While developing in the Linux environment, this track is held in place. It will be executed upon returning to a macOS environment or wired into a dedicated `macos-14` / `macos-15` GitHub Actions packaging runner.
+  - Direct download links will be posted openly when binaries are ready—no email gates or signups.
 
 ---
 
@@ -146,22 +175,25 @@ This document strictly tracks pending and deferred features calibrated against o
   - Fast, SQL-compiled smart queries matching any/all rules: Rating (`>= 4★`), Status (`Pick`), Date Range, Camera Model, Lens, Focal Length, and Edit State (`Has Edits`).
   - Streamlines pre-print proofing (e.g. "All 4★+ picks taken on 50mm between Oct–Dec").
 
-### 5.4 Offline Search, Time-Proximity Geotagging & Spatial Discovery (Post-v1 / Post-v2)
+### 5.4 Cross-Platform Offline Search, Geotagging & Face Clustering (Post-v1 / Post-v2)
 - **Time-Proximity Geotagging ("Borrow GPS from Mobile")**:
   - Correlate GPS coordinates from companion mobile photos within an adjustable time window (e.g. $\pm 30$–$60$ min) for camera RAWs lacking onboard GPS hardware.
   - Linear spatial trajectory interpolation when a RAW shot is bracketed between two mobile GPS locations.
   - Camera clock drift calibration slider (`±MM:SS`) with reference photo alignment.
   - Transparent metadata auditing: Distinguish exact hardware coordinates from approximate inferred locations (`FIRSTPROOF_TIME_PROXIMITY_INFERRED` in XMP sidecars and muted pin badge in inspector).
-- **Invisible Concrete Object Search (Apple Neural Engine `VNClassifyImageRequest`)**:
-  - Sub-millisecond background classification on Apple Silicon during folder index; categorizes 1,300+ concrete objects (e.g. "dog", "bicycle", "boat", "car", "mountain") into SQLite `photo_classifications`.
+- **Platform-Agnostic Offline Concrete Object Search**:
+  - Primary engine written in cross-platform Rust (`firstproof-core`), evaluating lightweight on-device vision models (e.g. MobileNet / ONNX runtime or pure Rust inference) that run identically across Linux, macOS, and WebAssembly.
+  - Sub-millisecond background classification during folder indexing; categorizes 1,000+ concrete objects into SQLite `photo_classifications`.
   - Zero UI clutter: no bounding boxes or tags drawn on the artist's canvas; full-text search bar returns matching photos instantly.
-- **Restrained Archival MapKit Bounding Box Search**:
-  - Muted, dark-slate native macOS MapKit canvas matching First Proof's `#1E1E1E` darkroom palette.
+  - **Optional Apple Intelligence / Vision Accelerator Plugin**: On macOS, users can optionally opt-in to Apple Neural Engine acceleration (`VNClassifyImageRequest`). Deduplication logic merges overlapping labels cleanly based on confidence scores.
+- **Restrained Archival Map View Bounding Box Search**:
+  - Muted, dark-slate map canvas matching First Proof's `#1E1E1E` darkroom palette (Leaflet / MapKit depending on platform).
   - Dynamic viewport bounding-box synchronization: panning/zooming the map instantly updates the contact sheet grid.
-- **Archival Portrait Clustering (MWG/IPTC Standard Regions)**:
-  - 100% offline, on-device portrait face clustering via Apple `Vision` framework.
+- **Cross-Platform Archival Portrait Clustering (MWG/IPTC Standard Regions)**:
+  - 100% offline, on-device portrait face detection and embedding clustering in Rust (e.g. lightweight UltraFace / YuNet ONNX or pure Rust).
+  - Optional macOS opt-in: Apple `Vision` face observation can be enabled as an alternative hardware accelerator.
   - Unidentified sitter triage deck: *"Found X photos of this person. Who is this sitter?"*
-  - Serializes coordinates directly into open-standard [MWG (Metadata Working Group) / IPTC XMP Face Regions](file:///Users/blikkie/src/LumenBox/docs/values.md#L43) (`mwg-rs:Regions`), avoiding proprietary database lock-in.
+  - Serializes coordinates directly into open-standard [MWG (Metadata Working Group) / IPTC XMP Face Regions](file:///Users/blikkie/src/LumenBox/docs/values.md#L43) (`mwg-rs:Regions`), avoiding proprietary database lock-in across all platforms.
 
 ### 5.5 Optical Notch & Spectral Illuminant Modeling (Deep Backlog / Exploratory R&D)
 - **Physical Context & The Multi-Source Problem**:
@@ -188,5 +220,3 @@ This document strictly tracks pending and deferred features calibrated against o
 - **Anti-Slop Guardrail (Rejection of "Liquid Glass" Translucency)**:
   - Proactively reject refractive translucent materials ("liquid glass") in inspector sidebars or canvas chrome.
   - Maintain First Proof's strict opaque, matte dark slate palette (`#181818` / `#1E1E1E`). Desktop wallpaper or background window radiance must never bleed into the photographer's peripheral vision and distort neutral chromatic adaptation.
-
-

@@ -1,4 +1,4 @@
-# LumenBox Execution Checklist
+# First Proof Execution Checklist
 
 - `[x]` 1. Documentation & Roadmap Setup
     - `[x]` Create `docs/roadmap/backlog.md` with P1/P2 editing features and Google Photos sync notes
@@ -80,3 +80,18 @@
 - `[x]` 18. Epic 11: Apple EDR & Ultra HDR Gain Map Pipeline (P1)
     - `[x]` 18.1 16-bit float Metal canvas layer (`.rgba16Float`) for 1,600-nit Liquid Retina XDR displays
     - `[x]` 18.2 ISO 21496-1 gain map JPEG export and Google Pixel gain map ingestion
+- `[ ]` 19. Epic 12: WebAssembly & WebGL Interactive Darkroom Engine (P0 / P1 - Pulled Forward)
+    - `[ ]` 19.1 `firstproof-wasm` crate scaffolding (`wasm-bindgen`, `wasm-pack`, memory pool)
+    - `[ ]` 19.2 Pre-allocated linear memory scratchpad buffer & Web Worker zero-copy transfer
+    - `[ ]` 19.3 WebGL 2 develop shader pipeline (GLSL 3.00 ES port of `ColorScience.metal` & `Shaders.metal`)
+    - `[ ]` 19.4 Local folder intake (`window.showDirectoryPicker()` & `<input type="file" webkitdirectory>`)
+    - `[ ]` 19.5 In-memory filmstrip, star rating badges, and direct `.xmp` sidecar synchronization
+    - `[ ]` 19.6 Static web UI & marketing landing page deployment (`web/` via GitHub Actions on GitHub Pages)
+    - `[ ]` 19.7 Direct open-access web distribution (zero email collection, zero tracking cookies) & GitHub Pages launch
+- `[ ]` 20. Epic 13: macOS Desktop Release Packaging & Notarization (Deferred / Standalone Initiative)
+    - `[ ]` 20.1 Compile `libfirstproof_core.a` static archive with release optimization flags
+    - `[ ]` 20.2 Generate Swift bridge bindings via `uniffi-bindgen`
+    - `[ ]` 20.3 Build release `.app` bundle via Xcode / `xcodebuild`
+    - `[ ]` 20.4 Apple Developer ID Application codesigning (`codesign --deep --strict`)
+    - `[ ]` 20.5 Apple `notarytool` submission and ticket stapling (`xcrun stapler staple`)
+    - `[ ]` 20.6 Compressed `.dmg` disk image and `.zip` distribution archive generation
