@@ -1465,10 +1465,15 @@ public struct EditSettings {
     public var splitToningHighlightHue: Float
     public var splitToningHighlightSat: Float
     public var splitToningBalance: Float
+    public var printMedia: PrintMediaMode
+    public var enlargerFilter: EnlargerFilterMode
+    public var printPaperGrade: Float
+    public var printBaseWarmth: Float
+    public var printProcessDepth: Float
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, grainAmount: Float, grainSize: Float, grainRoughness: Float, grainChroma: Float, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, grainAmount: Float, grainSize: Float, grainRoughness: Float, grainChroma: Float, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float, printMedia: PrintMediaMode, enlargerFilter: EnlargerFilterMode, printPaperGrade: Float, printBaseWarmth: Float, printProcessDepth: Float) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -1509,6 +1514,11 @@ public struct EditSettings {
         self.splitToningHighlightHue = splitToningHighlightHue
         self.splitToningHighlightSat = splitToningHighlightSat
         self.splitToningBalance = splitToningBalance
+        self.printMedia = printMedia
+        self.enlargerFilter = enlargerFilter
+        self.printPaperGrade = printPaperGrade
+        self.printBaseWarmth = printBaseWarmth
+        self.printProcessDepth = printProcessDepth
     }
 }
 
@@ -1636,6 +1646,21 @@ extension EditSettings: Equatable, Hashable {
         if lhs.splitToningBalance != rhs.splitToningBalance {
             return false
         }
+        if lhs.printMedia != rhs.printMedia {
+            return false
+        }
+        if lhs.enlargerFilter != rhs.enlargerFilter {
+            return false
+        }
+        if lhs.printPaperGrade != rhs.printPaperGrade {
+            return false
+        }
+        if lhs.printBaseWarmth != rhs.printBaseWarmth {
+            return false
+        }
+        if lhs.printProcessDepth != rhs.printProcessDepth {
+            return false
+        }
         return true
     }
 
@@ -1680,6 +1705,11 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(splitToningHighlightHue)
         hasher.combine(splitToningHighlightSat)
         hasher.combine(splitToningBalance)
+        hasher.combine(printMedia)
+        hasher.combine(enlargerFilter)
+        hasher.combine(printPaperGrade)
+        hasher.combine(printBaseWarmth)
+        hasher.combine(printProcessDepth)
     }
 }
 
@@ -1730,7 +1760,12 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 splitToningShadowSat: FfiConverterFloat.read(from: &buf), 
                 splitToningHighlightHue: FfiConverterFloat.read(from: &buf), 
                 splitToningHighlightSat: FfiConverterFloat.read(from: &buf), 
-                splitToningBalance: FfiConverterFloat.read(from: &buf)
+                splitToningBalance: FfiConverterFloat.read(from: &buf), 
+                printMedia: FfiConverterTypePrintMediaMode.read(from: &buf), 
+                enlargerFilter: FfiConverterTypeEnlargerFilterMode.read(from: &buf), 
+                printPaperGrade: FfiConverterFloat.read(from: &buf), 
+                printBaseWarmth: FfiConverterFloat.read(from: &buf), 
+                printProcessDepth: FfiConverterFloat.read(from: &buf)
         )
     }
 
@@ -1775,6 +1810,11 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.splitToningHighlightHue, into: &buf)
         FfiConverterFloat.write(value.splitToningHighlightSat, into: &buf)
         FfiConverterFloat.write(value.splitToningBalance, into: &buf)
+        FfiConverterTypePrintMediaMode.write(value.printMedia, into: &buf)
+        FfiConverterTypeEnlargerFilterMode.write(value.enlargerFilter, into: &buf)
+        FfiConverterFloat.write(value.printPaperGrade, into: &buf)
+        FfiConverterFloat.write(value.printBaseWarmth, into: &buf)
+        FfiConverterFloat.write(value.printProcessDepth, into: &buf)
     }
 }
 
@@ -3510,6 +3550,98 @@ extension ColorProfileMode: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum EnlargerFilterMode {
+    
+    case neutralPanchromatic
+    case yellowK2
+    case orange16
+    case red25A
+    case greenX1
+    case orthochromatic
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEnlargerFilterMode: FfiConverterRustBuffer {
+    typealias SwiftType = EnlargerFilterMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EnlargerFilterMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .neutralPanchromatic
+        
+        case 2: return .yellowK2
+        
+        case 3: return .orange16
+        
+        case 4: return .red25A
+        
+        case 5: return .greenX1
+        
+        case 6: return .orthochromatic
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: EnlargerFilterMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .neutralPanchromatic:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .yellowK2:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .orange16:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .red25A:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .greenX1:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .orthochromatic:
+            writeInt(&buf, Int32(6))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEnlargerFilterMode_lift(_ buf: RustBuffer) throws -> EnlargerFilterMode {
+    return try FfiConverterTypeEnlargerFilterMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEnlargerFilterMode_lower(_ value: EnlargerFilterMode) -> RustBuffer {
+    return FfiConverterTypeEnlargerFilterMode.lower(value)
+}
+
+
+
+extension EnlargerFilterMode: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ExportColorSpace {
     
     case srgb
@@ -3689,6 +3821,112 @@ extension FirstProofError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum PrintMediaMode {
+    
+    case none
+    case chromogenicTypeC
+    case silverDyeBleach
+    case fineArtCottonRag
+    case barytaSilverGelatin
+    case warmtoneChlorobromide
+    case platinumPalladium
+    case cyanotype
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrintMediaMode: FfiConverterRustBuffer {
+    typealias SwiftType = PrintMediaMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrintMediaMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .none
+        
+        case 2: return .chromogenicTypeC
+        
+        case 3: return .silverDyeBleach
+        
+        case 4: return .fineArtCottonRag
+        
+        case 5: return .barytaSilverGelatin
+        
+        case 6: return .warmtoneChlorobromide
+        
+        case 7: return .platinumPalladium
+        
+        case 8: return .cyanotype
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PrintMediaMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .none:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .chromogenicTypeC:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .silverDyeBleach:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .fineArtCottonRag:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .barytaSilverGelatin:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .warmtoneChlorobromide:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .platinumPalladium:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .cyanotype:
+            writeInt(&buf, Int32(8))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrintMediaMode_lift(_ buf: RustBuffer) throws -> PrintMediaMode {
+    return try FfiConverterTypePrintMediaMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrintMediaMode_lower(_ value: PrintMediaMode) -> RustBuffer {
+    return FfiConverterTypePrintMediaMode.lower(value)
+}
+
+
+
+extension PrintMediaMode: Equatable, Hashable {}
+
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)

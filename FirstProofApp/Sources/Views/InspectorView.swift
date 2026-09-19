@@ -93,6 +93,8 @@ struct InspectorView: View {
                     OpticsGeometryWorkspaceView()
                 case .detail:
                     DetailWorkspaceView()
+                case .emulsion:
+                    EmulsionWorkspaceView()
                 case .metadata:
                     MetadataWorkspaceView(photo: photo)
                 }

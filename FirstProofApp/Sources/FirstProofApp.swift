@@ -255,10 +255,15 @@ struct FirstProofApp: App {
                     }
                     .keyboardShortcut("4", modifiers: [.command, .option])
                     
+                    Button("Emulsion & Darkroom Print") {
+                        viewModel.selectedInspectorTab = .emulsion
+                    }
+                    .keyboardShortcut("5", modifiers: [.command, .option])
+                    
                     Button("EXIF Metadata") {
                         viewModel.selectedInspectorTab = .metadata
                     }
-                    .keyboardShortcut("5", modifiers: [.command, .option])
+                    .keyboardShortcut("6", modifiers: [.command, .option])
                 }
             }
         }

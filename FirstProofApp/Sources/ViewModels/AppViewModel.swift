@@ -52,6 +52,9 @@ public enum EditSliderType {
     case splitToningHighlightHue
     case splitToningHighlightSat
     case splitToningBalance
+    case printPaperGrade
+    case printBaseWarmth
+    case printProcessDepth
     
     public var displayName: String {
         switch self {
@@ -84,6 +87,9 @@ public enum EditSliderType {
         case .splitToningHighlightHue: return "Highlight Hue"
         case .splitToningHighlightSat: return "Highlight Saturation"
         case .splitToningBalance: return "Split Toning Balance"
+        case .printPaperGrade: return "Paper Grade"
+        case .printBaseWarmth: return "Base Warmth"
+        case .printProcessDepth: return "Process Depth"
         }
     }
 }
@@ -130,6 +136,7 @@ public enum InspectorTab: String, CaseIterable, Identifiable {
     case color = "Color"
     case optics = "Optics"
     case detail = "Detail"
+    case emulsion = "Emulsion"
     case metadata = "Info"
     
     public var id: String { rawValue }
@@ -140,6 +147,7 @@ public enum InspectorTab: String, CaseIterable, Identifiable {
         case .color: return "paintpalette.fill"
         case .optics: return "crop.rotate"
         case .detail: return "slider.horizontal.2.square"
+        case .emulsion: return "film"
         case .metadata: return "info.circle.fill"
         }
     }
@@ -292,6 +300,13 @@ public final class AppViewModel {
     public var splitToningBalance: Float = 0.0          // -100 .. +100
     public var selectedSplitToningPresetId: String? = nil
     public var selectedGrainPresetId: String? = nil
+    
+    // MARK: - Curated Fine-Art Print Media Archetypes & Optical Filtration
+    public var printMedia: PrintMediaMode = .none
+    public var enlargerFilter: EnlargerFilterMode = .neutralPanchromatic
+    public var printPaperGrade: Float = 0.0     // -2.0 .. +2.0
+    public var printBaseWarmth: Float = 0.0     // -100 .. +100
+    public var printProcessDepth: Float = 100.0 // 0 .. 100
 
     public var defaultSharpeningAmount: Float {
         (selectedPhoto?.isRaw ?? false) ? 20.0 : 0.0

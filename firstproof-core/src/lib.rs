@@ -18,6 +18,7 @@ pub mod synthetic;
 pub mod checksum;
 
 pub use curve::{evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, CurvePointRecord, ToneCurvesRecord};
+pub use color::print_media::{EnlargerFilterMode, PrintMediaMode};
 
 #[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ColorProfileMode {
@@ -135,6 +136,11 @@ pub struct EditSettings {
     pub split_toning_highlight_hue: f32,
     pub split_toning_highlight_sat: f32,
     pub split_toning_balance: f32,
+    pub print_media: PrintMediaMode,
+    pub enlarger_filter: EnlargerFilterMode,
+    pub print_paper_grade: f32,
+    pub print_base_warmth: f32,
+    pub print_process_depth: f32,
 }
 
 impl Default for EditSettings {
@@ -180,6 +186,11 @@ impl Default for EditSettings {
             split_toning_highlight_hue: 45.0,
             split_toning_highlight_sat: 0.0,
             split_toning_balance: 0.0,
+            print_media: PrintMediaMode::None,
+            enlarger_filter: EnlargerFilterMode::NeutralPanchromatic,
+            print_paper_grade: 0.0,
+            print_base_warmth: 0.0,
+            print_process_depth: 100.0,
         }
     }
 }

@@ -62,6 +62,44 @@ extension MetalRenderer {
         uniforms.cropConstrain = edits.cropConstrain ? 1 : 0
         uniforms.cropModeActive = isCropToolActive ? 1 : 0
         
+        switch edits.printMedia {
+        case .none:
+            uniforms.printMediaMode = 0
+        case .chromogenicTypeC:
+            uniforms.printMediaMode = 1
+        case .silverDyeBleach:
+            uniforms.printMediaMode = 2
+        case .fineArtCottonRag:
+            uniforms.printMediaMode = 3
+        case .barytaSilverGelatin:
+            uniforms.printMediaMode = 4
+        case .warmtoneChlorobromide:
+            uniforms.printMediaMode = 5
+        case .platinumPalladium:
+            uniforms.printMediaMode = 6
+        case .cyanotype:
+            uniforms.printMediaMode = 7
+        }
+        
+        switch edits.enlargerFilter {
+        case .neutralPanchromatic:
+            uniforms.enlargerFilterMode = 0
+        case .yellowK2:
+            uniforms.enlargerFilterMode = 1
+        case .orange16:
+            uniforms.enlargerFilterMode = 2
+        case .red25A:
+            uniforms.enlargerFilterMode = 3
+        case .greenX1:
+            uniforms.enlargerFilterMode = 4
+        case .orthochromatic:
+            uniforms.enlargerFilterMode = 5
+        }
+        
+        uniforms.printPaperGrade = edits.printPaperGrade
+        uniforms.printBaseWarmth = edits.printBaseWarmth
+        uniforms.printProcessDepth = edits.printProcessDepth
+        
         switch edits.toneProfile {
         case .agxVivid:
             uniforms.toneProfileMode = 0

@@ -93,6 +93,32 @@ pub fn generate_xmp(data: &XmpData) -> String {
     };
     writer.element("toneProfile", pm_ns.clone()).value(tone_profile_str);
 
+    let print_media_str = match data.edits.print_media {
+        crate::PrintMediaMode::None => "None",
+        crate::PrintMediaMode::ChromogenicTypeC => "ChromogenicTypeC",
+        crate::PrintMediaMode::SilverDyeBleach => "SilverDyeBleach",
+        crate::PrintMediaMode::FineArtCottonRag => "FineArtCottonRag",
+        crate::PrintMediaMode::BarytaSilverGelatin => "BarytaSilverGelatin",
+        crate::PrintMediaMode::WarmtoneChlorobromide => "WarmtoneChlorobromide",
+        crate::PrintMediaMode::PlatinumPalladium => "PlatinumPalladium",
+        crate::PrintMediaMode::Cyanotype => "Cyanotype",
+    };
+    writer.element("printMedia", pm_ns.clone()).value(print_media_str);
+
+    let enlarger_filter_str = match data.edits.enlarger_filter {
+        crate::EnlargerFilterMode::NeutralPanchromatic => "NeutralPanchromatic",
+        crate::EnlargerFilterMode::YellowK2 => "YellowK2",
+        crate::EnlargerFilterMode::Orange16 => "Orange16",
+        crate::EnlargerFilterMode::Red25A => "Red25A",
+        crate::EnlargerFilterMode::GreenX1 => "GreenX1",
+        crate::EnlargerFilterMode::Orthochromatic => "Orthochromatic",
+    };
+    writer.element("enlargerFilter", pm_ns.clone()).value(enlarger_filter_str);
+
+    writer.element("printPaperGrade", pm_ns.clone()).value(format!("{:.4}", data.edits.print_paper_grade).as_str());
+    writer.element("printBaseWarmth", pm_ns.clone()).value(format!("{:.4}", data.edits.print_base_warmth).as_str());
+    writer.element("printProcessDepth", pm_ns.clone()).value(format!("{:.4}", data.edits.print_process_depth).as_str());
+
     if let Some(name) = &data.edits.lut_name {
         writer.element("lutName", pm_ns.clone()).value(name.as_str());
         writer.element("lutIntensity", pm_ns.clone()).value(format!("{:.4}", data.edits.lut_intensity).as_str());

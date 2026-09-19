@@ -409,4 +409,195 @@ inline float3 applySplitToning(
     return clamp(rgb + delta, 0.0, 1.0);
 }
 
+// MARK: - Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration
+inline float applyPaperGrade(float val, float grade) {
+    if (abs(grade) < 0.001) {
+        return val;
+    }
+    float alpha = 0.40 * (grade / 2.0);
+    return clamp(val + alpha * val * (1.0 - val) * (2.0 * val - 1.0), 0.0, 1.0);
+}
+
+inline float3 applyBaseWarmth(float3 rgb, float warmth) {
+    if (abs(warmth) < 0.001) {
+        return rgb;
+    }
+    float lum = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+    float highlightWeight = clamp(pow(lum, 0.6), 0.0, 1.0);
+    float factor = (warmth / 100.0) * highlightWeight;
+    
+    float3 mult;
+    if (factor > 0.0) {
+        mult = float3(
+            1.0 + factor * 0.060,
+            1.0 + factor * 0.025,
+            1.0 - factor * 0.045
+        );
+    } else {
+        float absF = -factor;
+        mult = float3(
+            1.0 - absF * 0.025,
+            1.0 - absF * 0.008,
+            1.0 + absF * 0.045
+        );
+    }
+    return clamp(rgb * mult, 0.0, 1.0);
+}
+
+inline float3 getEnlargerFilterWeights(int filterMode) {
+    switch (filterMode) {
+        case 1: return float3(0.35, 0.60, 0.05); // YellowK2
+        case 2: return float3(0.55, 0.42, 0.03); // Orange16
+        case 3: return float3(0.85, 0.15, 0.00); // Red25A
+        case 4: return float3(0.15, 0.80, 0.05); // GreenX1
+        case 5: return float3(0.00, 0.60, 0.40); // Orthochromatic
+        default: return float3(0.2627, 0.6780, 0.0593); // NeutralPanchromatic
+    }
+}
+
+inline float3 applyPrintMedia(
+    float3 rgb,
+    int mediaMode,
+    int filterMode,
+    float paperGrade,
+    float baseWarmth,
+    float processDepth
+) {
+    if (mediaMode == 0) {
+        return rgb;
+    }
+    
+    float depth = clamp(processDepth / 100.0, 0.0, 1.0);
+    
+    switch (mediaMode) {
+        case 1: { // ChromogenicTypeC (RA-4)
+            float rG = applyPaperGrade(rgb.r, paperGrade);
+            float gG = applyPaperGrade(rgb.g, paperGrade);
+            float bG = applyPaperGrade(rgb.b, paperGrade);
+            
+            // Sensitometric highlight compression: smooth cubic Hermite soft shoulder
+            auto compressShoulder = [depth](float c) -> float {
+                if (c > 0.70) {
+                    float u = clamp((c - 0.70) / 0.30, 0.0, 1.0);
+                    return c - 0.045 * depth * u * u * (3.0 - 2.0 * u);
+                }
+                return c;
+            };
+            float rP = compressShoulder(rG);
+            float gP = compressShoulder(gG);
+            float bP = compressShoulder(bG);
+            
+            float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+            float satScale = 0.70 + 0.35 * depth;
+            float rOut = clamp(lum + (rP - lum) * satScale, 0.0, 1.0);
+            float gOut = clamp(lum + (gP - lum) * satScale, 0.0, 1.0);
+            float bOut = clamp(lum + (bP - lum) * satScale, 0.0, 1.0);
+            
+            float dyeDensity = 0.04 * max(1.0 - lum, 0.0) * depth;
+            rOut = clamp(rOut * (1.0 - dyeDensity * 0.4), 0.0, 1.0);
+            gOut = clamp(gOut * (1.0 - dyeDensity * 0.6), 0.0, 1.0);
+            bOut = clamp(bOut * (1.0 - dyeDensity * 0.9), 0.0, 1.0);
+            
+            return applyBaseWarmth(float3(rOut, gOut, bOut), baseWarmth);
+        }
+        case 2: { // SilverDyeBleach (Azo Reversal)
+            float rG = applyPaperGrade(rgb.r, paperGrade);
+            float gG = applyPaperGrade(rgb.g, paperGrade);
+            float bG = applyPaperGrade(rgb.b, paperGrade);
+            
+            float shadowPow = 1.0 + 0.12 * depth;
+            float rP = pow(rG, shadowPow);
+            float gP = pow(gG, shadowPow);
+            float bP = pow(bG, shadowPow);
+            
+            float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+            float azoSat = 0.80 + 0.30 * depth;
+            float rOut = clamp(lum + (rP - lum) * azoSat, 0.0, 1.0);
+            float gOut = clamp(lum + (gP - lum) * azoSat, 0.0, 1.0);
+            float bOut = clamp(lum + (bP - lum) * azoSat, 0.0, 1.0);
+            
+            return applyBaseWarmth(float3(rOut, gOut, bOut), baseWarmth);
+        }
+        case 3: { // FineArtCottonRag (Mineral Pigment)
+            float rG = applyPaperGrade(rgb.r, paperGrade);
+            float gG = applyPaperGrade(rgb.g, paperGrade);
+            float bG = applyPaperGrade(rgb.b, paperGrade);
+            
+            // Fiber surface scatter: lifts shadows without compressing specular highlights
+            float matteFloor = 0.055 - 0.015 * depth;
+            float rP = rG + matteFloor * (1.0 - rG) * (1.0 - rG);
+            float gP = gG + matteFloor * (1.0 - gG) * (1.0 - gG);
+            float bP = bG + matteFloor * (1.0 - bG) * (1.0 - bG);
+            
+            float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+            float pigmentSat = 0.75 + 0.25 * depth;
+            float rOut = clamp(lum + (rP - lum) * pigmentSat, 0.0, 1.0);
+            float gOut = clamp(lum + (gP - lum) * pigmentSat, 0.0, 1.0);
+            float bOut = clamp(lum + (bP - lum) * pigmentSat, 0.0, 1.0);
+            
+            return applyBaseWarmth(float3(rOut, gOut, bOut), baseWarmth + 15.0);
+        }
+        case 4: { // BarytaSilverGelatin
+            float3 w = getEnlargerFilterWeights(filterMode);
+            float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
+            float silver = applyPaperGrade(rawLum, paperGrade);
+            
+            float dmaxGamma = 1.0 + 0.08 * depth;
+            float silverToned = pow(silver, dmaxGamma);
+            
+            return applyBaseWarmth(float3(silverToned), baseWarmth);
+        }
+        case 5: { // WarmtoneChlorobromide (Selenium Toned)
+            float3 w = getEnlargerFilterWeights(filterMode);
+            float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
+            float silver = applyPaperGrade(rawLum, paperGrade);
+            
+            float shadowPow = 1.0 + 0.10 * depth;
+            float silverDeep = pow(silver, shadowPow);
+            
+            // Smooth parabolic harmonic bell curve for midtone dye deposition
+            float midMask = 4.0 * silver * (1.0 - silver);
+            float shadowDensity = max(1.0 - silver, 0.0);
+            
+            float rTone = silverDeep + depth * (midMask * 0.030 + shadowDensity * 0.020);
+            float gTone = silverDeep + depth * (midMask * 0.012 - shadowDensity * 0.015);
+            float bTone = silverDeep + depth * (-midMask * 0.018 + shadowDensity * 0.030);
+            
+            float3 toned = clamp(float3(rTone, gTone, bTone), 0.0, 1.0);
+            return applyBaseWarmth(toned, baseWarmth);
+        }
+        case 6: { // PlatinumPalladium
+            float3 w = getEnlargerFilterWeights(filterMode);
+            float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
+            float silver = applyPaperGrade(rawLum, paperGrade);
+            
+            float matteFloor = 0.035 * depth;
+            float silverBase = matteFloor + (1.0 - matteFloor) * silver;
+            
+            float warmLift = max(1.0 - pow(silverBase, 0.6), 0.0) * depth;
+            float rTone = silverBase + warmLift * 0.045;
+            float gTone = silverBase + warmLift * 0.028;
+            float bTone = silverBase - warmLift * 0.020;
+            
+            float3 toned = clamp(float3(rTone, gTone, bTone), 0.0, 1.0);
+            return applyBaseWarmth(toned, baseWarmth + 10.0 * depth);
+        }
+        case 7: { // Cyanotype
+            float3 w = getEnlargerFilterWeights(filterMode);
+            float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
+            float silver = applyPaperGrade(rawLum, paperGrade);
+            
+            float density = 1.0 - silver;
+            float rP = silver * (1.0 - 0.75 * depth * density);
+            float gP = silver * (1.0 - 0.35 * depth * density) + 0.02 * depth * density;
+            float bP = silver * (1.0 - 0.05 * depth * density) + 0.07 * depth * density;
+            
+            float3 toned = clamp(float3(rP, gP, bP), 0.0, 1.0);
+            return applyBaseWarmth(toned, baseWarmth + 8.0 * depth);
+        }
+        default:
+            return rgb;
+    }
+}
+
 #endif /* ColorScience_metal */

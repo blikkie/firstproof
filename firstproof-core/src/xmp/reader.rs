@@ -283,6 +283,43 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
             _ => crate::ColorProfileMode::AgxVivid,
         };
     }
+    if let Some(pm_str) = get(pm, "printMedia") {
+        data.edits.print_media = match pm_str {
+            "ChromogenicTypeC" => crate::PrintMediaMode::ChromogenicTypeC,
+            "SilverDyeBleach" => crate::PrintMediaMode::SilverDyeBleach,
+            "FineArtCottonRag" => crate::PrintMediaMode::FineArtCottonRag,
+            "BarytaSilverGelatin" => crate::PrintMediaMode::BarytaSilverGelatin,
+            "WarmtoneChlorobromide" => crate::PrintMediaMode::WarmtoneChlorobromide,
+            "PlatinumPalladium" => crate::PrintMediaMode::PlatinumPalladium,
+            "Cyanotype" => crate::PrintMediaMode::Cyanotype,
+            _ => crate::PrintMediaMode::None,
+        };
+    }
+    if let Some(ef_str) = get(pm, "enlargerFilter") {
+        data.edits.enlarger_filter = match ef_str {
+            "YellowK2" => crate::EnlargerFilterMode::YellowK2,
+            "Orange16" => crate::EnlargerFilterMode::Orange16,
+            "Red25A" => crate::EnlargerFilterMode::Red25A,
+            "GreenX1" => crate::EnlargerFilterMode::GreenX1,
+            "Orthochromatic" => crate::EnlargerFilterMode::Orthochromatic,
+            _ => crate::EnlargerFilterMode::NeutralPanchromatic,
+        };
+    }
+    if let Some(ppg_str) = get(pm, "printPaperGrade") {
+        if let Ok(val) = ppg_str.parse::<f32>() {
+            data.edits.print_paper_grade = val;
+        }
+    }
+    if let Some(pbw_str) = get(pm, "printBaseWarmth") {
+        if let Ok(val) = pbw_str.parse::<f32>() {
+            data.edits.print_base_warmth = val;
+        }
+    }
+    if let Some(ppd_str) = get(pm, "printProcessDepth") {
+        if let Ok(val) = ppd_str.parse::<f32>() {
+            data.edits.print_process_depth = val;
+        }
+    }
     if let Some(lut_name_str) = get(pm, "lutName") {
         if !lut_name_str.trim().is_empty() {
             data.edits.lut_name = Some(lut_name_str.to_string());

@@ -282,6 +282,18 @@ fragment float4 fragmentShader(
         );
     }
 
+    // 8.2 Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration
+    if (uniforms.isOriginal < 0.5 && uniforms.printMediaMode != 0) {
+        finalColor = applyPrintMedia(
+            finalColor,
+            uniforms.printMediaMode,
+            uniforms.enlargerFilterMode,
+            uniforms.printPaperGrade,
+            uniforms.printBaseWarmth,
+            uniforms.printProcessDepth
+        );
+    }
+
     // 8.5 Procedural Organic Film Grain
     if (uniforms.isOriginal == 0.0 && uniforms.grainAmount > 0.0) {
         float2 texDim = float2(texture.get_width(), texture.get_height());

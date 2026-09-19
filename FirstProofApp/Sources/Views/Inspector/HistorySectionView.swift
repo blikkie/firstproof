@@ -12,11 +12,13 @@ public struct HistorySectionView: View {
     }
     
     private var uStack: [UndoEntry] {
-        viewModel.undoHistory.undoStack(for: activePath)
+        _ = viewModel.undoHistory.historyRevision
+        return viewModel.undoHistory.undoStack(for: activePath)
     }
     
     private var rStack: [UndoEntry] {
-        viewModel.undoHistory.redoStack(for: activePath)
+        _ = viewModel.undoHistory.historyRevision
+        return viewModel.undoHistory.redoStack(for: activePath)
     }
     
     public var body: some View {
@@ -169,6 +171,8 @@ public struct HistorySectionView: View {
                 return "circle.dotted"
             } else if title.contains("White Balance") {
                 return "eyedropper"
+            } else if title.contains("Print Media") || title.contains("Paper Grade") || title.contains("Base Warmth") || title.contains("Process Depth") || title.contains("Enlarger Filter") {
+                return "film"
             }
             return "slider.horizontal.3"
         case .rating:

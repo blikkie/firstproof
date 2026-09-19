@@ -76,6 +76,11 @@ struct ShaderUniforms {
     float splitToningHighlightHue; // 0.0 .. 360.0 (degrees, default 45.0)
     float splitToningHighlightSat; // 0.0 .. 100.0 (default 0.0)
     float splitToningBalance;      // -100.0 .. +100.0 (default 0.0)
+    int32_t printMediaMode;        // 0 = None, 1 = ChromogenicTypeC, 2 = SilverDyeBleach, 3 = FineArtCottonRag, 4 = BarytaSilverGelatin, 5 = WarmtoneChlorobromide, 6 = PlatinumPalladium, 7 = Cyanotype
+    int32_t enlargerFilterMode;    // 0 = Neutral, 1 = YellowK2, 2 = Orange16, 3 = Red25A, 4 = GreenX1, 5 = Orthochromatic
+    float printPaperGrade;         // -2.0 .. +2.0 (default 0.0)
+    float printBaseWarmth;         // -100.0 .. +100.0 (default 0.0)
+    float printProcessDepth;       // 0.0 .. 100.0 (default 100.0)
 };
 
 #endif /* ShaderTypes_h */

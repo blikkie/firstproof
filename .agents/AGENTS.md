@@ -41,6 +41,12 @@
 
 - **Dual-Engine Math Parity**: The Metal GPU shader pipeline (`Shaders.metal`, `Geometry.metal`) and the Rust CPU pipeline (`export.rs`, `curve.rs`, `color/`) must maintain bit-level mathematical parity. Any new tone transform or slider adjustment must be implemented identically in both engines and verified with `cargo test --test agx_shader_parity` and `cargo test --test camera_profiles_parity`.
 
+- **Physical Sensitometric Math Over Magic Numbers & Piecewise Hacks**:
+  - Emulations (film stocks, recording emulsions, print media, enlarger filtration, toner chemistry) must always be grounded in continuous physical, optical, and sensitometric math—never arbitrary "magic numbers", hard thresholds, or piecewise if/else hacks.
+  - Tonal curves must be smooth $C^1$ or $C^\infty$ analytical functions (e.g. bounded cubic polynomial S-curves $f(x) = x + \alpha \cdot x(1-x)(2x-1)$, smooth Hermite shoulders, or sigmoidal density curves). Fractional power laws $x^\gamma$ with infinite derivative ($f' \to \infty$) at bounds are forbidden.
+  - Spectral absorption must obey physical laws (e.g. subtractive Beer-Lambert law $T = e^{-\alpha \cdot D}$ for dye clouds and pigments, multiplicative physical reflectance $I \cdot W_{\text{base}}$ for paper base warmth, quadratic surface scatter $f(1-x)^2$ for uncalendered rag matte).
+  - Piecewise logic with discontinuous first derivatives ($C^0$ or discontinuous slopes) creates posterization, harsh solarization knees, and unnatural clipping. Always formulate adjustments as continuous mathematical manifolds.
+
 - **Real-Time Viewport Thumbnail Invalidation**:
   - Viewport adjustments (sliders, curves, rotation) must never trigger slow disk re-renders or LibRaw demosaicing.
   - Thumbnails are updated via sub-millisecond GPU viewport snapshots (`captureThumbnailSnapshot`) into in-memory `ThumbnailCache`, followed by `NotificationCenter.default.post(name: .thumbnailDidChange, object: path)`. Disk serialization is deferred until save or closing the photo.

@@ -265,6 +265,23 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                 b_disp = b_sharp;
             }
 
+            // 3b.2 Fine-Art Print Media Archetypes & Chemical Darkroom Toning
+            if edits.print_media != crate::PrintMediaMode::None {
+                let (rp, gp, bp) = crate::color::apply_print_media(
+                    r_disp,
+                    g_disp,
+                    b_disp,
+                    edits.print_media,
+                    edits.enlarger_filter,
+                    edits.print_paper_grade,
+                    edits.print_base_warmth,
+                    edits.print_process_depth,
+                );
+                r_disp = rp;
+                g_disp = gp;
+                b_disp = bp;
+            }
+
             // 3c. Procedural Organic Film Grain
             if edits.grain_amount > 0.0 {
                 let (rg, gg, bg) = apply_film_grain_rgb(

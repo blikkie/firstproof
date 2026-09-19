@@ -47,7 +47,12 @@ extension AppViewModel {
             splitToningShadowSat: self.splitToningShadowSat,
             splitToningHighlightHue: self.splitToningHighlightHue,
             splitToningHighlightSat: self.splitToningHighlightSat,
-            splitToningBalance: self.splitToningBalance
+            splitToningBalance: self.splitToningBalance,
+            printMedia: self.printMedia,
+            enlargerFilter: self.enlargerFilter,
+            printPaperGrade: self.printPaperGrade,
+            printBaseWarmth: self.printBaseWarmth,
+            printProcessDepth: self.printProcessDepth
         )
     }
 }
@@ -94,7 +99,12 @@ extension EditSettings {
             splitToningShadowSat: 0.0,
             splitToningHighlightHue: 45.0,
             splitToningHighlightSat: 0.0,
-            splitToningBalance: 0.0
+            splitToningBalance: 0.0,
+            printMedia: .none,
+            enlargerFilter: .neutralPanchromatic,
+            printPaperGrade: 0.0,
+            printBaseWarmth: 0.0,
+            printProcessDepth: 100.0
         )
     }
 }
@@ -141,6 +151,11 @@ extension AppViewModel {
         self.splitToningHighlightHue = edits.splitToningHighlightHue
         self.splitToningHighlightSat = edits.splitToningHighlightSat
         self.splitToningBalance = edits.splitToningBalance
+        self.printMedia = edits.printMedia
+        self.enlargerFilter = edits.enlargerFilter
+        self.printPaperGrade = edits.printPaperGrade
+        self.printBaseWarmth = edits.printBaseWarmth
+        self.printProcessDepth = edits.printProcessDepth
         
         // Update or clear selectedGrainPresetId matching the loaded photo's grain settings
         if edits.grainAmount <= 0.0 {
@@ -256,6 +271,12 @@ extension AppViewModel {
                 title = "Highlight Saturation (\(Int(splitToningHighlightSat)))"
             case .splitToningBalance:
                 title = "Split Balance (\(splitToningBalance >= 0 ? "+" : "")\(Int(splitToningBalance)))"
+            case .printPaperGrade:
+                title = "Paper Grade (\(String(format: "%+.1f", printPaperGrade)))"
+            case .printBaseWarmth:
+                title = "Base Warmth (\(printBaseWarmth >= 0 ? "+" : "")\(Int(printBaseWarmth)))"
+            case .printProcessDepth:
+                title = "Process Depth (\(Int(printProcessDepth))%)"
             }
             endSliderScrub(actionName: title)
         }
@@ -728,6 +749,12 @@ extension AppViewModel {
         case .splitToningBalance:
             splitToningBalance = 0.0
             selectedSplitToningPresetId = nil
+        case .printPaperGrade:
+            printPaperGrade = 0.0
+        case .printBaseWarmth:
+            printBaseWarmth = 0.0
+        case .printProcessDepth:
+            printProcessDepth = 100.0
         }
         registerDiscreteEdit(title: "Reset \(type.displayName)", before: before)
     }
@@ -950,5 +977,53 @@ extension AppViewModel {
         let before = currentEdits
         cropConstrain.toggle()
         registerDiscreteEdit(title: cropConstrain ? "Enable Constrain Crop" : "Disable Constrain Crop", before: before)
+    }
+    
+    // MARK: - Curated Fine-Art Print Media
+    public func setPrintMedia(_ media: PrintMediaMode) {
+        guard self.printMedia != media else { return }
+        let before = currentEdits
+        self.printMedia = media
+        let title: String
+        switch media {
+        case .none: title = "Print Media: None (Display)"
+        case .chromogenicTypeC: title = "Print Media: Chromogenic Type-C"
+        case .silverDyeBleach: title = "Print Media: Silver Dye-Bleach"
+        case .fineArtCottonRag: title = "Print Media: Cotton Rag"
+        case .barytaSilverGelatin: title = "Print Media: Baryta Silver Gelatin"
+        case .warmtoneChlorobromide: title = "Print Media: Warmtone Chlorobromide"
+        case .platinumPalladium: title = "Print Media: Platinum/Palladium"
+        case .cyanotype: title = "Print Media: Historic Cyanotype"
+        }
+        registerDiscreteEdit(title: title, before: before)
+        notifyThumbnailChanged()
+    }
+    
+    public func setEnlargerFilter(_ filter: EnlargerFilterMode) {
+        guard self.enlargerFilter != filter else { return }
+        let before = currentEdits
+        self.enlargerFilter = filter
+        let title: String
+        switch filter {
+        case .neutralPanchromatic: title = "Enlarger Filter: Neutral"
+        case .yellowK2: title = "Enlarger Filter: Yellow (K2)"
+        case .orange16: title = "Enlarger Filter: Orange (16)"
+        case .red25A: title = "Enlarger Filter: Red (25A)"
+        case .greenX1: title = "Enlarger Filter: Green (X1)"
+        case .orthochromatic: title = "Enlarger Filter: Orthochromatic"
+        }
+        registerDiscreteEdit(title: title, before: before)
+        notifyThumbnailChanged()
+    }
+    
+    public func resetPrintMedia() {
+        let before = currentEdits
+        self.printMedia = .none
+        self.enlargerFilter = .neutralPanchromatic
+        self.printPaperGrade = 0.0
+        self.printBaseWarmth = 0.0
+        self.printProcessDepth = 100.0
+        registerDiscreteEdit(title: "Reset Print Media", before: before)
+        notifyThumbnailChanged()
     }
 }

@@ -7,11 +7,11 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Curated Fine-Art Print Media Archetypes: Color & Monochrome (P1)**: Optical print media (RA-4, Cibachrome, Silver Gelatin, Platinum) and spectral filtration as an optional fine-art treat.
-2. **Upstream Recording Emulsions & Photochemical Grain Mechanics (P1)**: Non-linear film stock modeling, DIR chemical couplers, subtractive Beer-Lambert grain, and mock-LUT/standalone grain de-bloat.
-3. **Cross-Platform Linux Toolchain & Headless Development Engine (P1 - Pulled Forward)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
-4. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-5. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
+1. **Upstream Recording Emulsions & Photochemical Grain Mechanics (P1)**: Non-linear film stock modeling, DIR chemical couplers, subtractive Beer-Lambert grain, and mock-LUT/standalone grain de-bloat.
+2. **Cross-Platform Linux Toolchain & Headless Development Engine (P1 - Pulled Forward)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
+3. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
+4. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
+5. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
 
 ---
 
@@ -21,36 +21,6 @@ This document strictly tracks pending and deferred features calibrated against o
 > First Proof's primary workhorse default is **pure optical RAW capture via AgX filmic tone mapping**. The core workspaces (**Light**, **Color**, **Detail**, **Optics**) are dedicated strictly to sensor reality: standard White Balance (Temperature & Tint), exposure, tone recovery, and sensor sharpness. Photos look 90% finished immediately without any analog styling.  
 > 
 > Film stock and print media emulation are **not** the main workflow and **not** a complex simulator. They are an exquisite, 100% opt-in **fine-art treat and differentiator** housed in a dedicated **Emulsion** workspace tab (`InspectorTab.emulsion`). Default state is always `None / Bypass`. When activated, the engine does all the heavy lifting under the hood so the photographer simply selects a curated stock or print medium without fiddling with chemical dials.
-
-### 3.1 Curated Fine-Art Print Media Archetypes: Color & Monochrome (P1)
-- **Downstream Darkroom Print Medium (The Fine-Art Treat)**:
-  - Treats the captured frame (clean digital RAW or chemical emulsion) as an archival gallery print exposed onto authentic fine-art paper chemistry.
-  - Quarantined inside the optional **Emulsion** tab; default is always clean digital display mapping.
-- **Curated Color Print Media Archetypes**:
-  - *Endura / Fujicolor Type-C (RA-4 Chromogenic)*: The classic gallery C-print standard. Creamy highlight roll-off, natural skin tone density, and organic cyan/magenta/yellow dye coupling that prevents digital clipping.
-  - *Ilfochrome / Cibachrome Classic (Silver Dye-Bleach Reversal)*: Legendary high-gloss slide print process with pure azo dyes. Ultra-deep shadow density ($D_{\text{max}} > 3.0$), high micro-contrast, and glowing gem-like jewel tones.
-  - *Archival Fine-Art Cotton Rag (Mineral Pigment)*: 100% unbleached cotton base, velvety matte shadow floor ($D_{\text{max}} \approx 1.65$), warm natural paper reflectance ($W_{\text{base}}$), and glare-free tonal breadth.
-- **Curated Monochrome Print Media Archetypes & Toning**:
-  - *Baryta Silver Gelatin FB*: Neutral barium sulfate ($\text{BaSO}_4$) base, deep $D_{\text{max}} \approx 2.2$, crisp midtone silver separation, and pure neutral silver blacks.
-  - *Warmtone Chlorobromide (Selenium Toned)*: Subtle warm fiber base, deep velvety shadow D-max ($D_{\text{max}} \approx 2.3$) with cool plum-black depths, warm charcoal midtones, and soft highlights.
-  - *Platinum / Palladium (Hand-Coated Cotton Rag)*: Noble metal embedded directly into cotton fibers. Long, delicate midtone graduation with non-clipping highlight roll-off ($D_{\text{max}} \approx 1.6$).
-  - *Historic Cyanotype*: Authentic 1842 Prussian blue iron-salt spectral response and tonal scale.
-- **Physical Enlarger Spectral Filtration (B&W Conversion)**:
-  - When printing to monochrome media, replaces harsh digital desaturation with physical optical filtration:
-    - *Neutral Panchromatic*: Standard wide-gamut linear luminance ($Y = 0.2627 R + 0.6780 G + 0.0593 B$).
-    - *Yellow Filter (K2)*: Darkens blue skies subtly to emphasize clouds; clears facial haze.
-    - *Orange Filter*: Moderate contrast, cuts atmospheric haze, smooths portraits.
-    - *Red Filter (25A)*: High-contrast drama, near-black dramatic skies, architectural separation.
-    - *Green Filter (X1)*: Lightens foliage and flora, separates skin tones under warm light.
-    - *Orthochromatic (Vintage)*: Blind to red ($w_r = 0$), sensitive strictly to blue/green for historic 19th/early-20th century look.
-- **Restrained "Rule of Three" Darkroom Controls (Zero Overload)**:
-  - When an archetype is selected, it renders 90% finished immediately at default `0`. The user has exactly three high-leverage physical darkroom sliders:
-    1. *Paper Grade / Hardness* (`-2.0` to `+2.0`, centered at `0` / Grade 2 Normal): Adjusts the slope and shoulder/toe steepness of the paper D-log H curve. Lower grades soften contrast to preserve delicate specular highlights; higher grades add graphic midtone punch.
-    2. *Base Warmth* (`-100` to `+100`, centered at `0`): Subtle trim of the paper substrate reflectance ($W_{\text{base}}$)—from cool, crisp optical-brightened baryta to warm, unbleached natural cotton rag.
-    3. *Process Depth* (`0%` to `100%`, default `100%`): Governs chemical toner bath immersion (untuned silver $\rightarrow$ deep archival selenium/platinum) for monochrome, or dye saturation depth for color.
-  - *No Simulator Bloat*: Absolutely zero dichroic YMC dials, agitation rates, or 20-slider chemical chemistry panels.
-- **Anti-Kitsch Guardrail**:
-  - Absolutely zero fake torn paper edges, faux white frames, artificial canvas textures, or digital grunge. Strictly physical sensitometric D-log H paper curves, base paper spectral reflectance ($W_{\text{base}}$), and authentic darkroom toner chemistry.
 
 ### 3.2 Upstream Recording Emulsions & Photochemical Grain Mechanics (P1)
 - **Upstream In-Camera Recording Medium**:

@@ -62,6 +62,7 @@ public struct UndoEntry: Identifiable, Equatable {
 
 /// Dedicated, isolated in-memory darkroom edit history for a single photo.
 /// Capped at 50 steps to eliminate memory bloat and prevent off-screen mutations.
+@Observable
 public final class PhotoEditHistory {
     public static let maxDepth = 50
     public var undoStack: [UndoEntry] = []
@@ -118,6 +119,9 @@ public final class PhotoEditHistory {
 public final class UndoHistoryManager {
     public static let maxCatalogHistoryCount = 100
     public static let maxPhotoHistoryCount = 50
+    
+    /// Observable revision ticker to guarantee real-time UI synchronization in HistorySectionView.
+    public private(set) var historyRevision: Int = 0
     
     // Per-photo isolated darkroom edit stacks
     private var photoHistories: [String: PhotoEditHistory] = [:]
@@ -194,6 +198,7 @@ public final class UndoHistoryManager {
     }
     
     public func popUndo(isDetailMode: Bool, activePhotoPath: String?) -> UndoEntry? {
+        historyRevision += 1
         if isDetailMode, let path = activePhotoPath {
             return photoHistories[path]?.popUndo()
         }
@@ -203,6 +208,7 @@ public final class UndoHistoryManager {
     }
     
     public func popRedo(isDetailMode: Bool, activePhotoPath: String?) -> UndoEntry? {
+        historyRevision += 1
         if isDetailMode, let path = activePhotoPath {
             return photoHistories[path]?.popRedo()
         }
@@ -241,6 +247,7 @@ public final class UndoHistoryManager {
             )
             let hist = photoHistory(for: photoPath)
             hist.pushUndo(entry)
+            historyRevision += 1
             return entry
         }
         
@@ -257,6 +264,7 @@ public final class UndoHistoryManager {
         )
         let hist = photoHistory(for: photoPath)
         hist.pushUndo(entry)
+        historyRevision += 1
     }
     
     /// Records a catalog-level action (ratings, flags) to the catalog session stack.
@@ -267,6 +275,7 @@ public final class UndoHistoryManager {
             catalogUndoStack.removeFirst()
         }
         catalogRedoStack.removeAll()
+        historyRevision += 1
     }
     
     /// Universal action registration dispatcher routing edits to photo stack and ratings/status to catalog stack.
@@ -286,10 +295,12 @@ public final class UndoHistoryManager {
         catalogRedoStack.removeAll()
         scrubStartEdits = nil
         scrubPhotoPath = nil
+        historyRevision += 1
     }
     
     /// Clears history for a specific photo.
     public func clear(for photoPath: String) {
         photoHistories[photoPath]?.clear()
+        historyRevision += 1
     }
 }
