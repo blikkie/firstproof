@@ -43,12 +43,36 @@ extension MetalRenderer {
         uniforms.sharpeningAmount = edits.sharpeningAmount
         uniforms.sharpeningRadius = edits.sharpeningRadius
         uniforms.sharpeningMasking = edits.sharpeningMasking
-        uniforms.noiseReduction = edits.noiseReduction
-        uniforms.grainAmount = edits.grainAmount
-        uniforms.grainSize = edits.grainSize
-        uniforms.grainRoughness = edits.grainRoughness
-        uniforms.grainChroma = edits.grainChroma
-        uniforms.splitToningShadowHue = edits.splitToningShadowHue
+        switch edits.emulsionArchetype {
+        case .none:
+            uniforms.emulsionArchetype = 0
+        case .rochesterPortrait400:
+            uniforms.emulsionArchetype = 1
+        case .ashigaraChrome50:
+            uniforms.emulsionArchetype = 2
+        case .rochesterK14Chrome64:
+            uniforms.emulsionArchetype = 3
+        case .rochesterCinema500:
+            uniforms.emulsionArchetype = 4
+        case .rochesterDaylight200:
+            uniforms.emulsionArchetype = 5
+        case .mobberleySilver400:
+            uniforms.emulsionArchetype = 6
+        case .cambridgeDiffusion100:
+            uniforms.emulsionArchetype = 7
+        }
+
+        switch edits.emulsionFormat {
+        case .format35mm:
+            uniforms.emulsionFormat = 0
+        case .format120:
+            uniforms.emulsionFormat = 1
+        case .format4x5:
+            uniforms.emulsionFormat = 2
+        }
+
+        uniforms.emulsionExposure = edits.emulsionExposure
+        uniforms._emulsionPadding = 0
         uniforms.splitToningShadowSat = edits.splitToningShadowSat
         uniforms.splitToningHighlightHue = edits.splitToningHighlightHue
         uniforms.splitToningHighlightSat = edits.splitToningHighlightSat

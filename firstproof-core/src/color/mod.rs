@@ -10,10 +10,12 @@
 pub mod agx;
 pub mod ciede2000;
 pub mod dcp;
+pub mod emulsion;
 pub mod print_media;
 
 pub use agx::{agx_tone_map, agx_tone_map_vivid, AGX_INSET_MATRIX, AGX_OUTSET_MATRIX};
 pub use dcp::{DcpHueSatMap, DcpProfile, evaluate_tone_curve, hsv_to_rgb, rgb_to_hsv};
+pub use emulsion::{apply_recording_emulsion, EmulsionArchetype, EmulsionFormat};
 pub use print_media::{apply_print_media, EnlargerFilterMode, PrintMediaMode};
 
 /// 3-component floating point color vector (e.g. RGB or XYZ)

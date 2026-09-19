@@ -1455,10 +1455,9 @@ public struct EditSettings {
     public var sharpeningRadius: Float
     public var sharpeningMasking: Float
     public var noiseReduction: Float
-    public var grainAmount: Float
-    public var grainSize: Float
-    public var grainRoughness: Float
-    public var grainChroma: Float
+    public var emulsionArchetype: EmulsionArchetype
+    public var emulsionFormat: EmulsionFormat
+    public var emulsionExposure: Float
     public var curves: ToneCurvesRecord
     public var splitToningShadowHue: Float
     public var splitToningShadowSat: Float
@@ -1473,7 +1472,7 @@ public struct EditSettings {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, grainAmount: Float, grainSize: Float, grainRoughness: Float, grainChroma: Float, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float, printMedia: PrintMediaMode, enlargerFilter: EnlargerFilterMode, printPaperGrade: Float, printBaseWarmth: Float, printProcessDepth: Float) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, emulsionArchetype: EmulsionArchetype, emulsionFormat: EmulsionFormat, emulsionExposure: Float, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float, printMedia: PrintMediaMode, enlargerFilter: EnlargerFilterMode, printPaperGrade: Float, printBaseWarmth: Float, printProcessDepth: Float) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -1504,10 +1503,9 @@ public struct EditSettings {
         self.sharpeningRadius = sharpeningRadius
         self.sharpeningMasking = sharpeningMasking
         self.noiseReduction = noiseReduction
-        self.grainAmount = grainAmount
-        self.grainSize = grainSize
-        self.grainRoughness = grainRoughness
-        self.grainChroma = grainChroma
+        self.emulsionArchetype = emulsionArchetype
+        self.emulsionFormat = emulsionFormat
+        self.emulsionExposure = emulsionExposure
         self.curves = curves
         self.splitToningShadowHue = splitToningShadowHue
         self.splitToningShadowSat = splitToningShadowSat
@@ -1616,16 +1614,13 @@ extension EditSettings: Equatable, Hashable {
         if lhs.noiseReduction != rhs.noiseReduction {
             return false
         }
-        if lhs.grainAmount != rhs.grainAmount {
+        if lhs.emulsionArchetype != rhs.emulsionArchetype {
             return false
         }
-        if lhs.grainSize != rhs.grainSize {
+        if lhs.emulsionFormat != rhs.emulsionFormat {
             return false
         }
-        if lhs.grainRoughness != rhs.grainRoughness {
-            return false
-        }
-        if lhs.grainChroma != rhs.grainChroma {
+        if lhs.emulsionExposure != rhs.emulsionExposure {
             return false
         }
         if lhs.curves != rhs.curves {
@@ -1695,10 +1690,9 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(sharpeningRadius)
         hasher.combine(sharpeningMasking)
         hasher.combine(noiseReduction)
-        hasher.combine(grainAmount)
-        hasher.combine(grainSize)
-        hasher.combine(grainRoughness)
-        hasher.combine(grainChroma)
+        hasher.combine(emulsionArchetype)
+        hasher.combine(emulsionFormat)
+        hasher.combine(emulsionExposure)
         hasher.combine(curves)
         hasher.combine(splitToningShadowHue)
         hasher.combine(splitToningShadowSat)
@@ -1751,10 +1745,9 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 sharpeningRadius: FfiConverterFloat.read(from: &buf), 
                 sharpeningMasking: FfiConverterFloat.read(from: &buf), 
                 noiseReduction: FfiConverterFloat.read(from: &buf), 
-                grainAmount: FfiConverterFloat.read(from: &buf), 
-                grainSize: FfiConverterFloat.read(from: &buf), 
-                grainRoughness: FfiConverterFloat.read(from: &buf), 
-                grainChroma: FfiConverterFloat.read(from: &buf), 
+                emulsionArchetype: FfiConverterTypeEmulsionArchetype.read(from: &buf), 
+                emulsionFormat: FfiConverterTypeEmulsionFormat.read(from: &buf), 
+                emulsionExposure: FfiConverterFloat.read(from: &buf), 
                 curves: FfiConverterTypeToneCurvesRecord.read(from: &buf), 
                 splitToningShadowHue: FfiConverterFloat.read(from: &buf), 
                 splitToningShadowSat: FfiConverterFloat.read(from: &buf), 
@@ -1800,10 +1793,9 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.sharpeningRadius, into: &buf)
         FfiConverterFloat.write(value.sharpeningMasking, into: &buf)
         FfiConverterFloat.write(value.noiseReduction, into: &buf)
-        FfiConverterFloat.write(value.grainAmount, into: &buf)
-        FfiConverterFloat.write(value.grainSize, into: &buf)
-        FfiConverterFloat.write(value.grainRoughness, into: &buf)
-        FfiConverterFloat.write(value.grainChroma, into: &buf)
+        FfiConverterTypeEmulsionArchetype.write(value.emulsionArchetype, into: &buf)
+        FfiConverterTypeEmulsionFormat.write(value.emulsionFormat, into: &buf)
+        FfiConverterFloat.write(value.emulsionExposure, into: &buf)
         FfiConverterTypeToneCurvesRecord.write(value.curves, into: &buf)
         FfiConverterFloat.write(value.splitToningShadowHue, into: &buf)
         FfiConverterFloat.write(value.splitToningShadowSat, into: &buf)
@@ -3550,6 +3542,183 @@ extension ColorProfileMode: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum EmulsionArchetype {
+    
+    case none
+    case rochesterPortrait400
+    case ashigaraChrome50
+    case rochesterK14Chrome64
+    case rochesterCinema500
+    case rochesterDaylight200
+    case mobberleySilver400
+    case cambridgeDiffusion100
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEmulsionArchetype: FfiConverterRustBuffer {
+    typealias SwiftType = EmulsionArchetype
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EmulsionArchetype {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .none
+        
+        case 2: return .rochesterPortrait400
+        
+        case 3: return .ashigaraChrome50
+        
+        case 4: return .rochesterK14Chrome64
+        
+        case 5: return .rochesterCinema500
+        
+        case 6: return .rochesterDaylight200
+        
+        case 7: return .mobberleySilver400
+        
+        case 8: return .cambridgeDiffusion100
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: EmulsionArchetype, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .none:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .rochesterPortrait400:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .ashigaraChrome50:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .rochesterK14Chrome64:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .rochesterCinema500:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .rochesterDaylight200:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .mobberleySilver400:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .cambridgeDiffusion100:
+            writeInt(&buf, Int32(8))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEmulsionArchetype_lift(_ buf: RustBuffer) throws -> EmulsionArchetype {
+    return try FfiConverterTypeEmulsionArchetype.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEmulsionArchetype_lower(_ value: EmulsionArchetype) -> RustBuffer {
+    return FfiConverterTypeEmulsionArchetype.lower(value)
+}
+
+
+
+extension EmulsionArchetype: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum EmulsionFormat {
+    
+    case format35mm
+    case format120
+    case format4x5
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEmulsionFormat: FfiConverterRustBuffer {
+    typealias SwiftType = EmulsionFormat
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EmulsionFormat {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .format35mm
+        
+        case 2: return .format120
+        
+        case 3: return .format4x5
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: EmulsionFormat, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .format35mm:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .format120:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .format4x5:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEmulsionFormat_lift(_ buf: RustBuffer) throws -> EmulsionFormat {
+    return try FfiConverterTypeEmulsionFormat.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEmulsionFormat_lower(_ value: EmulsionFormat) -> RustBuffer {
+    return FfiConverterTypeEmulsionFormat.lower(value)
+}
+
+
+
+extension EmulsionFormat: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum EnlargerFilterMode {
     
     case neutralPanchromatic
@@ -4904,7 +5073,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_extract_ultra_hdr_gain_map() != 4456) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut() != 58) {
+    if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut() != 34257) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut_titles() != 727) {

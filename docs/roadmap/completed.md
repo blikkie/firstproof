@@ -42,8 +42,18 @@ This archive tracks completed stories and features moved from the active backlog
   - *Analytical Sensitometry & Continuity*: Replaced all piecewise knees and tent functions with $C^1/C^\infty$ continuous curves: cubic Hermite soft shoulder for RA-4 highlights, quadratic fiber surface scatter for matte cotton rag shadows, and parabolic harmonic bell curves for selenium midtones. Subtractive Beer-Lambert ferric ferrocyanide absorption for authentic Prussian blue Cyanotype shadows ($D_{\text{max}} \approx 1.55$).
   - *Live History Integration*: Observable `PhotoEditHistory` with `historyRevision` ticker synchronizing darkroom changes into the History panel with dedicated `"film"` icons and full bidirectional `Cmd+Z` undo/redo.
   - *Dual-Engine Parity & Non-Destructive Ingestion*: 100% bit-level parity verified across all archetypes and filter sweeps between Rust CPU export (`print_media.rs`, `encoders.rs`) and Metal GPU shader (`ColorScience.metal`), backed by automated integration tests (`firstproof-core/tests/print_media_parity.rs`). Fully serialized to firstproof-native XMP sidecars (`printMedia`, `enlargerFilter`, `printPaperGrade`, `printBaseWarmth`, `printProcessDepth`).
+- **Story 3.2: Upstream Recording Emulsions & Photochemical Color Science (P1)**:
+  - *Upstream In-Camera Recording Medium*: Modeled photochemical behavior of the latent image on multi-layer camera negative/reversal and instant diffusion film prior to print enlargement or display mapping.
+  - *Zero Fake Grain & Legacy Mock-LUT Purge*: Purged hardcoded procedural pseudo-LUTs (`classic_chrome`, `warm_portrait`, `cine_teal_orange`, `tri_x_bw`, `vintage_fade`) from `lut.rs`, retaining strictly neutral `.cube` parsing. Purged 2D additive noise sliders (`grainAmount`, `grainSize`, `grainRoughness`, `grainChroma`) from Detail panel, restoring it to pure optical acutance. Permanently purged procedural noise algorithms in adherence to "Zero digital plastic", keeping sensor resolution 100% pristine.
+  - *Active DIR Chemical Couplers*: Vertical Development Inhibitor Releasing crosstalk matrices ($3 \times 3$ $\mathbf{C}_{\text{DIR}}$) evaluated in linear Rec.2020 density space, generating dynamic color separation, pastel highlight roll-off, and glowing skin tones.
+  - *Sensitometric D-log H Curves*: Continuous $C^1$ cubic Hermite characteristic curves derived from published manufacturer data sheets with photographic push/pull processing ($2^{\text{EV}}$ trim).
+  - *Curated Geographic Archetypes*: 7 deeply researched chemical archetypes across major historical processes (*Rochester Portrait 400*, *Ashigara Chrome 50*, *Rochester K-14 Chrome 64*, *Rochester Cinema 500*, *Rochester Daylight 200*, *Mobberley Silver 400*, *Cambridge Diffusion 100*).
+  - *Dual-Engine Bit-Level Parity*: Closed-form SIMD transform verified across Rust CPU (`emulsion.rs`, `pipeline.rs`) and Metal GPU shader (`ColorScience.metal`, `Shaders.metal`) with automated integration tests (`firstproof-core/tests/emulsion_parity.rs`).
+  - *Literature Grounding*: Characteristic curves systematically verified against published manufacturer technical data sheets (Kodak E-4050, Fuji AF3-960E, Kodak E-88, Kodak H-1-5219, Kodak E-7022, Ilford HP5 Plus, and Polaroid Land PNAS); documented in [sensitometric_emulsion_references.md](file:///Users/blikkie/src/LumenBox/docs/architecture/sensitometric_emulsion_references.md).
+
 
 ---
+
 
 ## 4. Ingestion, Sidecars & Batch Export
 - **Story 2.3: Catalog Ingestion & Deduplication Precedence Engine**:

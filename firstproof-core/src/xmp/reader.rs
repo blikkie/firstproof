@@ -193,24 +193,28 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
             data.edits.noise_reduction = val;
         }
     }
-    if let Some(ga_str) = get(pm, "grainAmount") {
-        if let Ok(val) = ga_str.parse::<f32>() {
-            data.edits.grain_amount = val;
-        }
+    if let Some(ea_str) = get(pm, "emulsionArchetype") {
+        data.edits.emulsion_archetype = match ea_str.trim() {
+            "RochesterPortrait400" => crate::EmulsionArchetype::RochesterPortrait400,
+            "AshigaraChrome50" => crate::EmulsionArchetype::AshigaraChrome50,
+            "RochesterK14Chrome64" => crate::EmulsionArchetype::RochesterK14Chrome64,
+            "RochesterCinema500" => crate::EmulsionArchetype::RochesterCinema500,
+            "RochesterDaylight200" => crate::EmulsionArchetype::RochesterDaylight200,
+            "MobberleySilver400" => crate::EmulsionArchetype::MobberleySilver400,
+            "CambridgeDiffusion100" => crate::EmulsionArchetype::CambridgeDiffusion100,
+            _ => crate::EmulsionArchetype::None,
+        };
     }
-    if let Some(gs_str) = get(pm, "grainSize") {
-        if let Ok(val) = gs_str.parse::<f32>() {
-            data.edits.grain_size = val;
-        }
+    if let Some(ef_str) = get(pm, "emulsionFormat") {
+        data.edits.emulsion_format = match ef_str.trim() {
+            "Format120" => crate::EmulsionFormat::Format120,
+            "Format4x5" => crate::EmulsionFormat::Format4x5,
+            _ => crate::EmulsionFormat::Format35mm,
+        };
     }
-    if let Some(gr_str) = get(pm, "grainRoughness") {
-        if let Ok(val) = gr_str.parse::<f32>() {
-            data.edits.grain_roughness = val;
-        }
-    }
-    if let Some(gc_str) = get(pm, "grainChroma") {
-        if let Ok(val) = gc_str.parse::<f32>() {
-            data.edits.grain_chroma = val;
+    if let Some(ee_str) = get(pm, "emulsionExposure") {
+        if let Ok(val) = ee_str.parse::<f32>() {
+            data.edits.emulsion_exposure = val;
         }
     }
     if let Some(temp_str) = get(pm, "temperature") {
@@ -482,27 +486,6 @@ pub fn parse_xmp(xmp_str: &str) -> std::io::Result<XmpData> {
         if let Some(nr_str) = desc.attribute(( crs_ns, "LuminanceSmoothing" )) {
             if let Ok(val) = nr_str.parse::<f32>() {
                 data.edits.noise_reduction = val;
-            }
-        }
-    }
-    if data.edits.grain_amount == 0.0 {
-        if let Some(ga_str) = desc.attribute(( crs_ns, "GrainAmount" )) {
-            if let Ok(val) = ga_str.parse::<f32>() {
-                data.edits.grain_amount = val;
-            }
-        }
-    }
-    if data.edits.grain_size == 1.0 {
-        if let Some(gs_str) = desc.attribute(( crs_ns, "GrainSize" )) {
-            if let Ok(val) = gs_str.parse::<f32>() {
-                data.edits.grain_size = val;
-            }
-        }
-    }
-    if data.edits.grain_roughness == 50.0 {
-        if let Some(gr_str) = desc.attribute(( crs_ns, "GrainFrequency" )) {
-            if let Ok(val) = gr_str.parse::<f32>() {
-                data.edits.grain_roughness = val;
             }
         }
     }

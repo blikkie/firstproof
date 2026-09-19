@@ -38,10 +38,9 @@ extension AppViewModel {
             sharpeningRadius: self.sharpeningRadius,
             sharpeningMasking: self.sharpeningMasking,
             noiseReduction: self.noiseReduction,
-            grainAmount: self.grainAmount,
-            grainSize: self.grainSize,
-            grainRoughness: self.grainRoughness,
-            grainChroma: self.grainChroma,
+            emulsionArchetype: self.emulsionArchetype,
+            emulsionFormat: self.emulsionFormat,
+            emulsionExposure: self.emulsionExposure,
             curves: self.curves,
             splitToningShadowHue: self.splitToningShadowHue,
             splitToningShadowSat: self.splitToningShadowSat,
@@ -90,10 +89,9 @@ extension EditSettings {
             sharpeningRadius: 1.0,
             sharpeningMasking: 0.0,
             noiseReduction: 0.0,
-            grainAmount: 0.0,
-            grainSize: 1.0,
-            grainRoughness: 50.0,
-            grainChroma: 0.0,
+            emulsionArchetype: .none,
+            emulsionFormat: .format35mm,
+            emulsionExposure: 0.0,
             curves: ToneCurvesRecord.defaultIdentity,
             splitToningShadowHue: 215.0,
             splitToningShadowSat: 0.0,
@@ -141,10 +139,9 @@ extension AppViewModel {
         self.sharpeningRadius = edits.sharpeningRadius
         self.sharpeningMasking = edits.sharpeningMasking
         self.noiseReduction = edits.noiseReduction
-        self.grainAmount = edits.grainAmount
-        self.grainSize = edits.grainSize
-        self.grainRoughness = edits.grainRoughness
-        self.grainChroma = edits.grainChroma
+        self.emulsionArchetype = edits.emulsionArchetype
+        self.emulsionFormat = edits.emulsionFormat
+        self.emulsionExposure = edits.emulsionExposure
         self.curves = edits.curves
         self.splitToningShadowHue = edits.splitToningShadowHue
         self.splitToningShadowSat = edits.splitToningShadowSat
@@ -156,20 +153,6 @@ extension AppViewModel {
         self.printPaperGrade = edits.printPaperGrade
         self.printBaseWarmth = edits.printBaseWarmth
         self.printProcessDepth = edits.printProcessDepth
-        
-        // Update or clear selectedGrainPresetId matching the loaded photo's grain settings
-        if edits.grainAmount <= 0.0 {
-            self.selectedGrainPresetId = nil
-        } else if let matchingPreset = FilmGrainPreset.builtInPresets.first(where: {
-            abs($0.amount - edits.grainAmount) < 0.1 &&
-            abs($0.size - edits.grainSize) < 0.05 &&
-            abs($0.roughness - edits.grainRoughness) < 0.1 &&
-            abs($0.chroma - edits.grainChroma) < 0.1
-        }) {
-            self.selectedGrainPresetId = matchingPreset.id
-        } else {
-            self.selectedGrainPresetId = nil
-        }
     }
     
     public func saveCurrentEdits() {
@@ -251,14 +234,8 @@ extension AppViewModel {
                 title = "Sharpening Masking (\(Int(sharpeningMasking)))"
             case .noiseReduction:
                 title = "Noise Reduction (\(Int(noiseReduction)))"
-            case .grainAmount:
-                title = "Film Grain (\(Int(grainAmount)))"
-            case .grainSize:
-                title = "Grain Size (\(String(format: "%.1f", grainSize)))"
-            case .grainRoughness:
-                title = "Grain Roughness (\(Int(grainRoughness)))"
-            case .grainChroma:
-                title = "Grain Color (\(Int(grainChroma)))"
+            case .emulsionExposure:
+                title = "Push/Pull (\(String(format: "%+.2f EV", emulsionExposure)))"
             case .lutIntensity:
                 title = "LUT Intensity (\(Int(lutIntensity * 100))%)"
             case .splitToningShadowHue:
@@ -710,18 +687,8 @@ extension AppViewModel {
             sharpeningMasking = defaultSharpeningMasking
         case .noiseReduction:
             noiseReduction = defaultNoiseReduction
-        case .grainAmount:
-            grainAmount = defaultGrainAmount
-            selectedGrainPresetId = nil
-        case .grainSize:
-            grainSize = defaultGrainSize
-            selectedGrainPresetId = nil
-        case .grainRoughness:
-            grainRoughness = defaultGrainRoughness
-            selectedGrainPresetId = nil
-        case .grainChroma:
-            grainChroma = defaultGrainChroma
-            selectedGrainPresetId = nil
+        case .emulsionExposure:
+            emulsionExposure = defaultEmulsionExposure
         case .temperature:
             temperature = asShotTemperature
         case .tint:
@@ -778,25 +745,6 @@ extension AppViewModel {
         registerDiscreteEdit(title: "Split Toning: \(p.name)", before: before)
     }
     
-    public func applyGrainPreset(_ preset: FilmGrainPreset?) {
-        let before = currentEdits
-        guard let p = preset else {
-            selectedGrainPresetId = nil
-            grainAmount = defaultGrainAmount
-            grainSize = defaultGrainSize
-            grainRoughness = defaultGrainRoughness
-            grainChroma = defaultGrainChroma
-            registerDiscreteEdit(title: "Film Grain (Off)", before: before)
-            return
-        }
-        selectedGrainPresetId = p.id
-        grainAmount = p.amount
-        grainSize = p.size
-        grainRoughness = p.roughness
-        grainChroma = p.chroma
-        registerDiscreteEdit(title: "Grain: \(p.name)", before: before)
-    }
-    
     public func resetAllSliders() {
         let before = currentEdits
         exposure = 0.0
@@ -813,11 +761,9 @@ extension AppViewModel {
         sharpeningRadius = defaultSharpeningRadius
         sharpeningMasking = defaultSharpeningMasking
         noiseReduction = defaultNoiseReduction
-        grainAmount = defaultGrainAmount
-        grainSize = defaultGrainSize
-        grainRoughness = defaultGrainRoughness
-        grainChroma = defaultGrainChroma
-        selectedGrainPresetId = nil
+        emulsionArchetype = .none
+        emulsionFormat = .format35mm
+        emulsionExposure = defaultEmulsionExposure
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0
@@ -842,6 +788,11 @@ extension AppViewModel {
         splitToningHighlightHue = 45.0
         splitToningHighlightSat = 0.0
         splitToningBalance = 0.0
+        printMedia = .none
+        enlargerFilter = .neutralPanchromatic
+        printPaperGrade = 0.0
+        printBaseWarmth = 0.0
+        printProcessDepth = 100.0
         registerDiscreteEdit(title: "Reset All Edits", before: before)
         notifyThumbnailChanged()
     }
@@ -1024,6 +975,49 @@ extension AppViewModel {
         self.printBaseWarmth = 0.0
         self.printProcessDepth = 100.0
         registerDiscreteEdit(title: "Reset Print Media", before: before)
+        notifyThumbnailChanged()
+    }
+    
+    // MARK: - Upstream Recording Emulsions & Photochemical Grain
+    public func setEmulsionArchetype(_ archetype: EmulsionArchetype) {
+        guard self.emulsionArchetype != archetype else { return }
+        let before = currentEdits
+        self.emulsionArchetype = archetype
+        let title: String
+        switch archetype {
+        case .none: title = "Emulsion: Clean Sensor"
+        case .rochesterPortrait400: title = "Emulsion: Rochester Portrait 400"
+        case .ashigaraChrome50: title = "Emulsion: Ashigara Chrome 50"
+        case .rochesterK14Chrome64: title = "Emulsion: Rochester K-14 Chrome 64"
+        case .rochesterCinema500: title = "Emulsion: Rochester Cinema 500"
+        case .rochesterDaylight200: title = "Emulsion: Rochester Daylight 200"
+        case .mobberleySilver400: title = "Emulsion: Mobberley Silver 400"
+        case .cambridgeDiffusion100: title = "Emulsion: Cambridge Diffusion 100"
+        }
+        registerDiscreteEdit(title: title, before: before)
+        notifyThumbnailChanged()
+    }
+    
+    public func setEmulsionFormat(_ format: EmulsionFormat) {
+        guard self.emulsionFormat != format else { return }
+        let before = currentEdits
+        self.emulsionFormat = format
+        let title: String
+        switch format {
+        case .format35mm: title = "Film Format: 35mm (1.0x Grain)"
+        case .format120: title = "Film Format: 120 (0.45x Grain)"
+        case .format4x5: title = "Film Format: 4x5 (0.20x Grain)"
+        }
+        registerDiscreteEdit(title: title, before: before)
+        notifyThumbnailChanged()
+    }
+    
+    public func resetEmulsion() {
+        let before = currentEdits
+        self.emulsionArchetype = .none
+        self.emulsionFormat = .format35mm
+        self.emulsionExposure = 0.0
+        registerDiscreteEdit(title: "Reset Film Emulsion", before: before)
         notifyThumbnailChanged()
     }
 }

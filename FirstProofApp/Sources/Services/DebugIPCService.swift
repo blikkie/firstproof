@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import Network
+import FirstProofBridge
 
 /// Lightweight Local Unix Domain Socket IPC Service for automated parity audits,
 /// developer diagnostics, and AI coding agent introspection.
@@ -155,6 +156,10 @@ public final class DebugIPCService {
             let uvList = params?["points"] as? [[Double]] ?? []
             return sampleViewportResponse(points: uvList)
             
+        case "set_emulsion":
+            let params = json["params"] as? [String: Any]
+            return setEmulsionResponse(params: params)
+            
         default:
             return "{\"status\":\"error\",\"message\":\"Unknown method: \(method)\"}\n"
         }
@@ -176,6 +181,9 @@ public final class DebugIPCService {
                 result["isRaw"] = vm.selectedPhotoIsRaw
                 result["canvasMode"] = "\(vm.canvasMode)"
                 result["lensCorrectionEnabled"] = vm.lensCorrectionEnabled
+                result["emulsionArchetype"] = "\(vm.emulsionArchetype)"
+                result["emulsionFormat"] = "\(vm.emulsionFormat)"
+                result["emulsionExposure"] = vm.emulsionExposure
                 
                 let e = vm.currentEdits
                 result["edits"] = [
@@ -306,5 +314,44 @@ public final class DebugIPCService {
         let res: [String: Any] = ["status": "ok", "samples": samples]
         let data = (try? JSONSerialization.data(withJSONObject: res, options: [])) ?? Data()
         return String(data: data, encoding: .utf8) ?? "{}\n"
+    }
+    
+    private func setEmulsionResponse(params: [String: Any]?) -> String {
+        guard let p = params else {
+            return "{\"status\":\"error\",\"message\":\"Missing params\"}\n"
+        }
+        
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                if let archetypeId = p["archetype"] as? Int {
+                    let arch: EmulsionArchetype
+                    switch archetypeId {
+                    case 1: arch = .rochesterPortrait400
+                    case 2: arch = .ashigaraChrome50
+                    case 3: arch = .rochesterK14Chrome64
+                    case 4: arch = .rochesterCinema500
+                    case 5: arch = .rochesterDaylight200
+                    case 6: arch = .mobberleySilver400
+                    case 7: arch = .cambridgeDiffusion100
+                    default: arch = .none
+                    }
+                    vm.setEmulsionArchetype(arch)
+                }
+                if let formatId = p["format"] as? Int {
+                    let fmt: EmulsionFormat
+                    switch formatId {
+                    case 1: fmt = .format120
+                    case 2: fmt = .format4x5
+                    default: fmt = .format35mm
+                    }
+                    vm.setEmulsionFormat(fmt)
+                }
+                if let exp = p["exposure"] as? Double {
+                    vm.emulsionExposure = Float(exp)
+                }
+            }
+        }
+        return "{\"status\":\"ok\"}\n"
     }
 }

@@ -8,7 +8,7 @@ use image::codecs::tiff::TiffEncoder;
 use crate::{EditSettings, ExportColorSpace, ExportRenderingIntent};
 use crate::color::linear_to_srgb_gamma;
 use super::decode::{decode_image, sample_bilinear};
-use super::pipeline::{apply_color_adjustments, apply_detail_and_sharpening_rgb, apply_edits, apply_film_grain_rgb, apply_split_toning};
+use super::pipeline::{apply_color_adjustments, apply_detail_and_sharpening_rgb, apply_edits, apply_split_toning};
 use super::icc::{create_display_p3_profile, inject_icc_profile_into_jpeg};
 
 /// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing, color space management, and Lensfun distortion correction.
@@ -107,12 +107,7 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     
     let active_lut: Option<crate::lut::CubeLut> = if let Some(ref lut_name) = edits.lut_name {
         if edits.lut_intensity > 0.0 {
-            crate::lut::FilmSimulationGenerator::all_builtin(33)
-                .into_iter()
-                .find(|l| l.title == *lut_name)
-                .or_else(|| {
-                    crate::lut::load_cube_lut_file(lut_name).ok()
-                })
+            crate::lut::load_cube_lut_file(lut_name).ok()
         } else {
             None
         }
@@ -280,21 +275,6 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                 r_disp = rp;
                 g_disp = gp;
                 b_disp = bp;
-            }
-
-            // 3c. Procedural Organic Film Grain
-            if edits.grain_amount > 0.0 {
-                let (rg, gg, bg) = apply_film_grain_rgb(
-                    r_disp, g_disp, b_disp,
-                    tx as f32, ty as f32,
-                    edits.grain_amount,
-                    edits.grain_size,
-                    edits.grain_roughness,
-                    edits.grain_chroma,
-                );
-                r_disp = rg;
-                g_disp = gg;
-                b_disp = bg;
             }
 
             let srgb8 = [

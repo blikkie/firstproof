@@ -600,4 +600,124 @@ inline float3 applyPrintMedia(
     }
 }
 
+// MARK: - Upstream Recording Emulsions & Photochemical Grain Mechanics
+
+inline float applyFilmCharacteristicCurve(float val, float gamma, float shoulder, float toe) {
+    float v = clamp(val, 0.0, 2.0);
+    float base = v;
+    if (abs(gamma - 1.0) > 0.001) {
+        float u = clamp(v / (v + 0.35), 0.0, 1.0);
+        float gMod = (gamma - 1.0) * 0.40;
+        base = max(v + gMod * u * (1.0 - u) * (2.0 * u - 1.0), 0.0);
+    }
+    float afterShoulder = base;
+    if (shoulder > 0.0 && base > 0.65) {
+        float t = clamp((base - 0.65) / 0.35, 0.0, 1.0);
+        float comp = shoulder * 0.12 * t * t * (3.0 - 2.0 * t);
+        afterShoulder = base - comp;
+    }
+    if (toe > 0.0 && afterShoulder < 0.35) {
+        float t = clamp(afterShoulder / 0.35, 0.0, 1.0);
+        float comp = toe * 0.06 * (1.0 - t) * (1.0 - t);
+        return max(afterShoulder - comp, 0.0);
+    }
+    return afterShoulder;
+}
+
+inline float3 applyDirChemicalCoupling(
+    float3 rgb,
+    float c_rg, float c_rb,
+    float c_gr, float c_gb,
+    float c_br, float c_bg
+) {
+    float eps = 1e-4;
+    float d_r = -log10(max(rgb.r, eps));
+    float d_g = -log10(max(rgb.g, eps));
+    float d_b = -log10(max(rgb.b, eps));
+
+    float c_rr = 1.0 - c_rg - c_rb;
+    float c_gg = 1.0 - c_gr - c_gb;
+    float c_bb = 1.0 - c_br - c_bg;
+
+    float d_r_out = c_rr * d_r + c_rg * d_g + c_rb * d_b;
+    float d_g_out = c_gr * d_r + c_gg * d_g + c_gb * d_b;
+    float d_b_out = c_br * d_r + c_bg * d_g + c_bb * d_b;
+
+    return clamp(float3(pow(10.0, -d_r_out), pow(10.0, -d_g_out), pow(10.0, -d_b_out)), 0.0, 2.0);
+}
+
+inline float3 applyRecordingEmulsion(
+    float3 rgb,
+    int archetype,
+    float pushPullEv
+) {
+    if (archetype == 0) {
+        return rgb;
+    }
+
+    float expGain = pow(2.0, clamp(pushPullEv, -2.0, 2.0));
+    float3 curRgb = max(rgb * expGain, 0.0);
+
+    switch (archetype) {
+        case 1: { // RochesterPortrait400 - Ref: Kodak Pub E-4050 (Portra 400), Status M Densitometry
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.04, 0.02, -0.08, 0.02, 0.02, -0.05);
+            return float3(
+                applyFilmCharacteristicCurve(dir.r, 0.90, 0.38, 0.08),
+                applyFilmCharacteristicCurve(dir.g, 0.90, 0.38, 0.08),
+                applyFilmCharacteristicCurve(dir.b, 0.90, 0.38, 0.08)
+            );
+        }
+        case 2: { // AshigaraChrome50 - Ref: Fujifilm Data Sheet AF3-960E (Velvia 50), Status A Densitometry
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.15, -0.08, -0.18, -0.08, -0.06, -0.12);
+            return float3(
+                applyFilmCharacteristicCurve(dir.r, 1.10, 0.12, 0.14),
+                applyFilmCharacteristicCurve(dir.g, 1.12, 0.10, 0.14),
+                applyFilmCharacteristicCurve(dir.b, 1.11, 0.12, 0.16)
+            );
+        }
+        case 3: { // RochesterK14Chrome64 - Ref: Kodak Pub E-88 (Kodachrome 64) & ResearchGate Layer Analysis
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.08, 0.06, -0.10, 0.04, 0.08, -0.04);
+            return float3(
+                applyFilmCharacteristicCurve(dir.r, 1.05, 0.18, 0.08),
+                applyFilmCharacteristicCurve(dir.g, 1.06, 0.16, 0.10),
+                applyFilmCharacteristicCurve(dir.b, 1.08, 0.14, 0.14)
+            );
+        }
+        case 4: { // RochesterCinema500 - Ref: Kodak Data Sheet H-1-5219 (Vision3 500T 5219), Status M Densitometry
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.02, 0.01, -0.03, 0.01, 0.01, -0.02);
+            return float3(
+                applyFilmCharacteristicCurve(dir.r, 0.82, 0.45, 0.08),
+                applyFilmCharacteristicCurve(dir.g, 0.82, 0.45, 0.08),
+                applyFilmCharacteristicCurve(dir.b, 0.82, 0.45, 0.08)
+            );
+        }
+        case 5: { // RochesterDaylight200 - Ref: Kodak Pub E-7022 (Gold 200), Status M Densitometry
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.06, 0.03, -0.07, 0.02, 0.08, -0.10);
+            return float3(
+                applyFilmCharacteristicCurve(dir.r, 1.12, 0.20, 0.12),
+                applyFilmCharacteristicCurve(dir.g, 1.08, 0.22, 0.12),
+                applyFilmCharacteristicCurve(dir.b, 0.98, 0.26, 0.16)
+            );
+        }
+        case 6: { // MobberleySilver400 - Ref: Ilford Technical Info Sheet (HP5 Plus), ID-11 Developer (1+1)
+            float panLum = 0.28 * curRgb.r + 0.62 * curRgb.g + 0.10 * curRgb.b;
+            float mono = applyFilmCharacteristicCurve(panLum, 1.08, 0.30, 0.25);
+            return float3(mono);
+        }
+        case 7: { // CambridgeDiffusion100 - Ref: Polaroid Corp Polacolor ER / Type 669 & Land PNAS
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.03, 0.02, -0.04, 0.03, 0.01, -0.03);
+            float3 curv = float3(
+                applyFilmCharacteristicCurve(dir.r, 0.98, 0.35, 0.12),
+                applyFilmCharacteristicCurve(dir.g, 0.98, 0.35, 0.12),
+                applyFilmCharacteristicCurve(dir.b, 0.98, 0.35, 0.12)
+            );
+            float lum = 0.2126 * curv.r + 0.7152 * curv.g + 0.0722 * curv.b;
+            float baseRefl = 0.025 * max(1.0 - lum, 0.0);
+            return min(curv + baseRefl * float3(1.02, 1.00, 0.94), 2.0);
+        }
+        default:
+            return rgb;
+    }
+}
+
 #endif /* ColorScience_metal */

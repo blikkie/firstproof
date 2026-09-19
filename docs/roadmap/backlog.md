@@ -7,53 +7,21 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Upstream Recording Emulsions & Photochemical Grain Mechanics (P1)**: Non-linear film stock modeling, DIR chemical couplers, subtractive Beer-Lambert grain, and mock-LUT/standalone grain de-bloat.
-2. **Cross-Platform Linux Toolchain & Headless Development Engine (P1 - Pulled Forward)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
-3. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-4. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
-5. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
+1. **Cross-Platform Linux Toolchain & Headless Development Engine (P1 - Pulled Forward)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
+2. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
+3. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
+4. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
+5. **Archival High-Precision Multi-Pass Export Engine (P2)**: Multi-pass AMaZE/RCD demosaicing and 2D spatial developer exhaustion diffusion.
 
 ---
 
 ## Phase 3: Fine-Art Darkroom Chemistry & Archival Formats (P1 / P2)
 
+
 > **Product Invariant: The Primary Engine vs. The Fine-Art "Treat"**  
 > First Proof's primary workhorse default is **pure optical RAW capture via AgX filmic tone mapping**. The core workspaces (**Light**, **Color**, **Detail**, **Optics**) are dedicated strictly to sensor reality: standard White Balance (Temperature & Tint), exposure, tone recovery, and sensor sharpness. Photos look 90% finished immediately without any analog styling.  
 > 
 > Film stock and print media emulation are **not** the main workflow and **not** a complex simulator. They are an exquisite, 100% opt-in **fine-art treat and differentiator** housed in a dedicated **Emulsion** workspace tab (`InspectorTab.emulsion`). Default state is always `None / Bypass`. When activated, the engine does all the heavy lifting under the hood so the photographer simply selects a curated stock or print medium without fiddling with chemical dials.
-
-### 3.2 Upstream Recording Emulsions & Photochemical Grain Mechanics (P1)
-- **Upstream In-Camera Recording Medium**:
-  - Models the photochemical behavior of the latent image on multi-layer camera negative/reversal and instant diffusion film prior to any print enlargement or display mapping.
-- **Legacy Mock-LUT & Standalone Grain Rip-Out**:
-  - *Mock-LUT Deprecation*: Purge hardcoded procedural pseudo-LUTs (`classic_chrome`, `warm_portra`, `cine_teal_orange`, `tri_x_bw`, `vintage_fade`) from `lut.rs`. Retain strictly the neutral `.cube` file parser for user-supplied technical calibration LUTs, cleanly separating technical looks from chemical darkroom science.
-  - *Detail Panel De-Bloat*: Rip out standalone 2D additive noise sliders (`grainAmount`, `grainSize`, `grainRoughness`, `grainChroma`) from `DetailWorkspaceView.swift`, `Detail.metal`, and `pipeline.rs`. Detail workspace is restored to pure sensor optical acutance (Sharpening & Noise Reduction).
-- **Photochemical Inter-Image Physics (DIR Couplers & Chemical Crosstalk)**:
-  - Replace static LUT warping with active chemical cross-talk matrices ($3 \times 3$ $\mathbf{C}_{\text{DIR}}$) evaluated in linear Rec.2020 density space.
-  - Models vertical diffusion of Development Inhibitor Releasing (DIR) couplers where intense exposure in one layer suppresses dye development in adjacent layers, creating dynamic color separation, glowing skin tones, and pastel highlight desaturation.
-  - Formulated as a closed-form SIMD matrix transform across Metal GPU and Rust CPU pipelines (100% bit-parity, $O(1)$ per fragment, zero texture lookups, zero 60/120fps viewport latency penalty).
-- **Subtractive Optical Density Grain Model (Beer-Lambert Absorption)**:
-  - Transition from additive RGB noise (`color + grain`) to physical optical density transmission:
-    $$T = 10^{-(D + \Delta D_{\text{grain}})}$$
-  - Naturally integrates grain into the physical tone curve—dense in midtones, soft in highlights, and optically absorbed into deep shadow blacks.
-- **Crystal Morphology & Dye Cloud Synthesis**:
-  - *Tabular (T-Grain) vs. Cubic Halide*: Modern tabular planar crystals (high-frequency needle grain) vs. classic organic multi-octave cubic silver clumping.
-  - *Colloidal Dye Clouds vs. Opaque Filaments*: C-41/E-6 renders soft overlapping dye clouds (bleached silver simulation); B&W renders crisp metallic silver filaments.
-  - *Lateral Dye Diffusion*: Instant film models dye migration through aqueous gelatin spacing layers rather than metallic halide clumping.
-  - *Physical Format Scaling*: Grain scale is driven by authentic photographic format (35mm, 120 6×7, 4×5 Large Format) rather than arbitrary digital sliders.
-- **Curated Geographic Archetypes (Historic Plant Homage & Sensitometric Grounding)**:
-  - Grounded strictly in published manufacturer sensitometric data sheets (characteristic D-log H curves, spectral dye density, and layer sensitivity curves):
-    - *Rochester Portrait 400* (C-41, Kodak Park, Rochester NY): Gentle portrait contrast, luminous skin tone separation via DIR couplers, pastel highlight roll-off.
-    - *Ashigara Chrome 50* (E-6 Reversal, Minamiashigara, Japan): High micro-contrast, rich saturated primaries with clean neutral shadows, inspired by slide chemistry.
-    - *Rochester K-14 Chrome 64* (K-14 Non-Substantive Reversal, Rochester NY): Ultra-deep ink-black D-max ($D_{\text{max}} > 3.2$), vivid warm red/yellow separation, and razor edge acutance modeled from Kodak Pub E-88.
-    - *Rochester Cinema 500* (ECN-2 Tungsten, Rochester NY): Low-contrast linear negative with gentle highlight compression designed for wide-gamut digital grading.
-    - *Rochester Daylight 200* (C-41, Rochester NY): Warm, earthy golden-hour daylight response with restrained blue density.
-    - *Mobberley Silver 400* (Panchromatic B&W, Mobberley, Cheshire, UK): Classic silver halide negative with linear midtone acutance and cubic crystal clumping.
-    - *Cambridge Diffusion 100* (Instant Dye Diffusion, Kendall Square, Cambridge MA): Reversal dye-developer immobilization with reflective $\text{TiO}_2$ base tone, luminous pastel greens, and soft dye diffusion acutance (Ansel Adams / Edwin Land lineage; strictly borderless and pure capture).
-- **Curated Restraint & Anti-Gimmick Invariants**:
-  - *Strict Neutral Default*: Emulsion profiles are 100% opt-in creative tools. The pipeline default is always unadorned, neutral optical sensor capture (Camera DCP + AgX).
-  - *Anti-Preset Restraint*: Strictly bounded to 7 foundational, deeply researched chemical archetypes across the major 20th-century processes. Zero bloated "preset packs" or arbitrary digital styling.
-  - *Anti-Kitsch Guardrail*: Absolutely zero faux borders, white frames, fake light leaks, or artificial dust/scratches. All archetypes are pure optical and chemical image transformations.
 
 ### 3.3 Archival Open DNG Converter & Lossless Compression Engine (P2)
 - **Lossless Bayer CFA Transcoding**:
@@ -73,25 +41,16 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ### 3.5 Archival High-Precision Multi-Pass Export Engine (P2)
 - **Decoupled Quality Controls in Export Sheet**:
-  - Cleanly separate general optical RAW demosaicing precision from physical 3D film simulation in `ExportSheetView.swift`:
+  - Cleanly separate general optical RAW demosaicing precision from spatial chemical edge diffusion in `ExportSheetView.swift`:
     1. *RAW Demosaicing Precision*: `Standard (Fast)` vs. `Archival (Edge-Adaptive AMaZE / RCD)`.
-    2. *Volumetric 3D Emulsion Simulation*: A distinct, dedicated toggle (active when a film stock or print medium is applied).
+    2. *Spatial Chemical Edge Diffusion (Mackie Lines)*: Dedicated toggle when an emulsion is active.
 - **Control 1: Multi-Pass Edge-Directed Demosaicing (AMaZE / RCD)**:
   - *Standard (Fast)*: Near-instant batch exports (150–250ms per RAW) using optimized cubic Bayer demosaicing.
   - *Archival (Edge-Adaptive)*: Directional edge-adaptive demosaicing (AMaZE / RCD) with chromatic moiré suppression passes (~500ms per RAW). Eliminates "zipper" artifacts, maze patterns, and false color fringing on high-frequency fabrics, architectural grids, and bird feathers on 45–61MP sensors.
-- **Control 2: Deep 3D Volumetric Film Simulation (Distinct Toggle)**:
-  - *Offline Rayon Simulation*: When enabled on photos with active emulsion/print media, the engine switches from the real-time analytical projection to full numerical physics:
-    - *Volumetric Gelatin Depth-Integration*: Multi-slice Beer-Lambert ray transmission through a 3D Boolean Random Field of crystal populations or colloidal dye cloud spheres ($z \in [0, z_{\text{emulsion}}]$). Captures inter-crystal 3D shadowing, turbidity (optical depth scattering), and exposure-dependent volumetric clumping.
-    - *Spatial Lateral Chemical Diffusion*: Extends vertical DIR coupling to spatial inhibitor diffusion across contrasting borders, recreating authentic photochemical Mackie lines / developer exhaustion boundaries for edge acutance without digital unsharp masking.
-    - *Sub-Pixel Jittered Supersampling*: 2×2 jittered sub-pixel integration across the volumetric emulsion layer, preventing spatial beat frequencies (aliasing) on 300+ DPI large-format archival prints.
-  - *Independence*: Photographers can export high-quality edge-demosaiced files with fast analytical film grain (fast batch turnaround), or opt into the full 3D volumetric simulation when preparing exhibition masters.
+- **Control 2: Spatial Lateral Chemical Diffusion (Mackie Lines / Developer Exhaustion)**:
+  - Extends vertical DIR coupling to 2D spatial inhibitor diffusion across contrasting borders, recreating authentic photochemical Mackie lines and developer exhaustion boundaries for organic edge acutance without digital unsharp masking.
 - **Strict WYSIWYG Tonal & Color Parity Invariant**:
-  - The live 120fps viewport shader remains the first-order analytical integral of the deep 3D simulation. Viewport and archival export match bit-for-bit in global tone curve, AgX mapping, color separation, and White Balance.
-- **Batch Export Short-Circuit Invariant (Zero Performance Penalty for Pure Digital RAWs)**:
-  - When "3D Volumetric Emulsion Simulation" is enabled in a multi-photo batch export, the Rayon export pipeline evaluates the simulation conditionally per photo.
-  - Any photo with no active film emulsion or print medium (`emulsion == nil` / `bypass`) immediately short-circuits the volumetric depth pass and renders at standard high-speed throughput (150–500ms). Pure digital RAW captures in a mixed batch never incur a thermal, battery, or latency penalty.
-- **Dignified UI Simplicity**:
-  - Clean, uncluttered layout in the export sheet: one segmented picker for demosaicing quality, and one clear toggle for 3D volumetric simulation when an emulsion is active. Zero slider bloat or esoteric algorithm lists.
+  - Viewport and archival export match bit-for-bit in global tone curve, AgX mapping, color separation, and White Balance.
 
 ### 3.6 Cross-Platform Linux Toolchain & Headless Development Engine (P1 - Pulled Forward)
 - **Kubuntu & Multi-Arch Linux Toolchain (x86_64 / aarch64)**:

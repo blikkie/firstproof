@@ -43,10 +43,7 @@ public enum EditSliderType {
     case perspectiveVertical
     case perspectiveHorizontal
     case lutIntensity
-    case grainAmount
-    case grainSize
-    case grainRoughness
-    case grainChroma
+    case emulsionExposure
     case splitToningShadowHue
     case splitToningShadowSat
     case splitToningHighlightHue
@@ -78,10 +75,7 @@ public enum EditSliderType {
         case .perspectiveVertical: return "Perspective Vertical"
         case .perspectiveHorizontal: return "Perspective Horizontal"
         case .lutIntensity: return "LUT Intensity"
-        case .grainAmount: return "Film Grain"
-        case .grainSize: return "Grain Size"
-        case .grainRoughness: return "Grain Roughness"
-        case .grainChroma: return "Grain Color"
+        case .emulsionExposure: return "Push / Pull Exposure"
         case .splitToningShadowHue: return "Shadow Hue"
         case .splitToningShadowSat: return "Shadow Saturation"
         case .splitToningHighlightHue: return "Highlight Hue"
@@ -289,17 +283,19 @@ public final class AppViewModel {
     public var sharpeningRadius: Float = 1.0     // 0.5 .. 3.0 px
     public var sharpeningMasking: Float = 0.0    // 0 .. 100
     public var noiseReduction: Float = 0.0       // 0 .. 100
-    public var grainAmount: Float = 0.0          // 0 .. 100
-    public var grainSize: Float = 1.0            // 0.5 .. 3.0
-    public var grainRoughness: Float = 50.0      // 0 .. 100
-    public var grainChroma: Float = 0.0          // 0 .. 100
+
+    // MARK: - Upstream Recording Emulsions & Photochemical Grain
+    public var emulsionArchetype: EmulsionArchetype = .none
+    public var emulsionFormat: EmulsionFormat = .format35mm
+    public var emulsionExposure: Float = 0.0          // -2.0 .. +2.0 EV
+    public var defaultEmulsionExposure: Float { 0.0 }
+    
     public var splitToningShadowHue: Float = 215.0      // 0 .. 360
     public var splitToningShadowSat: Float = 0.0        // 0 .. 100
     public var splitToningHighlightHue: Float = 45.0    // 0 .. 360
     public var splitToningHighlightSat: Float = 0.0     // 0 .. 100
     public var splitToningBalance: Float = 0.0          // -100 .. +100
     public var selectedSplitToningPresetId: String? = nil
-    public var selectedGrainPresetId: String? = nil
     
     // MARK: - Curated Fine-Art Print Media Archetypes & Optical Filtration
     public var printMedia: PrintMediaMode = .none
@@ -316,10 +312,6 @@ public final class AppViewModel {
         (selectedPhoto?.isRaw ?? false) ? 15.0 : 0.0
     }
     public var defaultNoiseReduction: Float { 0.0 }
-    public var defaultGrainAmount: Float { 0.0 }
-    public var defaultGrainSize: Float { 1.0 }
-    public var defaultGrainRoughness: Float { 50.0 }
-    public var defaultGrainChroma: Float { 0.0 }
 
     public var isEyedropperActive: Bool = false
     public var temperature: Float = 5500.0 // 2000K .. 20000K

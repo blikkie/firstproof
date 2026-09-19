@@ -18,6 +18,7 @@ pub mod synthetic;
 pub mod checksum;
 
 pub use curve::{evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, CurvePointRecord, ToneCurvesRecord};
+pub use color::emulsion::{EmulsionArchetype, EmulsionFormat};
 pub use color::print_media::{EnlargerFilterMode, PrintMediaMode};
 
 #[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -126,10 +127,9 @@ pub struct EditSettings {
     pub sharpening_radius: f32,
     pub sharpening_masking: f32,
     pub noise_reduction: f32,
-    pub grain_amount: f32,
-    pub grain_size: f32,
-    pub grain_roughness: f32,
-    pub grain_chroma: f32,
+    pub emulsion_archetype: EmulsionArchetype,
+    pub emulsion_format: EmulsionFormat,
+    pub emulsion_exposure: f32,
     pub curves: ToneCurvesRecord,
     pub split_toning_shadow_hue: f32,
     pub split_toning_shadow_sat: f32,
@@ -176,10 +176,9 @@ impl Default for EditSettings {
             sharpening_radius: 1.0,
             sharpening_masking: 0.0,
             noise_reduction: 0.0,
-            grain_amount: 0.0,
-            grain_size: 1.0,
-            grain_roughness: 50.0,
-            grain_chroma: 0.0,
+            emulsion_archetype: EmulsionArchetype::None,
+            emulsion_format: EmulsionFormat::Format35mm,
+            emulsion_exposure: 0.0,
             curves: ToneCurvesRecord::default(),
             split_toning_shadow_hue: 215.0,
             split_toning_shadow_sat: 0.0,
@@ -961,20 +960,12 @@ pub fn check_connection() -> String {
 
 #[uniffi::export]
 pub fn get_builtin_cube_lut_titles() -> Vec<String> {
-    lut::FilmSimulationGenerator::builtin_titles()
+    Vec::new()
 }
 
 #[uniffi::export]
-pub fn get_builtin_cube_lut(title: String, size: u32) -> Option<CubeLutRecord> {
-    let s = (size as usize).clamp(17, 65);
-    lut::FilmSimulationGenerator::generate_by_title(&title, s).map(|l| {
-        let data_rgba32f = l.to_rgba32f_bytes();
-        CubeLutRecord {
-            title: l.title,
-            size: l.size as u32,
-            data_rgba32f,
-        }
-    })
+pub fn get_builtin_cube_lut(_title: String, _size: u32) -> Option<CubeLutRecord> {
+    None
 }
 
 #[uniffi::export]

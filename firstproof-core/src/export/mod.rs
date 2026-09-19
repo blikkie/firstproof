@@ -110,9 +110,13 @@ mod tests {
             ..Default::default()
         };
         
+        let tmp_cube = "test_mono.cube";
+        let cube_content = "TITLE \"Test Mono\"\nLUT_3D_SIZE 2\nDOMAIN_MIN 0.0 0.0 0.0\nDOMAIN_MAX 1.0 1.0 1.0\n0.0 0.0 0.0\n0.5 0.5 0.5\n0.5 0.5 0.5\n1.0 1.0 1.0\n0.5 0.5 0.5\n1.0 1.0 1.0\n1.0 1.0 1.0\n1.0 1.0 1.0\n";
+        std::fs::write(tmp_cube, cube_content).unwrap();
+
         export_photo_file(tmp_in, tmp_out_no_lut, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
         
-        edits.lut_name = Some("Film - B&W High Contrast (Tri-X)".to_string());
+        edits.lut_name = Some(tmp_cube.to_string());
         edits.lut_intensity = 1.0;
         export_photo_file(tmp_in, tmp_out_lut, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
         
@@ -129,6 +133,7 @@ mod tests {
         let _ = std::fs::remove_file(tmp_in);
         let _ = std::fs::remove_file(tmp_out_no_lut);
         let _ = std::fs::remove_file(tmp_out_lut);
+        let _ = std::fs::remove_file(tmp_cube);
     }
 
     #[test]
@@ -604,32 +609,20 @@ mod tests {
     }
 
     #[test]
-    fn test_film_grain_math() {
-        let (r, g, b) = apply_film_grain_rgb(0.5, 0.5, 0.5, 10.0, 20.0, 0.0, 1.0, 50.0, 0.0);
-        assert_eq!((r, g, b), (0.5, 0.5, 0.5));
+    fn test_recording_emulsion_and_subtractive_grain_math() {
+        use crate::color::emulsion::{apply_recording_emulsion, EmulsionArchetype};
 
-        let (r1, g1, b1) = apply_film_grain_rgb(0.5, 0.5, 0.5, 15.0, 25.0, 50.0, 1.0, 50.0, 0.0);
-        let dr = (r1 - 0.5).abs();
-        let dg = (g1 - 0.5).abs();
-        let db = (b1 - 0.5).abs();
-        assert!((dr - dg).abs() < 1e-5);
-        assert!((dg - db).abs() < 1e-5);
-        assert!(dr > 0.0);
+        // 1. Clean bypass when None
+        let (r0, g0, b0) = apply_recording_emulsion(0.5, 0.5, 0.5, EmulsionArchetype::None, 0.0);
+        assert_eq!((r0, g0, b0), (0.5, 0.5, 0.5));
 
-        let mut midtone_delta_sum = 0.0;
-        let mut highlight_delta_sum = 0.0;
-        for i in 0..20 {
-            let x = i as f32 * 5.0;
-            let (rm, _, _) = apply_film_grain_rgb(0.5, 0.5, 0.5, x, x, 50.0, 1.0, 50.0, 0.0);
-            let (rh, _, _) = apply_film_grain_rgb(0.98, 0.98, 0.98, x, x, 50.0, 1.0, 50.0, 0.0);
-            midtone_delta_sum += (rm - 0.5).abs();
-            highlight_delta_sum += (rh - 0.98).abs();
-        }
-        assert!(midtone_delta_sum > highlight_delta_sum * 2.0);
+        // 2. Sensitometric toe absorption: pure black stays 0.0
+        let (rb, gb, bb) = apply_recording_emulsion(0.0, 0.0, 0.0, EmulsionArchetype::RochesterPortrait400, 0.0);
+        assert_eq!((rb, gb, bb), (0.0, 0.0, 0.0));
 
-        let (rc, gc, bc) = apply_film_grain_rgb(0.5, 0.5, 0.5, 42.0, 84.0, 60.0, 1.0, 50.0, 50.0);
-        let d_rg = (rc - gc).abs();
-        let d_gb = (gc - bc).abs();
-        assert!(d_rg > 1e-4 || d_gb > 1e-4);
+        // 3. Push/Pull photographic exposure trim (2^EV)
+        let (r_base, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 0.0);
+        let (r_push, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 1.0);
+        assert!(r_push > r_base, "Pushed exposure must produce higher density than normal");
     }
 }

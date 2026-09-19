@@ -59,3 +59,5 @@ To prevent tone-curve collisions (double tone-mapping) and dynamic range clippin
 5. **Capture & Print Decoupling (Strict Neutral Default)**:
    - Emulsion profiles and darkroom print toners are strictly opt-in creative tools. The pipeline default is always pure optical sensor capture (Camera DCP + AgX).
    - Upstream in-camera recording chemistry (DIR couplers) and downstream darkroom printmaking (enlarger filtration, silver paper D-log H, archival toning) are orthogonal stages. Neither replaces or overrides the other.
+   - For detailed manufacturer publication codes and sensitometric characteristic curve derivations, see [sensitometric_emulsion_references.md](file:///Users/blikkie/src/LumenBox/docs/architecture/sensitometric_emulsion_references.md).
+

@@ -93,11 +93,23 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
             b = b_rec;
         }
         
+        // 2c. Upstream Recording Emulsion (DIR Chemical Couplers & Sensitometric Curves)
+        if edits.emulsion_archetype != crate::EmulsionArchetype::None {
+            let (r_em, g_em, b_em) = crate::color::apply_recording_emulsion(
+                r, g, b,
+                edits.emulsion_archetype,
+                edits.emulsion_exposure,
+            );
+            r = r_em;
+            g = g_em;
+            b = b_em;
+        }
+        
         // 3. AgX Filmic or Camera-Matching Tone Profiles
         // Tone profiles output sRGB (display-referred for AgX, linear sRGB for camera profiles / raw passthrough).
         // Outputting sRGB directly avoids matrix inversion back into Rec.2020 and eliminates channel cross-talk
         // or clamping discrepancies prior to bilinear interpolation.
-        if image.is_raw || edits.contrast != 0.0 || edits.highlights != 0.0 || edits.shadows != 0.0 || edits.whites != 0.0 || edits.blacks != 0.0 || edits.tone_profile != crate::ColorProfileMode::AgxFilmic {
+        if image.is_raw || edits.contrast != 0.0 || edits.highlights != 0.0 || edits.shadows != 0.0 || edits.whites != 0.0 || edits.blacks != 0.0 || edits.emulsion_archetype != crate::EmulsionArchetype::None || edits.tone_profile != crate::ColorProfileMode::AgxFilmic {
             match edits.tone_profile {
                 crate::ColorProfileMode::AgxVivid => {
                     let c_rec2020 = Color3::new(r, g, b);
@@ -478,93 +490,4 @@ pub fn apply_detail_and_sharpening_rgb(
     ((r * k).clamp(0.0, 1.0), (g * k).clamp(0.0, 1.0), (b * k).clamp(0.0, 1.0))
 }
 
-// MARK: - Procedural Film Grain (Luminance-Dependent Silver Halide Simulation)
 
-#[inline(always)]
-fn grain_luminance_weight(lum: f32) -> f32 {
-    let bell = 4.0 * lum * (1.0 - lum);
-    (0.08 * (1.0 - lum)).max(bell)
-}
-
-#[inline(always)]
-fn pcg_hash_2d(x: i32, y: i32) -> f32 {
-    let ux = x as u32;
-    let uy = y as u32;
-    let mut h = ux.wrapping_mul(374761393).wrapping_add(uy.wrapping_mul(668265263)).wrapping_add(0x9E3779B9);
-    h = (h ^ (h >> 13)).wrapping_mul(1274126177);
-    h = h ^ (h >> 16);
-    h as f32 * (1.0 / 4294967296.0)
-}
-
-#[inline(always)]
-fn smooth_noise_2d(x: f32, y: f32) -> f32 {
-    let ix = x.floor() as i32;
-    let iy = y.floor() as i32;
-    let fx = x - x.floor();
-    let fy = y - y.floor();
-    
-    let ux = fx * fx * fx * (fx * (fx * 6.0 - 15.0) + 10.0);
-    let uy = fy * fy * fy * (fy * (fy * 6.0 - 15.0) + 10.0);
-    
-    let a = pcg_hash_2d(ix, iy);
-    let b = pcg_hash_2d(ix + 1, iy);
-    let c = pcg_hash_2d(ix, iy + 1);
-    let d = pcg_hash_2d(ix + 1, iy + 1);
-    
-    (a * (1.0 - ux) + b * ux) * (1.0 - uy) + (c * (1.0 - ux) + d * ux) * uy
-}
-
-#[inline(always)]
-fn organic_grain_noise(px: f32, py: f32, scale: f32, roughness: f32) -> f32 {
-    let fine = (pcg_hash_2d(px.floor() as i32, py.floor() as i32) - 0.5) * 2.0;
-    let clump = (smooth_noise_2d(px / scale, py / scale) - 0.5) * 2.0;
-    let micro = (smooth_noise_2d((px + 31.7) / (scale * 0.5), (py + 47.3) / (scale * 0.5)) - 0.5) * 2.0;
-    let r_factor = (roughness / 100.0).clamp(0.0, 1.0);
-    clump * 0.45 + micro * (0.25 * r_factor) + fine * (0.35 + 0.25 * r_factor)
-}
-
-/// Applies procedural organic silver halide film grain to a display-referred RGB pixel.
-#[inline(always)]
-pub fn apply_film_grain_rgb(
-    r: f32, g: f32, b: f32,
-    pixel_x: f32, pixel_y: f32,
-    amount: f32,
-    size: f32,
-    roughness: f32,
-    chroma: f32,
-) -> (f32, f32, f32) {
-    if amount <= 0.0 {
-        return (r, g, b);
-    }
-    
-    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    let weight = grain_luminance_weight(lum.clamp(0.0, 1.0));
-    let grain_scale = size.max(0.4);
-    
-    let mono_noise = organic_grain_noise(pixel_x, pixel_y, grain_scale, roughness);
-    
-    let (nr, ng, nb) = if chroma > 0.0 {
-        let c_t = (chroma / 100.0).clamp(0.0, 1.0);
-        let theta = c_t * std::f32::consts::FRAC_PI_2;
-        let w_mono = theta.cos();
-        let w_color = theta.sin() * 1.25;
-
-        let r_noise = organic_grain_noise(pixel_x + 131.7, pixel_y + 71.3, grain_scale * 0.9, roughness);
-        let g_noise = organic_grain_noise(pixel_x + 291.7, pixel_y + 431.1, grain_scale * 1.0, roughness);
-        let b_noise = organic_grain_noise(pixel_x + 531.3, pixel_y + 191.9, grain_scale * 1.25, roughness);
-        (
-            mono_noise * w_mono + r_noise * w_color,
-            mono_noise * w_mono + g_noise * w_color,
-            mono_noise * w_mono + b_noise * w_color,
-        )
-    } else {
-        (mono_noise, mono_noise, mono_noise)
-    };
-    
-    let strength = (amount / 100.0) * 0.18 * weight;
-    (
-        (r + nr * strength).clamp(0.0, 1.0),
-        (g + ng * strength).clamp(0.0, 1.0),
-        (b + nb * strength).clamp(0.0, 1.0),
-    )
-}

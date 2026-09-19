@@ -183,6 +183,15 @@ fragment float4 fragmentShader(
         );
     }
     
+    // 4b. Upstream Recording Emulsion (DIR Coupling & Sensitometric D-log H Curves)
+    if (uniforms.isOriginal < 0.5 && uniforms.emulsionArchetype != 0) {
+        rec2020Color = applyRecordingEmulsion(
+            rec2020Color,
+            uniforms.emulsionArchetype,
+            uniforms.emulsionExposure
+        );
+    }
+    
     // 5. AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles
     // Calibrated contrast: Ceiling 2.0x (+100), Floor 0.40x (-100) preventing flat gray collapse
     float contrastGain = (editContrast >= 0.0)
@@ -291,20 +300,6 @@ fragment float4 fragmentShader(
             uniforms.printPaperGrade,
             uniforms.printBaseWarmth,
             uniforms.printProcessDepth
-        );
-    }
-
-    // 8.5 Procedural Organic Film Grain
-    if (uniforms.isOriginal == 0.0 && uniforms.grainAmount > 0.0) {
-        float2 texDim = float2(texture.get_width(), texture.get_height());
-        finalColor = applyProceduralFilmGrain(
-            finalColor,
-            uv,
-            texDim,
-            uniforms.grainAmount,
-            uniforms.grainSize,
-            uniforms.grainRoughness,
-            uniforms.grainChroma
         );
     }
     

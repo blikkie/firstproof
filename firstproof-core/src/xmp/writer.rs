@@ -65,10 +65,22 @@ pub fn generate_xmp(data: &XmpData) -> String {
     writer.element("sharpeningRadius", pm_ns.clone()).value(format!("{:.4}", data.edits.sharpening_radius).as_str());
     writer.element("sharpeningMasking", pm_ns.clone()).value(format!("{:.4}", data.edits.sharpening_masking).as_str());
     writer.element("noiseReduction", pm_ns.clone()).value(format!("{:.4}", data.edits.noise_reduction).as_str());
-    writer.element("grainAmount", pm_ns.clone()).value(format!("{:.4}", data.edits.grain_amount).as_str());
-    writer.element("grainSize", pm_ns.clone()).value(format!("{:.4}", data.edits.grain_size).as_str());
-    writer.element("grainRoughness", pm_ns.clone()).value(format!("{:.4}", data.edits.grain_roughness).as_str());
-    writer.element("grainChroma", pm_ns.clone()).value(format!("{:.4}", data.edits.grain_chroma).as_str());
+    writer.element("emulsionArchetype", pm_ns.clone()).value(match data.edits.emulsion_archetype {
+        crate::EmulsionArchetype::None => "None",
+        crate::EmulsionArchetype::RochesterPortrait400 => "RochesterPortrait400",
+        crate::EmulsionArchetype::AshigaraChrome50 => "AshigaraChrome50",
+        crate::EmulsionArchetype::RochesterK14Chrome64 => "RochesterK14Chrome64",
+        crate::EmulsionArchetype::RochesterCinema500 => "RochesterCinema500",
+        crate::EmulsionArchetype::RochesterDaylight200 => "RochesterDaylight200",
+        crate::EmulsionArchetype::MobberleySilver400 => "MobberleySilver400",
+        crate::EmulsionArchetype::CambridgeDiffusion100 => "CambridgeDiffusion100",
+    });
+    writer.element("emulsionFormat", pm_ns.clone()).value(match data.edits.emulsion_format {
+        crate::EmulsionFormat::Format35mm => "Format35mm",
+        crate::EmulsionFormat::Format120 => "Format120",
+        crate::EmulsionFormat::Format4x5 => "Format4x5",
+    });
+    writer.element("emulsionExposure", pm_ns.clone()).value(format!("{:.4}", data.edits.emulsion_exposure).as_str());
     writer.element("temperature", pm_ns.clone()).value(format!("{:.4}", data.edits.temperature).as_str());
     writer.element("tint", pm_ns.clone()).value(format!("{:.4}", data.edits.tint).as_str());
     writer.element("cropLeft", pm_ns.clone()).value(format!("{:.4}", data.edits.crop_left).as_str());
@@ -145,10 +157,7 @@ pub fn generate_xmp(data: &XmpData) -> String {
     )));
     writer.element("PerspectiveVertical", crs_ns.clone()).value(format!("{:.4}", data.edits.perspective_vertical).as_str());
     writer.element("PerspectiveHorizontal", crs_ns.clone()).value(format!("{:.4}", data.edits.perspective_horizontal).as_str());
-    writer.element("CropConstrainToWarp", crs_ns.clone()).value(if data.edits.crop_constrain { "1" } else { "0" });
-    writer.element("GrainAmount", crs_ns.clone()).value(format!("{:.4}", data.edits.grain_amount).as_str());
-    writer.element("GrainSize", crs_ns.clone()).value(format!("{:.4}", data.edits.grain_size).as_str());
-    writer.element("GrainFrequency", crs_ns).value(format!("{:.4}", data.edits.grain_roughness).as_str());
+    writer.element("CropConstrainToWarp", crs_ns).value(if data.edits.crop_constrain { "1" } else { "0" });
 
     writer.finish(None)
 }

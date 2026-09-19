@@ -6,16 +6,21 @@ public struct EmulsionWorkspaceView: View {
     
     public init() {}
     
+    private var hasActiveEmulsionEdits: Bool {
+        viewModel.emulsionArchetype != .none ||
+        viewModel.emulsionExposure != 0.0
+    }
+    
     private var isMonochromeActive: Bool {
         switch viewModel.printMedia {
         case .barytaSilverGelatin, .warmtoneChlorobromide, .platinumPalladium, .cyanotype:
             return true
         default:
-            return false
+            return viewModel.emulsionArchetype == .mobberleySilver400
         }
     }
     
-    private var hasActiveEdits: Bool {
+    private var hasActivePrintEdits: Bool {
         viewModel.printMedia != .none ||
         viewModel.enlargerFilter != .neutralPanchromatic ||
         viewModel.printPaperGrade != 0.0 ||
@@ -26,196 +31,317 @@ public struct EmulsionWorkspaceView: View {
     public var body: some View {
         @Bindable var viewModel = viewModel
         VStack(alignment: .leading, spacing: 14) {
-            // Header
-            HStack {
-                Text("DARKROOM PRINT MEDIA")
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .foregroundColor(.secondary)
-                Spacer()
-                Button(action: {
-                    viewModel.resetPrintMedia()
-                }) {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(!hasActiveEdits)
-                .help("Reset Darkroom Print Media to Digital Passthrough")
-            }
-            
-            // Print Media Archetype Selector
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Print Medium Archetype")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Picker("", selection: Binding<PrintMediaMode>(
-                    get: { viewModel.printMedia },
-                    set: { viewModel.setPrintMedia($0) }
-                )) {
-                    Text("None (Clean Digital Display)").tag(PrintMediaMode.none)
-                    
-                    Divider()
-                    
-                    Section("Color Print Media") {
-                        Text("Gallery Chromogenic Type-C (RA-4)").tag(PrintMediaMode.chromogenicTypeC)
-                        Text("Silver Dye-Bleach Classic (Azo Reversal)").tag(PrintMediaMode.silverDyeBleach)
-                        Text("Archival Fine-Art Cotton Rag (Mineral)").tag(PrintMediaMode.fineArtCottonRag)
-                    }
-                    
-                    Section("Monochrome Media & Archival Chemistry") {
-                        Text("Baryta Silver Gelatin FB").tag(PrintMediaMode.barytaSilverGelatin)
-                        Text("Warmtone Chlorobromide (Selenium Toned)").tag(PrintMediaMode.warmtoneChlorobromide)
-                        Text("Platinum / Palladium (Hand-Coated Rag)").tag(PrintMediaMode.platinumPalladium)
-                        Text("Historic Cyanotype (Prussian Blue)").tag(PrintMediaMode.cyanotype)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-            }
-            
-            // Process Summary Description
-            if viewModel.printMedia != .none {
-                HStack(spacing: 8) {
-                    Image(systemName: isMonochromeActive ? "moon.stars.fill" : "paintpalette.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(.accentColor)
-                    Text(archetypeDescription(for: viewModel.printMedia))
-                        .font(.caption2)
+            // MARK: - Section 1: Upstream Recording Emulsion
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("RECORDING EMULSION")
+                        .font(.caption)
+                        .fontWeight(.bold)
                         .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(8)
-                .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
-                .cornerRadius(6)
-            }
-            
-            // Optical Enlarger Spectral Filtration (B&W Conversion)
-            if isMonochromeActive {
-                Divider()
-                    .padding(.vertical, 2)
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("ENLARGER SPECTRAL FILTRATION")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.secondary)
-                        Spacer()
+                    Spacer()
+                    Button(action: {
+                        viewModel.resetEmulsion()
+                    }) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 11, weight: .semibold))
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!hasActiveEmulsionEdits)
+                    .help("Reset Recording Emulsion to Linear Sensor Raw")
+                }
+                
+                // Emulsion Stock Picker
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Film Stock Archetype")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                     
-                    Picker("", selection: Binding<EnlargerFilterMode>(
-                        get: { viewModel.enlargerFilter },
-                        set: { viewModel.setEnlargerFilter($0) }
+                    Picker("", selection: Binding<EmulsionArchetype>(
+                        get: { viewModel.emulsionArchetype },
+                        set: { viewModel.setEmulsionArchetype($0) }
                     )) {
-                        Text("Neutral Panchromatic (Standard)").tag(EnlargerFilterMode.neutralPanchromatic)
-                        Text("Yellow Filter (K2) — Subtle Contrast & Sky").tag(EnlargerFilterMode.yellowK2)
-                        Text("Orange Filter (16) — Moderate Contrast").tag(EnlargerFilterMode.orange16)
-                        Text("Red Filter (25A) — High Drama & Deep Skies").tag(EnlargerFilterMode.red25A)
-                        Text("Green Filter (X1) — Foliage & Flora Separation").tag(EnlargerFilterMode.greenX1)
-                        Text("Orthochromatic (Vintage) — Blue/Green Sensitive").tag(EnlargerFilterMode.orthochromatic)
+                        Text("None (Linear Sensor Raw)").tag(EmulsionArchetype.none)
+                        
+                        Divider()
+                        
+                        Section("Color Negative (C-41 & Cinema)") {
+                            Text("Rochester Portrait 400 (C-41)").tag(EmulsionArchetype.rochesterPortrait400)
+                            Text("Rochester Cinema 500 (ECN-2)").tag(EmulsionArchetype.rochesterCinema500)
+                            Text("Rochester Daylight 200 (C-41)").tag(EmulsionArchetype.rochesterDaylight200)
+                        }
+                        
+                        Section("Color Reversal / Slide (E-6 & K-14)") {
+                            Text("Ashigara Chrome 50 (E-6)").tag(EmulsionArchetype.ashigaraChrome50)
+                            Text("Rochester K-14 Chrome 64").tag(EmulsionArchetype.rochesterK14Chrome64)
+                        }
+                        
+                        Section("Monochrome Silver & Diffusion") {
+                            Text("Mobberley Silver 400 (Panchromatic)").tag(EmulsionArchetype.mobberleySilver400)
+                            Text("Cambridge Diffusion 100 (Instant)").tag(EmulsionArchetype.cambridgeDiffusion100)
+                        }
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
+                }
+                
+                // Emulsion Info & Controls when active
+                if viewModel.emulsionArchetype != .none {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "film")
+                            .font(.system(size: 11))
+                            .foregroundColor(.accentColor)
+                            .padding(.top, 1)
+                        Text(emulsionDescription(for: viewModel.emulsionArchetype))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
+                    .cornerRadius(6)
                     
-                    Text("Physical optical glass filtration placed in the enlarger light path.")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary.opacity(0.8))
+                    // Push / Pull Exposure Compensation
+                    VStack(alignment: .leading, spacing: 2) {
+                        SliderRow(
+                            label: "Push / Pull",
+                            value: $viewModel.emulsionExposure,
+                            range: -2.0...2.0,
+                            format: "%+.2f EV",
+                            onReset: { viewModel.resetSlider(.emulsionExposure) },
+                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .emulsionExposure) }
+                        )
+                        HStack {
+                            Text("Pull (-2 EV)")
+                            Spacer()
+                            Text("Normal")
+                            Spacer()
+                            Text("Push (+2 EV)")
+                        }
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary.opacity(0.7))
+                    }
                 }
             }
             
-            // The Rule of Three Darkroom Controls
-            if viewModel.printMedia != .none {
-                Divider()
-                    .padding(.vertical, 2)
-                
-                Text("DARKROOM ADJUSTMENTS")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.secondary)
-                
-                // 1. Paper Grade / Hardness
-                VStack(alignment: .leading, spacing: 2) {
-                    SliderRow(
-                        label: "Paper Grade",
-                        value: $viewModel.printPaperGrade,
-                        range: -2.0...2.0,
-                        format: "%+.1f",
-                        onReset: { viewModel.resetSlider(.printPaperGrade) },
-                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printPaperGrade) }
-                    )
-                    HStack {
-                        Text("Grade 0 (Soft)")
-                        Spacer()
-                        Text("Grade 2 (Norm)")
-                        Spacer()
-                        Text("Grade 4 (Hard)")
-                    }
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary.opacity(0.7))
-                }
-                
-                // 2. Base Warmth
-                VStack(alignment: .leading, spacing: 2) {
-                    SliderRow(
-                        label: "Base Warmth",
-                        value: $viewModel.printBaseWarmth,
-                        range: -100.0...100.0,
-                        format: "%+.0f",
-                        onReset: { viewModel.resetSlider(.printBaseWarmth) },
-                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printBaseWarmth) }
-                    )
-                    HStack {
-                        Text("Baryta Optical")
-                        Spacer()
-                        Text("Neutral")
-                        Spacer()
-                        Text("Natural Cotton")
-                    }
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary.opacity(0.7))
-                }
-                
-                // 3. Process Depth
-                VStack(alignment: .leading, spacing: 2) {
-                    SliderRow(
-                        label: "Process Depth",
-                        value: $viewModel.printProcessDepth,
-                        range: 0.0...100.0,
-                        format: "%.0f%%",
-                        onReset: { viewModel.resetSlider(.printProcessDepth) },
-                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printProcessDepth) }
-                    )
-                    HStack {
-                        Text(isMonochromeActive ? "Untuned Silver" : "Base Dye")
-                        Spacer()
-                        Text(isMonochromeActive ? "Archival Toner" : "Full Coupling")
-                    }
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary.opacity(0.7))
-                }
-            } else {
-                // Passthrough state callout
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Pure Digital Capture Passthrough")
+            Divider()
+                .padding(.vertical, 2)
+            
+            // MARK: - Section 2: Darkroom Print Media
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("DARKROOM PRINT MEDIA")
                         .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                    Text("Select an authentic photographic print medium above to emulate chemical darkroom paper sensitometry, optical enlarger filtration, and archival chemical toners.")
-                        .font(.caption2)
+                        .fontWeight(.bold)
                         .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button(action: {
+                        viewModel.resetPrintMedia()
+                    }) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!hasActivePrintEdits)
+                    .help("Reset Darkroom Print Media to Digital Passthrough")
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
-                .cornerRadius(8)
+                
+                // Print Media Archetype Selector
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Print Medium Archetype")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Picker("", selection: Binding<PrintMediaMode>(
+                        get: { viewModel.printMedia },
+                        set: { viewModel.setPrintMedia($0) }
+                    )) {
+                        Text("None (Clean Digital Display)").tag(PrintMediaMode.none)
+                        
+                        Divider()
+                        
+                        Section("Color Print Media") {
+                            Text("Gallery Chromogenic Type-C (RA-4)").tag(PrintMediaMode.chromogenicTypeC)
+                            Text("Silver Dye-Bleach Classic (Azo Reversal)").tag(PrintMediaMode.silverDyeBleach)
+                            Text("Archival Fine-Art Cotton Rag (Mineral)").tag(PrintMediaMode.fineArtCottonRag)
+                        }
+                        
+                        Section("Monochrome Media & Archival Chemistry") {
+                            Text("Baryta Silver Gelatin FB").tag(PrintMediaMode.barytaSilverGelatin)
+                            Text("Warmtone Chlorobromide (Selenium Toned)").tag(PrintMediaMode.warmtoneChlorobromide)
+                            Text("Platinum / Palladium (Hand-Coated Rag)").tag(PrintMediaMode.platinumPalladium)
+                            Text("Historic Cyanotype (Prussian Blue)").tag(PrintMediaMode.cyanotype)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+                
+                // Process Summary Description
+                if viewModel.printMedia != .none {
+                    HStack(spacing: 8) {
+                        Image(systemName: isMonochromeActive ? "moon.stars.fill" : "paintpalette.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.accentColor)
+                        Text(printArchetypeDescription(for: viewModel.printMedia))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(8)
+                    .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
+                    .cornerRadius(6)
+                }
+                
+                // Optical Enlarger Spectral Filtration (B&W Conversion)
+                if isMonochromeActive {
+                    Divider()
+                        .padding(.vertical, 2)
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("ENLARGER SPECTRAL FILTRATION")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                        }
+                        
+                        Picker("", selection: Binding<EnlargerFilterMode>(
+                            get: { viewModel.enlargerFilter },
+                            set: { viewModel.setEnlargerFilter($0) }
+                        )) {
+                            Text("Neutral Panchromatic (Standard)").tag(EnlargerFilterMode.neutralPanchromatic)
+                            Text("Yellow Filter (K2) — Subtle Contrast & Sky").tag(EnlargerFilterMode.yellowK2)
+                            Text("Orange Filter (16) — Moderate Contrast").tag(EnlargerFilterMode.orange16)
+                            Text("Red Filter (25A) — High Drama & Deep Skies").tag(EnlargerFilterMode.red25A)
+                            Text("Green Filter (X1) — Foliage & Flora Separation").tag(EnlargerFilterMode.greenX1)
+                            Text("Orthochromatic (Vintage) — Blue/Green Sensitive").tag(EnlargerFilterMode.orthochromatic)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        
+                        Text("Physical optical glass filtration placed in the enlarger light path.")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary.opacity(0.8))
+                    }
+                }
+                
+                // The Rule of Three Darkroom Controls
+                if viewModel.printMedia != .none {
+                    Divider()
+                        .padding(.vertical, 2)
+                    
+                    Text("DARKROOM ADJUSTMENTS")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.secondary)
+                    
+                    // 1. Paper Grade / Hardness
+                    VStack(alignment: .leading, spacing: 2) {
+                        SliderRow(
+                            label: "Paper Grade",
+                            value: $viewModel.printPaperGrade,
+                            range: -2.0...2.0,
+                            format: "%+.1f",
+                            onReset: { viewModel.resetSlider(.printPaperGrade) },
+                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printPaperGrade) }
+                        )
+                        HStack {
+                            Text("Grade 0 (Soft)")
+                            Spacer()
+                            Text("Grade 2 (Norm)")
+                            Spacer()
+                            Text("Grade 4 (Hard)")
+                        }
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary.opacity(0.7))
+                    }
+                    
+                    // 2. Base Warmth
+                    VStack(alignment: .leading, spacing: 2) {
+                        SliderRow(
+                            label: "Base Warmth",
+                            value: $viewModel.printBaseWarmth,
+                            range: -100.0...100.0,
+                            format: "%+.0f",
+                            onReset: { viewModel.resetSlider(.printBaseWarmth) },
+                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printBaseWarmth) }
+                        )
+                        HStack {
+                            Text("Baryta Optical")
+                            Spacer()
+                            Text("Neutral")
+                            Spacer()
+                            Text("Natural Cotton")
+                        }
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary.opacity(0.7))
+                    }
+                    
+                    // 3. Process Depth
+                    VStack(alignment: .leading, spacing: 2) {
+                        SliderRow(
+                            label: "Process Depth",
+                            value: $viewModel.printProcessDepth,
+                            range: 0.0...100.0,
+                            format: "%.0f%%",
+                            onReset: { viewModel.resetSlider(.printProcessDepth) },
+                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printProcessDepth) }
+                        )
+                        HStack {
+                            Text(isMonochromeActive ? "Untuned Silver" : "Base Dye")
+                            Spacer()
+                            Text(isMonochromeActive ? "Archival Toner" : "Full Coupling")
+                        }
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary.opacity(0.7))
+                    }
+                } else {
+                    // Passthrough state callout
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Pure Digital Capture Passthrough")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        Text("Select an authentic photographic print medium above to emulate chemical darkroom paper sensitometry, optical enlarger filtration, and archival chemical toners.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
+                    .cornerRadius(8)
+                }
             }
         }
         .padding(.top, 4)
     }
     
-    private func archetypeDescription(for media: PrintMediaMode) -> String {
+    private func emulsionDescription(for archetype: EmulsionArchetype) -> String {
+        switch archetype {
+        case .none:
+            return "Linear sensor raw passthrough without film sensitometry."
+        case .rochesterPortrait400:
+            return "C-41 Color Negative: Gentle S-curve shoulder, warm skin tone fidelity, active DIR cyan-boosted shadow contrast, and pastel highlight separation."
+        case .ashigaraChrome50:
+            return "E-6 Color Reversal: High saturation, steep D-log H midtones, deep Dmax, and clean neutral shadows."
+        case .rochesterK14Chrome64:
+            return "K-14 Non-Substantive Reversal: Iconic warm-golden highlight cast, high optical acutance, and punchy archival shadow density."
+        case .rochesterCinema500:
+            return "ECN-2 Cinema Negative: Soft highlight shoulder, extreme 14+ stop latitude, and low-contrast linear grading foundation."
+        case .rochesterDaylight200:
+            return "C-41 Golden Daylight Negative: Clean, balanced primary color fidelity, golden daylight warmth, and restrained blue density."
+        case .mobberleySilver400:
+            return "Panchromatic Silver Halide: Pure monochromatic collapse in linear Rec.2020, linear midtone acutance, and rich shadow micro-contrast."
+        case .cambridgeDiffusion100:
+            return "Instant Dye Diffusion Reversal: Instant peel-apart chemistry, soft highlight roll-off, reflective TiO2 base tone, and pastel greens."
+        }
+    }
+    
+    private func printArchetypeDescription(for media: PrintMediaMode) -> String {
         switch media {
         case .none:
             return "Clean digital display rendering."

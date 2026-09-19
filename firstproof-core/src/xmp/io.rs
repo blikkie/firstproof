@@ -26,7 +26,7 @@ pub fn has_custom_adjustments(data: &XmpData) -> bool {
         || (data.edits.temperature != 5000.0 && data.edits.temperature != 0.0)
         || data.edits.tint != 0.0
         || data.edits.lut_name.is_some()
-        || data.edits.grain_amount != 0.0
+        || data.edits.emulsion_archetype != crate::EmulsionArchetype::None
         || data.edits.curves != crate::curve::ToneCurvesRecord::default()
         || data.rating.is_some()
         || (data.status != "None" && !data.status.is_empty())
