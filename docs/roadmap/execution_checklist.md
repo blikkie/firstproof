@@ -81,8 +81,8 @@
     - `[x]` 18.1 16-bit float Metal canvas layer (`.rgba16Float`) for 1,600-nit Liquid Retina XDR displays
     - `[x]` 18.2 ISO 21496-1 gain map JPEG export and Google Pixel gain map ingestion
 - `[ ]` 19. Epic 12: WebAssembly & WebGL Interactive Darkroom Engine (P0 / P1 - Pulled Forward)
-    - `[ ]` 19.1 `firstproof-wasm` crate scaffolding (`wasm-bindgen`, `wasm-pack`, memory pool)
-    - `[ ]` 19.2 Pre-allocated linear memory scratchpad buffer & Web Worker zero-copy transfer
+    - `[x]` 19.1 `firstproof-wasm` crate scaffolding (`wasm-bindgen`, `wasm-pack`, memory pool)
+    - `[x]` 19.2 Pre-allocated linear memory scratchpad buffer & Web Worker zero-copy transfer
     - `[ ]` 19.3 WebGL 2 develop shader pipeline (GLSL 3.00 ES port of `ColorScience.metal` & `Shaders.metal`)
     - `[ ]` 19.4 Local folder intake (`window.showDirectoryPicker()` & `<input type="file" webkitdirectory>`)
     - `[ ]` 19.5 In-memory filmstrip, star rating badges, and direct `.xmp` sidecar synchronization

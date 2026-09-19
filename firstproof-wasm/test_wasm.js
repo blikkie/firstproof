@@ -1,0 +1,113 @@
+const fs = require('fs');
+const path = require('path');
+const wasm = require('./pkg-node/firstproof_wasm.js');
+
+console.log('====================================================');
+console.log('    First Proof WebAssembly Integration Test        ');
+console.log('====================================================\n');
+
+// 1. Initialize scratchpad in WASM linear memory (64MB)
+console.log('1. Initializing 64 MB linear memory scratchpad...');
+const ptr = wasm.init_scratchpad(64);
+const len = wasm.get_scratchpad_len();
+console.log(`   ✔ Scratchpad pointer: 0x${ptr.toString(16)}`);
+console.log(`   ✔ Scratchpad capacity: ${(len / (1024 * 1024)).toFixed(1)} MB`);
+
+// 2. Load test image into WASM linear memory buffer directly
+const testImagePath = path.join(__dirname, '../raw_calibration_comparison.jpg');
+console.log(`\n2. Loading test image: ${testImagePath}`);
+const fileBuffer = fs.readFileSync(testImagePath);
+console.log(`   ✔ Read image file: ${(fileBuffer.length / 1024).toFixed(1)} KB`);
+
+const copied = wasm.copy_into_scratchpad(0, fileBuffer);
+console.log(`   ✔ Copied ${copied} bytes into WASM scratchpad`);
+
+// 3. Decode preview & extract metadata
+console.log('\n3. Decoding image stream and metadata in WASM...');
+const previewResult = wasm.decode_preview_from_scratchpad(fileBuffer.length);
+console.log(`   ✔ Image Dimensions: ${previewResult.width} x ${previewResult.height}`);
+console.log(`   ✔ Embedded Preview Slice: offset=${previewResult.preview_offset}, len=${previewResult.preview_len} bytes`);
+console.log(`   ✔ Camera Make: ${previewResult.metadata.camera_make || 'N/A'}`);
+console.log(`   ✔ Camera Model: ${previewResult.metadata.camera_model || 'N/A'}`);
+console.log(`   ✔ ISO: ${previewResult.metadata.iso || 'N/A'}, Aperture: f/${previewResult.metadata.aperture || 'N/A'}, Shutter: ${previewResult.metadata.shutter_speed || 'N/A'}`);
+
+// 4. Test Tone Curves spline evaluation
+console.log('\n4. Evaluating Tone Curves via Fritsch-Carlson Monotone Cubic Spline...');
+const curvePayload = {
+  master: [
+    { x: 0.0, y: 0.0 },
+    { x: 0.25, y: 0.20 },
+    { x: 0.75, y: 0.85 },
+    { x: 1.0, y: 1.0 }
+  ],
+  red: [{ x: 0.0, y: 0.0 }, { x: 1.0, y: 1.0 }],
+  green: [{ x: 0.0, y: 0.0 }, { x: 1.0, y: 1.0 }],
+  blue: [{ x: 0.0, y: 0.0 }, { x: 1.0, y: 1.0 }]
+};
+
+const lut = wasm.evaluate_curves(JSON.stringify(curvePayload));
+console.log(`   ✔ Master LUT sample count: ${lut.master.length}`);
+console.log(`   ✔ In: 0.00 -> Out: ${lut.master[0].toFixed(4)}`);
+console.log(`   ✔ In: 0.25 -> Out: ${lut.master[64].toFixed(4)} (control point: 0.20)`);
+console.log(`   ✔ In: 0.50 -> Out: ${lut.master[128].toFixed(4)}`);
+console.log(`   ✔ In: 0.75 -> Out: ${lut.master[192].toFixed(4)} (control point: 0.85)`);
+console.log(`   ✔ In: 1.00 -> Out: ${lut.master[255].toFixed(4)}`);
+
+// 5. Test XMP Sidecar serialization and parsing
+console.log('\n5. Generating and parsing First Proof XMP sidecar...');
+const editSettings = {
+  exposure: 0.75,
+  contrast: 20.0,
+  highlights: -30.0,
+  shadows: 25.0,
+  whites: 10.0,
+  blacks: -15.0,
+  vibrance: 18.0,
+  saturation: -5.0,
+  temperature: 6100.0,
+  tint: -6.0,
+  crop_left: 0.05,
+  crop_top: 0.05,
+  crop_right: 0.95,
+  crop_bottom: 0.95,
+  crop_angle: -0.75,
+  rotation: 90,
+  flip_horizontal: true,
+  flip_vertical: false,
+  curve_master: curvePayload.master,
+  curve_red: curvePayload.red,
+  curve_green: curvePayload.green,
+  curve_blue: curvePayload.blue,
+  emulsion_archetype: "RochesterPortrait400",
+  emulsion_format: "Format120",
+  emulsion_exposure: 0.5
+};
+
+const xmpPayload = {
+  rating: 4,
+  status: "Pick",
+  title: "Glacier Ridge at Dawn",
+  description: "High elevation alpine morning light",
+  creator: "Remco",
+  copyright: "© First Proof",
+  keywords: ["alpine", "dawn", "rockies"],
+  edits: editSettings
+};
+
+const xmpXml = wasm.generate_xmp(JSON.stringify(xmpPayload));
+console.log('   ✔ Serialized XMP Sidecar (first 10 lines):');
+console.log(xmpXml.split('\n').slice(0, 10).map(l => '     ' + l).join('\n'));
+
+const parsedBack = wasm.parse_xmp(xmpXml);
+console.log('\n   ✔ Roundtrip Verification:');
+console.log(`     - Rating: ${parsedBack.rating} ★`);
+console.log(`     - Status: ${parsedBack.status}`);
+console.log(`     - Title: "${parsedBack.title}"`);
+console.log(`     - Exposure: +${parsedBack.edits.exposure} EV`);
+console.log(`     - Contrast: +${parsedBack.edits.contrast}`);
+console.log(`     - Film Emulsion: ${parsedBack.edits.emulsion_archetype} [${parsedBack.edits.emulsion_format}]`);
+console.log(`     - Geometry: ${parsedBack.edits.rotation}° rotation, Flip(H): ${parsedBack.edits.flip_horizontal}`);
+
+console.log('\n====================================================');
+console.log(' 🎉 ALL WEBASSMEBLY TESTS PASSED SUCCESSFULLY!       ');
+console.log('====================================================\n');

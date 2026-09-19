@@ -14,6 +14,11 @@ LumenBoxBridge/Sources/LumenBoxCoreFFI/include/*.a
 # Rust
 **/*.rs.bk
 
+# Web & WebAssembly
+**/pkg*/
+**/node_modules/
+web/dist/
+
 # macOS
 .DS_Store
 **/.DS_Store

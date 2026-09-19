@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "firstproof-core",
+    "firstproof-wasm",
 ]
 resolver = "2"
-
-
