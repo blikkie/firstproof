@@ -9,6 +9,11 @@ This archive tracks completed stories and features moved from the active backlog
 - **Single-Key Professional Muscle Memory**: Single-key shortcuts (`1`..`5` ratings, `P`/`X`/`U` flags, `C` crop, `Z` zoom, `\` original peek) guarded by first-responder shielding against active text fields.
 - **Native macOS Polish**: Regular activation policy (`NSApplication.shared.setActivationPolicy(.regular)`), session persistence of `lastOpenedDirectoryPath`, and distributable `FirstProof.app` bundle via `make bundle`.
 - **Portable Catalogs on External Drives (`.firstproof/`)**: Folder indexing on external storage volumes stores catalogs inside `<volume>/.firstproof/catalog.db` so the catalog travels with external media.
+- **Cross-Engine Pipeline Parity & Pure Additive Luminance Sharpening**:
+  - Replaced legacy multiplicative unsharp mask channel scaling ($k = 1.0 + \Delta / y_c$) with pure additive luminance high-pass filtering ($C' = C + \Delta y$) across Metal (`Detail.metal`), Rust (`pipeline.rs`), and WebGL (`WebGLRenderer.ts`), eliminating all arbitrary divisor floors (`0.05`), clamp ceilings (`3.0`), and piecewise noise gates. Preserves chromaticity ratios $(R - G, B - G)$ with bit-level invariance, permanently eradicating Bayer sensor read-noise hot-pixels ("red stars") in deep shadows.
+  - Harmonized stage order across all engines: Tone Recovery strictly precedes Recording Emulsion, and sharpening references are evaluated from homogeneous pre-curve display luminance.
+  - Bounded WebGL viewport sharpening sampling offsets by screen-space derivatives ($\max(\text{texelSize}, \text{fwidth}(v\_\text{texCoord}))$), preventing sub-pixel sensor noise aliasing in downsampled viewports while preserving 1:1 optical bite in full-resolution exports.
+  - Built automated live WebGL vs CPU divergence testing battery (`ParityHarness.ts`, `ParityModal.ts`, `ReferenceExport.ts`) and upgraded proof exports to native sensor resolution.
 
 ---
 
