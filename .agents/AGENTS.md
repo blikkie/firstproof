@@ -81,6 +81,16 @@
 - **Portable Catalogs on External Drives (`.firstproof/`)**:
   - Folder indexing on external storage volumes stores catalogs inside `<volume>/.firstproof/catalog.db` so the catalog travels with the external media.
 
+- **Reference-First Architecture & Zero Greenfield Hallucination**:
+  - Whenever building, porting, or refactoring subsystems in `web/`, `firstproof-wasm/`, or secondary targets where a native implementation already exists in `FirstProofApp/` (macOS Swift/Metal) or `firstproof-core/` (Rust):
+  - **Never invent ad-hoc layout, math, or interaction models from general web/platform training priors.** (e.g. do not default to CSS `object-fit: contain` when native uses full-bleed vertex quad scaling; do not place floating tool dialogs in the photo center when native uses stationary bottom HUDs; do not hardcode landscape aspect ratios when native inverts them for portrait images).
+  - **Shared Library Extraction Preference**: When analyzing whether an algorithm, state transition, coordinate mapping, or mathematical model is being reimplemented or ported, the default preference MUST be to **extract it into the shared Rust library (`firstproof-types`)** rather than duplicating it across Swift and TypeScript. Only view hierarchy layout and platform event monitors belong in host code.
+  - Always execute the **Reference Deconstruction Protocol** (`firstproof-subsystem-parity` skill) BEFORE writing target code:
+    1. **Identify Authoritative Reference Files** in `FirstProofApp/` or `firstproof-core/`.
+    2. **Extract the 4 Core Primitives**: Coordinate Spaces, Viewport/Sizing Negotiation, State Lifecycle & HUD Placement, and Orientation/Edge Cases.
+    3. **Generate a Porting Contract Matrix** mapping Swift/Metal constructs 1:1 to target equivalents (or extracting them into `firstproof-types`).
+    4. **Mechanically Transcribe the Architecture** to preserve identical visual styling, mathematical guarantees, and interaction ergonomics.
+
 - **Proactive Customization Encoding**: Whenever a platform-specific quirk, non-obvious workaround, multi-step pipeline recipe, or architectural convention is established during development, proactively suggest encoding it into `.agents/AGENTS.md` or as a new skill under `.agents/skills/` so subsequent chats retain it automatically.
 
 - **Token Efficiency Invariants**:
