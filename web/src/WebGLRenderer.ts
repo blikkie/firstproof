@@ -4,10 +4,15 @@ const VERTEX_SHADER_SRC = `#version 300 es
 in vec2 a_position;
 in vec2 a_texCoord;
 
+uniform vec2 u_fitScale;
+uniform float u_zoomScale;
+uniform vec2 u_panOffset;
+
 out vec2 v_texCoord;
 
 void main() {
-    gl_Position = vec4(a_position, 0.0, 1.0);
+    vec2 pos = a_position * u_fitScale * u_zoomScale + u_panOffset;
+    gl_Position = vec4(pos, 0.0, 1.0);
     v_texCoord = a_texCoord;
 }
 `;
@@ -48,6 +53,11 @@ uniform float u_splitShadowSat;
 uniform float u_splitHighlightHue;
 uniform float u_splitHighlightSat;
 uniform float u_splitBalance;
+uniform float u_cropLeft;
+uniform float u_cropTop;
+uniform float u_cropRight;
+uniform float u_cropBottom;
+uniform int u_cropModeActive;
 
 uniform bool u_isOriginal;
 uniform bool u_isLinearRec2020;
@@ -669,7 +679,11 @@ void main() {
                           (!u_hasMasterCurve) &&
                           (!u_hasRgbCurves) &&
                           (u_emulsionArchetype == 0) &&
-                          (u_printMediaMode == 0);
+                          (u_printMediaMode == 0) &&
+                          (u_cropLeft <= 0.001) &&
+                          (u_cropTop <= 0.001) &&
+                          (u_cropRight >= 0.999) &&
+                          (u_cropBottom >= 0.999);
 
     if (!u_isLinearRec2020 && isNeutralEdits) {
         fragColor = sampled;
@@ -800,6 +814,14 @@ export class WebGLRenderer {
   private masterLutTex: WebGLTexture | null = null;
   private rgbLutTex: WebGLTexture | null = null;
   private isLinearRec2020: boolean = false;
+  private vbo: WebGLBuffer | null = null;
+  private currentRotation: number = 0;
+  private currentFlipH: boolean = false;
+  private currentFlipV: boolean = false;
+  private currentCrop: { left: number; top: number; right: number; bottom: number } = { left: 0, top: 0, right: 1, bottom: 1 };
+  private currentCropModeActive: boolean = false;
+  private texWidth: number = 1920;
+  private texHeight: number = 1080;
 
   // Uniform locations
   private uLocs: Record<string, WebGLUniformLocation | null> = {};
@@ -847,6 +869,7 @@ export class WebGLRenderer {
       'u_toneProfileMode', 'u_emulsionArchetype', 'u_emulsionExposure',
       'u_printMediaMode', 'u_printPaperGrade', 'u_printBaseWarmth', 'u_printProcessDepth', 'u_enlargerFilterMode',
       'u_splitShadowHue', 'u_splitShadowSat', 'u_splitHighlightHue', 'u_splitHighlightSat', 'u_splitBalance',
+      'u_fitScale', 'u_zoomScale', 'u_panOffset', 'u_cropLeft', 'u_cropTop', 'u_cropRight', 'u_cropBottom', 'u_cropModeActive',
       'u_isOriginal', 'u_isLinearRec2020', 'u_hasMasterCurve', 'u_hasRgbCurves'
     ];
     for (const u of uniforms) {
@@ -870,8 +893,9 @@ export class WebGLRenderer {
     ]);
 
     const vbo = gl.createBuffer();
+    this.vbo = vbo;
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
 
     const aPos = gl.getAttribLocation(this.program, 'a_position');
     const aTex = gl.getAttribLocation(this.program, 'a_texCoord');
@@ -881,6 +905,70 @@ export class WebGLRenderer {
 
     gl.enableVertexAttribArray(aTex);
     gl.vertexAttribPointer(aTex, 2, gl.FLOAT, false, 16, 8);
+  }
+
+  public updateQuadGeometry(
+    rotation: number = 0,
+    flipH: boolean = false,
+    flipV: boolean = false,
+    crop: { left: number; top: number; right: number; bottom: number } = { left: 0, top: 0, right: 1, bottom: 1 },
+    cropModeActive: boolean = false
+  ) {
+    if (!this.vbo) return;
+    const effectiveCrop = cropModeActive ? { left: 0, top: 0, right: 1, bottom: 1 } : crop;
+    if (
+      this.currentRotation === rotation &&
+      this.currentFlipH === flipH &&
+      this.currentFlipV === flipV &&
+      this.currentCropModeActive === cropModeActive &&
+      this.currentCrop.left === effectiveCrop.left &&
+      this.currentCrop.top === effectiveCrop.top &&
+      this.currentCrop.right === effectiveCrop.right &&
+      this.currentCrop.bottom === effectiveCrop.bottom
+    ) {
+      return;
+    }
+    this.currentRotation = rotation;
+    this.currentFlipH = flipH;
+    this.currentFlipV = flipV;
+    this.currentCropModeActive = cropModeActive;
+    this.currentCrop = { ...effectiveCrop };
+
+    const rot = ((rotation % 360) + 360) % 360;
+    const mapScreenToTex = (xs: number, ys: number): [number, number] => {
+      switch (rot) {
+        case 90: return [ys, 1.0 - xs];
+        case 180: return [1.0 - xs, 1.0 - ys];
+        case 270: return [1.0 - ys, xs];
+        default: return [xs, ys];
+      }
+    };
+
+    let tl = mapScreenToTex(effectiveCrop.left, effectiveCrop.top);
+    let tr = mapScreenToTex(effectiveCrop.right, effectiveCrop.top);
+    let bl = mapScreenToTex(effectiveCrop.left, effectiveCrop.bottom);
+    let br = mapScreenToTex(effectiveCrop.right, effectiveCrop.bottom);
+
+    if (flipH) {
+      const tmpT = tl; tl = tr; tr = tmpT;
+      const tmpB = bl; bl = br; br = tmpB;
+    }
+    if (flipV) {
+      const tmpL = tl; tl = bl; bl = tmpL;
+      const tmpR = tr; tr = br; br = tmpR;
+    }
+
+    // Quad geometry matching TRIANGLE_STRIP: (-1, -1), (1, -1), (-1, 1), (1, 1)
+    const vertices = new Float32Array([
+      -1, -1,  bl[0], bl[1],
+       1, -1,  br[0], br[1],
+      -1,  1,  tl[0], tl[1],
+       1,  1,  tr[0], tr[1],
+    ]);
+
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
   }
 
   private initLutTextures() {
@@ -914,6 +1002,8 @@ export class WebGLRenderer {
 
   public uploadImage(image: HTMLImageElement | HTMLCanvasElement | ImageBitmap | ImageData) {
     this.isLinearRec2020 = false;
+    this.texWidth = (image as any).width || 1920;
+    this.texHeight = (image as any).height || 1080;
     const gl = this.gl;
     if (!this.texture) {
       this.texture = gl.createTexture();
@@ -935,6 +1025,8 @@ export class WebGLRenderer {
 
   public uploadLinearRec2020Texture(width: number, height: number, data: Uint16Array) {
     this.isLinearRec2020 = true;
+    this.texWidth = width;
+    this.texHeight = height;
     const gl = this.gl;
     gl.getExtension('EXT_color_buffer_float');
 
@@ -1000,13 +1092,85 @@ export class WebGLRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
-  public render(edits: EditSettingsPayload, isOriginal: boolean = false) {
+  public computeFitScale(
+    rotation: number = 0,
+    crop: { left: number; top: number; right: number; bottom: number } = { left: 0, top: 0, right: 1, bottom: 1 },
+    cropModeActive: boolean = false
+  ): { fitScaleX: number; fitScaleY: number } {
+    const isOrthogonal = (rotation === 90 || rotation === 270);
+    const origW = isOrthogonal ? this.texHeight : this.texWidth;
+    const origH = isOrthogonal ? this.texWidth : this.texHeight;
+    const cropW = cropModeActive ? 1.0 : Math.max(0.01, (crop.right ?? 1.0) - (crop.left ?? 0.0));
+    const cropH = cropModeActive ? 1.0 : Math.max(0.01, (crop.bottom ?? 1.0) - (crop.top ?? 0.0));
+    const dispW = Math.max(1, origW * cropW);
+    const dispH = Math.max(1, origH * cropH);
+    const imgAspect = dispW / dispH;
+
+    const viewW = this.gl.canvas.width;
+    const viewH = this.gl.canvas.height;
+    const viewAspect = (viewW > 0 && viewH > 0) ? (viewW / viewH) : imgAspect;
+
+    let fitScaleX = 1.0;
+    let fitScaleY = 1.0;
+    if (viewAspect > imgAspect) {
+      fitScaleY = 1.0;
+      fitScaleX = (viewH * imgAspect) / Math.max(viewW, 1);
+    } else {
+      fitScaleX = 1.0;
+      fitScaleY = (viewW / imgAspect) / Math.max(viewH, 1);
+    }
+    return { fitScaleX, fitScaleY };
+  }
+
+  public render(
+    edits: EditSettingsPayload,
+    isOriginal: boolean = false,
+    zoomScale: number = 1.0,
+    panOffset: { x: number; y: number } = { x: 0, y: 0 },
+    cropModeActive: boolean = false
+  ) {
     const gl = this.gl;
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     gl.clearColor(0.05, 0.06, 0.08, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.useProgram(this.program);
+
+    this.updateQuadGeometry(
+      edits.rotation ?? 0,
+      edits.flip_horizontal ?? false,
+      edits.flip_vertical ?? false,
+      {
+        left: edits.crop_left ?? 0.0,
+        top: edits.crop_top ?? 0.0,
+        right: edits.crop_right ?? 1.0,
+        bottom: edits.crop_bottom ?? 1.0,
+      },
+      cropModeActive
+    );
+
+    const { fitScaleX, fitScaleY } = this.computeFitScale(
+      edits.rotation ?? 0,
+      {
+        left: edits.crop_left ?? 0.0,
+        top: edits.crop_top ?? 0.0,
+        right: edits.crop_right ?? 1.0,
+        bottom: edits.crop_bottom ?? 1.0,
+      },
+      cropModeActive
+    );
+
+    // Zoom & Pan & Fit Scale
+    gl.uniform2f(this.uLocs['u_fitScale'], fitScaleX, fitScaleY);
+    gl.uniform1f(this.uLocs['u_zoomScale'], zoomScale);
+    gl.uniform2f(this.uLocs['u_panOffset'], panOffset.x, panOffset.y);
+
+    // Crop Coordinates
+    gl.uniform1f(this.uLocs['u_cropLeft'], edits.crop_left ?? 0.0);
+    gl.uniform1f(this.uLocs['u_cropTop'], edits.crop_top ?? 0.0);
+    gl.uniform1f(this.uLocs['u_cropRight'], edits.crop_right ?? 1.0);
+    gl.uniform1f(this.uLocs['u_cropBottom'], edits.crop_bottom ?? 1.0);
+    gl.uniform1i(this.uLocs['u_cropModeActive'], cropModeActive ? 1 : 0);
 
     if (this.texture) {
       gl.activeTexture(gl.TEXTURE0);

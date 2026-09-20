@@ -10,6 +10,7 @@ export interface ImageMetadata {
   focal_length?: number;
   date_time?: string;
   taken_time?: number;
+  orientation?: number;
   raw_width?: number;
   raw_height?: number;
 }

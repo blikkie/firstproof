@@ -174,10 +174,7 @@ body.darkroom-body {
 #darkroom-canvas {
   width: 100%;
   height: 100%;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: block;
 }
 
 /* Spinner Overlay */
@@ -347,6 +344,8 @@ body.darkroom-body {
   height: 60px;
   object-fit: cover;
   background-color: #000;
+  transition: transform 0.15s ease;
+  transform-origin: center center;
 }
 
 .thumb-title {
@@ -1383,5 +1382,190 @@ kbd {
     width: 16px;
     height: 16px;
   }
+}
+
+/* Header button group */
+.header-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background-color: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.header-btn-group .btn-icon {
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.header-btn-group .btn-icon:hover {
+  background-color: var(--surface-hover);
+}
+
+/* Floating Zoom Readout Badge */
+.zoom-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  background: rgba(14, 16, 20, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e4e9;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.zoom-badge:hover {
+  background: rgba(26, 30, 38, 0.92);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+.zoom-badge.is-zoomed,
+.zoom-badge.zoomed {
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #60a5fa;
+  background: rgba(14, 25, 45, 0.85);
+}
+
+/* General utility */
+.hidden {
+  display: none !important;
+}
+
+/* Interactive Crop Tool & Overlay (Mac App Parity) */
+.crop-overlay {
+  position: absolute;
+  z-index: 20;
+  pointer-events: auto;
+  user-select: none;
+}
+.crop-overlay.hidden {
+  display: none !important;
+}
+.crop-svg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.crop-box-border {
+  stroke: #ffffff;
+  stroke-width: 1.5px;
+  fill: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+}
+.crop-grid-line {
+  stroke: rgba(255, 255, 255, 0.65);
+  stroke-width: 0.75px;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+.crop-handle-corner {
+  stroke: #ffffff;
+  stroke-width: 3.5px;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  fill: none;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.75));
+  pointer-events: none;
+}
+.crop-handle-edge {
+  fill: #ffffff;
+  stroke: rgba(0, 0, 0, 0.5);
+  stroke-width: 0.5px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+  pointer-events: none;
+}
+.crop-gesture-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* Floating Bottom Action HUD Bar (Mac App Parity) */
+.crop-toolbar {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(14, 16, 20, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 8px 14px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 30;
+  white-space: nowrap;
+}
+.crop-toolbar.hidden {
+  display: none !important;
+}
+.crop-toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+.crop-aspect-select {
+  padding: 4px 8px;
+  font-size: 11px;
+  height: 28px;
+  background-color: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.btn-crop-action {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+.btn-crop-action:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+.btn-crop-done {
+  background: var(--accent-blue, #3b82f6);
+  color: #ffffff;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+.btn-crop-done:hover {
+  background: #2563eb;
 }
 

@@ -8,6 +8,13 @@ const DB_NAME = 'firstproof_cache_v1';
 const STORE_NAME = 'thumbnails';
 const DB_VERSION = 1;
 
+export interface CachedThumbnail {
+  blob: Blob;
+  rotation?: number;
+  flipH?: boolean;
+  flipV?: boolean;
+}
+
 export class ThumbnailCacheStore {
   private static dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -38,9 +45,9 @@ export class ThumbnailCacheStore {
   }
 
   /**
-   * Retrieve cached image Blob by unique photo key (`${name}_${size}_${mtime}`)
+   * Retrieve cached image Blob or CachedThumbnail record by unique photo key (`${name}_${size}_${mtime}`)
    */
-  static async get(key: string): Promise<Blob | null> {
+  static async get(key: string): Promise<CachedThumbnail | Blob | null> {
     try {
       const db = await this.getDB();
       return new Promise((resolve) => {
@@ -62,15 +69,15 @@ export class ThumbnailCacheStore {
   }
 
   /**
-   * Save image Blob to IndexedDB
+   * Save image Blob or CachedThumbnail record to IndexedDB
    */
-  static async set(key: string, blob: Blob): Promise<void> {
+  static async set(key: string, data: CachedThumbnail | Blob): Promise<void> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        const req = store.put(blob, key);
+        const req = store.put(data, key);
 
         req.onsuccess = () => resolve();
         req.onerror = (e) => reject((e.target as IDBRequest).error);

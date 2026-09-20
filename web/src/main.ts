@@ -4,6 +4,7 @@ import { FolderIntake, PhotoFileEntry } from './FolderIntake';
 import { ToneCurveWidget } from './ToneCurveWidget';
 import { ThumbnailCacheStore } from './ThumbnailCacheStore';
 import { ParityModal } from './parity/ParityModal';
+import { CropController, CropRect } from './CropController';
 import {
   formatAperture,
   formatShutterSpeed,
@@ -12,6 +13,21 @@ import {
   formatExposure,
   formatDimensions
 } from './utils/formatters';
+import { readExifOrientationFromBlob } from './utils/exifReader';
+
+export function decodeExifOrientation(orientation?: number): { rotation: number; flipH: boolean; flipV: boolean } {
+  switch (orientation) {
+    case 1: return { rotation: 0, flipH: false, flipV: false };
+    case 2: return { rotation: 0, flipH: true, flipV: false };
+    case 3: return { rotation: 180, flipH: false, flipV: false };
+    case 4: return { rotation: 180, flipH: true, flipV: false };
+    case 5: return { rotation: 90, flipH: true, flipV: false };
+    case 6: return { rotation: 90, flipH: false, flipV: false };
+    case 7: return { rotation: 270, flipH: true, flipV: false };
+    case 8: return { rotation: 270, flipH: false, flipV: false };
+    default: return { rotation: 0, flipH: false, flipV: false };
+  }
+}
 
 interface ActiveSliderScrub {
   id: string;
@@ -33,14 +49,15 @@ class DarkroomApp {
   private renderer!: WebGLRenderer;
   private curveWidget!: ToneCurveWidget;
   private parityModal: ParityModal = new ParityModal();
+  private cropController!: CropController;
 
   private fileEntries: PhotoFileEntry[] = [];
   private activeIdx: number = -1;
   private dirHandle: any = null;
   private activeScrub: ActiveSliderScrub | null = null;
 
-  // Edit Settings state
   private edits: EditSettingsPayload = this.getDefaultEdits();
+  private cardRotations: Map<number, { rotation: number; flipH: boolean; flipV: boolean }> = new Map();
   private isOriginalPeek: boolean = false;
   private currentMetadata: any = {};
   private currentRating: number = 0;
@@ -51,6 +68,16 @@ class DarkroomApp {
   private preloadDebounceTimer: any = null;
   private thumbLoadingSet: Set<number> = new Set();
   private prewarmLoadingSet: Set<number> = new Set();
+
+  // Zoom & Pan state (100% 1:1 sensor pixel peeping)
+  private zoomScale: number = 1.0;
+  private panOffset: { x: number; y: number } = { x: 0, y: 0 };
+  private isPanning: boolean = false;
+  private panStartPos: { x: number; y: number } = { x: 0, y: 0 };
+  private panStartOffset: { x: number; y: number } = { x: 0, y: 0 };
+
+  // Crop & Straighten tool state
+  private isCropActive: boolean = false;
 
   private activeLinearData: Uint16Array | null = null;
   private activeLinearW: number = 0;
@@ -304,7 +331,21 @@ class DarkroomApp {
     const initialLut = this.bridge.evaluateCurves(this.edits.curves);
     this.renderer.updateToneCurvesLut(initialLut);
 
-    // 4. Bind UI Controls & Shortcuts
+    // 4. Init Interactive Crop Controller
+    this.cropController = new CropController('crop-overlay', {
+      onCropUpdate: (crop) => {
+        this.edits.crop_left = crop.left;
+        this.edits.crop_top = crop.top;
+        this.edits.crop_right = crop.right;
+        this.edits.crop_bottom = crop.bottom;
+        this.renderCanvas();
+      },
+      onDone: () => {
+        this.toggleCropMode(false);
+      }
+    });
+
+    // 5. Bind UI Controls & Shortcuts
     this.bindEvents();
     this.updateUI();
 
@@ -397,7 +438,8 @@ class DarkroomApp {
       'btn-pick', 'btn-reject', 'modal-shortcuts', 'btn-close-modal', 'select-tone-profile',
       'select-wb-preset', 'btn-wb-eyedropper', 'btn-white-point-picker', 'btn-black-point-picker',
       'select-emulsion', 'select-print-media', 'btn-reset-curve', 'btn-auto-tone',
-      'meta-input-title', 'meta-input-caption', 'meta-input-creator', 'meta-input-keywords'
+      'meta-input-title', 'meta-input-caption', 'meta-input-creator', 'meta-input-keywords',
+      'btn-crop-tool', 'btn-rotate-ccw', 'btn-rotate-cw', 'zoom-badge'
     ];
     for (const id of ids) {
       const el = document.getElementById(id);
@@ -548,6 +590,61 @@ class DarkroomApp {
         this.renderCanvas();
         this.autoSaveSidecar();
         this.toggleEyedropper(this.activeEyedropper);
+      }
+    });
+
+    // Header Crop & Rotation Tools
+    this.elements['btn-crop-tool']?.addEventListener('click', () => this.toggleCropMode());
+    this.elements['btn-rotate-ccw']?.addEventListener('click', () => this.rotateImage(-90));
+    this.elements['btn-rotate-cw']?.addEventListener('click', () => this.rotateImage(90));
+    this.elements['zoom-badge']?.addEventListener('click', () => this.togglePixelPeep());
+
+    // Canvas Double-Click to Pixel Peep (100% 1:1 sensor view)
+    canvas.addEventListener('dblclick', (e: MouseEvent) => {
+      if (this.isCropActive) return;
+      this.togglePixelPeep(e.clientX, e.clientY);
+    });
+
+    // Canvas Drag to Pan Viewport when zoomed
+    canvas.addEventListener('mousedown', (e: MouseEvent) => {
+      if (this.activeEyedropper) return;
+      if (this.isCropActive) return;
+      if (this.zoomScale > 1.05 && e.button === 0) {
+        this.isPanning = true;
+        this.panStartPos = { x: e.clientX, y: e.clientY };
+        this.panStartOffset = { ...this.panOffset };
+        canvas.style.cursor = 'grabbing';
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('mousemove', (e: MouseEvent) => {
+      if (this.isPanning) {
+        const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
+        const rect = wrapper ? wrapper.getBoundingClientRect() : canvas.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const dx = ((e.clientX - this.panStartPos.x) / (rect.width / 2));
+          const dy = -((e.clientY - this.panStartPos.y) / (rect.height / 2));
+          this.panOffset.x = this.panStartOffset.x + dx;
+          this.panOffset.y = this.panStartOffset.y + dy;
+          this.clampPanOffset();
+          this.renderCanvas();
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (this.isPanning) {
+        this.isPanning = false;
+        canvas.style.cursor = this.zoomScale > 1.05 ? 'grab' : 'default';
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      this.updateCanvasDimensions();
+      this.renderCanvas();
+      if (this.isCropActive) {
+        this.updateCropOverlayPosition();
       }
     });
 
@@ -846,10 +943,16 @@ class DarkroomApp {
 
     // Keyboard Shortcuts filter with FIRST-RESPONDER TEXT FIELD SHIELDING
     window.addEventListener('keydown', (e: KeyboardEvent) => {
-      // Escape key rolls back active scrubbing slider if one is active
+      // Escape key rolls back active scrubbing slider or exits active crop mode
       if (e.key === 'Escape') {
         if (this.activeScrub) {
           this.rollbackActiveScrub();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        if (this.isCropActive) {
+          this.toggleCropMode(false);
           e.preventDefault();
           e.stopPropagation();
           return;
@@ -906,6 +1009,10 @@ class DarkroomApp {
           this.autoSaveSidecar();
           break;
         case 'x': case 'X':
+          if (this.isCropActive) {
+            this.cropController.flipCropOrientation();
+            return;
+          }
           this.currentStatus = (this.currentStatus === 'Reject') ? 'Unflagged' : 'Reject';
           this.syncRatingFlagUI();
           this.autoSaveSidecar();
@@ -914,6 +1021,25 @@ class DarkroomApp {
           this.currentStatus = 'Unflagged';
           this.syncRatingFlagUI();
           this.autoSaveSidecar();
+          break;
+        case 'Enter':
+          if (this.isCropActive) {
+            this.toggleCropMode(false);
+          }
+          break;
+        case 'c': case 'C':
+          this.toggleCropMode();
+          break;
+        case 'z': case 'Z':
+          if (!this.isCropActive) {
+            this.togglePixelPeep();
+          }
+          break;
+        case '[':
+          this.rotateImage(-90);
+          break;
+        case ']':
+          this.rotateImage(90);
           break;
         case 'w': case 'W':
           this.toggleEyedropper('wb');
@@ -960,6 +1086,7 @@ class DarkroomApp {
       URL.revokeObjectURL(oldUrl);
     }
     this.thumbCache.clear();
+    this.cardRotations.clear();
 
     // Render Filmstrip Cards
     const filmstripScroll = this.elements['filmstrip-scroll'];
@@ -984,7 +1111,36 @@ class DarkroomApp {
 
       card.addEventListener('click', () => this.selectPhoto(idx, false));
       filmstripScroll.appendChild(card);
+
+      // Fast background EXIF orientation scan from raw byte slice (sub-0.1ms per image)
+      readExifOrientationFromBlob(entry.file).then(async (orientation) => {
+        if (this.fileEntries[idx] !== entry) return;
+        const exifOri = decodeExifOrientation(orientation);
+        let rot = exifOri.rotation;
+        let flipH = exifOri.flipH;
+        let flipV = exifOri.flipV;
+
+        const sidecarXml = await FolderIntake.readSidecarFromDisk(entry);
+        if (this.fileEntries[idx] !== entry) return;
+        if (sidecarXml) {
+          try {
+            const xmp = this.bridge.parseXmp(sidecarXml);
+            if (xmp.edits?.rotation !== undefined && xmp.edits?.rotation !== null) {
+              rot = xmp.edits.rotation;
+              flipH = xmp.edits.flip_horizontal ?? false;
+              flipV = xmp.edits.flip_vertical ?? false;
+            }
+          } catch (_) {}
+        }
+        this.updateThumbnailCardOrientation(idx, rot, flipH, flipV);
+      });
     });
+
+    // Eagerly begin loading thumbnails for the initial visible batch of cards
+    const initialBatch = Math.min(this.fileEntries.length, 12);
+    for (let i = 0; i < initialBatch; i++) {
+      this.loadThumbnailForCard(i);
+    }
 
     if (this.fileEntries.length > 0) {
       let initialIdx = 0;
@@ -1069,6 +1225,23 @@ class DarkroomApp {
     }
   }
 
+  private updateThumbnailCardOrientation(idx: number, rotation: number = 0, flipH: boolean = false, flipV: boolean = false) {
+    this.cardRotations.set(idx, { rotation, flipH, flipV });
+    const cardEl = document.getElementById(`thumb-card-${idx}`);
+    if (!cardEl) return;
+    const img = cardEl.querySelector('.thumb-img') as HTMLImageElement | null;
+    if (!img) return;
+
+    const rot = ((rotation % 360) + 360) % 360;
+    const transforms: string[] = [];
+    if (rot !== 0) transforms.push(`rotate(${rot}deg)`);
+    if (rot === 90 || rot === 270) transforms.push('scale(0.6667)');
+    if (flipH) transforms.push('scaleX(-1)');
+    if (flipV) transforms.push('scaleY(-1)');
+
+    img.style.transform = transforms.length > 0 ? transforms.join(' ') : 'none';
+  }
+
   private async loadThumbnailForCard(idx: number) {
     if (idx < 0 || idx >= this.fileEntries.length) return;
     if (this.thumbCache.has(idx) || this.thumbLoadingSet.has(idx)) return;
@@ -1078,27 +1251,89 @@ class DarkroomApp {
     this.thumbLoadingSet.add(idx);
     try {
       let previewUrl = this.thumbCache.get(idx);
+      let cardRot = 0;
+      let cardFlipH = false;
+      let cardFlipV = false;
+
+      const entry = this.fileEntries[idx];
+      const cacheKey = `${entry.name}_${entry.file.size}_${entry.file.lastModified}`;
+
       if (!previewUrl) {
-        const entry = this.fileEntries[idx];
-        const cacheKey = `${entry.name}_${entry.file.size}_${entry.file.lastModified}`;
-        const cachedBlob = await ThumbnailCacheStore.get(cacheKey);
-        if (cachedBlob) {
-          previewUrl = URL.createObjectURL(cachedBlob);
-          this.cacheThumbnail(idx, previewUrl);
-        } else {
-          const arrayBuffer = await entry.file.arrayBuffer();
-          const bytes = new Uint8Array(arrayBuffer);
-          const { imageSlice } = this.bridge.decodeImageBytes(bytes);
-          const previewBlob = new Blob([new Uint8Array(imageSlice)], { type: 'image/jpeg' });
-          previewUrl = URL.createObjectURL(previewBlob);
-          this.cacheThumbnail(idx, previewUrl);
-          await ThumbnailCacheStore.set(cacheKey, previewBlob);
+        const cached = await ThumbnailCacheStore.get(cacheKey);
+        if (cached) {
+          if (cached instanceof Blob) {
+            previewUrl = URL.createObjectURL(cached);
+          } else if ((cached as any).blob) {
+            previewUrl = URL.createObjectURL((cached as any).blob);
+            cardRot = (cached as any).rotation ?? 0;
+            cardFlipH = (cached as any).flipH ?? false;
+            cardFlipV = (cached as any).flipV ?? false;
+          }
+          if (previewUrl) {
+            this.cacheThumbnail(idx, previewUrl);
+          }
+        }
+      }
+
+      if (!previewUrl) {
+        const arrayBuffer = await entry.file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        const { imageSlice, preview } = this.bridge.decodeImageBytes(bytes);
+        const previewBlob = new Blob([new Uint8Array(imageSlice)], { type: 'image/jpeg' });
+        previewUrl = URL.createObjectURL(previewBlob);
+        this.cacheThumbnail(idx, previewUrl);
+
+        const orientation = preview.metadata?.orientation ?? 1;
+        const exifOri = decodeExifOrientation(orientation);
+        cardRot = exifOri.rotation;
+        cardFlipH = exifOri.flipH;
+        cardFlipV = exifOri.flipV;
+
+        // Check if adjacent XMP sidecar has custom rotation
+        const sidecarXml = await FolderIntake.readSidecarFromDisk(entry);
+        if (sidecarXml) {
+          try {
+            const xmp = this.bridge.parseXmp(sidecarXml);
+            if (xmp.edits?.rotation !== undefined && xmp.edits?.rotation !== null) {
+              cardRot = xmp.edits.rotation;
+              cardFlipH = xmp.edits.flip_horizontal ?? false;
+              cardFlipV = xmp.edits.flip_vertical ?? false;
+            }
+          } catch (_) {}
+        }
+
+        await ThumbnailCacheStore.set(cacheKey, {
+          blob: previewBlob,
+          rotation: cardRot,
+          flipH: cardFlipH,
+          flipV: cardFlipV,
+        });
+      } else if (!this.cardRotations.has(idx)) {
+        // If we only had a cached Blob without rotation, read fast EXIF orientation and sidecar
+        try {
+          const orientation = await readExifOrientationFromBlob(entry.file);
+          const exifOri = decodeExifOrientation(orientation);
+          cardRot = exifOri.rotation;
+          cardFlipH = exifOri.flipH;
+          cardFlipV = exifOri.flipV;
+        } catch (_) {}
+
+        const sidecarXml = await FolderIntake.readSidecarFromDisk(entry);
+        if (sidecarXml) {
+          try {
+            const xmp = this.bridge.parseXmp(sidecarXml);
+            if (xmp.edits?.rotation !== undefined && xmp.edits?.rotation !== null) {
+              cardRot = xmp.edits.rotation;
+              cardFlipH = xmp.edits.flip_horizontal ?? false;
+              cardFlipV = xmp.edits.flip_vertical ?? false;
+            }
+          } catch (_) {}
         }
       }
 
       const existingImg = cardEl.querySelector('img') as HTMLImageElement | null;
       if (existingImg) {
-        existingImg.src = previewUrl;
+        if (existingImg.src !== previewUrl) existingImg.src = previewUrl;
       } else {
         const img = document.createElement('img');
         img.className = 'thumb-img';
@@ -1106,6 +1341,13 @@ class DarkroomApp {
         const placeholder = cardEl.querySelector('.thumb-icon-placeholder');
         if (placeholder) placeholder.remove();
         cardEl.insertBefore(img, cardEl.firstChild);
+      }
+
+      const knownRot = this.cardRotations.get(idx);
+      if (knownRot) {
+        this.updateThumbnailCardOrientation(idx, knownRot.rotation, knownRot.flipH, knownRot.flipV);
+      } else {
+        this.updateThumbnailCardOrientation(idx, cardRot, cardFlipH, cardFlipV);
       }
     } catch (err) {
       console.warn(`[Thumbnail] Could not extract preview thumbnail for ${this.fileEntries[idx].name}:`, err);
@@ -1313,6 +1555,9 @@ class DarkroomApp {
           this.elements['meta-date-taken'].innerText = dateStr;
         }
 
+        const orientation = preview.metadata?.orientation ?? 1;
+        const exifOri = decodeExifOrientation(orientation);
+
         // Update filmstrip thumbnail
         const cardEl = document.getElementById(`thumb-card-${idx}`);
         if (cardEl) {
@@ -1322,12 +1567,17 @@ class DarkroomApp {
             previewUrl = URL.createObjectURL(previewBlob);
             this.cacheThumbnail(idx, previewUrl);
             const cacheKey = `${entry.name}_${entry.file.size}_${entry.file.lastModified}`;
-            ThumbnailCacheStore.set(cacheKey, previewBlob);
+            ThumbnailCacheStore.set(cacheKey, {
+              blob: previewBlob,
+              rotation: exifOri.rotation,
+              flipH: exifOri.flipH,
+              flipV: exifOri.flipV,
+            });
           }
 
           const existingImg = cardEl.querySelector('img') as HTMLImageElement | null;
           if (existingImg) {
-            existingImg.src = previewUrl;
+            if (existingImg.src !== previewUrl) existingImg.src = previewUrl;
           } else {
             const img = document.createElement('img');
             img.className = 'thumb-img';
@@ -1355,6 +1605,11 @@ class DarkroomApp {
         if (sidecarXml) {
           const xmp = this.bridge.parseXmp(sidecarXml);
           this.edits = { ...this.getDefaultEdits(), ...xmp.edits };
+          if (this.edits.rotation === undefined || this.edits.rotation === null) {
+            this.edits.rotation = exifOri.rotation;
+            this.edits.flip_horizontal = exifOri.flipH;
+            this.edits.flip_vertical = exifOri.flipV;
+          }
           this.currentRating = xmp.rating || 0;
           this.currentStatus = xmp.status || 'Unflagged';
           (this.elements['meta-input-title'] as HTMLInputElement).value = xmp.title || '';
@@ -1363,9 +1618,24 @@ class DarkroomApp {
           (this.elements['meta-input-keywords'] as HTMLInputElement).value = (xmp.keywords || []).join(', ');
         } else {
           this.edits = this.getDefaultEdits();
+          this.edits.rotation = exifOri.rotation;
+          this.edits.flip_horizontal = exifOri.flipH;
+          this.edits.flip_vertical = exifOri.flipV;
           this.currentRating = 0;
           this.currentStatus = 'Unflagged';
         }
+
+        // Apply updated orientation to thumbnail card in filmstrip
+        this.updateThumbnailCardOrientation(idx, this.edits.rotation, this.edits.flip_horizontal, this.edits.flip_vertical);
+
+        if (this.isCropActive) {
+          this.cropController.hide();
+          this.isCropActive = false;
+          this.elements['btn-crop-tool']?.classList.remove('active');
+        }
+        this.zoomScale = 1.0;
+        this.panOffset = { x: 0, y: 0 };
+        this.updateZoomUI();
 
         this.syncSliderUI();
         this.syncRatingFlagUI();
@@ -1420,9 +1690,7 @@ class DarkroomApp {
           this.renderer.uploadImage(imgBitmap);
         }
 
-        const maxDim = Math.min(Math.max(imgW, imgH), 3840);
-        canvas.width = imgW >= imgH ? maxDim : Math.round(maxDim * (imgW / imgH));
-        canvas.height = imgH > imgW ? maxDim : Math.round(maxDim * (imgH / imgW));
+        this.updateCanvasDimensions();
         this.onCurveChange(); // evaluate LUTs and render canvas
         const t4 = performance.now();
 
@@ -1470,17 +1738,248 @@ class DarkroomApp {
   }
 
   public resetAllEdits() {
+    const orientation = this.currentMetadata?.orientation ?? 1;
+    const exifOri = decodeExifOrientation(orientation);
     this.edits = this.getDefaultEdits();
+    this.edits.rotation = exifOri.rotation;
+    this.edits.flip_horizontal = exifOri.flipH;
+    this.edits.flip_vertical = exifOri.flipV;
+    if (this.activeIdx >= 0) {
+      this.updateThumbnailCardOrientation(this.activeIdx, exifOri.rotation, exifOri.flipH, exifOri.flipV);
+    }
+    if (this.isCropActive) {
+      this.cropController.resetCrop();
+    }
+    this.zoomScale = 1.0;
+    this.panOffset = { x: 0, y: 0 };
+    this.updateZoomUI();
     this.curveWidget.resetAllChannels();
     this.syncSliderUI();
+    this.updateCanvasDimensions();
     this.renderCanvas();
     this.autoSaveSidecar();
     console.log('⚡ [App] Reset all edits to as-shot defaults');
   }
 
+  private updateCanvasDimensions() {
+    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
+    const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
+    if (!canvas || !wrapper) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(wrapper.clientWidth * dpr));
+    const h = Math.max(1, Math.round(wrapper.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+  }
+
+  public rotateImage(deltaDeg: number) {
+    if (this.activeIdx < 0) return;
+    const curRot = this.edits.rotation ?? 0;
+    let newRot = (curRot + deltaDeg) % 360;
+    if (newRot < 0) newRot += 360;
+    this.edits.rotation = newRot;
+    this.updateThumbnailCardOrientation(this.activeIdx, newRot, this.edits.flip_horizontal, this.edits.flip_vertical);
+    this.updateCanvasDimensions();
+    this.renderCanvas();
+    this.autoSaveSidecar();
+    if (this.isCropActive) {
+      this.updateCropOverlayPosition();
+    }
+    console.log(`⚡ [App] Rotated photo to ${newRot}°`);
+  }
+
+  private getZoomScale100(): number {
+    const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
+    const isOrthogonal = (this.edits.rotation === 90 || this.edits.rotation === 270);
+    const sensorW = isOrthogonal
+      ? (this.currentMetadata?.raw_height || this.activeLinearH || this.activeSourceH || 1920)
+      : (this.currentMetadata?.raw_width || this.activeLinearW || this.activeSourceW || 1920);
+    const sensorH = isOrthogonal
+      ? (this.currentMetadata?.raw_width || this.activeLinearW || this.activeSourceW || 1920)
+      : (this.currentMetadata?.raw_height || this.activeLinearH || this.activeSourceH || 1080);
+    const imgAspect = sensorW / Math.max(sensorH, 1);
+
+    const viewW = wrapper?.clientWidth || 800;
+    const viewH = wrapper?.clientHeight || 600;
+    const viewAspect = viewW / Math.max(viewH, 1);
+
+    let baseQuadW: number;
+    if (viewAspect > imgAspect) {
+      baseQuadW = viewH * imgAspect;
+    } else {
+      baseQuadW = viewW;
+    }
+
+    const scale = sensorW / Math.max(baseQuadW, 1);
+    return Math.max(1.5, Math.min(10.0, scale));
+  }
+
+  public togglePixelPeep(clientX?: number, clientY?: number) {
+    if (this.activeIdx < 0 || this.isCropActive) return;
+    const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
+    if (!wrapper) return;
+
+    if (this.zoomScale > 1.05) {
+      // Return to fit
+      this.zoomScale = 1.0;
+      this.panOffset = { x: 0, y: 0 };
+    } else {
+      // Zoom 100% 1:1 sensor view
+      const targetScale = this.getZoomScale100();
+      this.zoomScale = targetScale;
+
+      if (clientX !== undefined && clientY !== undefined) {
+        const rect = wrapper.getBoundingClientRect();
+        const ndcX = ((clientX - rect.left) / rect.width) * 2.0 - 1.0;
+        const ndcY = -(((clientY - rect.top) / rect.height) * 2.0 - 1.0);
+        this.panOffset = {
+          x: ndcX * (1.0 - targetScale),
+          y: ndcY * (1.0 - targetScale)
+        };
+        this.clampPanOffset();
+      } else {
+        this.panOffset = { x: 0, y: 0 };
+      }
+    }
+
+    this.updateZoomUI();
+    this.renderCanvas();
+  }
+
+  private clampPanOffset() {
+    const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
+    const isOrthogonal = (this.edits.rotation === 90 || this.edits.rotation === 270);
+    const origW = isOrthogonal ? (this.activeLinearH || this.activeSourceH || 1920) : (this.activeLinearW || this.activeSourceW || 1920);
+    const origH = isOrthogonal ? (this.activeLinearW || this.activeSourceW || 1920) : (this.activeLinearH || this.activeSourceH || 1080);
+    const cL = this.isCropActive ? 0.0 : (this.edits.crop_left ?? 0.0);
+    const cT = this.isCropActive ? 0.0 : (this.edits.crop_top ?? 0.0);
+    const cR = this.isCropActive ? 1.0 : (this.edits.crop_right ?? 1.0);
+    const cB = this.isCropActive ? 1.0 : (this.edits.crop_bottom ?? 1.0);
+    const dispW = Math.max(1, origW * (cR - cL));
+    const dispH = Math.max(1, origH * (cB - cT));
+    const imgAspect = dispW / dispH;
+
+    const viewW = wrapper?.clientWidth || 800;
+    const viewH = wrapper?.clientHeight || 600;
+    const viewAspect = viewW / Math.max(viewH, 1);
+
+    let fitScaleX = 1.0;
+    let fitScaleY = 1.0;
+    if (viewAspect > imgAspect) {
+      fitScaleY = 1.0;
+      fitScaleX = (viewH * imgAspect) / Math.max(viewW, 1);
+    } else {
+      fitScaleX = 1.0;
+      fitScaleY = (viewW / imgAspect) / Math.max(viewH, 1);
+    }
+
+    const effW = fitScaleX * this.zoomScale;
+    const effH = fitScaleY * this.zoomScale;
+    const maxPanX = Math.max(0, effW - 1.0);
+    const maxPanY = Math.max(0, effH - 1.0);
+
+    this.panOffset.x = Math.max(-maxPanX, Math.min(maxPanX, this.panOffset.x));
+    this.panOffset.y = Math.max(-maxPanY, Math.min(maxPanY, this.panOffset.y));
+  }
+
+  private updateZoomUI() {
+    const badge = this.elements['zoom-badge'];
+    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
+    if (badge) {
+      if (this.zoomScale <= 1.05) {
+        badge.innerText = 'Fit';
+        badge.classList.remove('zoomed');
+      } else {
+        badge.innerText = `${Math.round(this.zoomScale * 100)}%`;
+        badge.classList.add('zoomed');
+      }
+    }
+    if (canvas) {
+      canvas.style.cursor = this.zoomScale > 1.05 ? 'grab' : 'default';
+    }
+  }
+
+  public toggleCropMode(force?: boolean) {
+    if (this.activeIdx < 0) return;
+    const nextState = force !== undefined ? force : !this.isCropActive;
+    if (this.isCropActive === nextState) return;
+    this.isCropActive = nextState;
+
+    const btnCrop = this.elements['btn-crop-tool'];
+    btnCrop?.classList.toggle('active', this.isCropActive);
+
+    if (this.isCropActive) {
+      // Reset zoom to fit during crop mode
+      this.zoomScale = 1.0;
+      this.panOffset = { x: 0, y: 0 };
+      this.updateZoomUI();
+
+      this.updateCanvasDimensions();
+      this.renderCanvas();
+
+      requestAnimationFrame(() => {
+        this.updateCropOverlayPosition();
+        const isOrthogonal = (this.edits.rotation === 90 || this.edits.rotation === 270);
+        const w = isOrthogonal ? (this.activeLinearH || this.activeSourceH || 1) : (this.activeLinearW || this.activeSourceW || 1);
+        const h = isOrthogonal ? (this.activeLinearW || this.activeSourceW || 1) : (this.activeLinearH || this.activeSourceH || 1);
+        const aspect = w / h;
+        this.cropController.show({
+          left: this.edits.crop_left ?? 0.0,
+          top: this.edits.crop_top ?? 0.0,
+          right: this.edits.crop_right ?? 1.0,
+          bottom: this.edits.crop_bottom ?? 1.0,
+        }, aspect);
+      });
+    } else {
+      this.cropController.hide();
+      this.updateCanvasDimensions();
+      this.renderCanvas();
+      this.autoSaveSidecar();
+    }
+  }
+
+  private updateCropOverlayPosition() {
+    const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
+    if (!wrapper) return;
+
+    let imgW = this.activeLinearW || this.activeSourceW || 1920;
+    let imgH = this.activeLinearH || this.activeSourceH || 1080;
+    const isOrthogonal = (this.edits.rotation === 90 || this.edits.rotation === 270);
+    const dispW = isOrthogonal ? imgH : imgW;
+    const dispH = isOrthogonal ? imgW : imgH;
+    const imgAspect = dispW / Math.max(dispH, 1);
+
+    const viewW = wrapper.clientWidth;
+    const viewH = wrapper.clientHeight;
+    const viewAspect = viewW / Math.max(viewH, 1);
+
+    let renderW: number;
+    let renderH: number;
+    if (viewAspect > imgAspect) {
+      renderH = viewH;
+      renderW = renderH * imgAspect;
+    } else {
+      renderW = viewW;
+      renderH = renderW / imgAspect;
+    }
+
+    const left = (viewW - renderW) / 2.0;
+    const top = (viewH - renderH) / 2.0;
+
+    this.cropController.updatePosition({ left, top, width: renderW, height: renderH });
+  }
+
   private renderCanvas() {
     if (this.activeIdx >= 0) {
-      this.renderer.render(this.edits, this.isOriginalPeek);
+      this.renderer.render(
+        this.edits,
+        this.isOriginalPeek,
+        this.zoomScale,
+        this.panOffset,
+        this.isCropActive
+      );
     }
   }
 
@@ -1619,6 +2118,13 @@ class DarkroomApp {
     if (e.tone_profile !== d.tone_profile) return true;
     if (e.emulsion_archetype !== d.emulsion_archetype) return true;
     if (e.print_media !== d.print_media) return true;
+    if (Math.abs((e.crop_left ?? 0.0) - 0.0) > 1e-4) return true;
+    if (Math.abs((e.crop_top ?? 0.0) - 0.0) > 1e-4) return true;
+    if (Math.abs((e.crop_right ?? 1.0) - 1.0) > 1e-4) return true;
+    if (Math.abs((e.crop_bottom ?? 1.0) - 1.0) > 1e-4) return true;
+    const orientation = this.currentMetadata?.orientation ?? 1;
+    const exifOri = decodeExifOrientation(orientation);
+    if ((e.rotation ?? 0) !== exifOri.rotation) return true;
 
     return false;
   }
@@ -1658,10 +2164,15 @@ class DarkroomApp {
 
   private exportProofJpeg() {
     const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
-    if (canvas) {
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    if (canvas && this.activeIdx >= 0) {
+      // Temporarily render clean final proof frame (fit zoom, crop active = false)
+      this.renderer.render(this.edits, false, 1.0, { x: 0, y: 0 }, false);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      // Restore current active viewport zoom/crop state
+      this.renderCanvas();
+
       const link = document.createElement('a');
-      const filename = this.activeIdx >= 0 ? `${this.fileEntries[this.activeIdx].name}_proof.jpg` : 'firstproof_proof.jpg';
+      const filename = `${this.fileEntries[this.activeIdx].name}_proof.jpg`;
       link.download = filename;
       link.href = dataUrl;
       link.click();

@@ -38,6 +38,20 @@
           Original (\)
         </button>
 
+        <button id="btn-crop-tool" class="btn btn-secondary" title="Interactive Crop & Straighten (C)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+          <span class="btn-text">Crop (C)</span>
+        </button>
+
+        <div class="header-btn-group">
+          <button id="btn-rotate-ccw" class="btn btn-icon" title="Rotate 90° CCW ([)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          </button>
+          <button id="btn-rotate-cw" class="btn btn-icon" title="Rotate 90° CW (])">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.99 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+          </button>
+        </div>
+
         <button id="btn-export-proof" class="btn btn-secondary" title="Export high-resolution JPEG proof directly from WebGL canvas">
           Export Proof
         </button>
@@ -59,6 +73,67 @@
       <main class="viewport-main">
         <div class="canvas-wrapper" id="canvas-wrapper">
           <canvas id="darkroom-canvas"></canvas>
+          
+          <!-- Floating Zoom Badge -->
+          <div id="zoom-badge" class="zoom-badge" title="Double click or press Z to toggle 100% Pixel Peeping">Fit</div>
+
+          <!-- Interactive Crop Overlay -->
+          <div id="crop-overlay" class="crop-overlay hidden">
+            <svg id="crop-svg" class="crop-svg" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <mask id="crop-mask">
+                  <rect width="100%" height="100%" fill="white" />
+                  <rect id="crop-mask-cutout" x="0" y="0" width="0" height="0" fill="black" />
+                </mask>
+              </defs>
+              <rect width="100%" height="100%" fill="rgba(0, 0, 0, 0.55)" mask="url(#crop-mask)" />
+              <line id="crop-grid-h1" class="crop-grid-line" />
+              <line id="crop-grid-h2" class="crop-grid-line" />
+              <line id="crop-grid-v1" class="crop-grid-line" />
+              <line id="crop-grid-v2" class="crop-grid-line" />
+              <rect id="crop-box-border" class="crop-box-border" />
+              
+              <!-- 4 Corner L-Brackets (18x18, 3.5px stroke - Mac App Parity) -->
+              <path id="handle-tl" class="crop-handle-corner" />
+              <path id="handle-tr" class="crop-handle-corner" />
+              <path id="handle-bl" class="crop-handle-corner" />
+              <path id="handle-br" class="crop-handle-corner" />
+
+              <!-- 4 Edge Capsules (26x5 / 5x26 white pills - Mac App Parity) -->
+              <rect id="handle-t" class="crop-handle-edge" rx="2.5" ry="2.5" />
+              <rect id="handle-b" class="crop-handle-edge" rx="2.5" ry="2.5" />
+              <rect id="handle-l" class="crop-handle-edge" rx="2.5" ry="2.5" />
+              <rect id="handle-r" class="crop-handle-edge" rx="2.5" ry="2.5" />
+            </svg>
+            <div id="crop-gesture-surface" class="crop-gesture-surface"></div>
+          </div>
+
+          <!-- Floating Crop Action HUD Bar (Pinned to bottom of viewport, Mac App Parity) -->
+          <div id="crop-toolbar" class="crop-toolbar hidden">
+            <select id="select-crop-aspect" class="select-input crop-aspect-select">
+              <option value="original" selected>Original Aspect</option>
+              <option value="free">Freeform</option>
+              <option value="1:1">1:1 Square</option>
+              <option value="3:2">3:2 (35mm)</option>
+              <option value="4:3">4:3 (Medium Format)</option>
+              <option value="16:9">16:9 Widescreen</option>
+            </select>
+
+            <div class="crop-toolbar-divider"></div>
+
+            <button id="btn-crop-flip" class="btn-crop-action" title="Flip Aspect Orientation between Landscape and Portrait (X)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+              Flip (X)
+            </button>
+
+            <div class="crop-toolbar-divider"></div>
+
+            <button id="btn-crop-reset" class="btn-crop-action" title="Reset crop to full frame">Reset</button>
+
+            <div class="crop-toolbar-divider"></div>
+
+            <button id="btn-crop-done" class="btn-crop-done" title="Commit Crop and exit (Return)">Done ↵</button>
+          </div>
           
           <!-- Developing / Decoding Spinner Overlay -->
           <div id="developing-spinner" class="spinner-overlay hidden">
@@ -467,6 +542,10 @@
       </div>
       <div class="modal-body">
         <table class="shortcuts-table">
+          <tr><td><kbd>Z</kbd> / Double Click</td><td>Toggle 100% Pixel Peep (1:1 Sensor Resolution)</td></tr>
+          <tr><td><kbd>C</kbd></td><td>Toggle Interactive Crop & Straighten Tool</td></tr>
+          <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Rotate 90° CCW / CW (Camera EXIF Orientation)</td></tr>
+          <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd></td><td>Reset All Edits to As-Shot</td></tr>
           <tr><td><kbd>1</kbd> .. <kbd>5</kbd></td><td>Set Star Rating (1 to 5 Stars)</td></tr>
           <tr><td><kbd>0</kbd></td><td>Clear Star Rating</td></tr>
           <tr><td><kbd>P</kbd></td><td>Set Pick Flag</td></tr>
