@@ -141,3 +141,10 @@ This archive tracks completed stories and features moved from the active backlog
 - **Native Engine Intake & Binning Enhancements (`firstproof-core`)**:
   - Backported sub-millisecond TIFF IFD preview extraction into `raw.rs` (`extract_preview_slice`), replacing brute-force multi-megabyte linear byte scans with direct 0.3ms IFD/SubIFD directory lookups.
   - Optimized 2×2 Bayer binning in `decode.rs` with contiguous row slicing and hoisted CFA pattern matching outside inner pixel loops across both NEON SIMD and Rayon parallel paths.
+- **macOS Slider Boundaries, Mired Scaling & Conservative Auto Tone (`firstproof-types/auto.rs`, `web/`)**:
+  - Extracted conservative auto tone solver (Zone System log-geometric mean, $P_{50}$ median anchoring, $P_{98}$ specular ceiling safeguard, $65\%$ damping) and Gray-World auto white balance into shared `firstproof-types::auto`.
+  - Re-exported auto solvers in `firstproof-wasm` and `firstproof-core`, eliminating math duplication.
+  - Implemented perceptual Mired non-linear color temperature mapping ($2000\text{K} \to 20000\text{K}$, $50\text{K}/200\text{K}$ stepping) providing uniform visual sensitivity across daylight and tungsten regions.
+  - Aligned all develop slider boundaries with macOS desktop app (Exposure $\pm 3.0\,\text{EV}$, Tint $\pm 200$, Warmth $\pm 100$, Process Depth $0..100\%$).
+  - Added Detail & Sharpening workspace and <kbd>Cmd+U</kbd> / <kbd>Ctrl+U</kbd> keyboard shortcut for instant auto tone leveling.
+
