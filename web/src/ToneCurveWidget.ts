@@ -1,4 +1,4 @@
-import { CurvePoint, ToneCurvesPayload, WasmBridge } from './WasmBridge';
+import { CurvePoint, EvaluatedLut, ToneCurvesPayload, WasmBridge } from './WasmBridge';
 
 export class ToneCurveWidget {
   private canvas: HTMLCanvasElement;
@@ -40,6 +40,15 @@ export class ToneCurveWidget {
 
   public resetCurrentChannel() {
     this.points[this.channel] = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+    this.render();
+    this.onChange();
+  }
+
+  public resetAllChannels() {
+    this.points.master = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+    this.points.red = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+    this.points.green = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+    this.points.blue = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
     this.render();
     this.onChange();
   }
@@ -100,6 +109,59 @@ export class ToneCurveWidget {
         this.render();
       }
     });
+
+    this.canvas.addEventListener('dblclick', (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = (e.clientX - rect.left) / rect.width;
+      const my = 1.0 - (e.clientY - rect.top) / rect.height;
+
+      const pts = this.points[this.channel];
+      let found = -1;
+      for (let i = 0; i < pts.length; i++) {
+        const dx = pts[i].x - mx;
+        const dy = pts[i].y - my;
+        if (Math.sqrt(dx * dx + dy * dy) < 0.08) {
+          found = i;
+          break;
+        }
+      }
+
+      if (found >= 0) {
+        if (found === 0) {
+          pts[0].y = 0;
+        } else if (found === pts.length - 1) {
+          pts[pts.length - 1].y = 1;
+        } else {
+          pts.splice(found, 1);
+        }
+        this.render();
+        this.onChange();
+      }
+    });
+
+    this.canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = (e.clientX - rect.left) / rect.width;
+      const my = 1.0 - (e.clientY - rect.top) / rect.height;
+
+      const pts = this.points[this.channel];
+      let found = -1;
+      for (let i = 0; i < pts.length; i++) {
+        const dx = pts[i].x - mx;
+        const dy = pts[i].y - my;
+        if (Math.sqrt(dx * dx + dy * dy) < 0.08) {
+          found = i;
+          break;
+        }
+      }
+
+      if (found > 0 && found < pts.length - 1) {
+        pts.splice(found, 1);
+        this.render();
+        this.onChange();
+      }
+    });
   }
 
   public render() {
@@ -124,52 +186,103 @@ export class ToneCurveWidget {
     // Draw active channel curve
     const pts = this.points[this.channel];
     const colors: Record<string, string> = {
-      master: '#f59e0b',
+      master: '#ffffff',
       red: '#ef4444',
       green: '#10b981',
       blue: '#3b82f6'
     };
     const strokeColor = colors[this.channel];
 
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-
-    // Draw active channel curve using exact WASM monotone cubic spline
-    let samples: number[] | null = null;
+    // Evaluate exact WASM monotone cubic spline
+    let lut: EvaluatedLut | null = null;
     try {
       const bridge = WasmBridge.getInstance();
-      const lut = bridge.evaluateCurves(this.getPoints());
-      samples = lut[this.channel];
+      lut = bridge.evaluateCurves(this.getPoints());
     } catch (_) {}
 
+    // 1. Ghost master curve if currently inspecting Red, Green, or Blue
+    if (this.channel !== 'master' && lut && lut['master'] && lut['master'].length === 256) {
+      const masterSamples = lut['master'];
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i < 256; i++) {
+        const cx = (i / 255.0) * w;
+        const cy = (1.0 - masterSamples[i]) * h;
+        if (i === 0) ctx.moveTo(cx, cy);
+        else ctx.lineTo(cx, cy);
+      }
+      ctx.stroke();
+    }
+
+    const samples = lut ? lut[this.channel] : null;
+
+    // 2. Subtle under-curve gradient fill (matching macOS ToneCurveView)
     if (samples && samples.length === 256) {
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      if (this.channel === 'master') {
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.12)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0.01)');
+      } else {
+        grad.addColorStop(0, `${strokeColor}28`);
+        grad.addColorStop(1, `${strokeColor}03`);
+      }
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let i = 0; i < 256; i++) {
+        const cx = (i / 255.0) * w;
+        const cy = (1.0 - samples[i]) * h;
+        ctx.lineTo(cx, cy);
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fill();
+
+      // 3. Active Channel Spline Line
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
       for (let i = 0; i < 256; i++) {
         const cx = (i / 255.0) * w;
         const cy = (1.0 - samples[i]) * h;
         if (i === 0) ctx.moveTo(cx, cy);
         else ctx.lineTo(cx, cy);
       }
+      ctx.stroke();
     } else {
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
       for (let i = 0; i < pts.length; i++) {
         const cx = pts[i].x * w;
         const cy = (1.0 - pts[i].y) * h;
         if (i === 0) ctx.moveTo(cx, cy);
         else ctx.lineTo(cx, cy);
       }
+      ctx.stroke();
     }
-    ctx.stroke();
 
-    // Control point dots
+    // 4. Interactive Control Points
     for (let i = 0; i < pts.length; i++) {
       const cx = pts[i].x * w;
       const cy = (1.0 - pts[i].y) * h;
-      ctx.fillStyle = (i === this.draggingIdx) ? '#ffffff' : strokeColor;
+      const isDragged = (i === this.draggingIdx);
+
+      // Outer aura when dragged
+      if (isDragged) {
+        ctx.fillStyle = this.channel === 'master' ? 'rgba(255, 255, 255, 0.35)' : `${strokeColor}44`;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = strokeColor;
       ctx.beginPath();
-      ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
+      ctx.arc(cx, cy, isDragged ? 5.5 : 4.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
     }
   }

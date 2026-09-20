@@ -152,6 +152,8 @@ This document strictly tracks pending and deferred features calibrated against o
     - <kbd>Escape</kbd> key drag rollback (cancels pending scrub and reverts value without pushing undo).
     - Double-click / double-tap reset on slider thumb and row labels.
     - Tabular lining numbers (`.monospacedDigit()`) across all inspector readout labels to eliminate width jitter.
+- **Persistent Heads-Up EXIF Badges (CAM / ISO / Aperture / Shutter)**:
+  - Adopt the web darkroom's fixed 4-badge EXIF summary element (`CAM`, `ISO`, `APERTURE`, `SHUTTER`) directly in macOS `PermanentHeaderCard` (`InspectorHeaderView.swift`) positioned above the segmented tabs, so essential capture parameters remain visible at a glance across every workspace tab.
 - **Cross-Platform Verification Gate**:
   - Verify 1:1 parameter boundaries, visual feedback, and keyboard/mouse interaction parity between native macOS and WebAssembly darkroom targets.
 

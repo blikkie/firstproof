@@ -9,6 +9,14 @@ import { ParityHarness, ParityAuditResult, ParityTestCase } from './ParityHarnes
 import { WebGLRenderer } from '../WebGLRenderer';
 import { EditSettingsPayload } from '../WasmBridge';
 
+export interface ActivePhotoInput {
+  isLinearRec2020: boolean;
+  width: number;
+  height: number;
+  linearData?: Uint16Array;
+  imageSource?: CanvasImageSource;
+}
+
 export class ParityModal {
   private harness: ParityHarness;
   private modalEl: HTMLDialogElement | null = null;
@@ -16,14 +24,22 @@ export class ParityModal {
   private activeTestIndex: number = 0;
   private activeRenderer: WebGLRenderer | null = null;
   private getActiveEdits: (() => EditSettingsPayload) | null = null;
+  private getActivePhoto: (() => ActivePhotoInput | null) | null = null;
 
   constructor() {
     this.harness = new ParityHarness(256, 256);
   }
 
-  public init(activeRenderer: WebGLRenderer, getActiveEdits: () => EditSettingsPayload) {
+  public init(
+    activeRenderer: WebGLRenderer,
+    getActiveEdits: () => EditSettingsPayload,
+    getActivePhoto?: () => ActivePhotoInput | null
+  ) {
     this.activeRenderer = activeRenderer;
     this.getActiveEdits = getActiveEdits;
+    if (getActivePhoto) {
+      this.getActivePhoto = getActivePhoto;
+    }
     this.injectModalHtml();
     this.bindEvents();
   }
@@ -210,32 +226,79 @@ export class ParityModal {
 
   public auditActivePhoto() {
     if (!this.activeRenderer || !this.getActiveEdits) return;
-    const mainCanvas = this.activeRenderer.getCanvas();
-    const w = Math.min(mainCanvas.width, 256);
-    const h = Math.min(mainCanvas.height, 256);
-
     const edits = this.getActiveEdits();
+    const photo = this.getActivePhoto ? this.getActivePhoto() : null;
 
-    // Create downsampled test case from active photo canvas
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = w;
-    tempCanvas.height = h;
-    const ctx = tempCanvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(mainCanvas, 0, 0, w, h);
+    let activeTestCase: ParityTestCase;
+
+    if (photo && photo.isLinearRec2020 && photo.linearData) {
+      // 1. Sample center 256x256 patch from the uncompressed 16-bit Linear Rec.2020 RAW sensor frame
+      const w = Math.min(photo.width, 256);
+      const h = Math.min(photo.height, 256);
+      const startX = Math.floor((photo.width - w) / 2);
+      const startY = Math.floor((photo.height - h) / 2);
+      const sampledLin = new Uint16Array(w * h * 4);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const srcIdx = ((startY + y) * photo.width + (startX + x)) * 4;
+          const dstIdx = (y * w + x) * 4;
+          sampledLin[dstIdx] = photo.linearData[srcIdx];
+          sampledLin[dstIdx + 1] = photo.linearData[srcIdx + 1];
+          sampledLin[dstIdx + 2] = photo.linearData[srcIdx + 2];
+          sampledLin[dstIdx + 3] = photo.linearData[srcIdx + 3];
+        }
+      }
+
+      activeTestCase = {
+        id: 'active_photo_raw',
+        name: 'Active RAW Frame (Linear Rec.2020) with Current Sliders',
+        category: 'active_photo',
+        edits,
+        isLinearRec2020: true,
+        textureWidth: w,
+        textureHeight: h,
+        createTexture: () => ({ data: sampledLin, width: w, height: h }),
+      };
+    } else if (photo && !photo.isLinearRec2020 && photo.imageSource) {
+      // 2. Sample from the unadjusted JPEG source image (not the already-rendered display canvas!)
+      const w = Math.min(photo.width, 256);
+      const h = Math.min(photo.height, 256);
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = w;
+      tempCanvas.height = h;
+      const ctx = tempCanvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(photo.imageSource, 0, 0, w, h);
+      }
+      const imgData = ctx?.getImageData(0, 0, w, h) || new ImageData(w, h);
+
+      activeTestCase = {
+        id: 'active_photo_jpeg',
+        name: 'Active Photo Frame (sRGB Source) with Current Sliders',
+        category: 'active_photo',
+        edits,
+        isLinearRec2020: false,
+        textureWidth: w,
+        textureHeight: h,
+        createTexture: () => imgData,
+      };
+    } else {
+      // 3. Fallback: No photo loaded yet — verify active sliders against Macbeth ColorChecker standard
+      const w = 256;
+      const h = 256;
+      const imgData = this.harness.createMacbethTexture();
+
+      activeTestCase = {
+        id: 'active_sliders_macbeth',
+        name: 'Active Sliders Verification (Macbeth Reference Target)',
+        category: 'active_photo',
+        edits,
+        isLinearRec2020: false,
+        textureWidth: w,
+        textureHeight: h,
+        createTexture: () => imgData,
+      };
     }
-    const imgData = ctx?.getImageData(0, 0, w, h) || new ImageData(w, h);
-
-    const activeTestCase: ParityTestCase = {
-      id: 'active_photo_viewport',
-      name: 'Active Photo Viewport with Current Sliders',
-      category: 'active_photo',
-      edits,
-      isLinearRec2020: false,
-      textureWidth: w,
-      textureHeight: h,
-      createTexture: () => imgData,
-    };
 
     const res = this.harness.auditTestCase(activeTestCase);
     this.results.unshift(res);

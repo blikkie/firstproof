@@ -164,6 +164,8 @@ export function isNeutralEdits(edits: {
   tone_profile?: string;
   split_toning_shadow_sat: number;
   split_toning_highlight_sat: number;
+  emulsion_archetype?: string;
+  print_media?: string;
 }): boolean {
   return (
     (edits.tone_profile === 'AgxVivid' || !edits.tone_profile) &&
@@ -180,7 +182,9 @@ export function isNeutralEdits(edits: {
     edits.deep_blue === 0.0 &&
     edits.foliage === 0.0 &&
     edits.split_toning_shadow_sat === 0.0 &&
-    edits.split_toning_highlight_sat === 0.0
+    edits.split_toning_highlight_sat === 0.0 &&
+    (!edits.emulsion_archetype || edits.emulsion_archetype === 'None') &&
+    (!edits.print_media || edits.print_media === 'None')
   );
 }
 
@@ -393,6 +397,323 @@ export function applySplitToning(
   ];
 }
 
+export const EMULSION_MAP: Record<string, number> = {
+  None: 0,
+  RochesterPortrait400: 1,
+  AshigaraChrome50: 2,
+  RochesterK14Chrome64: 3,
+  RochesterCinema500: 4,
+  RochesterDaylight200: 5,
+  MobberleySilver400: 6,
+  CambridgeDiffusion100: 7,
+};
+
+export const PRINT_MEDIA_MAP: Record<string, number> = {
+  None: 0,
+  ChromogenicTypeC: 1,
+  SilverDyeBleach: 2,
+  FineArtCottonRag: 3,
+  BarytaSilverGelatin: 4,
+  WarmtoneChlorobromide: 5,
+  PlatinumPalladium: 6,
+  Cyanotype: 7,
+  PrussianCyanotype: 7,
+};
+
+export function applyFilmCharacteristicCurve(val: number, gamma: number, shoulder: number, toe: number): number {
+  const v = Math.min(Math.max(val, 0.0), 2.0);
+  let base = v;
+  if (Math.abs(gamma - 1.0) > 0.001) {
+    const u = Math.min(Math.max(v / (v + 0.35), 0.0), 1.0);
+    const gMod = (gamma - 1.0) * 0.40;
+    base = Math.max(v + gMod * u * (1.0 - u) * (2.0 * u - 1.0), 0.0);
+  }
+  let afterShoulder = base;
+  if (shoulder > 0.0 && base > 0.65) {
+    const t = Math.min(Math.max((base - 0.65) / 0.35, 0.0), 1.0);
+    const comp = shoulder * 0.12 * t * t * (3.0 - 2.0 * t);
+    afterShoulder = base - comp;
+  }
+  if (toe > 0.0 && afterShoulder < 0.35) {
+    const t = Math.min(Math.max(afterShoulder / 0.35, 0.0), 1.0);
+    const comp = toe * 0.06 * (1.0 - t) * (1.0 - t);
+    return Math.max(afterShoulder - comp, 0.0);
+  }
+  return afterShoulder;
+}
+
+export function applyDirChemicalCoupling(
+  cur: [number, number, number],
+  c_rg: number, c_rb: number,
+  c_gr: number, c_gb: number,
+  c_br: number, c_bg: number
+): [number, number, number] {
+  const eps = 1e-4;
+  const d_r = -Math.log2(Math.max(cur[0], eps)) / 3.321928;
+  const d_g = -Math.log2(Math.max(cur[1], eps)) / 3.321928;
+  const d_b = -Math.log2(Math.max(cur[2], eps)) / 3.321928;
+
+  const c_rr = 1.0 - c_rg - c_rb;
+  const c_gg = 1.0 - c_gr - c_gb;
+  const c_bb = 1.0 - c_br - c_bg;
+
+  const d_r_out = c_rr * d_r + c_rg * d_g + c_rb * d_b;
+  const d_g_out = c_gr * d_r + c_gg * d_g + c_gb * d_b;
+  const d_b_out = c_br * d_r + c_bg * d_g + c_bb * d_b;
+
+  return [
+    Math.min(Math.max(Math.pow(10.0, -d_r_out), 0.0), 2.0),
+    Math.min(Math.max(Math.pow(10.0, -d_g_out), 0.0), 2.0),
+    Math.min(Math.max(Math.pow(10.0, -d_b_out), 0.0), 2.0),
+  ];
+}
+
+export function applyRecordingEmulsion(
+  rgb: [number, number, number],
+  archetype: string,
+  pushPullEv: number
+): [number, number, number] {
+  const mode = EMULSION_MAP[archetype] ?? 0;
+  if (mode === 0) return rgb;
+
+  const expGain = Math.pow(2.0, Math.min(Math.max(pushPullEv, -2.0), 2.0));
+  const cur: [number, number, number] = [
+    Math.max(rgb[0] * expGain, 0.0),
+    Math.max(rgb[1] * expGain, 0.0),
+    Math.max(rgb[2] * expGain, 0.0),
+  ];
+
+  if (mode === 1) { // Rochester Portrait 400
+    const dir = applyDirChemicalCoupling(cur, -0.04, 0.02, -0.08, 0.02, 0.02, -0.05);
+    return [
+      applyFilmCharacteristicCurve(dir[0], 0.90, 0.38, 0.08),
+      applyFilmCharacteristicCurve(dir[1], 0.90, 0.38, 0.08),
+      applyFilmCharacteristicCurve(dir[2], 0.90, 0.38, 0.08),
+    ];
+  } else if (mode === 2) { // Ashigara Chrome 50
+    const dir = applyDirChemicalCoupling(cur, -0.15, -0.08, -0.18, -0.08, -0.06, -0.12);
+    return [
+      applyFilmCharacteristicCurve(dir[0], 1.10, 0.12, 0.14),
+      applyFilmCharacteristicCurve(dir[1], 1.12, 0.10, 0.14),
+      applyFilmCharacteristicCurve(dir[2], 1.11, 0.12, 0.16),
+    ];
+  } else if (mode === 3) { // Rochester K-14 Chrome 64
+    const dir = applyDirChemicalCoupling(cur, -0.08, 0.06, -0.10, 0.04, 0.08, -0.04);
+    return [
+      applyFilmCharacteristicCurve(dir[0], 1.05, 0.18, 0.08),
+      applyFilmCharacteristicCurve(dir[1], 1.06, 0.16, 0.10),
+      applyFilmCharacteristicCurve(dir[2], 1.08, 0.14, 0.14),
+    ];
+  } else if (mode === 4) { // Rochester Cinema 500T
+    const dir = applyDirChemicalCoupling(cur, -0.02, 0.01, -0.03, 0.01, 0.01, -0.02);
+    return [
+      applyFilmCharacteristicCurve(dir[0], 0.82, 0.45, 0.08),
+      applyFilmCharacteristicCurve(dir[1], 0.82, 0.45, 0.08),
+      applyFilmCharacteristicCurve(dir[2], 0.82, 0.45, 0.08),
+    ];
+  } else if (mode === 5) { // Rochester Daylight 200
+    const dir = applyDirChemicalCoupling(cur, -0.06, 0.03, -0.07, 0.02, 0.08, -0.10);
+    return [
+      applyFilmCharacteristicCurve(dir[0], 1.12, 0.20, 0.12),
+      applyFilmCharacteristicCurve(dir[1], 1.08, 0.22, 0.12),
+      applyFilmCharacteristicCurve(dir[2], 0.98, 0.26, 0.16),
+    ];
+  } else if (mode === 6) { // Mobberley Silver 400 (B&W)
+    const panLum = 0.28 * cur[0] + 0.62 * cur[1] + 0.10 * cur[2];
+    const mono = applyFilmCharacteristicCurve(panLum, 1.08, 0.30, 0.25);
+    return [mono, mono, mono];
+  } else if (mode === 7) { // Cambridge Instant Diffusion 100
+    const dir = applyDirChemicalCoupling(cur, -0.03, 0.02, -0.04, 0.03, 0.01, -0.03);
+    const curv: [number, number, number] = [
+      applyFilmCharacteristicCurve(dir[0], 0.98, 0.35, 0.12),
+      applyFilmCharacteristicCurve(dir[1], 0.98, 0.35, 0.12),
+      applyFilmCharacteristicCurve(dir[2], 0.98, 0.35, 0.12),
+    ];
+    const lum = 0.2126 * curv[0] + 0.7152 * curv[1] + 0.0722 * curv[2];
+    const baseRefl = 0.025 * Math.max(1.0 - lum, 0.0);
+    return [
+      Math.min(curv[0] + baseRefl * 1.02, 2.0),
+      Math.min(curv[1] + baseRefl * 1.00, 2.0),
+      Math.min(curv[2] + baseRefl * 0.94, 2.0),
+    ];
+  }
+  return cur;
+}
+
+export function applyPaperGrade(val: number, grade: number): number {
+  if (Math.abs(grade) < 0.001) return val;
+  const alpha = 0.40 * (grade / 2.0);
+  return Math.min(Math.max(val + alpha * val * (1.0 - val) * (2.0 * val - 1.0), 0.0), 1.0);
+}
+
+export function applyBaseWarmth(rgb: [number, number, number], warmth: number): [number, number, number] {
+  if (Math.abs(warmth) < 0.001) return rgb;
+  const lum = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+  const factor = (warmth / 100.0) * Math.min(Math.max(Math.pow(lum, 0.6), 0.0), 1.0);
+  const mult = factor > 0
+    ? [1.0 + factor * 0.060, 1.0 + factor * 0.025, 1.0 - factor * 0.045]
+    : [1.0 + factor * 0.025, 1.0 + factor * 0.008, 1.0 - factor * 0.045];
+  return [
+    Math.min(Math.max(rgb[0] * mult[0], 0.0), 1.0),
+    Math.min(Math.max(rgb[1] * mult[1], 0.0), 1.0),
+    Math.min(Math.max(rgb[2] * mult[2], 0.0), 1.0),
+  ];
+}
+
+export function applyPrintMedia(
+  rgb: [number, number, number],
+  printMedia: string,
+  grade: number,
+  warmth: number,
+  depthPercent: number = 100.0,
+  filterMode: number = 0
+): [number, number, number] {
+  const mode = PRINT_MEDIA_MAP[printMedia] ?? 0;
+  if (mode === 0) return rgb;
+
+  const depth = Math.min(Math.max(depthPercent / 100.0, 0.0), 1.0);
+
+  const getEnlargerFilterWeights = (fm: number): [number, number, number] => {
+    if (fm === 1) return [0.35, 0.60, 0.05];
+    if (fm === 2) return [0.55, 0.42, 0.03];
+    if (fm === 3) return [0.85, 0.15, 0.00];
+    if (fm === 4) return [0.15, 0.80, 0.05];
+    if (fm === 5) return [0.00, 0.60, 0.40];
+    return [0.2627, 0.6780, 0.0593];
+  };
+
+  if (mode === 1) { // ChromogenicTypeC (RA-4)
+    const rG = applyPaperGrade(rgb[0], grade);
+    const gG = applyPaperGrade(rgb[1], grade);
+    const bG = applyPaperGrade(rgb[2], grade);
+
+    const compressShoulder = (c: number): number => {
+      if (c > 0.70) {
+        const u = Math.min(Math.max((c - 0.70) / 0.30, 0.0), 1.0);
+        return c - 0.045 * depth * u * u * (3.0 - 2.0 * u);
+      }
+      return c;
+    };
+    const rP = compressShoulder(rG);
+    const gP = compressShoulder(gG);
+    const bP = compressShoulder(bG);
+
+    const lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+    const satScale = 0.70 + 0.35 * depth;
+    let rOut = Math.min(Math.max(lum + (rP - lum) * satScale, 0.0), 1.0);
+    let gOut = Math.min(Math.max(lum + (gP - lum) * satScale, 0.0), 1.0);
+    let bOut = Math.min(Math.max(lum + (bP - lum) * satScale, 0.0), 1.0);
+
+    const dyeDensity = 0.04 * Math.max(1.0 - lum, 0.0) * depth;
+    rOut = Math.min(Math.max(rOut * (1.0 - dyeDensity * 0.4), 0.0), 1.0);
+    gOut = Math.min(Math.max(gOut * (1.0 - dyeDensity * 0.6), 0.0), 1.0);
+    bOut = Math.min(Math.max(bOut * (1.0 - dyeDensity * 0.9), 0.0), 1.0);
+
+    return applyBaseWarmth([rOut, gOut, bOut], warmth);
+  } else if (mode === 2) { // SilverDyeBleach (Azo Reversal)
+    const rG = applyPaperGrade(rgb[0], grade);
+    const gG = applyPaperGrade(rgb[1], grade);
+    const bG = applyPaperGrade(rgb[2], grade);
+
+    const shadowPow = 1.0 + 0.12 * depth;
+    const rP = Math.pow(Math.max(rG, 0.0), shadowPow);
+    const gP = Math.pow(Math.max(gG, 0.0), shadowPow);
+    const bP = Math.pow(Math.max(bG, 0.0), shadowPow);
+
+    const lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+    const azoSat = 0.80 + 0.30 * depth;
+    const rOut = Math.min(Math.max(lum + (rP - lum) * azoSat, 0.0), 1.0);
+    const gOut = Math.min(Math.max(lum + (gP - lum) * azoSat, 0.0), 1.0);
+    const bOut = Math.min(Math.max(lum + (bP - lum) * azoSat, 0.0), 1.0);
+
+    return applyBaseWarmth([rOut, gOut, bOut], warmth);
+  } else if (mode === 3) { // FineArtCottonRag
+    const rG = applyPaperGrade(rgb[0], grade);
+    const gG = applyPaperGrade(rgb[1], grade);
+    const bG = applyPaperGrade(rgb[2], grade);
+
+    const matteFloor = 0.055 - 0.015 * depth;
+    const rP = rG + matteFloor * (1.0 - rG) * (1.0 - rG);
+    const gP = gG + matteFloor * (1.0 - gG) * (1.0 - gG);
+    const bP = bG + matteFloor * (1.0 - bG) * (1.0 - bG);
+
+    const lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+    const pigmentSat = 0.75 + 0.25 * depth;
+    const rOut = Math.min(Math.max(lum + (rP - lum) * pigmentSat, 0.0), 1.0);
+    const gOut = Math.min(Math.max(lum + (gP - lum) * pigmentSat, 0.0), 1.0);
+    const bOut = Math.min(Math.max(lum + (bP - lum) * pigmentSat, 0.0), 1.0);
+
+    return applyBaseWarmth([rOut, gOut, bOut], warmth + 15.0);
+  } else if (mode === 4) { // BarytaSilverGelatin
+    const w = getEnlargerFilterWeights(filterMode);
+    const rawLum = Math.min(Math.max(rgb[0] * w[0] + rgb[1] * w[1] + rgb[2] * w[2], 0.0), 1.0);
+    const silver = applyPaperGrade(rawLum, grade);
+
+    const dmaxGamma = 1.0 + 0.08 * depth;
+    const silverToned = Math.pow(Math.max(silver, 0.0), dmaxGamma);
+
+    return applyBaseWarmth([silverToned, silverToned, silverToned], warmth);
+  } else if (mode === 5) { // WarmtoneChlorobromide
+    const w = getEnlargerFilterWeights(filterMode);
+    const rawLum = Math.min(Math.max(rgb[0] * w[0] + rgb[1] * w[1] + rgb[2] * w[2], 0.0), 1.0);
+    const silver = applyPaperGrade(rawLum, grade);
+
+    const shadowPow = 1.0 + 0.10 * depth;
+    const silverDeep = Math.pow(Math.max(silver, 0.0), shadowPow);
+
+    const midMask = 4.0 * silver * (1.0 - silver);
+    const shadowDensity = Math.max(1.0 - silver, 0.0);
+
+    const rTone = silverDeep + depth * (midMask * 0.030 + shadowDensity * 0.020);
+    const gTone = silverDeep + depth * (midMask * 0.012 - shadowDensity * 0.015);
+    const bTone = silverDeep + depth * (-midMask * 0.018 + shadowDensity * 0.030);
+
+    const toned: [number, number, number] = [
+      Math.min(Math.max(rTone, 0.0), 1.0),
+      Math.min(Math.max(gTone, 0.0), 1.0),
+      Math.min(Math.max(bTone, 0.0), 1.0),
+    ];
+    return applyBaseWarmth(toned, warmth);
+  } else if (mode === 6) { // PlatinumPalladium
+    const w = getEnlargerFilterWeights(filterMode);
+    const rawLum = Math.min(Math.max(rgb[0] * w[0] + rgb[1] * w[1] + rgb[2] * w[2], 0.0), 1.0);
+    const silver = applyPaperGrade(rawLum, grade);
+
+    const matteFloor = 0.035 * depth;
+    const silverBase = matteFloor + (1.0 - matteFloor) * silver;
+
+    const warmLift = Math.max(1.0 - Math.pow(Math.max(silverBase, 0.0), 0.6), 0.0) * depth;
+    const rTone = silverBase + warmLift * 0.045;
+    const gTone = silverBase + warmLift * 0.028;
+    const bTone = silverBase - warmLift * 0.020;
+
+    const toned: [number, number, number] = [
+      Math.min(Math.max(rTone, 0.0), 1.0),
+      Math.min(Math.max(gTone, 0.0), 1.0),
+      Math.min(Math.max(bTone, 0.0), 1.0),
+    ];
+    return applyBaseWarmth(toned, warmth + 10.0 * depth);
+  } else if (mode === 7) { // Cyanotype
+    const w = getEnlargerFilterWeights(filterMode);
+    const rawLum = Math.min(Math.max(rgb[0] * w[0] + rgb[1] * w[1] + rgb[2] * w[2], 0.0), 1.0);
+    const silver = applyPaperGrade(rawLum, grade);
+
+    const density = 1.0 - silver;
+    const rP = silver * (1.0 - 0.75 * depth * density);
+    const gP = silver * (1.0 - 0.35 * depth * density) + 0.02 * depth * density;
+    const bP = silver * (1.0 - 0.05 * depth * density) + 0.07 * depth * density;
+
+    const toned: [number, number, number] = [
+      Math.min(Math.max(rP, 0.0), 1.0),
+      Math.min(Math.max(gP, 0.0), 1.0),
+      Math.min(Math.max(bP, 0.0), 1.0),
+    ];
+    return applyBaseWarmth(toned, warmth + 8.0 * depth);
+  }
+
+  return rgb;
+}
+
 /**
  * Executes full reference CPU export pipeline on a single pixel.
  */
@@ -418,6 +739,13 @@ export function evaluateReferencePixel(
     split_toning_highlight_hue: number;
     split_toning_highlight_sat: number;
     split_toning_balance: number;
+    emulsion_archetype?: string;
+    emulsion_exposure?: number;
+    print_media?: string;
+    print_paper_grade?: number;
+    print_base_warmth?: number;
+    print_process_depth?: number;
+    enlarger_filter?: string;
   },
   curveLut?: { master?: number[]; red?: number[]; green?: number[]; blue?: number[] }
 ): [number, number, number] {
@@ -463,6 +791,11 @@ export function evaluateReferencePixel(
     rec2020[0] *= gain;
     rec2020[1] *= gain;
     rec2020[2] *= gain;
+  }
+
+  // 3b. Photochemical Recording Emulsion
+  if (edits.emulsion_archetype && edits.emulsion_archetype !== 'None') {
+    rec2020 = applyRecordingEmulsion(rec2020, edits.emulsion_archetype, edits.emulsion_exposure ?? 0.0);
   }
 
   // 4. Tone Recovery
@@ -527,14 +860,35 @@ export function evaluateReferencePixel(
   );
 
   // 8. Curves
+  const sampleLut = (lut: number[], val: number): number => {
+    const idx = Math.min(Math.max(Math.round(val * 255), 0), 255);
+    return lut[idx];
+  };
   if (curveLut?.master && curveLut.master.length === 256) {
-    const sampleLut = (lut: number[], val: number): number => {
-      const idx = Math.min(Math.max(Math.round(val * 255), 0), 255);
-      return lut[idx];
-    };
     finalColor[0] = sampleLut(curveLut.master, finalColor[0]);
     finalColor[1] = sampleLut(curveLut.master, finalColor[1]);
     finalColor[2] = sampleLut(curveLut.master, finalColor[2]);
+  }
+  if (curveLut) {
+    if (curveLut.red && curveLut.red.length === 256) finalColor[0] = sampleLut(curveLut.red, finalColor[0]);
+    if (curveLut.green && curveLut.green.length === 256) finalColor[1] = sampleLut(curveLut.green, finalColor[1]);
+    if (curveLut.blue && curveLut.blue.length === 256) finalColor[2] = sampleLut(curveLut.blue, finalColor[2]);
+  }
+
+  // 8b. Fine-Art Print Media Chemistry
+  if (edits.print_media && edits.print_media !== 'None') {
+    const filterMap: Record<string, number> = {
+      NeutralPanchromatic: 0, FilterGrade2: 0, YellowK2: 1, Orange16: 2, Red25A: 3, GreenX1: 4, Orthochromatic: 5
+    };
+    const filterMode = filterMap[edits.enlarger_filter ?? ''] ?? 0;
+    finalColor = applyPrintMedia(
+      finalColor,
+      edits.print_media,
+      edits.print_paper_grade ?? 0.0,
+      edits.print_base_warmth ?? 0.0,
+      edits.print_process_depth ?? 100.0,
+      filterMode
+    );
   }
 
   // 9. Display Target Transform matching Shaders.metal and encoders.rs:

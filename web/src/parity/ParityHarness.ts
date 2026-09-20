@@ -6,7 +6,7 @@
  */
 
 import { WebGLRenderer } from '../WebGLRenderer';
-import { EditSettingsPayload, EvaluatedLut } from '../WasmBridge';
+import { EditSettingsPayload, EvaluatedLut, WasmBridge } from '../WasmBridge';
 import { evaluateReferencePixel, ParityPixelResult } from './ReferenceExport';
 
 export interface ParityTestCase {
@@ -199,6 +199,18 @@ export class ParityHarness {
       this.renderer.uploadImage(imgData);
     }
 
+    // If test case has tone curves, evaluate and upload LUT to test renderer
+    let curveLut: EvaluatedLut | undefined = undefined;
+    if (test.edits.curves && (test.edits.curves.master?.length > 2 || test.edits.curves.red?.length > 2 || test.edits.curves.green?.length > 2 || test.edits.curves.blue?.length > 2)) {
+      try {
+        const bridge = WasmBridge.getInstance();
+        curveLut = bridge.evaluateCurves(test.edits.curves);
+        this.renderer.uploadCurveLuts(curveLut);
+      } catch (err) {
+        console.warn('Could not evaluate curve LUT for parity test', err);
+      }
+    }
+
     // 2. Render WebGL
     this.renderer.render(test.edits, false);
 
@@ -255,7 +267,7 @@ export class ParityHarness {
           ];
         }
 
-        const expRgb = evaluateReferencePixel(inputPixel, test.isLinearRec2020, test.edits);
+        const expRgb = evaluateReferencePixel(inputPixel, test.isLinearRec2020, test.edits, curveLut);
 
         const dr = Math.abs(glR - expRgb[0]);
         const dg = Math.abs(glG - expRgb[1]);
@@ -461,6 +473,46 @@ export class ParityHarness {
         name: 'Camera Portrait Profile (Skin Smoothing & Calm Skies)',
         category: 'color',
         edits: { ...createDefaultEdits(), tone_profile: 'CameraPortrait' },
+        isLinearRec2020: false,
+        textureWidth: w,
+        textureHeight: h,
+        createTexture: () => this.createMacbethTexture(),
+      },
+      {
+        id: 'emulsion_rochester_portrait_400',
+        name: 'Emulsion: Rochester Portrait 400 (C-41 Color Negative)',
+        category: 'color',
+        edits: { ...createDefaultEdits(), emulsion_archetype: 'RochesterPortrait400' },
+        isLinearRec2020: false,
+        textureWidth: w,
+        textureHeight: h,
+        createTexture: () => this.createMacbethTexture(),
+      },
+      {
+        id: 'emulsion_mobberley_silver_400',
+        name: 'Emulsion: Mobberley Silver 400 (Panchromatic B&W)',
+        category: 'color',
+        edits: { ...createDefaultEdits(), emulsion_archetype: 'MobberleySilver400' },
+        isLinearRec2020: false,
+        textureWidth: w,
+        textureHeight: h,
+        createTexture: () => this.createMacbethTexture(),
+      },
+      {
+        id: 'print_media_cyanotype',
+        name: 'Print Media: Prussian Blue Cyanotype (Tonal Split & Base)',
+        category: 'color',
+        edits: { ...createDefaultEdits(), print_media: 'Cyanotype' },
+        isLinearRec2020: false,
+        textureWidth: w,
+        textureHeight: h,
+        createTexture: () => this.createMacbethTexture(),
+      },
+      {
+        id: 'print_media_chromogenic',
+        name: 'Print Media: RA-4 Chromogenic Type-C Print',
+        category: 'color',
+        edits: { ...createDefaultEdits(), print_media: 'ChromogenicTypeC' },
         isLinearRec2020: false,
         textureWidth: w,
         textureHeight: h,

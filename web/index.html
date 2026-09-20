@@ -132,15 +132,45 @@
           </div>
         </div>
 
-        <!-- Accordion Inspector Groups -->
+        <!-- Segmented Workspace Tab Bar -->
+        <div class="workspace-tab-bar" id="workspace-tab-bar">
+          <div class="segmented-control" role="tablist">
+            <button class="seg-btn active" data-tab="light" role="tab" aria-selected="true" title="Light & Tone Curves (Cmd+1)">
+              <svg class="seg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+              <span class="seg-label">Light</span>
+            </button>
+            <button class="seg-btn" data-tab="color" role="tab" aria-selected="false" title="Color & White Balance (Cmd+2)">
+              <svg class="seg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 9.5 10c.93 0 1.5-.68 1.5-1.5 0-.38-.15-.74-.42-1.01-.27-.28-.43-.64-.43-1.03 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-5.17-4.49-8.96-10-8.96Z"/></svg>
+              <span class="seg-label">Color</span>
+            </button>
+            <button class="seg-btn" data-tab="detail" role="tab" aria-selected="false" title="Detail & Sharpening (Cmd+3)">
+              <svg class="seg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>
+              <span class="seg-label">Detail</span>
+            </button>
+            <button class="seg-btn" data-tab="emulsion" role="tab" aria-selected="false" title="Film Stock & Darkroom Media (Cmd+4)">
+              <svg class="seg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>
+              <span class="seg-label">Emulsion</span>
+            </button>
+            <button class="seg-btn" data-tab="info" role="tab" aria-selected="false" title="Photo Metadata & IPTC (Cmd+5)">
+              <svg class="seg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              <span class="seg-label">Info</span>
+            </button>
+          </div>
+          <button id="btn-reset-all" class="btn btn-secondary seg-reset-btn" title="Reset All Edits to As-Shot (Cmd+Shift+R)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            <span>Reset</span>
+          </button>
+        </div>
+
+        <!-- Active Workspace Tab Panels -->
         <div class="inspector-scroll">
-          <!-- 1. LIGHT & EXPOSURE -->
-          <details open class="inspector-group">
-            <summary class="group-title" style="display: flex; align-items: center;">
-              <span>Light & Exposure</span>
-              <button id="btn-auto-tone" class="btn btn-secondary btn-sm" title="Auto Tone: Conservative exposure and contrast (Cmd+U)" style="padding: 2px 8px; font-size: 11px; margin-left: auto; margin-right: 4px;">Auto</button>
-            </summary>
-            <div class="group-content">
+          <!-- 1. LIGHT WORKSPACE -->
+          <div class="workspace-panel" id="tab-light">
+            <div class="panel-section">
+              <div class="section-header">
+                <span class="section-title">Tone & Exposure</span>
+                <button id="btn-auto-tone" class="btn btn-secondary btn-sm" title="Auto Tone: Conservative exposure and contrast (Cmd+U)" style="padding: 2px 8px; font-size: 11px;">Auto</button>
+              </div>
               <div class="slider-row">
                 <label>Exposure <span id="val-exposure" class="slider-val">0.00 EV</span></label>
                 <input type="range" id="slider-exposure" min="-3.0" max="3.0" step="0.05" value="0.0" />
@@ -176,23 +206,26 @@
                 </div>
               </div>
             </div>
-          </details>
 
-          <!-- 2. COLOR & WHITE BALANCE -->
-          <details open class="inspector-group">
-            <summary class="group-title">Color & Tone Profile</summary>
-            <div class="group-content">
-              <div class="control-row">
-                <label>AgX Tone Profile</label>
-                <select id="select-tone-profile" class="select-input">
-                  <option value="AgxVivid" selected>AgX Vivid (Rich Color & Dynamic Range)</option>
-                  <option value="AgxFilmic">AgX Filmic Neutral (Restrained Filmic)</option>
-                  <option value="CameraStandard">Camera Standard</option>
-                  <option value="CameraPortrait">Camera Portrait</option>
-                  <option value="CameraLandscape">Camera Landscape</option>
-                  <option value="CameraVivid">Camera Vivid</option>
-                </select>
+            <div class="panel-section">
+              <span class="section-title">Tone Curves</span>
+              <div class="curve-channel-tabs" id="curve-channel-tabs">
+                <button class="channel-btn active" data-channel="master">Master</button>
+                <button class="channel-btn red" data-channel="red">R</button>
+                <button class="channel-btn green" data-channel="green">G</button>
+                <button class="channel-btn blue" data-channel="blue">B</button>
               </div>
+              <div class="curve-widget-container">
+                <canvas id="curve-canvas" width="240" height="240"></canvas>
+              </div>
+              <button id="btn-reset-curve" class="btn btn-secondary btn-sm full-width">Reset Channel Curve</button>
+            </div>
+          </div>
+
+          <!-- 2. COLOR WORKSPACE -->
+          <div class="workspace-panel hidden" id="tab-color">
+            <div class="panel-section">
+              <span class="section-title">White Balance & Warmth</span>
               <div class="control-row">
                 <label>Light Source Preset</label>
                 <div class="row-with-btn">
@@ -214,13 +247,17 @@
                 </div>
               </div>
               <div class="slider-row">
-                <label>Temperature <span id="val-temp" class="slider-val">5500 K</span></label>
+                <label>Warmth (Temp) <span id="val-temp" class="slider-val">5500 K</span></label>
                 <input type="range" id="slider-temp" min="0.0" max="1.0" step="0.001" value="0.707" />
               </div>
               <div class="slider-row">
                 <label>Tint <span id="val-tint" class="slider-val">0</span></label>
                 <input type="range" id="slider-tint" min="-200" max="200" step="1" value="0" />
               </div>
+            </div>
+
+            <div class="panel-section">
+              <span class="section-title">Color Calibration</span>
               <div class="slider-row">
                 <label>Vibrance <span id="val-vibrance" class="slider-val">0</span></label>
                 <input type="range" id="slider-vibrance" min="-100" max="100" step="1" value="0" />
@@ -238,29 +275,79 @@
                 <input type="range" id="slider-foliage" min="-100" max="100" step="1" value="0" />
               </div>
             </div>
-          </details>
 
-          <!-- 3. TONE CURVES ENGINE -->
-          <details open class="inspector-group">
-            <summary class="group-title">Tone Curves</summary>
-            <div class="group-content">
-              <div class="curve-channel-tabs" id="curve-channel-tabs">
-                <button class="channel-btn active" data-channel="master">Master</button>
-                <button class="channel-btn red" data-channel="red">R</button>
-                <button class="channel-btn green" data-channel="green">G</button>
-                <button class="channel-btn blue" data-channel="blue">B</button>
+            <details class="panel-section panel-disclosure" id="disclosure-split-toning">
+              <summary class="disclosure-header">
+                <span class="section-title">Split Toning</span>
+                <span class="disclosure-hint" id="hint-split-toning">Off</span>
+              </summary>
+              <div class="disclosure-content">
+                <div class="slider-row">
+                  <label>Shadow Hue <span id="val-shadow-hue" class="slider-val">215°</span></label>
+                  <input type="range" id="slider-shadow-hue" min="0" max="360" step="1" value="215" />
+                </div>
+                <div class="slider-row">
+                  <label>Shadow Saturation <span id="val-shadow-sat" class="slider-val">0</span></label>
+                  <input type="range" id="slider-shadow-sat" min="0" max="100" step="1" value="0" />
+                </div>
+                <div class="slider-row">
+                  <label>Highlight Hue <span id="val-highlight-hue" class="slider-val">45°</span></label>
+                  <input type="range" id="slider-highlight-hue" min="0" max="360" step="1" value="45" />
+                </div>
+                <div class="slider-row">
+                  <label>Highlight Saturation <span id="val-highlight-sat" class="slider-val">0</span></label>
+                  <input type="range" id="slider-highlight-sat" min="0" max="100" step="1" value="0" />
+                </div>
+                <div class="slider-row">
+                  <label>Balance <span id="val-split-balance" class="slider-val">0</span></label>
+                  <input type="range" id="slider-split-balance" min="-100" max="100" step="1" value="0" />
+                </div>
               </div>
-              <div class="curve-widget-container">
-                <canvas id="curve-canvas" width="240" height="240"></canvas>
+            </details>
+          </div>
+
+          <!-- 3. DETAIL WORKSPACE -->
+          <div class="workspace-panel hidden" id="tab-detail">
+            <div class="panel-section">
+              <span class="section-title">Sensor Sharpening</span>
+              <div class="slider-row">
+                <label>Amount <span id="val-sharpen-amount" class="slider-val">0</span></label>
+                <input type="range" id="slider-sharpen-amount" min="0" max="100" step="1" value="0" />
               </div>
-              <button id="btn-reset-curve" class="btn btn-secondary btn-sm full-width">Reset Channel Curve</button>
+              <div class="slider-row">
+                <label>Radius <span id="val-sharpen-radius" class="slider-val">1.0 px</span></label>
+                <input type="range" id="slider-sharpen-radius" min="0.5" max="3.0" step="0.1" value="1.0" />
+              </div>
+              <div class="slider-row">
+                <label>Masking <span id="val-sharpen-masking" class="slider-val">0</span></label>
+                <input type="range" id="slider-sharpen-masking" min="0" max="100" step="1" value="0" />
+              </div>
             </div>
-          </details>
 
-          <!-- 4. RECORDING EMULSION & FINE-ART PRINT MEDIA -->
-          <details class="inspector-group">
-            <summary class="group-title">Film Stock & Darkroom Media</summary>
-            <div class="group-content">
+            <div class="panel-section">
+              <span class="section-title">Noise Reduction</span>
+              <div class="slider-row">
+                <label>Luminance Noise <span id="val-noise-reduction" class="slider-val">0</span></label>
+                <input type="range" id="slider-noise-reduction" min="0" max="100" step="1" value="0" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. EMULSION WORKSPACE -->
+          <div class="workspace-panel hidden" id="tab-emulsion">
+            <div class="panel-section">
+              <span class="section-title">Tone Profile & Emulsion</span>
+              <div class="control-row">
+                <label>AgX Tone Profile</label>
+                <select id="select-tone-profile" class="select-input">
+                  <option value="AgxVivid" selected>AgX Vivid (Rich Color & Dynamic Range)</option>
+                  <option value="AgxFilmic">AgX Filmic Neutral (Restrained Filmic)</option>
+                  <option value="CameraStandard">Camera Standard</option>
+                  <option value="CameraPortrait">Camera Portrait</option>
+                  <option value="CameraLandscape">Camera Landscape</option>
+                  <option value="CameraVivid">Camera Vivid</option>
+                </select>
+              </div>
               <div class="control-row">
                 <label>Emulsion Archetype</label>
                 <select id="select-emulsion" class="select-input">
@@ -278,6 +365,10 @@
                 <label>Emulsion Exposure <span id="val-emulsion-exp" class="slider-val">0.00 EV</span></label>
                 <input type="range" id="slider-emulsion-exp" min="-2.0" max="2.0" step="0.1" value="0.0" />
               </div>
+            </div>
+
+            <div class="panel-section">
+              <span class="section-title">Darkroom Print Media</span>
               <div class="control-row">
                 <label>Print Media Archetype</label>
                 <select id="select-print-media" class="select-input">
@@ -304,62 +395,46 @@
                 <input type="range" id="slider-process-depth" min="0" max="100" step="1" value="100" />
               </div>
             </div>
-          </details>
+          </div>
 
-          <!-- 5. DETAIL & SHARPENING -->
-          <details class="inspector-group">
-            <summary class="group-title">Detail & Sharpening</summary>
-            <div class="group-content">
-              <div class="slider-row">
-                <label>Sharpening Amount <span id="val-sharpen-amount" class="slider-val">0</span></label>
-                <input type="range" id="slider-sharpen-amount" min="0" max="100" step="1" value="0" />
-              </div>
-              <div class="slider-row">
-                <label>Sharpening Radius <span id="val-sharpen-radius" class="slider-val">1.0 px</span></label>
-                <input type="range" id="slider-sharpen-radius" min="0.5" max="3.0" step="0.1" value="1.0" />
-              </div>
-              <div class="slider-row">
-                <label>Sharpening Masking <span id="val-sharpen-masking" class="slider-val">0</span></label>
-                <input type="range" id="slider-sharpen-masking" min="0" max="100" step="1" value="0" />
-              </div>
-              <div class="slider-row">
-                <label>Luminance Noise Reduction <span id="val-noise-reduction" class="slider-val">0</span></label>
-                <input type="range" id="slider-noise-reduction" min="0" max="100" step="1" value="0" />
+          <!-- 5. INFO & METADATA WORKSPACE -->
+          <div class="workspace-panel hidden" id="tab-info">
+            <div class="panel-section">
+              <span class="section-title">Hardware & Optics</span>
+              <div class="meta-details-table">
+                <div class="meta-detail-row">
+                  <span class="meta-detail-label">Camera</span>
+                  <span class="meta-detail-val" id="meta-full-camera">—</span>
+                </div>
+                <div class="meta-detail-row">
+                  <span class="meta-detail-label">Lens</span>
+                  <span class="meta-detail-val" id="meta-lens">—</span>
+                </div>
+                <div class="meta-detail-row">
+                  <span class="meta-detail-label">Focal Length</span>
+                  <span class="meta-detail-val" id="meta-focal-length">—</span>
+                </div>
+                <div class="meta-detail-row">
+                  <span class="meta-detail-label">Exposure</span>
+                  <span class="meta-detail-val" id="meta-exposure-summary">—</span>
+                </div>
+                <div class="meta-detail-row">
+                  <span class="meta-detail-label">Sensor Size</span>
+                  <span class="meta-detail-val" id="meta-sensor-res">—</span>
+                </div>
+                <div class="meta-detail-row">
+                  <span class="meta-detail-label">Date Taken</span>
+                  <span class="meta-detail-val" id="meta-date-taken">—</span>
+                </div>
+                <div class="meta-detail-row">
+                  <span class="meta-detail-label">Sidecar</span>
+                  <span class="meta-detail-val" id="meta-sidecar-status">None</span>
+                </div>
               </div>
             </div>
-          </details>
 
-          <!-- 5. SPLIT TONING & COLOR GRADING -->
-          <details class="inspector-group">
-            <summary class="group-title">Split Toning & Color Grading</summary>
-            <div class="group-content">
-              <div class="slider-row">
-                <label>Shadow Hue <span id="val-shadow-hue" class="slider-val">215°</span></label>
-                <input type="range" id="slider-shadow-hue" min="0" max="360" step="1" value="215" />
-              </div>
-              <div class="slider-row">
-                <label>Shadow Saturation <span id="val-shadow-sat" class="slider-val">0</span></label>
-                <input type="range" id="slider-shadow-sat" min="0" max="100" step="1" value="0" />
-              </div>
-              <div class="slider-row">
-                <label>Highlight Hue <span id="val-highlight-hue" class="slider-val">45°</span></label>
-                <input type="range" id="slider-highlight-hue" min="0" max="360" step="1" value="45" />
-              </div>
-              <div class="slider-row">
-                <label>Highlight Saturation <span id="val-highlight-sat" class="slider-val">0</span></label>
-                <input type="range" id="slider-highlight-sat" min="0" max="100" step="1" value="0" />
-              </div>
-              <div class="slider-row">
-                <label>Balance <span id="val-split-balance" class="slider-val">0</span></label>
-                <input type="range" id="slider-split-balance" min="-100" max="100" step="1" value="0" />
-              </div>
-            </div>
-          </details>
-
-          <!-- 6. METADATA PANEL -->
-          <details class="inspector-group">
-            <summary class="group-title">IPTC / XMP Metadata</summary>
-            <div class="group-content">
+            <div class="panel-section">
+              <span class="section-title">IPTC / Dublin Core Metadata</span>
               <div class="control-row">
                 <label for="meta-input-title">Title</label>
                 <input type="text" id="meta-input-title" class="text-input" placeholder="Photo Title..." />
@@ -377,7 +452,7 @@
                 <input type="text" id="meta-input-keywords" class="text-input" placeholder="comma, separated, tags" />
               </div>
             </div>
-          </details>
+          </div>
         </div>
       </aside>
     </div>

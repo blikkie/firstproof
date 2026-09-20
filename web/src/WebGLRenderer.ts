@@ -41,6 +41,8 @@ uniform float u_emulsionExposure;
 uniform int u_printMediaMode; // 0: None, 1: RA4, 2: SilverDye, 3: CottonRag, 4: SilverGelatin, 5: Selenium, 6: Platinum, 7: Cyanotype
 uniform float u_printPaperGrade;
 uniform float u_printBaseWarmth;
+uniform float u_printProcessDepth;
+uniform int u_enlargerFilterMode;
 uniform float u_splitShadowHue;
 uniform float u_splitShadowSat;
 uniform float u_splitHighlightHue;
@@ -488,11 +490,149 @@ vec3 applyCameraHueSat(vec3 hsv, int mode) {
     return vec3(h, clamp(s, 0.0, 1.0), clamp(v, 0.0, 1.0));
 }
 
+// Enlarger Optical Filtration
+vec3 getEnlargerFilterWeights(int filterMode) {
+    if (filterMode == 1) return vec3(0.35, 0.60, 0.05); // YellowK2
+    if (filterMode == 2) return vec3(0.55, 0.42, 0.03); // Orange16
+    if (filterMode == 3) return vec3(0.85, 0.15, 0.00); // Red25A
+    if (filterMode == 4) return vec3(0.15, 0.80, 0.05); // GreenX1
+    if (filterMode == 5) return vec3(0.00, 0.60, 0.40); // Orthochromatic
+    return vec3(0.2627, 0.6780, 0.0593); // NeutralPanchromatic
+}
+
 // Fine-Art Print Media
-vec3 applyPrintMedia(vec3 rgb, int media, float grade, float warmth) {
-    if (media == 0) return rgb;
-    vec3 graded = vec3(applyPaperGrade(rgb.r, grade), applyPaperGrade(rgb.g, grade), applyPaperGrade(rgb.b, grade));
-    return applyBaseWarmth(graded, warmth);
+vec3 applyPrintMedia(vec3 rgb, int mediaMode, int filterMode, float paperGrade, float baseWarmth, float processDepth) {
+    if (mediaMode == 0) return rgb;
+    float depth = clamp(processDepth / 100.0, 0.0, 1.0);
+
+    if (mediaMode == 1) { // ChromogenicTypeC (RA-4)
+        float rG = applyPaperGrade(rgb.r, paperGrade);
+        float gG = applyPaperGrade(rgb.g, paperGrade);
+        float bG = applyPaperGrade(rgb.b, paperGrade);
+
+        float rP = rG;
+        if (rG > 0.70) {
+            float u = clamp((rG - 0.70) / 0.30, 0.0, 1.0);
+            rP = rG - 0.045 * depth * u * u * (3.0 - 2.0 * u);
+        }
+        float gP = gG;
+        if (gG > 0.70) {
+            float u = clamp((gG - 0.70) / 0.30, 0.0, 1.0);
+            gP = gG - 0.045 * depth * u * u * (3.0 - 2.0 * u);
+        }
+        float bP = bG;
+        if (bG > 0.70) {
+            float u = clamp((bG - 0.70) / 0.30, 0.0, 1.0);
+            bP = bG - 0.045 * depth * u * u * (3.0 - 2.0 * u);
+        }
+
+        float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+        float satScale = 0.70 + 0.35 * depth;
+        float rOut = clamp(lum + (rP - lum) * satScale, 0.0, 1.0);
+        float gOut = clamp(lum + (gP - lum) * satScale, 0.0, 1.0);
+        float bOut = clamp(lum + (bP - lum) * satScale, 0.0, 1.0);
+
+        float dyeDensity = 0.04 * max(1.0 - lum, 0.0) * depth;
+        rOut = clamp(rOut * (1.0 - dyeDensity * 0.4), 0.0, 1.0);
+        gOut = clamp(gOut * (1.0 - dyeDensity * 0.6), 0.0, 1.0);
+        bOut = clamp(bOut * (1.0 - dyeDensity * 0.9), 0.0, 1.0);
+
+        return applyBaseWarmth(vec3(rOut, gOut, bOut), baseWarmth);
+    } else if (mediaMode == 2) { // SilverDyeBleach (Azo Reversal)
+        float rG = applyPaperGrade(rgb.r, paperGrade);
+        float gG = applyPaperGrade(rgb.g, paperGrade);
+        float bG = applyPaperGrade(rgb.b, paperGrade);
+
+        float shadowPow = 1.0 + 0.12 * depth;
+        float rP = pow(max(rG, 0.0), shadowPow);
+        float gP = pow(max(gG, 0.0), shadowPow);
+        float bP = pow(max(bG, 0.0), shadowPow);
+
+        float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+        float azoSat = 0.80 + 0.30 * depth;
+        float rOut = clamp(lum + (rP - lum) * azoSat, 0.0, 1.0);
+        float gOut = clamp(lum + (gP - lum) * azoSat, 0.0, 1.0);
+        float bOut = clamp(lum + (bP - lum) * azoSat, 0.0, 1.0);
+
+        return applyBaseWarmth(vec3(rOut, gOut, bOut), baseWarmth);
+    } else if (mediaMode == 3) { // FineArtCottonRag
+        float rG = applyPaperGrade(rgb.r, paperGrade);
+        float gG = applyPaperGrade(rgb.g, paperGrade);
+        float bG = applyPaperGrade(rgb.b, paperGrade);
+
+        float matteFloor = 0.055 - 0.015 * depth;
+        float rP = rG + matteFloor * (1.0 - rG) * (1.0 - rG);
+        float gP = gG + matteFloor * (1.0 - gG) * (1.0 - gG);
+        float bP = bG + matteFloor * (1.0 - bG) * (1.0 - bG);
+
+        float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+        float pigmentSat = 0.75 + 0.25 * depth;
+        float rOut = clamp(lum + (rP - lum) * pigmentSat, 0.0, 1.0);
+        float gOut = clamp(lum + (gP - lum) * pigmentSat, 0.0, 1.0);
+        float bOut = clamp(lum + (bP - lum) * pigmentSat, 0.0, 1.0);
+
+        return applyBaseWarmth(vec3(rOut, gOut, bOut), baseWarmth + 15.0);
+    } else if (mediaMode == 4) { // BarytaSilverGelatin
+        vec3 w = getEnlargerFilterWeights(filterMode);
+        float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
+        float silver = applyPaperGrade(rawLum, paperGrade);
+
+        float dmaxGamma = 1.0 + 0.08 * depth;
+        float silverToned = pow(max(silver, 0.0), dmaxGamma);
+
+        return applyBaseWarmth(vec3(silverToned), baseWarmth);
+    } else if (mediaMode == 5) { // WarmtoneChlorobromide
+        vec3 w = getEnlargerFilterWeights(filterMode);
+        float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
+        float silver = applyPaperGrade(rawLum, paperGrade);
+
+        float shadowPow = 1.0 + 0.10 * depth;
+        float silverDeep = pow(max(silver, 0.0), shadowPow);
+
+        float midMask = 4.0 * silver * (1.0 - silver);
+        float shadowDensity = max(1.0 - silver, 0.0);
+
+        float rTone = silverDeep + depth * (midMask * 0.030 + shadowDensity * 0.020);
+        float gTone = silverDeep + depth * (midMask * 0.012 - shadowDensity * 0.015);
+        float bTone = silverDeep + depth * (-midMask * 0.018 + shadowDensity * 0.030);
+
+        vec3 toned = clamp(vec3(rTone, gTone, bTone), 0.0, 1.0);
+        return applyBaseWarmth(toned, baseWarmth);
+    } else if (mediaMode == 6) { // PlatinumPalladium
+        vec3 w = getEnlargerFilterWeights(filterMode);
+        float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
+        float silver = applyPaperGrade(rawLum, paperGrade);
+
+        float matteFloor = 0.035 * depth;
+        float silverBase = matteFloor + (1.0 - matteFloor) * silver;
+
+        float warmLift = max(1.0 - pow(max(silverBase, 0.0), 0.6), 0.0) * depth;
+        float rTone = silverBase + warmLift * 0.045;
+        float gTone = silverBase + warmLift * 0.028;
+        float bTone = silverBase - warmLift * 0.020;
+
+        vec3 toned = clamp(vec3(rTone, gTone, bTone), 0.0, 1.0);
+        return applyBaseWarmth(toned, baseWarmth + 10.0 * depth);
+    } else if (mediaMode == 7) { // Cyanotype
+        vec3 w = getEnlargerFilterWeights(filterMode);
+        float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
+        float silver = applyPaperGrade(rawLum, paperGrade);
+
+        float density = 1.0 - silver;
+        float rP = silver * (1.0 - 0.75 * depth * density);
+        float gP = silver * (1.0 - 0.35 * depth * density) + 0.02 * depth * density;
+        float bP = silver * (1.0 - 0.05 * depth * density) + 0.07 * depth * density;
+
+        vec3 toned = clamp(vec3(rP, gP, bP), 0.0, 1.0);
+        return applyBaseWarmth(toned, baseWarmth + 8.0 * depth);
+    }
+    return rgb;
+}
+
+// Tone Curve Coordinate Mapping (Half-texel offset for exact 256-sample 1D LUT)
+vec2 sampleCurveCoord(float val) {
+    float u = (clamp(val, 0.0, 1.0) * 255.0 + 0.5) / 256.0;
+    return vec2(u, 0.5);
 }
 
 void main() {
@@ -605,19 +745,19 @@ void main() {
     
     // 9. RGB Tone Curves (Master + RGB 1D Texture LUT Sampler)
     if (u_hasMasterCurve) {
-        finalColor.r = texture(u_curveMasterLut, vec2(clamp(finalColor.r, 0.0, 1.0), 0.5)).r;
-        finalColor.g = texture(u_curveMasterLut, vec2(clamp(finalColor.g, 0.0, 1.0), 0.5)).r;
-        finalColor.b = texture(u_curveMasterLut, vec2(clamp(finalColor.b, 0.0, 1.0), 0.5)).r;
+        finalColor.r = texture(u_curveMasterLut, sampleCurveCoord(finalColor.r)).r;
+        finalColor.g = texture(u_curveMasterLut, sampleCurveCoord(finalColor.g)).r;
+        finalColor.b = texture(u_curveMasterLut, sampleCurveCoord(finalColor.b)).r;
     }
     if (u_hasRgbCurves) {
-        finalColor.r = texture(u_curveRgbLut, vec2(clamp(finalColor.r, 0.0, 1.0), 0.5)).r;
-        finalColor.g = texture(u_curveRgbLut, vec2(clamp(finalColor.g, 0.0, 1.0), 0.5)).g;
-        finalColor.b = texture(u_curveRgbLut, vec2(clamp(finalColor.b, 0.0, 1.0), 0.5)).b;
+        finalColor.r = texture(u_curveRgbLut, sampleCurveCoord(finalColor.r)).r;
+        finalColor.g = texture(u_curveRgbLut, sampleCurveCoord(finalColor.g)).g;
+        finalColor.b = texture(u_curveRgbLut, sampleCurveCoord(finalColor.b)).b;
     }
 
     // 10. Fine-Art Print Media Chemistry
     if (u_printMediaMode != 0) {
-        finalColor = applyPrintMedia(finalColor, u_printMediaMode, u_printPaperGrade, u_printBaseWarmth);
+        finalColor = applyPrintMedia(finalColor, u_printMediaMode, u_enlargerFilterMode, u_printPaperGrade, u_printBaseWarmth, u_printProcessDepth);
     }
     
     // Match Shaders.metal lines 360-366: AgX (modes 0 & 1) is already display-referred.
@@ -650,6 +790,7 @@ const PRINT_MEDIA_MAP: Record<string, number> = {
   WarmtoneChlorobromide: 5,
   PlatinumPalladium: 6,
   Cyanotype: 7,
+  PrussianCyanotype: 7,
 };
 
 export class WebGLRenderer {
@@ -704,7 +845,7 @@ export class WebGLRenderer {
       'u_exposure', 'u_contrast', 'u_highlights', 'u_shadows', 'u_whites', 'u_blacks',
       'u_vibrance', 'u_saturation', 'u_deepBlue', 'u_foliage', 'u_temperature', 'u_tint',
       'u_toneProfileMode', 'u_emulsionArchetype', 'u_emulsionExposure',
-      'u_printMediaMode', 'u_printPaperGrade', 'u_printBaseWarmth',
+      'u_printMediaMode', 'u_printPaperGrade', 'u_printBaseWarmth', 'u_printProcessDepth', 'u_enlargerFilterMode',
       'u_splitShadowHue', 'u_splitShadowSat', 'u_splitHighlightHue', 'u_splitHighlightSat', 'u_splitBalance',
       'u_isOriginal', 'u_isLinearRec2020', 'u_hasMasterCurve', 'u_hasRgbCurves'
     ];
@@ -744,15 +885,29 @@ export class WebGLRenderer {
 
   private initLutTextures() {
     const gl = this.gl;
+    const identityBytes = new Uint8Array(256 * 4);
+    for (let i = 0; i < 256; i++) {
+      identityBytes[i * 4] = i;
+      identityBytes[i * 4 + 1] = i;
+      identityBytes[i * 4 + 2] = i;
+      identityBytes[i * 4 + 3] = 255;
+    }
+
     this.masterLutTex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.masterLutTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, identityBytes);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
     this.rgbLutTex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.rgbLutTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, identityBytes);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
@@ -827,6 +982,8 @@ export class WebGLRenderer {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.masterLutTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, masterBytes);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     // RGB LUT
     const rgbBytes = new Uint8Array(256 * 4);
@@ -839,6 +996,8 @@ export class WebGLRenderer {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.rgbLutTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgbBytes);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
   public render(edits: EditSettingsPayload, isOriginal: boolean = false) {
@@ -848,6 +1007,19 @@ export class WebGLRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.useProgram(this.program);
+
+    if (this.texture) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    }
+    if (this.masterLutTex) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.masterLutTex);
+    }
+    if (this.rgbLutTex) {
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this.rgbLutTex);
+    }
 
     gl.uniform1i(this.uLocs['u_texture'], 0);
     gl.uniform1i(this.uLocs['u_curveMasterLut'], 1);
@@ -877,6 +1049,11 @@ export class WebGLRenderer {
     gl.uniform1i(this.uLocs['u_printMediaMode'], PRINT_MEDIA_MAP[edits.print_media] ?? 0);
     gl.uniform1f(this.uLocs['u_printPaperGrade'], edits.print_paper_grade);
     gl.uniform1f(this.uLocs['u_printBaseWarmth'], edits.print_base_warmth);
+    gl.uniform1f(this.uLocs['u_printProcessDepth'], (edits as any).print_process_depth ?? 100.0);
+    const filterMap: Record<string, number> = {
+      NeutralPanchromatic: 0, FilterGrade2: 0, YellowK2: 1, Orange16: 2, Red25A: 3, GreenX1: 4, Orthochromatic: 5
+    };
+    gl.uniform1i(this.uLocs['u_enlargerFilterMode'], filterMap[(edits as any).enlarger_filter] ?? 0);
 
     gl.uniform1f(this.uLocs['u_splitShadowHue'], edits.split_toning_shadow_hue);
     gl.uniform1f(this.uLocs['u_splitShadowSat'], edits.split_toning_shadow_sat);

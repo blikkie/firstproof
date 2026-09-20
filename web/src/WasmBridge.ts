@@ -9,6 +9,7 @@ export interface ImageMetadata {
   shutter_speed?: string;
   focal_length?: number;
   date_time?: string;
+  taken_time?: number;
   raw_width?: number;
   raw_height?: number;
 }

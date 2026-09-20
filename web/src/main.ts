@@ -56,6 +56,10 @@ class DarkroomApp {
   private activeLinearW: number = 0;
   private activeLinearH: number = 0;
 
+  private activeSourceImage: CanvasImageSource | null = null;
+  private activeSourceW: number = 0;
+  private activeSourceH: number = 0;
+
   private rawWorker: Worker | null = null;
   private workerMsgId: number = 0;
   private workerPendingMap: Map<number, (res: any) => void> = new Map();
@@ -85,6 +89,15 @@ class DarkroomApp {
     return Math.min(Math.max(steppedK, 2000.0), 20000.0);
   }
 
+  private updateSplitToningHint() {
+    const hasSplitToning = (this.edits.split_toning_shadow_sat > 0) || (this.edits.split_toning_highlight_sat > 0);
+    const hintEl = document.getElementById('hint-split-toning');
+    if (hintEl) {
+      hintEl.innerText = hasSplitToning ? 'Active' : 'Off';
+      hintEl.classList.toggle('active', hasSplitToning);
+    }
+  }
+
   private rollbackActiveScrub() {
     if (!this.activeScrub) return;
     const scrub = this.activeScrub;
@@ -95,6 +108,9 @@ class DarkroomApp {
     } else if (scrub.prop) {
       (this.edits[scrub.prop] as number) = scrub.initialValue;
       scrub.label.innerText = scrub.format(scrub.initialValue);
+      if ((scrub.prop as string).startsWith('split_toning_')) {
+        this.updateSplitToningHint();
+      }
     }
     this.renderCanvas();
     scrub.input.blur();
@@ -258,11 +274,35 @@ class DarkroomApp {
     canvas.width = 1920;
     canvas.height = 1080;
     this.renderer = new WebGLRenderer(canvas);
-    this.parityModal.init(this.renderer, () => this.edits);
+    this.parityModal.init(
+      this.renderer,
+      () => this.edits,
+      () => {
+        if (this.activeIdx < 0) return null;
+        if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
+          return {
+            isLinearRec2020: true,
+            width: this.activeLinearW,
+            height: this.activeLinearH,
+            linearData: this.activeLinearData,
+          };
+        } else if (this.activeSourceImage && this.activeSourceW > 0 && this.activeSourceH > 0) {
+          return {
+            isLinearRec2020: false,
+            width: this.activeSourceW,
+            height: this.activeSourceH,
+            imageSource: this.activeSourceImage,
+          };
+        }
+        return null;
+      }
+    );
 
     // 3. Init Tone Curve Widget
     const curveCanvas = document.getElementById('curve-canvas') as HTMLCanvasElement;
     this.curveWidget = new ToneCurveWidget(curveCanvas, () => this.onCurveChange());
+    const initialLut = this.bridge.evaluateCurves(this.edits.curves);
+    this.renderer.updateToneCurvesLut(initialLut);
 
     // 4. Bind UI Controls & Shortcuts
     this.bindEvents();
@@ -352,6 +392,8 @@ class DarkroomApp {
       'btn-open-folder', 'file-input-fallback', 'btn-original-peek', 'btn-export-proof', 'btn-parity-audit', 'btn-shortcuts',
       'empty-state', 'btn-empty-open', 'developing-spinner', 'filmstrip-count', 'filmstrip-scroll',
       'meta-filename', 'meta-dimensions', 'meta-camera', 'meta-iso', 'meta-aperture', 'meta-shutter',
+      'meta-format-badge', 'meta-full-camera', 'meta-lens', 'meta-focal-length', 'meta-exposure-summary',
+      'meta-sensor-res', 'meta-date-taken', 'meta-sidecar-status', 'btn-reset-all',
       'btn-pick', 'btn-reject', 'modal-shortcuts', 'btn-close-modal', 'select-tone-profile',
       'select-wb-preset', 'btn-wb-eyedropper', 'btn-white-point-picker', 'btn-black-point-picker',
       'select-emulsion', 'select-print-media', 'btn-reset-curve', 'btn-auto-tone',
@@ -596,6 +638,9 @@ class DarkroomApp {
             input.value = fineVal.toString();
             (this.edits[prop] as number) = fineVal;
             label.innerText = format(fineVal);
+            if ((prop as string).startsWith('split_toning_')) {
+              this.updateSplitToningHint();
+            }
             this.renderCanvas();
           }
         });
@@ -605,6 +650,9 @@ class DarkroomApp {
           const val = parseFloat(input.value);
           (this.edits[prop] as number) = val;
           label.innerText = format(val);
+          if ((prop as string).startsWith('split_toning_')) {
+            this.updateSplitToningHint();
+          }
           this.renderCanvas();
         });
         input.addEventListener('change', () => this.autoSaveSidecar());
@@ -613,6 +661,9 @@ class DarkroomApp {
           input.value = `${defaultVal}`;
           (this.edits[prop] as number) = defaultVal;
           label.innerText = format(defaultVal);
+          if ((prop as string).startsWith('split_toning_')) {
+            this.updateSplitToningHint();
+          }
           this.renderCanvas();
           this.autoSaveSidecar();
         };
@@ -714,11 +765,11 @@ class DarkroomApp {
     bindSlider('sharpen-radius', 'sharpening_radius', v => `${v.toFixed(1)} px`, 1.0);
     bindSlider('sharpen-masking', 'sharpening_masking', v => `${Math.round(v)}`, 0.0);
     bindSlider('noise-reduction', 'noise_reduction', v => `${Math.round(v)}`, 0.0);
-    bindSlider('shadow-hue', 'split_toning_shadow_hue', v => `${Math.round(v)}°`, 0);
-    bindSlider('shadow-sat', 'split_toning_shadow_sat', v => `${Math.round(v)}`, 0);
-    bindSlider('highlight-hue', 'split_toning_highlight_hue', v => `${Math.round(v)}°`, 0);
-    bindSlider('highlight-sat', 'split_toning_highlight_sat', v => `${Math.round(v)}`, 0);
-    bindSlider('split-balance', 'split_toning_balance', v => `${Math.round(v)}`, 0);
+    bindSlider('shadow-hue', 'split_toning_shadow_hue', v => `${Math.round(v)}°`, 215.0);
+    bindSlider('shadow-sat', 'split_toning_shadow_sat', v => `${Math.round(v)}`, 0.0);
+    bindSlider('highlight-hue', 'split_toning_highlight_hue', v => `${Math.round(v)}°`, 45.0);
+    bindSlider('highlight-sat', 'split_toning_highlight_sat', v => `${Math.round(v)}`, 0.0);
+    bindSlider('split-balance', 'split_toning_balance', v => `${Math.round(v)}`, 0.0);
 
     // Tone Profile Select
     this.elements['select-tone-profile']?.addEventListener('change', (e) => {
@@ -755,6 +806,20 @@ class DarkroomApp {
 
     this.elements['btn-reset-curve'].addEventListener('click', () => {
       this.curveWidget.resetCurrentChannel();
+    });
+
+    // Segmented Workspace Tab Bar
+    const tabBtns = document.querySelectorAll('.seg-btn');
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.getAttribute('data-tab');
+        if (tab) this.selectInspectorTab(tab);
+      });
+    });
+
+    // Reset All Edits Button
+    this.elements['btn-reset-all']?.addEventListener('click', () => {
+      this.resetAllEdits();
     });
 
     // Metadata text inputs auto-save
@@ -799,6 +864,22 @@ class DarkroomApp {
       );
       if (isTextField) {
         return; // Guardrail: Never intercept single-key shortcuts while user is typing in metadata fields!
+      }
+
+      // Cmd+1..5 / Ctrl+1..5: Workspace Tab Navigation
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey) {
+        if (e.key === '1') { e.preventDefault(); this.selectInspectorTab('light'); return; }
+        if (e.key === '2') { e.preventDefault(); this.selectInspectorTab('color'); return; }
+        if (e.key === '3') { e.preventDefault(); this.selectInspectorTab('detail'); return; }
+        if (e.key === '4') { e.preventDefault(); this.selectInspectorTab('emulsion'); return; }
+        if (e.key === '5') { e.preventDefault(); this.selectInspectorTab('info'); return; }
+      }
+
+      // Cmd+Shift+R / Ctrl+Shift+R: Reset All Edits
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault();
+        this.resetAllEdits();
+        return;
       }
 
       // Cmd+U / Ctrl+U: Auto Tone calculation
@@ -1173,7 +1254,7 @@ class DarkroomApp {
 
         this.currentMetadata = preview.metadata;
 
-        // Update EXIF metadata header
+        // Update EXIF metadata header (permanent across all tabs)
         this.elements['meta-dimensions'].innerText = formatDimensions(
           preview.width,
           preview.height,
@@ -1184,6 +1265,53 @@ class DarkroomApp {
         this.elements['meta-iso'].innerText = formatISO(preview.metadata.iso);
         this.elements['meta-aperture'].innerText = formatAperture(preview.metadata.aperture);
         this.elements['meta-shutter'].innerText = formatShutterSpeed(preview.metadata.shutter_speed);
+
+        // Update format badge & rich hardware metadata for Info tab
+        const extBadge = entry.name.split('.').pop()?.toUpperCase() || 'RAW';
+        if (this.elements['meta-format-badge']) {
+          this.elements['meta-format-badge'].innerText = extBadge;
+        }
+
+        const make = preview.metadata.camera_make || '';
+        const model = preview.metadata.camera_model || '';
+        const fullCamera = `${make} ${model}`.trim() || preview.metadata.camera_model || 'Bayer Sensor';
+        if (this.elements['meta-full-camera']) {
+          this.elements['meta-full-camera'].innerText = fullCamera;
+        }
+
+        if (this.elements['meta-lens']) {
+          this.elements['meta-lens'].innerText = preview.metadata.lens_model || '—';
+        }
+
+        if (this.elements['meta-focal-length']) {
+          this.elements['meta-focal-length'].innerText = formatFocalLength(preview.metadata.focal_length);
+        }
+
+        if (this.elements['meta-exposure-summary']) {
+          this.elements['meta-exposure-summary'].innerText = `${formatShutterSpeed(preview.metadata.shutter_speed)} • ${formatAperture(preview.metadata.aperture)} • ISO ${formatISO(preview.metadata.iso)}`;
+        }
+
+        if (this.elements['meta-sensor-res']) {
+          this.elements['meta-sensor-res'].innerText = formatDimensions(
+            preview.width,
+            preview.height,
+            preview.metadata.raw_width,
+            preview.metadata.raw_height
+          );
+        }
+
+        if (this.elements['meta-date-taken']) {
+          let dateStr = '—';
+          if (preview.metadata.taken_time && preview.metadata.taken_time > 0) {
+            dateStr = new Date(preview.metadata.taken_time * 1000).toLocaleString(undefined, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            });
+          } else if (preview.metadata.date_time) {
+            dateStr = preview.metadata.date_time;
+          }
+          this.elements['meta-date-taken'].innerText = dateStr;
+        }
 
         // Update filmstrip thumbnail
         const cardEl = document.getElementById(`thumb-card-${idx}`);
@@ -1218,6 +1346,11 @@ class DarkroomApp {
           } catch (_) {}
         }
         if (requestId !== this.selectRequestId) return; // Dropped after sidecar read!
+
+        if (this.elements['meta-sidecar-status']) {
+          this.elements['meta-sidecar-status'].innerText = sidecarXml ? '.xmp Synced' : 'Session RAM';
+          this.elements['meta-sidecar-status'].style.color = sidecarXml ? '#4ade80' : 'var(--text-muted)';
+        }
 
         if (sidecarXml) {
           const xmp = this.bridge.parseXmp(sidecarXml);
@@ -1269,6 +1402,9 @@ class DarkroomApp {
           this.activeLinearData = linear16Data;
           this.activeLinearW = linearW;
           this.activeLinearH = linearH;
+          this.activeSourceImage = null;
+          this.activeSourceW = 0;
+          this.activeSourceH = 0;
           imgW = linearW;
           imgH = linearH;
           this.renderer.uploadLinearRec2020Texture(linearW, linearH, linear16Data);
@@ -1276,6 +1412,9 @@ class DarkroomApp {
           this.activeLinearData = null;
           this.activeLinearW = 0;
           this.activeLinearH = 0;
+          this.activeSourceImage = imgBitmap;
+          this.activeSourceW = imgBitmap.width;
+          this.activeSourceH = imgBitmap.height;
           imgW = imgBitmap.width;
           imgH = imgBitmap.height;
           this.renderer.uploadImage(imgBitmap);
@@ -1314,6 +1453,29 @@ class DarkroomApp {
     const lut = this.bridge.evaluateCurves(this.edits.curves);
     this.renderer.updateToneCurvesLut(lut);
     this.renderCanvas();
+  }
+
+  public selectInspectorTab(tab: string) {
+    const tabBtns = document.querySelectorAll('.seg-btn');
+    tabBtns.forEach(b => {
+      const isMatch = b.getAttribute('data-tab') === tab;
+      b.classList.toggle('active', isMatch);
+      b.setAttribute('aria-selected', isMatch ? 'true' : 'false');
+    });
+
+    const panels = document.querySelectorAll('.workspace-panel');
+    panels.forEach(p => {
+      p.classList.toggle('hidden', p.id !== `tab-${tab}`);
+    });
+  }
+
+  public resetAllEdits() {
+    this.edits = this.getDefaultEdits();
+    this.curveWidget.resetAllChannels();
+    this.syncSliderUI();
+    this.renderCanvas();
+    this.autoSaveSidecar();
+    console.log('⚡ [App] Reset all edits to as-shot defaults');
   }
 
   private renderCanvas() {
@@ -1359,6 +1521,14 @@ class DarkroomApp {
     setVal('sharpen-masking', this.edits.sharpening_masking, v => `${Math.round(v)}`);
     setVal('noise-reduction', this.edits.noise_reduction, v => `${Math.round(v)}`);
 
+    setVal('shadow-hue', this.edits.split_toning_shadow_hue, v => `${Math.round(v)}°`);
+    setVal('shadow-sat', this.edits.split_toning_shadow_sat, v => `${Math.round(v)}`);
+    setVal('highlight-hue', this.edits.split_toning_highlight_hue, v => `${Math.round(v)}°`);
+    setVal('highlight-sat', this.edits.split_toning_highlight_sat, v => `${Math.round(v)}`);
+    setVal('split-balance', this.edits.split_toning_balance, v => `${Math.round(v)}`);
+
+    this.updateSplitToningHint();
+
     if (this.elements['select-tone-profile']) {
       (this.elements['select-tone-profile'] as HTMLSelectElement).value = this.edits.tone_profile;
     }
@@ -1371,6 +1541,8 @@ class DarkroomApp {
 
     if (this.edits.curves) {
       this.curveWidget.setPoints(this.edits.curves);
+      const lut = this.bridge.evaluateCurves(this.edits.curves);
+      this.renderer.updateToneCurvesLut(lut);
     }
   }
 
