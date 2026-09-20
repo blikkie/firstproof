@@ -152,4 +152,9 @@ This archive tracks completed stories and features moved from the active backlog
   - Implemented perceptual Mired non-linear color temperature mapping ($2000\text{K} \to 20000\text{K}$, $50\text{K}/200\text{K}$ stepping) providing uniform visual sensitivity across daylight and tungsten regions.
   - Aligned all develop slider boundaries with macOS desktop app (Exposure $\pm 3.0\,\text{EV}$, Tint $\pm 200$, Warmth $\pm 100$, Process Depth $0..100\%$).
   - Added Detail & Sharpening workspace and <kbd>Cmd+U</kbd> / <kbd>Ctrl+U</kbd> keyboard shortcut for instant auto tone leveling.
+- **macOS Export Modal Parity & Full-Resolution RAW CFA Demosaicing (`ExportModal.ts`, `firstproof-types/raw.rs`, `tiffEncoder.ts`)**:
+  - Implemented `ExportModal.ts` with 1:1 parity with macOS desktop `ExportSheetView.swift`: JPEG (Quality 1–100 + Ultra HDR ISO 21496-1 toggle) vs 16-bit uncompressed TIFF 6.0, sizing presets (Original, 2048px, 3840px, Custom Dimension), and color spaces (sRGB vs Display P3 with Relative Colorimetric vs Perceptual rendering intents).
+  - Resolved Chromium `SecurityError: The directory selected contains system files` by defaulting destination to `~/Downloads (Browser Default)` streaming via browser downloads without requiring privileged directory handle access.
+  - Implemented pure Rust edge-directed gradient-sensing CFA demosaicing in `firstproof-types/src/raw.rs` (`to_full_demosaiced_linear_f16`) and exposed through `firstproof-wasm` bridge (`decode_raw_full_linear_from_scratchpad`), allowing exports of RAW files at 1:1 native sensor resolution while preserving 10–15ms 2×2 binned viewport culling.
+  - Created zero-dependency TypeScript 16-bit uncompressed TIFF 6.0 binary encoder (`tiffEncoder.ts`) with deterministic little-endian IFD directory packing.
 
