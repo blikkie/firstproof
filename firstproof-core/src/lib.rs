@@ -17,56 +17,20 @@ pub mod gainmap;
 pub mod synthetic;
 pub mod checksum;
 
-pub use curve::{evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, CurvePointRecord, ToneCurvesRecord};
-pub use color::emulsion::{EmulsionArchetype, EmulsionFormat};
-pub use color::print_media::{EnlargerFilterMode, PrintMediaMode};
+pub use firstproof_types::{
+    evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, ColorProfileMode,
+    CurvePointRecord, EditSettings, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode,
+    ExportColorSpace, ExportRenderingIntent, PrintMediaMode, ToneCurvesRecord, WhiteBalanceResult,
+};
 
-#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum ColorProfileMode {
-    AgxVivid,
-    AgxFilmic,
-    CameraStandard,
-    CameraPortrait,
-    CameraLandscape,
-    CameraVivid,
-}
-
-impl Default for ColorProfileMode {
-    fn default() -> Self {
-        Self::AgxVivid
-    }
-}
-
-#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum ExportColorSpace {
-    Srgb,
-    DisplayP3,
-}
-
-impl Default for ExportColorSpace {
-    fn default() -> Self {
-        Self::Srgb
-    }
-}
-
-#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum ExportRenderingIntent {
-    Perceptual,
-    RelativeColorimetric,
-}
-
-impl Default for ExportRenderingIntent {
-    fn default() -> Self {
-        Self::RelativeColorimetric
-    }
-}
+pub use lensfun::LensCorrectionCoefficients;
 
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct BatchExportItemRecord {
     pub input_path: String,
     pub output_path: String,
     pub edits: EditSettings,
-    pub lens_coeffs: Option<LensCorrectionCoefficientsRecord>,
+    pub lens_coeffs: Option<LensCorrectionCoefficients>,
     pub quality: u32,
     pub max_dimension: Option<u32>,
     pub color_space: ExportColorSpace,
@@ -89,110 +53,7 @@ pub struct CubeLutRecord {
     pub data_rgba32f: Vec<u8>,
 }
 
-#[derive(uniffi::Record, Clone, Copy, Debug, PartialEq)]
-pub struct WhiteBalanceResult {
-    pub temperature: f32,
-    pub tint: f32,
-}
 
-#[derive(uniffi::Record, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct EditSettings {
-    pub exposure: f32,
-    pub contrast: f32,
-    pub highlights: f32,
-    pub shadows: f32,
-    pub whites: f32,
-    pub blacks: f32,
-    pub vibrance: f32,
-    pub saturation: f32,
-    pub deep_blue: f32,
-    pub foliage: f32,
-    pub temperature: f32,
-    pub tint: f32,
-    pub crop_left: f32,
-    pub crop_top: f32,
-    pub crop_right: f32,
-    pub crop_bottom: f32,
-    pub crop_angle: f32,
-    pub perspective_vertical: f32,
-    pub perspective_horizontal: f32,
-    pub crop_constrain: bool,
-    pub rotation: i32,
-    pub flip_horizontal: bool,
-    pub flip_vertical: bool,
-    pub tone_profile: ColorProfileMode,
-    pub lut_name: Option<String>,
-    pub lut_intensity: f32,
-    pub sharpening_amount: f32,
-    pub sharpening_radius: f32,
-    pub sharpening_masking: f32,
-    pub noise_reduction: f32,
-    pub emulsion_archetype: EmulsionArchetype,
-    pub emulsion_format: EmulsionFormat,
-    pub emulsion_exposure: f32,
-    pub curves: ToneCurvesRecord,
-    pub split_toning_shadow_hue: f32,
-    pub split_toning_shadow_sat: f32,
-    pub split_toning_highlight_hue: f32,
-    pub split_toning_highlight_sat: f32,
-    pub split_toning_balance: f32,
-    pub print_media: PrintMediaMode,
-    pub enlarger_filter: EnlargerFilterMode,
-    pub print_paper_grade: f32,
-    pub print_base_warmth: f32,
-    pub print_process_depth: f32,
-}
-
-impl Default for EditSettings {
-    fn default() -> Self {
-        Self {
-            exposure: 0.0,
-            contrast: 0.0,
-            highlights: 0.0,
-            shadows: 0.0,
-            whites: 0.0,
-            blacks: 0.0,
-            vibrance: 0.0,
-            saturation: 0.0,
-            deep_blue: 0.0,
-            foliage: 0.0,
-            temperature: 5000.0,
-            tint: 0.0,
-            crop_left: 0.0,
-            crop_top: 0.0,
-            crop_right: 1.0,
-            crop_bottom: 1.0,
-            crop_angle: 0.0,
-            perspective_vertical: 0.0,
-            perspective_horizontal: 0.0,
-            crop_constrain: true,
-            rotation: 0,
-            flip_horizontal: false,
-            flip_vertical: false,
-            tone_profile: ColorProfileMode::AgxVivid,
-            lut_name: None,
-            lut_intensity: 1.0,
-            sharpening_amount: 0.0,
-            sharpening_radius: 1.0,
-            sharpening_masking: 0.0,
-            noise_reduction: 0.0,
-            emulsion_archetype: EmulsionArchetype::None,
-            emulsion_format: EmulsionFormat::Format35mm,
-            emulsion_exposure: 0.0,
-            curves: ToneCurvesRecord::default(),
-            split_toning_shadow_hue: 215.0,
-            split_toning_shadow_sat: 0.0,
-            split_toning_highlight_hue: 45.0,
-            split_toning_highlight_sat: 0.0,
-            split_toning_balance: 0.0,
-            print_media: PrintMediaMode::None,
-            enlarger_filter: EnlargerFilterMode::NeutralPanchromatic,
-            print_paper_grade: 0.0,
-            print_base_warmth: 0.0,
-            print_process_depth: 100.0,
-        }
-    }
-}
 
 /// Returns a deterministic signature of all edit settings for cache keying and invalidation.
 /// Automatically serializes all current and future fields without manual tracking.

@@ -1,4 +1,4 @@
-.PHONY: all build-core build-bridge clean test run
+.PHONY: all build-core build-bridge build-wasm build-web clean test test-all run
 
 ARCH := $(shell uname -m)
 ifeq ($(ARCH),arm64)
@@ -44,10 +44,23 @@ bundle: build-app
 	@echo "✅ Standalone bundle created at dist/FirstProof.app"
 
 test:
-	GIT_CONFIG_GLOBAL=/dev/null cargo test --target $(RUST_TARGET) -p firstproof-core
+	GIT_CONFIG_GLOBAL=/dev/null cargo test -p firstproof-core
+
+test-all:
+	GIT_CONFIG_GLOBAL=/dev/null cargo test --workspace
+	GIT_CONFIG_GLOBAL=/dev/null cargo check -p firstproof-wasm --target wasm32-unknown-unknown
+	cd firstproof-wasm && wasm-pack build --target web --out-dir pkg
+	node firstproof-wasm/test_wasm.js
+
+build-wasm:
+	cd firstproof-wasm && wasm-pack build --target web --out-dir pkg
+
+build-web: build-wasm
+	cd web && npm run build
 
 test-parity:
-	GIT_CONFIG_GLOBAL=/dev/null cargo test --target $(RUST_TARGET) -p firstproof-core --test dual_engine_synthetic_parity -- --nocapture
+	GIT_CONFIG_GLOBAL=/dev/null cargo test -p firstproof-core --test dual_engine_synthetic_parity -- --nocapture
+
 
 test-calibration:
 	GIT_CONFIG_GLOBAL=/dev/null cargo run --manifest-path firstproof-core/Cargo.toml --target $(RUST_TARGET) --bin calibrate

@@ -114,3 +114,30 @@ This archive tracks completed stories and features moved from the active backlog
   - Replaced legacy `Color.clear.aspectRatio(1.0, contentMode: .fit).overlay(GeometryReader ...)` pattern in `ToneCurveView` and `ColorWheelView`.
   - Guaranteed deterministic vertical space reservation inside inspector `ScrollView` and `VStack` containers, eliminating layout jitter and overflow into adjacent disclosure groups during window and sidebar resizing.
   - Updated architectural guidelines in `.agents/AGENTS.md` to establish `SquareAspectLayout` as the standard pattern for square aspect containment.
+
+---
+
+## 7. WebAssembly & WebGL 2 Interactive Darkroom Engine (`firstproof.photo`)
+- **WebAssembly Core Engine (`firstproof-wasm`)**:
+  - Compiled core color science, sensitometric film stock characteristic curves, print media archetypes, DCP/XMP ingestion, and preview extraction to WebAssembly targeting `--target web`.
+  - Implemented pre-allocated 64MB decode scratchpad (`init_scratchpad`) with zero-copy shared memory pointer transfers (`copy_into_scratchpad`, `decode_preview_from_scratchpad`).
+  - Strict spec-compliant JPEG stream marker segment parser (`parse_jpeg_stream_at`) handling 2-byte marker lengths, skipping `0xFF 0x00` entropy scan data byte stuffing, and filtering out `SOF3` Lossless JPEG tiles.
+  - Recursive TIFF IFD structure parser (`IFD0`, `SubIFDs` `0x014A`, `ExifIFD` `0x8769`) extracting high-res preview JPEGs (`5184 × 3456`) directly from DNG and CR2 negatives.
+- **WebGL 2 Sensitometric Shader Pipeline (`WebGLRenderer.ts`)**:
+  - GLSL 3.00 ES shader rendering AgX filmic tone mapping (Vivid/Neutral), linear Rec.2020 working space, DCP HueSatMap HSV deltas, high-precision tone curve LUTs, and fine-art print media.
+- **Photographic Web Application (`web/src/main.ts`)**:
+  - Local browser folder intake via File System Access API (`showDirectoryPicker`) with zero tracking and 100% on-device processing.
+  - Dual-wheel Tone Curve editor widget (`ToneCurveWidget.ts`) with cubic spline evaluation.
+  - Extended White Balance presets including Sodium Vapor ($2200\text{K}, \text{Tint } +160$) and Auto WB.
+  - Interactive White Balance Eyedropper (<kbd>W</kbd>), White Point Picker, and Black Point Picker sampling WebGL canvas pixels.
+  - Pure photographic EXIF formatters (`formatAperture`, `formatShutterSpeed`, `formatDimensions`, `formatExposure`).
+- **Shared Rust Types & Web Parity Invariant (`firstproof-types`)**:
+  - Created shared domain crate `firstproof-types` extracting `RawSensorFrame`, `EditSettings`, `evaluate_curve_lut`, `XmpData`, and `extract_preview_slice` to guarantee 1:1 color science, sensitometric math, and channel mapping parity across native macOS and web darkroom targets without duplicate logic.
+  - Verified bit-level parity with integration test suite `core_wasm_parity.rs`.
+- **Off-Main-Thread RAW Pipeline & Instant Culling (`RawDecodeWorker.ts`)**:
+  - Decoupled 16-bit linear Bayer CFA sensor decoding into dedicated WebWorker (`RawDecodeWorker.ts`) using zero-copy `postMessage` ArrayBuffer transfer, keeping the main UI thread locked at 60 FPS.
+  - Implemented lookahead neighbor frame prewarming (`[idx - 1, idx + 1]`) in the background worker with bounded LRU memory eviction and `imgBitmap.close()` cleanup, reducing burst culling navigation latency to < 50ms.
+  - Integrated dynamic `wasm.memory.buffer` validation to eliminate detached ArrayBuffer exceptions when allocating scratchpads.
+- **Native Engine Intake & Binning Enhancements (`firstproof-core`)**:
+  - Backported sub-millisecond TIFF IFD preview extraction into `raw.rs` (`extract_preview_slice`), replacing brute-force multi-megabyte linear byte scans with direct 0.3ms IFD/SubIFD directory lookups.
+  - Optimized 2×2 Bayer binning in `decode.rs` with contiguous row slicing and hoisted CFA pattern matching outside inner pixel loops across both NEON SIMD and Rayon parallel paths.

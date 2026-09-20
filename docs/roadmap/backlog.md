@@ -2,17 +2,16 @@
 
 This document strictly tracks pending and deferred features calibrated against our core philosophy: **"Pure capture. Honest color. Zero digital plastic. Print & web first."**
 
-> **Note**: For completed stories, see [completed.md](file:///Users/blikkie/src/LumenBox/docs/roadmap/completed.md). For color pipeline specifications, see [color_pipeline.md](file:///Users/blikkie/src/LumenBox/docs/architecture/color_pipeline.md). For web architecture, see [web_architecture.md](file:///home/remco/src/firstproof/docs/architecture/web_architecture.md).
+> **Note**: For completed stories, see [completed.md](file:///home/remco/src/firstproof/docs/roadmap/completed.md). For color pipeline specifications, see [color_pipeline.md](file:///home/remco/src/firstproof/docs/architecture/color_pipeline.md). For web architecture, see [web_architecture.md](file:///home/remco/src/firstproof/docs/architecture/web_architecture.md).
 
 ---
 
 ## 🚀 Immediate Next Up
-1. **WebAssembly Darkroom Engine & Static Web Launch (P0 / P1 - Pulled Forward)**: Compile core color science and preview extraction to WebAssembly (`firstproof-wasm`), build WebGL 2 develop shader pipeline, pre-allocated decode scratchpad, local folder intake (`showDirectoryPicker`), and deploy static interactive test drive on GitHub Pages (`firstproof.photo`).
-2. **Cross-Platform Linux Toolchain & Headless Development Engine (P1)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
-3. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-4. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
-5. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
-6. **Archival High-Precision Multi-Pass Export Engine (P2)**: Multi-pass AMaZE/RCD demosaicing and 2D spatial developer exhaustion diffusion.
+1. **Cross-Platform Linux Toolchain & Headless Development Engine (P1)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
+2. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
+3. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
+4. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
+5. **Archival High-Precision Multi-Pass Export Engine (P2)**: Multi-pass AMaZE/RCD demosaicing and 2D spatial developer exhaustion diffusion.
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
 

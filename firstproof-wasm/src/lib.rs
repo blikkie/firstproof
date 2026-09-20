@@ -1,16 +1,15 @@
 use wasm_bindgen::prelude::*;
 
-pub mod curve;
-pub mod preview;
 pub mod scratchpad;
-pub mod xmp;
 
-use curve::{evaluate_curves_lut_ref, ToneCurvesRecord};
-use preview::{
-    extract_metadata_from_bytes, extract_preview_slice, get_jpeg_dimensions, PreviewResultRecord,
+pub use firstproof_types::{
+    evaluate_all_curves_lut, evaluate_curve_lut, extract_metadata_from_bytes,
+    extract_preview_slice, generate_xmp_sidecar, get_jpeg_dimensions, parse_xmp_sidecar,
+    AllCurvesLutRecord, CfaPattern, ColorProfileMode, CurvePointRecord, EditSettings,
+    EmulsionArchetype, EmulsionFormat, EnlargerFilterMode, f16_to_f32, ImageMetadataRecord, PrintMediaMode,
+    PreviewResultRecord, RawLinearResultRecord, RawSensorFrame, ToneCurvesRecord, XmpData,
 };
 use scratchpad::with_scratchpad;
-use xmp::{generate_xmp_sidecar, parse_xmp_sidecar, WebXmpData};
 
 #[wasm_bindgen]
 pub fn init_scratchpad(capacity_mb: u32) -> *mut u8 {
@@ -32,35 +31,289 @@ pub fn get_scratchpad_len() -> usize {
 }
 
 #[wasm_bindgen]
-pub fn copy_into_scratchpad(offset: usize, bytes: &[u8]) -> usize {
+pub fn get_scratchpad_u16_slice(offset: usize, u16_len: usize) -> js_sys::Uint16Array {
     with_scratchpad(|buf| {
-        if offset + bytes.len() > buf.len() {
-            buf.resize(offset + bytes.len());
+        let byte_len = u16_len * 2;
+        if let Some(slice) = buf.slice(offset, byte_len) {
+            let u16_slice = unsafe {
+                std::slice::from_raw_parts(slice.as_ptr() as *const u16, u16_len)
+            };
+            js_sys::Uint16Array::from(u16_slice)
+        } else {
+            js_sys::Uint16Array::new_with_length(0)
         }
-        if let Some(slice) = buf.slice_mut(offset, bytes.len()) {
-            slice.copy_from_slice(bytes);
-            bytes.len()
+    })
+}
+
+#[wasm_bindgen]
+pub fn get_scratchpad_u8_slice(offset: usize, len: usize) -> js_sys::Uint8Array {
+    with_scratchpad(|buf| {
+        if let Some(slice) = buf.slice(offset, len) {
+            js_sys::Uint8Array::from(slice)
+        } else {
+            js_sys::Uint8Array::new_with_length(0)
+        }
+    })
+}
+
+#[wasm_bindgen]
+pub fn copy_into_scratchpad(offset: usize, bytes: &js_sys::Uint8Array) -> usize {
+    with_scratchpad(|buf| {
+        let len = bytes.byte_length() as usize;
+        if offset + len > buf.len() {
+            buf.resize(offset + len);
+        }
+        if let Some(slice) = buf.slice_mut(offset, len) {
+            bytes.copy_to(slice);
+            len
         } else {
             0
         }
     })
 }
 
+fn decode_raw_sensor_frame(slice: &[u8]) -> Option<RawSensorFrame> {
+    let rawfile = rawler::rawsource::RawSource::new_from_slice(slice);
+    let params = rawler::decoders::RawDecodeParams::default();
+    let raw = rawler::decode(&rawfile, &params).ok()?;
+
+    let (crop_top, crop_left, active_w, active_h) = if let Some(crop) = raw.crop_area {
+        let x = (crop.p.x as usize) & !1;
+        let y = (crop.p.y as usize) & !1;
+        let w = (crop.d.w as usize).max(2) & !1;
+        let h = (crop.d.h as usize).max(2) & !1;
+        (y, x, w, h)
+    } else {
+        (0, 0, raw.width & !1, raw.height & !1)
+    };
+
+    let c00 = raw.camera.cfa.color_at(0, 0);
+    let c01 = raw.camera.cfa.color_at(0, 1);
+    let c10 = raw.camera.cfa.color_at(1, 0);
+    let c11 = raw.camera.cfa.color_at(1, 1);
+
+    let cfa_pattern = match (c00, c01, c10, c11) {
+        (0, 1, 1, 2) => CfaPattern::Rggb,
+        (2, 1, 1, 0) => CfaPattern::Bggr,
+        (1, 2, 0, 1) => CfaPattern::Gbrg,
+        (1, 0, 2, 1) => CfaPattern::Grbg,
+        _ => CfaPattern::Rggb,
+    };
+
+    let camera_model = format!("{} {}", raw.clean_make, raw.clean_model).trim().to_string();
+
+    let mut black_levels = [0.0f32; 4];
+    if !raw.blacklevel.levels.is_empty() {
+        let r = &raw.blacklevel.levels[0];
+        let val = if r.d != 0 { r.n as f32 / r.d as f32 } else { r.n as f32 };
+        black_levels = [val; 4];
+    }
+
+    let mut white_levels = [65535.0f32; 4];
+    if !raw.whitelevel.0.is_empty() {
+        white_levels = [raw.whitelevel.0[0] as f32; 4];
+    }
+
+    let wb = raw.wb_coeffs;
+    let wb_coeffs = [wb[0], wb[1], wb[2], wb[3]];
+
+    let sensor_data = match raw.data {
+        rawler::RawImageData::Integer(cfa) => cfa,
+        _ => return None,
+    };
+
+    let find_matrix = |pattern: &str| -> Option<[[f32; 3]; 3]> {
+        raw.color_matrix.iter()
+            .find(|(k, _)| format!("{:?}", k).to_lowercase() == pattern)
+            .and_then(|(_, v)| {
+                if v.len() >= 9 {
+                    Some([
+                        [v[0], v[1], v[2]],
+                        [v[3], v[4], v[5]],
+                        [v[6], v[7], v[8]],
+                    ])
+                } else {
+                    None
+                }
+            })
+    };
+
+    let color_matrix_tungsten = find_matrix("a");
+    let color_matrix = find_matrix("d65")
+        .or_else(|| find_matrix("d50"))
+        .or_else(|| raw.color_matrix.iter().next().and_then(|(_, v)| {
+            if v.len() >= 9 {
+                Some([
+                    [v[0], v[1], v[2]],
+                    [v[3], v[4], v[5]],
+                    [v[6], v[7], v[8]],
+                ])
+            } else {
+                None
+            }
+        }));
+
+    Some(RawSensorFrame {
+        full_width: raw.width,
+        full_height: raw.height,
+        active_x: crop_left,
+        active_y: crop_top,
+        active_width: active_w,
+        active_height: active_h,
+        cfa_pattern,
+        black_levels,
+        white_levels,
+        wb_coeffs,
+        color_matrix,
+        color_matrix_tungsten,
+        camera_model,
+        sensor_data,
+    })
+}
+
+fn decode_raw_binned_linear(slice: &[u8]) -> Option<(Vec<u16>, u32, u32)> {
+    let frame = decode_raw_sensor_frame(slice)?;
+    Some(frame.to_binned_linear_f16())
+}
+
+#[wasm_bindgen]
+pub fn decode_raw_linear_from_scratchpad(input_len: usize) -> Result<JsValue, JsValue> {
+    with_scratchpad(|buf| {
+        let metadata = {
+            let slice = buf
+                .slice(0, input_len)
+                .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
+            extract_metadata_from_bytes(slice)
+        };
+
+        let linear_res = {
+            if let Some(slice) = buf.slice(0, input_len) {
+                decode_raw_binned_linear(slice)
+            } else {
+                None
+            }
+        };
+
+        if let Some((u16_pixels, bin_w, bin_h)) = linear_res {
+            let bytes_needed = u16_pixels.len() * 2;
+            let aligned_offset = (input_len + 15) & !15;
+            let scratch_len = buf.len();
+            if aligned_offset + bytes_needed > scratch_len {
+                buf.resize(aligned_offset + bytes_needed);
+            }
+            if let Some(target_slice) = buf.slice_mut(aligned_offset, bytes_needed) {
+                let u8_view = unsafe {
+                    std::slice::from_raw_parts(
+                        u16_pixels.as_ptr() as *const u8,
+                        bytes_needed,
+                    )
+                };
+                target_slice.copy_from_slice(u8_view);
+                let res = RawLinearResultRecord {
+                    linear_offset: aligned_offset as u64,
+                    linear_len: bytes_needed as u64,
+                    width: bin_w,
+                    height: bin_h,
+                    is_linear: true,
+                    metadata,
+                };
+                web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
+                    "⚡ [RAW Linear Rec.2020 Event] Decoded uncompressed 16-bit linear RAW frame: {}x{} pixels ({} MB)",
+                    bin_w, bin_h, (bytes_needed as f32 / 1024.0 / 1024.0)
+                )));
+                return serde_wasm_bindgen::to_value(&res).map_err(|e| JsValue::from_str(&e.to_string()));
+            }
+        }
+
+        Err(JsValue::from_str("Failed to decode 16-bit linear RAW frame"))
+    })
+}
+
 #[wasm_bindgen]
 pub fn decode_preview_from_scratchpad(input_len: usize) -> Result<JsValue, JsValue> {
     with_scratchpad(|buf| {
-        let slice = buf
-            .slice(0, input_len)
-            .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
+        let metadata = {
+            let slice = buf
+                .slice(0, input_len)
+                .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
+            extract_metadata_from_bytes(slice)
+        };
 
-        let metadata = extract_metadata_from_bytes(slice);
-        let preview_info = extract_preview_slice(slice).ok_or_else(|| {
-            JsValue::from_str("Failed to find embedded RGB preview in RAW/JPEG stream")
-        })?;
+        // 1. Try extracting high-res embedded preview JPEG
+        let mut preview_offset = 0u64;
+        let mut preview_len = 0u64;
+        let mut width = 0u32;
+        let mut height = 0u32;
 
-        let (preview_offset, preview_len) = preview_info;
-        let preview_bytes = &slice[preview_offset..preview_offset + preview_len];
-        let (width, height) = get_jpeg_dimensions(preview_bytes).unwrap_or((0, 0));
+        {
+            if let Some(slice) = buf.slice(0, input_len) {
+                if let Some((off, len)) = extract_preview_slice(slice) {
+                    let preview_bytes = &slice[off..off + len];
+                    if let Some((w, h)) = get_jpeg_dimensions(preview_bytes) {
+                        if w >= 320 && h >= 240 {
+                            preview_offset = off as u64;
+                            preview_len = len as u64;
+                            width = w;
+                            height = h;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. If embedded preview is missing or low-res (< 1920x1080), decode full RAW Bayer sensor frame via rawler
+        if width == 0 || height == 0 {
+            let raw_res = {
+                if let Some(slice) = buf.slice(0, input_len) {
+                    decode_raw_binned_linear(slice)
+                } else {
+                    None
+                }
+            };
+
+            if let Some((u16_pixels, bin_w, bin_h)) = raw_res {
+                let mut rgb_bytes = vec![0u8; (bin_w * bin_h * 3) as usize];
+                for i in 0..(bin_w * bin_h) as usize {
+                    let r_lin = f16_to_f32(u16_pixels[i * 4]);
+                    let g_lin = f16_to_f32(u16_pixels[i * 4 + 1]);
+                    let b_lin = f16_to_f32(u16_pixels[i * 4 + 2]);
+                    rgb_bytes[i * 3] = (r_lin.clamp(0.0, 1.0).powf(1.0 / 2.2) * 255.0) as u8;
+                    rgb_bytes[i * 3 + 1] = (g_lin.clamp(0.0, 1.0).powf(1.0 / 2.2) * 255.0) as u8;
+                    rgb_bytes[i * 3 + 2] = (b_lin.clamp(0.0, 1.0).powf(1.0 / 2.2) * 255.0) as u8;
+                }
+                let mut jpeg_buf = Vec::new();
+                let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buf, 90);
+                if encoder.encode(&rgb_bytes, bin_w, bin_h, image::ColorType::Rgb8).is_ok() {
+                    let raw_len = jpeg_buf.len();
+                    let scratch_len = buf.len();
+                    if input_len + raw_len > scratch_len {
+                        buf.resize(input_len + raw_len);
+                    }
+                    if let Some(target_slice) = buf.slice_mut(input_len, raw_len) {
+                        target_slice.copy_from_slice(&jpeg_buf);
+                        preview_offset = input_len as u64;
+                        preview_len = raw_len as u64;
+                        width = bin_w;
+                        height = bin_h;
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback to embedded slice if rawler decoding was unavailable for this container format
+        if width == 0 || height == 0 {
+            if let Some(slice) = buf.slice(0, input_len) {
+                if let Some((off, len)) = extract_preview_slice(slice) {
+                    let preview_bytes = &slice[off..off + len];
+                    if let Some((w, h)) = get_jpeg_dimensions(preview_bytes) {
+                        preview_offset = off as u64;
+                        preview_len = len as u64;
+                        width = w;
+                        height = h;
+                    }
+                }
+            }
+        }
 
         let res = PreviewResultRecord {
             preview_offset,
@@ -79,7 +332,7 @@ pub fn decode_preview_from_scratchpad(input_len: usize) -> Result<JsValue, JsVal
 pub fn evaluate_curves(curves_json: &str) -> Result<JsValue, JsValue> {
     let curves: ToneCurvesRecord = serde_json::from_str(curves_json)
         .map_err(|e| JsValue::from_str(&format!("Invalid curves JSON: {}", e)))?;
-    let lut = evaluate_curves_lut_ref(&curves);
+    let lut = evaluate_all_curves_lut(&curves);
     serde_wasm_bindgen::to_value(&lut).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
@@ -91,7 +344,7 @@ pub fn parse_xmp(xml: &str) -> Result<JsValue, JsValue> {
 
 #[wasm_bindgen]
 pub fn generate_xmp(xmp_json: &str) -> Result<String, JsValue> {
-    let xmp: WebXmpData = serde_json::from_str(xmp_json)
+    let xmp: XmpData = serde_json::from_str(xmp_json)
         .map_err(|e| JsValue::from_str(&format!("Invalid XMP JSON: {}", e)))?;
     Ok(generate_xmp_sidecar(&xmp))
 }
@@ -99,7 +352,6 @@ pub fn generate_xmp(xmp_json: &str) -> Result<String, JsValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use curve::CurvePointRecord;
 
     #[test]
     fn test_scratchpad_allocation() {
@@ -107,8 +359,8 @@ mod tests {
             assert!(buf.len() >= 64 * 1024 * 1024);
             let ptr = buf.ptr();
             assert!(!ptr.is_null());
-            buf.resize(70 * 1024 * 1024);
-            assert_eq!(buf.len(), 70 * 1024 * 1024);
+            buf.resize(300 * 1024 * 1024);
+            assert_eq!(buf.len(), 300 * 1024 * 1024);
         });
     }
 
@@ -121,7 +373,7 @@ mod tests {
             CurvePointRecord { x: 0.75, y: 0.80 },
             CurvePointRecord { x: 1.0, y: 1.0 },
         ];
-        let lut = evaluate_curves_lut_ref(&curves);
+        let lut = evaluate_all_curves_lut(&curves);
         assert_eq!(lut.master.len(), 256);
         assert_eq!(lut.red.len(), 256);
         assert_eq!(lut.green.len(), 256);
@@ -136,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_xmp_roundtrip() {
-        let mut xmp = WebXmpData::default();
+        let mut xmp = XmpData::default();
         xmp.rating = Some(5);
         xmp.status = "Pick".to_string();
         xmp.title = Some("Alpine Sunset".to_string());

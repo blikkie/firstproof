@@ -331,7 +331,14 @@ pub fn extract_preview_jpeg<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>>
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "File too small"));
     }
     
-    // Fast path: If the entire file is already an RGB JPEG image
+    // Fast path 1: TIFF IFD / SubIFD tag resolution via firstproof_types (0.3ms)
+    if let Some((start, len_slice)) = firstproof_types::preview::extract_preview_slice(&bytes) {
+        if start + len_slice <= bytes.len() {
+            return Ok(bytes[start..start + len_slice].to_vec());
+        }
+    }
+
+    // Fast path 2: Direct JPEG image
     if bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF && is_displayable_rgb_jpeg(&bytes) {
         return Ok(bytes);
     }

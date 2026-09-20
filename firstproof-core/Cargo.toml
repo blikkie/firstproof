@@ -8,6 +8,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "firstproof_core"
 
 [dependencies]
+firstproof-types = { path = "../firstproof-types", features = ["uniffi"] }
 # Core dependencies
 uniffi = { version = "0.28", features = ["cli"] }
 rawler = "0.8"
@@ -25,5 +26,3 @@ xmp-writer = "0.3"
 img-parts = "0.4.0"
 bayer = "0.1.5"
 lcms2 = { version = "6.2.0", features = ["static"] }
-
-

@@ -95,6 +95,25 @@ fn main() {
             }
             cmd_audit_parity(&args[2], None, true);
         }
+        "export-photo" => {
+            if args.len() < 4 {
+                eprintln!("Usage: inspect export-photo <input> <output>");
+                std::process::exit(1);
+            }
+            let edits = read_xmp_file(Path::new(&args[2])).map(|x| x.edits).unwrap_or_default();
+            firstproof_core::export::export_photo_file(
+                &args[2],
+                &args[3],
+                &edits,
+                None,
+                90,
+                None,
+                firstproof_core::ExportColorSpace::Srgb,
+                firstproof_core::ExportRenderingIntent::Perceptual,
+                false,
+            ).unwrap();
+            println!("Exported successfully to {}", args[3]);
+        }
         _ => {
             eprintln!("Unknown command: {}", command);
             print_usage();
@@ -123,6 +142,18 @@ fn cmd_inspect_photo(path_str: &str) {
             m.focal_length.unwrap_or(0.0), m.iso.unwrap_or(0), m.shutter_speed.as_deref().unwrap_or("-"), m.aperture.unwrap_or(0.0));
     } else {
         println!("⚠️  Could not extract EXIF metadata");
+    }
+
+    if let Ok(frame) = firstproof_core::raw_decoder::RawDecoder::decode(&firstproof_core::raw_decoder::RawlerDecoder, path) {
+        use firstproof_core::raw_decoder::RawSensorFrameExt;
+        println!("\n🖼️  Dimensions: full={}x{}, active={}x{}, origin=({}, {})", frame.full_width, frame.full_height, frame.active_width, frame.active_height, frame.active_x, frame.active_y);
+        println!("🧩 CFA Pattern: {:?}, Black: {:?}, White: {:?}, As-Shot WB: {:?}", frame.cfa_pattern, frame.black_levels, frame.white_levels, frame.as_shot_wb());
+        println!("🎨 Frame color_matrix: {:?}", frame.color_matrix);
+        println!("🎨 Frame color_matrix_tungsten: {:?}", frame.color_matrix_tungsten);
+        let m_core = frame.sensor_to_rec2020_at(5500.0);
+        println!("🎨 Core sensor_to_rec2020_at(5500K): {:?}", m_core.0);
+        let m_types = frame.compute_sensor_to_rec2020();
+        println!("🎨 Types compute_sensor_to_rec2020(): {:?}", m_types);
     }
 
     // 2. Lensfun Lookup

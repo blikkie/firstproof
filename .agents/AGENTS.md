@@ -41,6 +41,10 @@
 
 - **Dual-Engine Math Parity**: The Metal GPU shader pipeline (`Shaders.metal`, `Geometry.metal`) and the Rust CPU pipeline (`export.rs`, `curve.rs`, `color/`) must maintain bit-level mathematical parity. Any new tone transform or slider adjustment must be implemented identically in both engines and verified with `cargo test --test agx_shader_parity` and `cargo test --test camera_profiles_parity`.
 
+- **Shared Rust Primitives & Web Parity Invariant**:
+  - Never duplicate RAW decoding, Bayer binning, tone curve evaluation, or color math logic ad-hoc inside `firstproof-wasm`.
+  - WASM decoders and calculations must strictly consume shared domain models (`RawSensorFrame`, `EditSettings`, `evaluate_curve_lut`) defined in `firstproof-types` to guarantee 1:1 color science, sensitometric math, and channel mapping parity across native macOS and web darkroom targets.
+
 - **Physical Sensitometric Math Over Magic Numbers & Piecewise Hacks**:
   - Emulations (film stocks, recording emulsions, print media, enlarger filtration, toner chemistry) must always be grounded in continuous physical, optical, and sensitometric math—never arbitrary "magic numbers", hard thresholds, or piecewise if/else hacks.
   - Tonal curves must be smooth $C^1$ or $C^\infty$ analytical functions (e.g. bounded cubic polynomial S-curves $f(x) = x + \alpha \cdot x(1-x)(2x-1)$, smooth Hermite shoulders, or sigmoidal density curves). Fractional power laws $x^\gamma$ with infinite derivative ($f' \to \infty$) at bounds are forbidden.

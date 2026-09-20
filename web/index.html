@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>First Proof — WebAssembly & WebGL Darkroom Engine</title>
+  <meta name="description" content="Pure capture. Honest color. Zero digital plastic. High-fidelity client-side WebAssembly & WebGL 2 raw darkroom photo editor running 100% on device." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body class="darkroom-body">
+  <div id="app" class="app-layout">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 3a9 9 0 0 0 0 18v-9Z"/>
+          </svg>
+        </div>
+        <div class="brand-titles">
+          <h1 class="brand-name">FIRST PROOF</h1>
+          <span class="brand-tagline">Pure capture. Honest color. Zero digital plastic.</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-open-folder" class="btn btn-primary" title="Open local folder of RAW/JPEG photos">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+          Open Folder...
+        </button>
+        <input type="file" id="file-input-fallback" webkitdirectory directory multiple style="display: none;" />
+
+        <button id="btn-original-peek" class="btn btn-secondary" title="Press & Hold \ to compare original as-shot frame">
+          Original (\)
+        </button>
+
+        <button id="btn-export-proof" class="btn btn-secondary" title="Export high-resolution JPEG proof directly from WebGL canvas">
+          Export Proof
+        </button>
+
+        <button id="btn-parity-audit" class="btn btn-secondary" title="Audit Dual-Engine GL vs Export Parity">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Parity Audit
+        </button>
+
+        <button id="btn-shortcuts" class="btn btn-icon" title="Keyboard Shortcuts">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM6 3a3 3 0 0 0-3 3v12a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Workspace -->
+    <div class="workspace-container">
+      <!-- Center Canvas Viewport -->
+      <main class="viewport-main">
+        <div class="canvas-wrapper" id="canvas-wrapper">
+          <canvas id="darkroom-canvas"></canvas>
+          
+          <!-- Developing / Decoding Spinner Overlay -->
+          <div id="developing-spinner" class="spinner-overlay hidden">
+            <div class="spinner"></div>
+            <span class="spinner-text">Developing 14-bit RAW AgX frame...</span>
+          </div>
+
+          <!-- Empty Dropzone Placeholder -->
+          <div id="empty-state" class="empty-state-overlay">
+            <div class="empty-state-card">
+              <div class="empty-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                  <circle cx="9" cy="9" r="2"/>
+                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                </svg>
+              </div>
+              <h2>Select a Photo Shoot Folder</h2>
+              <p>100% Client-Side WebAssembly & WebGL 2 Darkroom Engine</p>
+              <div class="empty-actions">
+                <button id="btn-empty-open" class="btn btn-primary btn-lg">Open Local Folder</button>
+              </div>
+              <div class="zero-tracking-pill">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Zero tracking • On-device RAM • Non-destructive .xmp sidecars
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filmstrip Footer -->
+        <footer class="filmstrip-container">
+          <div class="filmstrip-header">
+            <span id="filmstrip-count" class="filmstrip-count">0 Photos Loaded</span>
+            <div class="filmstrip-nav-hints">Use ← / → keys to navigate frames | 1–5 for Ratings | P / X for Flags</div>
+          </div>
+          <div class="filmstrip-scroll" id="filmstrip-scroll">
+            <!-- Dynamic Thumbnail Cards appended here -->
+          </div>
+        </footer>
+      </main>
+
+      <!-- Right Inspector Sidebar -->
+      <aside class="inspector-sidebar">
+        <!-- Metadata Header Box -->
+        <div class="metadata-header-card" id="metadata-header-card">
+          <div class="meta-title-row">
+            <span id="meta-filename" class="meta-filename">No Photo Selected</span>
+            <span id="meta-dimensions" class="meta-dimensions">—</span>
+          </div>
+          <div class="meta-exif-grid">
+            <div class="exif-badge"><span class="exif-label">CAM</span><span id="meta-camera" class="exif-val">—</span></div>
+            <div class="exif-badge"><span class="exif-label">ISO</span><span id="meta-iso" class="exif-val">—</span></div>
+            <div class="exif-badge"><span class="exif-label">APERTURE</span><span id="meta-aperture" class="exif-val">—</span></div>
+            <div class="exif-badge"><span class="exif-label">SHUTTER</span><span id="meta-shutter" class="exif-val">—</span></div>
+          </div>
+        </div>
+
+        <!-- Rating & Flag Toolbar -->
+        <div class="rating-flag-toolbar">
+          <div class="star-rating-group" id="star-rating-group">
+            <button class="star-btn" data-star="1">★</button>
+            <button class="star-btn" data-star="2">★</button>
+            <button class="star-btn" data-star="3">★</button>
+            <button class="star-btn" data-star="4">★</button>
+            <button class="star-btn" data-star="5">★</button>
+          </div>
+          <div class="flag-group">
+            <button id="btn-pick" class="flag-btn pick-btn" title="Pick (P)">Pick</button>
+            <button id="btn-reject" class="flag-btn reject-btn" title="Reject (X)">Reject</button>
+          </div>
+        </div>
+
+        <!-- Accordion Inspector Groups -->
+        <div class="inspector-scroll">
+          <!-- 1. LIGHT & EXPOSURE -->
+          <details open class="inspector-group">
+            <summary class="group-title">Light & Exposure</summary>
+            <div class="group-content">
+              <div class="slider-row">
+                <label>Exposure <span id="val-exposure" class="slider-val">0.00 EV</span></label>
+                <input type="range" id="slider-exposure" min="-4.0" max="4.0" step="0.05" value="0.0" />
+              </div>
+              <div class="slider-row">
+                <label>Contrast <span id="val-contrast" class="slider-val">0</span></label>
+                <input type="range" id="slider-contrast" min="-100" max="100" step="1" value="0" />
+              </div>
+              <div class="slider-row">
+                <label>Highlights <span id="val-highlights" class="slider-val">0</span></label>
+                <input type="range" id="slider-highlights" min="-100" max="100" step="1" value="0" />
+              </div>
+              <div class="slider-row">
+                <label>Shadows <span id="val-shadows" class="slider-val">0</span></label>
+                <input type="range" id="slider-shadows" min="-100" max="100" step="1" value="0" />
+              </div>
+              <div class="slider-row">
+                <label>Whites <span id="val-whites" class="slider-val">0</span></label>
+                <div class="row-with-btn">
+                  <input type="range" id="slider-whites" min="-100" max="100" step="1" value="0" />
+                  <button id="btn-white-point-picker" class="btn btn-secondary btn-icon" title="White Point Picker">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8" fill="#ffffff"/><circle cx="12" cy="12" r="3" fill="#000000"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="slider-row">
+                <label>Blacks <span id="val-blacks" class="slider-val">0</span></label>
+                <div class="row-with-btn">
+                  <input type="range" id="slider-blacks" min="-100" max="100" step="1" value="0" />
+                  <button id="btn-black-point-picker" class="btn btn-secondary btn-icon" title="Black Point Picker">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8" fill="#111111"/><circle cx="12" cy="12" r="3" fill="#ffffff"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <!-- 2. COLOR & WHITE BALANCE -->
+          <details open class="inspector-group">
+            <summary class="group-title">Color & Tone Profile</summary>
+            <div class="group-content">
+              <div class="control-row">
+                <label>AgX Tone Profile</label>
+                <select id="select-tone-profile" class="select-input">
+                  <option value="AgxVivid" selected>AgX Vivid (Rich Color & Dynamic Range)</option>
+                  <option value="AgxFilmic">AgX Filmic Neutral (Restrained Filmic)</option>
+                  <option value="CameraStandard">Camera Standard</option>
+                  <option value="CameraPortrait">Camera Portrait</option>
+                  <option value="CameraLandscape">Camera Landscape</option>
+                  <option value="CameraVivid">Camera Vivid</option>
+                </select>
+              </div>
+              <div class="control-row">
+                <label>Light Source Preset</label>
+                <div class="row-with-btn">
+                  <select id="select-wb-preset" class="select-input">
+                    <option value="AsShot" selected>As Shot (Camera EXIF)</option>
+                    <option value="Auto">Auto White Balance</option>
+                    <option value="Daylight">Daylight / Direct Sun (5500 K)</option>
+                    <option value="Shade">Shade (7500 K)</option>
+                    <option value="Cloudy">Cloudy / Overcast (6500 K)</option>
+                    <option value="Tungsten">Tungsten / Incandescent (2850 K)</option>
+                    <option value="Fluorescent">Cool White Fluorescent (3800 K)</option>
+                    <option value="SodiumVapor">Sodium Vapor / HPS Streetlight (2200 K)</option>
+                    <option value="Flash">Flash / Studio Strobe (5500 K)</option>
+                    <option value="Custom">Custom Kelvin</option>
+                  </select>
+                  <button id="btn-wb-eyedropper" class="btn btn-secondary btn-icon" title="White Balance Eyedropper (W)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14 2 6 6-4 4-2-2-4 4-2-2 4-4-2-2Z"/><path d="m2 22 5-5"/><path d="M11 11 2 20"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="slider-row">
+                <label>Temp (K) <span id="val-temp" class="slider-val">5500 K</span></label>
+                <input type="range" id="slider-temp" min="2000" max="15000" step="50" value="5500" />
+              </div>
+              <div class="slider-row">
+                <label>Tint <span id="val-tint" class="slider-val">0</span></label>
+                <input type="range" id="slider-tint" min="-150" max="150" step="1" value="0" />
+              </div>
+              <div class="slider-row">
+                <label>Vibrance <span id="val-vibrance" class="slider-val">0</span></label>
+                <input type="range" id="slider-vibrance" min="-100" max="100" step="1" value="0" />
+              </div>
+              <div class="slider-row">
+                <label>Saturation <span id="val-saturation" class="slider-val">0</span></label>
+                <input type="range" id="slider-saturation" min="-100" max="100" step="1" value="0" />
+              </div>
+              <div class="slider-row">
+                <label>Sky Deep Blue <span id="val-deep-blue" class="slider-val">0</span></label>
+                <input type="range" id="slider-deep-blue" min="-100" max="100" step="1" value="0" />
+              </div>
+              <div class="slider-row">
+                <label>Foliage Green <span id="val-foliage" class="slider-val">0</span></label>
+                <input type="range" id="slider-foliage" min="-100" max="100" step="1" value="0" />
+              </div>
+            </div>
+          </details>
+
+          <!-- 3. TONE CURVES ENGINE -->
+          <details open class="inspector-group">
+            <summary class="group-title">Tone Curves</summary>
+            <div class="group-content">
+              <div class="curve-channel-tabs" id="curve-channel-tabs">
+                <button class="channel-btn active" data-channel="master">Master</button>
+                <button class="channel-btn red" data-channel="red">R</button>
+                <button class="channel-btn green" data-channel="green">G</button>
+                <button class="channel-btn blue" data-channel="blue">B</button>
+              </div>
+              <div class="curve-widget-container">
+                <canvas id="curve-canvas" width="240" height="240"></canvas>
+              </div>
+              <button id="btn-reset-curve" class="btn btn-secondary btn-sm full-width">Reset Channel Curve</button>
+            </div>
+          </details>
+
+          <!-- 4. RECORDING EMULSION & FINE-ART PRINT MEDIA -->
+          <details class="inspector-group">
+            <summary class="group-title">Film Stock & Darkroom Media</summary>
+            <div class="group-content">
+              <div class="control-row">
+                <label>Emulsion Archetype</label>
+                <select id="select-emulsion" class="select-input">
+                  <option value="None" selected>None (Sensor Capture)</option>
+                  <option value="RochesterPortrait400">Rochester Portrait 400 (C-41 Negative)</option>
+                  <option value="AshigaraChrome50">Ashigara Chrome 50 (E-6 Reversal)</option>
+                  <option value="RochesterK14Chrome64">Rochester K-14 Chrome 64 (Reversal)</option>
+                  <option value="RochesterCinema500">Rochester Cinema 500T (ECN-2 Negative)</option>
+                  <option value="RochesterDaylight200">Rochester Daylight 200 (C-41 Color)</option>
+                  <option value="MobberleySilver400">Mobberley Silver 400 (Panchromatic B&W)</option>
+                  <option value="CambridgeDiffusion100">Cambridge Instant Diffusion 100</option>
+                </select>
+              </div>
+              <div class="slider-row">
+                <label>Emulsion Exposure <span id="val-emulsion-exp" class="slider-val">0.00 EV</span></label>
+                <input type="range" id="slider-emulsion-exp" min="-2.0" max="2.0" step="0.1" value="0.0" />
+              </div>
+              <div class="control-row">
+                <label>Print Media Archetype</label>
+                <select id="select-print-media" class="select-input">
+                  <option value="None" selected>None (Digital Viewport)</option>
+                  <option value="ChromogenicTypeC">RA-4 Chromogenic Type-C Print</option>
+                  <option value="SilverDyeBleach">Azo Silver Dye Bleach Reversal</option>
+                  <option value="FineArtCottonRag">Fine Art Uncalendered Rag Matte</option>
+                  <option value="BarytaSilverGelatin">Baryta Silver Gelatin B&W</option>
+                  <option value="WarmtoneChlorobromide">Warmtone Selenium Toned B&W</option>
+                  <option value="PlatinumPalladium">Platinum / Palladium Fine-Art</option>
+                  <option value="Cyanotype">Prussian Blue Cyanotype</option>
+                </select>
+              </div>
+              <div class="slider-row">
+                <label>Paper Grade <span id="val-paper-grade" class="slider-val">0.0</span></label>
+                <input type="range" id="slider-paper-grade" min="-2.0" max="2.0" step="0.1" value="0.0" />
+              </div>
+              <div class="slider-row">
+                <label>Base Warmth <span id="val-base-warmth" class="slider-val">0</span></label>
+                <input type="range" id="slider-base-warmth" min="-50" max="50" step="1" value="0" />
+              </div>
+            </div>
+          </details>
+
+          <!-- 5. SPLIT TONING & COLOR GRADING -->
+          <details class="inspector-group">
+            <summary class="group-title">Split Toning & Color Grading</summary>
+            <div class="group-content">
+              <div class="slider-row">
+                <label>Shadow Hue <span id="val-shadow-hue" class="slider-val">215°</span></label>
+                <input type="range" id="slider-shadow-hue" min="0" max="360" step="1" value="215" />
+              </div>
+              <div class="slider-row">
+                <label>Shadow Saturation <span id="val-shadow-sat" class="slider-val">0</span></label>
+                <input type="range" id="slider-shadow-sat" min="0" max="100" step="1" value="0" />
+              </div>
+              <div class="slider-row">
+                <label>Highlight Hue <span id="val-highlight-hue" class="slider-val">45°</span></label>
+                <input type="range" id="slider-highlight-hue" min="0" max="360" step="1" value="45" />
+              </div>
+              <div class="slider-row">
+                <label>Highlight Saturation <span id="val-highlight-sat" class="slider-val">0</span></label>
+                <input type="range" id="slider-highlight-sat" min="0" max="100" step="1" value="0" />
+              </div>
+              <div class="slider-row">
+                <label>Balance <span id="val-split-balance" class="slider-val">0</span></label>
+                <input type="range" id="slider-split-balance" min="-100" max="100" step="1" value="0" />
+              </div>
+            </div>
+          </details>
+
+          <!-- 6. METADATA PANEL -->
+          <details class="inspector-group">
+            <summary class="group-title">IPTC / XMP Metadata</summary>
+            <div class="group-content">
+              <div class="control-row">
+                <label for="meta-input-title">Title</label>
+                <input type="text" id="meta-input-title" class="text-input" placeholder="Photo Title..." />
+              </div>
+              <div class="control-row">
+                <label for="meta-input-caption">Caption</label>
+                <textarea id="meta-input-caption" class="textarea-input" placeholder="Description / Caption..."></textarea>
+              </div>
+              <div class="control-row">
+                <label for="meta-input-creator">Creator</label>
+                <input type="text" id="meta-input-creator" class="text-input" placeholder="Photographer Name..." />
+              </div>
+              <div class="control-row">
+                <label for="meta-input-keywords">Keywords</label>
+                <input type="text" id="meta-input-keywords" class="text-input" placeholder="comma, separated, tags" />
+              </div>
+            </div>
+          </details>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <dialog id="modal-shortcuts" class="dialog-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>First Proof Keyboard Shortcuts</h3>
+        <button id="btn-close-modal" class="btn-close">×</button>
+      </div>
+      <div class="modal-body">
+        <table class="shortcuts-table">
+          <tr><td><kbd>1</kbd> .. <kbd>5</kbd></td><td>Set Star Rating (1 to 5 Stars)</td></tr>
+          <tr><td><kbd>0</kbd></td><td>Clear Star Rating</td></tr>
+          <tr><td><kbd>P</kbd></td><td>Set Pick Flag</td></tr>
+          <tr><td><kbd>X</kbd></td><td>Set Reject Flag</td></tr>
+          <tr><td><kbd>U</kbd></td><td>Unflag Photo</td></tr>
+          <tr><td><kbd>\</kbd></td><td>Press & Hold for As-Shot Original Peek</td></tr>
+          <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Navigate Previous / Next Photo</td></tr>
+        </table>
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

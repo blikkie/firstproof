@@ -4,6 +4,7 @@ use rayon::prelude::*;
 use crate::color::{
     Color3, LINEAR_SRGB_TO_REC2020, srgb_gamma_to_linear,
 };
+use crate::raw_decoder::RawSensorFrameExt;
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
 
@@ -349,136 +350,336 @@ pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32,
             out_rgba_f16.par_chunks_exact_mut(binned_w * 8).enumerate().for_each(|(by, row_bytes)| {
                 let row0 = (frame.active_y + by * 2).min(full_h.saturating_sub(2));
                 let row1 = (row0 + 1).min(full_h.saturating_sub(1));
-                let row0_idx = row0 * full_w;
-                let row1_idx = row1 * full_w;
+                let row0_start = row0 * full_w + frame.active_x;
+                let row1_start = row1 * full_w + frame.active_x;
+                let row_len = binned_w * 2;
 
                 let mut bx = 0;
-                #[cfg(target_arch = "aarch64")]
-                unsafe {
-                    let zero = vdupq_n_f32(0.0);
-                    let one = vdupq_n_f32(1.0);
-                    let black_v = vdupq_n_f32(black);
-                    let scale_v = vdupq_n_f32(scale);
-                    let wb_r_v = vdupq_n_f32(wb_r);
-                    let wb_b_v = vdupq_n_f32(wb_b);
 
-                    while bx + 4 <= binned_w {
-                        let mut r_arr = [0f32; 4];
-                        let mut g_arr = [0f32; 4];
-                        let mut b_arr = [0f32; 4];
+                if row0_start + row_len <= sensor_data.len() && row1_start + row_len <= sensor_data.len() {
+                    let r0 = &sensor_data[row0_start..row0_start + row_len];
+                    let r1 = &sensor_data[row1_start..row1_start + row_len];
 
-                        for i in 0..4 {
-                            let col0 = (frame.active_x + (bx + i) * 2).min(full_w.saturating_sub(2));
-                            let col1 = (col0 + 1).min(full_w.saturating_sub(1));
+                    #[cfg(target_arch = "aarch64")]
+                    unsafe {
+                        let zero = vdupq_n_f32(0.0);
+                        let one = vdupq_n_f32(1.0);
+                        let black_v = vdupq_n_f32(black);
+                        let scale_v = vdupq_n_f32(scale);
+                        let wb_r_v = vdupq_n_f32(wb_r);
+                        let wb_b_v = vdupq_n_f32(wb_b);
 
-                            let s00 = sensor_data[row0_idx + col0] as f32;
-                            let s01 = sensor_data[row0_idx + col1] as f32;
-                            let s10 = sensor_data[row1_idx + col0] as f32;
-                            let s11 = sensor_data[row1_idx + col1] as f32;
+                        while bx + 4 <= binned_w {
+                            let mut r_arr = [0f32; 4];
+                            let mut g_arr = [0f32; 4];
+                            let mut b_arr = [0f32; 4];
 
-                            let (r_raw, g_raw, b_raw) = match frame.cfa_pattern {
-                                crate::raw_decoder::CfaPattern::Rggb => (s00, (s01 + s10) * 0.5, s11),
-                                crate::raw_decoder::CfaPattern::Bggr => (s11, (s01 + s10) * 0.5, s00),
-                                crate::raw_decoder::CfaPattern::Gbrg => (s10, (s00 + s11) * 0.5, s01),
-                                crate::raw_decoder::CfaPattern::Grbg => (s01, (s00 + s11) * 0.5, s10),
-                                _ => (s00, (s01 + s10) * 0.5, s11),
-                            };
-                            r_arr[i] = r_raw;
-                            g_arr[i] = g_raw;
-                            b_arr[i] = b_raw;
+                            match frame.cfa_pattern {
+                                crate::raw_decoder::CfaPattern::Rggb => {
+                                    for i in 0..4 {
+                                        let off = (bx + i) * 2;
+                                        r_arr[i] = r0[off] as f32;
+                                        g_arr[i] = (r0[off + 1] as f32 + r1[off] as f32) * 0.5;
+                                        b_arr[i] = r1[off + 1] as f32;
+                                    }
+                                }
+                                crate::raw_decoder::CfaPattern::Bggr => {
+                                    for i in 0..4 {
+                                        let off = (bx + i) * 2;
+                                        b_arr[i] = r0[off] as f32;
+                                        g_arr[i] = (r0[off + 1] as f32 + r1[off] as f32) * 0.5;
+                                        r_arr[i] = r1[off + 1] as f32;
+                                    }
+                                }
+                                crate::raw_decoder::CfaPattern::Gbrg => {
+                                    for i in 0..4 {
+                                        let off = (bx + i) * 2;
+                                        g_arr[i] = (r0[off] as f32 + r1[off + 1] as f32) * 0.5;
+                                        b_arr[i] = r0[off + 1] as f32;
+                                        r_arr[i] = r1[off] as f32;
+                                    }
+                                }
+                                crate::raw_decoder::CfaPattern::Grbg => {
+                                    for i in 0..4 {
+                                        let off = (bx + i) * 2;
+                                        g_arr[i] = (r0[off] as f32 + r1[off + 1] as f32) * 0.5;
+                                        r_arr[i] = r0[off + 1] as f32;
+                                        b_arr[i] = r1[off] as f32;
+                                    }
+                                }
+                                _ => {
+                                    for i in 0..4 {
+                                        let off = (bx + i) * 2;
+                                        r_arr[i] = r0[off] as f32;
+                                        g_arr[i] = (r0[off + 1] as f32 + r1[off] as f32) * 0.5;
+                                        b_arr[i] = r1[off + 1] as f32;
+                                    }
+                                }
+                            }
+
+                            // Load 4 binned pixels into NEON registers
+                            let r_v = vld1q_f32(r_arr.as_ptr());
+                            let g_v = vld1q_f32(g_arr.as_ptr());
+                            let b_v = vld1q_f32(b_arr.as_ptr());
+
+                            // Normalize: clamp((raw - black) * scale, 0.0, 1.0)
+                            let r_norm = vminq_f32(vmaxq_f32(vmulq_f32(vsubq_f32(r_v, black_v), scale_v), zero), one);
+                            let g_norm = vminq_f32(vmaxq_f32(vmulq_f32(vsubq_f32(g_v, black_v), scale_v), zero), one);
+                            let b_norm = vminq_f32(vmaxq_f32(vmulq_f32(vsubq_f32(b_v, black_v), scale_v), zero), one);
+
+                            // White balance multipliers
+                            let r_wb = vminq_f32(vmulq_f32(r_norm, wb_r_v), one);
+                            let g_wb = g_norm;
+                            let b_wb = vminq_f32(vmulq_f32(b_norm, wb_b_v), one);
+
+                            // NEON 128-bit SIMD matrix transformation (fmla.4s)
+                            let r_rec = vmaxq_f32(
+                                vmlaq_n_f32(vmlaq_n_f32(vmulq_n_f32(r_wb, m[0][0]), g_wb, m[0][1]), b_wb, m[0][2]),
+                                zero,
+                            );
+                            let g_rec = vmaxq_f32(
+                                vmlaq_n_f32(vmlaq_n_f32(vmulq_n_f32(r_wb, m[1][0]), g_wb, m[1][1]), b_wb, m[1][2]),
+                                zero,
+                            );
+                            let b_rec = vmaxq_f32(
+                                vmlaq_n_f32(vmlaq_n_f32(vmulq_n_f32(r_wb, m[2][0]), g_wb, m[2][1]), b_wb, m[2][2]),
+                                zero,
+                            );
+
+                            // Convert 4 floats to half-float (f16) in single instruction
+                            let r_f16 = vcvt_f16_f32(r_rec);
+                            let g_f16 = vcvt_f16_f32(g_rec);
+                            let b_f16 = vcvt_f16_f32(b_rec);
+                            let a_f16 = vcvt_f16_f32(one);
+
+                            // Interleave into RGBA RGBA RGBA RGBA in single instruction
+                            let rgba = uint16x4x4_t(
+                                vreinterpret_u16_f16(r_f16),
+                                vreinterpret_u16_f16(g_f16),
+                                vreinterpret_u16_f16(b_f16),
+                                vreinterpret_u16_f16(a_f16),
+                            );
+                            let out_ptr = row_bytes.as_mut_ptr().add(bx * 8) as *mut u16;
+                            vst4_u16(out_ptr, rgba);
+
+                            bx += 4;
                         }
-
-                        // Load 4 binned pixels into NEON registers
-                        let r_v = vld1q_f32(r_arr.as_ptr());
-                        let g_v = vld1q_f32(g_arr.as_ptr());
-                        let b_v = vld1q_f32(b_arr.as_ptr());
-
-                        // Normalize: clamp((raw - black) * scale, 0.0, 1.0)
-                        let r_norm = vminq_f32(vmaxq_f32(vmulq_f32(vsubq_f32(r_v, black_v), scale_v), zero), one);
-                        let g_norm = vminq_f32(vmaxq_f32(vmulq_f32(vsubq_f32(g_v, black_v), scale_v), zero), one);
-                        let b_norm = vminq_f32(vmaxq_f32(vmulq_f32(vsubq_f32(b_v, black_v), scale_v), zero), one);
-
-                        // White balance multipliers
-                        let r_wb = vminq_f32(vmulq_f32(r_norm, wb_r_v), one);
-                        let g_wb = g_norm;
-                        let b_wb = vminq_f32(vmulq_f32(b_norm, wb_b_v), one);
-
-                        // NEON 128-bit SIMD matrix transformation (fmla.4s)
-                        let r_rec = vmaxq_f32(
-                            vmlaq_n_f32(vmlaq_n_f32(vmulq_n_f32(r_wb, m[0][0]), g_wb, m[0][1]), b_wb, m[0][2]),
-                            zero,
-                        );
-                        let g_rec = vmaxq_f32(
-                            vmlaq_n_f32(vmlaq_n_f32(vmulq_n_f32(r_wb, m[1][0]), g_wb, m[1][1]), b_wb, m[1][2]),
-                            zero,
-                        );
-                        let b_rec = vmaxq_f32(
-                            vmlaq_n_f32(vmlaq_n_f32(vmulq_n_f32(r_wb, m[2][0]), g_wb, m[2][1]), b_wb, m[2][2]),
-                            zero,
-                        );
-
-                        // Convert 4 floats to half-float (f16) in single instruction
-                        let r_f16 = vcvt_f16_f32(r_rec);
-                        let g_f16 = vcvt_f16_f32(g_rec);
-                        let b_f16 = vcvt_f16_f32(b_rec);
-                        let a_f16 = vcvt_f16_f32(one);
-
-                        // Interleave into RGBA RGBA RGBA RGBA in single instruction
-                        let rgba = uint16x4x4_t(
-                            vreinterpret_u16_f16(r_f16),
-                            vreinterpret_u16_f16(g_f16),
-                            vreinterpret_u16_f16(b_f16),
-                            vreinterpret_u16_f16(a_f16),
-                        );
-                        let out_ptr = row_bytes.as_mut_ptr().add(bx * 8) as *mut u16;
-                        vst4_u16(out_ptr, rgba);
-
-                        bx += 4;
                     }
-                }
 
-                // Scalar remainder or portable fallback
-                while bx < binned_w {
-                    let col0 = (frame.active_x + bx * 2).min(full_w.saturating_sub(2));
-                    let col1 = (col0 + 1).min(full_w.saturating_sub(1));
+                    // Scalar remainder or portable fallback (zero branches inside loop)
+                    match frame.cfa_pattern {
+                        crate::raw_decoder::CfaPattern::Rggb => {
+                            while bx < binned_w {
+                                let off = bx * 2;
+                                let r_raw = r0[off] as f32;
+                                let g_raw = (r0[off + 1] as f32 + r1[off] as f32) * 0.5;
+                                let b_raw = r1[off + 1] as f32;
 
-                    let s00 = sensor_data[row0_idx + col0] as f32;
-                    let s01 = sensor_data[row0_idx + col1] as f32;
-                    let s10 = sensor_data[row1_idx + col0] as f32;
-                    let s11 = sensor_data[row1_idx + col1] as f32;
+                                let r_norm = ((r_raw - black) * scale).clamp(0.0, 1.0);
+                                let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
+                                let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
 
-                    let (r_raw, g_raw, b_raw) = match frame.cfa_pattern {
-                        crate::raw_decoder::CfaPattern::Rggb => (s00, (s01 + s10) * 0.5, s11),
-                        crate::raw_decoder::CfaPattern::Bggr => (s11, (s01 + s10) * 0.5, s00),
-                        crate::raw_decoder::CfaPattern::Gbrg => (s10, (s00 + s11) * 0.5, s01),
-                        crate::raw_decoder::CfaPattern::Grbg => (s01, (s00 + s11) * 0.5, s10),
-                        _ => (s00, (s01 + s10) * 0.5, s11),
-                    };
+                                let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
+                                let g_wb = g_norm.clamp(0.0, 1.0);
+                                let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
 
-                    let r_norm = ((r_raw - black) * scale).clamp(0.0, 1.0);
-                    let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
-                    let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
+                                let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
+                                let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);
+                                let b_rec = (m[2][0] * r_wb + m[2][1] * g_wb + m[2][2] * b_wb).max(0.0);
 
-                    let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
-                    let g_wb = g_norm.clamp(0.0, 1.0);
-                    let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+                                let r16 = f32_to_f16(r_rec);
+                                let g16 = f32_to_f16(g_rec);
+                                let b16 = f32_to_f16(b_rec);
+                                let a16 = 0x3c00u16;
 
-                    let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
-                    let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);
-                    let b_rec = (m[2][0] * r_wb + m[2][1] * g_wb + m[2][2] * b_wb).max(0.0);
+                                let out_idx = bx * 8;
+                                row_bytes[out_idx..out_idx + 2].copy_from_slice(&r16.to_le_bytes());
+                                row_bytes[out_idx + 2..out_idx + 4].copy_from_slice(&g16.to_le_bytes());
+                                row_bytes[out_idx + 4..out_idx + 6].copy_from_slice(&b16.to_le_bytes());
+                                row_bytes[out_idx + 6..out_idx + 8].copy_from_slice(&a16.to_le_bytes());
 
-                    let r16 = f32_to_f16(r_rec);
-                    let g16 = f32_to_f16(g_rec);
-                    let b16 = f32_to_f16(b_rec);
-                    let a16 = 0x3c00u16;
+                                bx += 1;
+                            }
+                        }
+                        crate::raw_decoder::CfaPattern::Bggr => {
+                            while bx < binned_w {
+                                let off = bx * 2;
+                                let b_raw = r0[off] as f32;
+                                let g_raw = (r0[off + 1] as f32 + r1[off] as f32) * 0.5;
+                                let r_raw = r1[off + 1] as f32;
 
-                    let out_idx = bx * 8;
-                    row_bytes[out_idx..out_idx + 2].copy_from_slice(&r16.to_le_bytes());
-                    row_bytes[out_idx + 2..out_idx + 4].copy_from_slice(&g16.to_le_bytes());
-                    row_bytes[out_idx + 4..out_idx + 6].copy_from_slice(&b16.to_le_bytes());
-                    row_bytes[out_idx + 6..out_idx + 8].copy_from_slice(&a16.to_le_bytes());
+                                let r_norm = ((r_raw - black) * scale).clamp(0.0, 1.0);
+                                let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
+                                let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
 
-                    bx += 1;
+                                let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
+                                let g_wb = g_norm.clamp(0.0, 1.0);
+                                let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+
+                                let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
+                                let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);
+                                let b_rec = (m[2][0] * r_wb + m[2][1] * g_wb + m[2][2] * b_wb).max(0.0);
+
+                                let r16 = f32_to_f16(r_rec);
+                                let g16 = f32_to_f16(g_rec);
+                                let b16 = f32_to_f16(b_rec);
+                                let a16 = 0x3c00u16;
+
+                                let out_idx = bx * 8;
+                                row_bytes[out_idx..out_idx + 2].copy_from_slice(&r16.to_le_bytes());
+                                row_bytes[out_idx + 2..out_idx + 4].copy_from_slice(&g16.to_le_bytes());
+                                row_bytes[out_idx + 4..out_idx + 6].copy_from_slice(&b16.to_le_bytes());
+                                row_bytes[out_idx + 6..out_idx + 8].copy_from_slice(&a16.to_le_bytes());
+
+                                bx += 1;
+                            }
+                        }
+                        crate::raw_decoder::CfaPattern::Gbrg => {
+                            while bx < binned_w {
+                                let off = bx * 2;
+                                let g_raw = (r0[off] as f32 + r1[off + 1] as f32) * 0.5;
+                                let b_raw = r0[off + 1] as f32;
+                                let r_raw = r1[off] as f32;
+
+                                let r_norm = ((r_raw - black) * scale).clamp(0.0, 1.0);
+                                let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
+                                let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
+
+                                let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
+                                let g_wb = g_norm.clamp(0.0, 1.0);
+                                let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+
+                                let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
+                                let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);
+                                let b_rec = (m[2][0] * r_wb + m[2][1] * g_wb + m[2][2] * b_wb).max(0.0);
+
+                                let r16 = f32_to_f16(r_rec);
+                                let g16 = f32_to_f16(g_rec);
+                                let b16 = f32_to_f16(b_rec);
+                                let a16 = 0x3c00u16;
+
+                                let out_idx = bx * 8;
+                                row_bytes[out_idx..out_idx + 2].copy_from_slice(&r16.to_le_bytes());
+                                row_bytes[out_idx + 2..out_idx + 4].copy_from_slice(&g16.to_le_bytes());
+                                row_bytes[out_idx + 4..out_idx + 6].copy_from_slice(&b16.to_le_bytes());
+                                row_bytes[out_idx + 6..out_idx + 8].copy_from_slice(&a16.to_le_bytes());
+
+                                bx += 1;
+                            }
+                        }
+                        crate::raw_decoder::CfaPattern::Grbg => {
+                            while bx < binned_w {
+                                let off = bx * 2;
+                                let g_raw = (r0[off] as f32 + r1[off + 1] as f32) * 0.5;
+                                let r_raw = r0[off + 1] as f32;
+                                let b_raw = r1[off] as f32;
+
+                                let r_norm = ((r_raw - black) * scale).clamp(0.0, 1.0);
+                                let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
+                                let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
+
+                                let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
+                                let g_wb = g_norm.clamp(0.0, 1.0);
+                                let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+
+                                let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
+                                let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);
+                                let b_rec = (m[2][0] * r_wb + m[2][1] * g_wb + m[2][2] * b_wb).max(0.0);
+
+                                let r16 = f32_to_f16(r_rec);
+                                let g16 = f32_to_f16(g_rec);
+                                let b16 = f32_to_f16(b_rec);
+                                let a16 = 0x3c00u16;
+
+                                let out_idx = bx * 8;
+                                row_bytes[out_idx..out_idx + 2].copy_from_slice(&r16.to_le_bytes());
+                                row_bytes[out_idx + 2..out_idx + 4].copy_from_slice(&g16.to_le_bytes());
+                                row_bytes[out_idx + 4..out_idx + 6].copy_from_slice(&b16.to_le_bytes());
+                                row_bytes[out_idx + 6..out_idx + 8].copy_from_slice(&a16.to_le_bytes());
+
+                                bx += 1;
+                            }
+                        }
+                        _ => {
+                            while bx < binned_w {
+                                let off = bx * 2;
+                                let r_raw = r0[off] as f32;
+                                let g_raw = (r0[off + 1] as f32 + r1[off] as f32) * 0.5;
+                                let b_raw = r1[off + 1] as f32;
+
+                                let r_norm = ((r_raw - black) * scale).clamp(0.0, 1.0);
+                                let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
+                                let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
+
+                                let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
+                                let g_wb = g_norm.clamp(0.0, 1.0);
+                                let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+
+                                let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
+                                let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);
+                                let b_rec = (m[2][0] * r_wb + m[2][1] * g_wb + m[2][2] * b_wb).max(0.0);
+
+                                let r16 = f32_to_f16(r_rec);
+                                let g16 = f32_to_f16(g_rec);
+                                let b16 = f32_to_f16(b_rec);
+                                let a16 = 0x3c00u16;
+
+                                let out_idx = bx * 8;
+                                row_bytes[out_idx..out_idx + 2].copy_from_slice(&r16.to_le_bytes());
+                                row_bytes[out_idx + 2..out_idx + 4].copy_from_slice(&g16.to_le_bytes());
+                                row_bytes[out_idx + 4..out_idx + 6].copy_from_slice(&b16.to_le_bytes());
+                                row_bytes[out_idx + 6..out_idx + 8].copy_from_slice(&a16.to_le_bytes());
+
+                                bx += 1;
+                            }
+                        }
+                    }
+                } else {
+                    let row0_idx = row0 * full_w;
+                    let row1_idx = row1 * full_w;
+
+                    while bx < binned_w {
+                        let col0 = (frame.active_x + bx * 2).min(full_w.saturating_sub(2));
+                        let col1 = (col0 + 1).min(full_w.saturating_sub(1));
+
+                        let s00 = sensor_data[row0_idx + col0] as f32;
+                        let s01 = sensor_data[row0_idx + col1] as f32;
+                        let s10 = sensor_data[row1_idx + col0] as f32;
+                        let s11 = sensor_data[row1_idx + col1] as f32;
+
+                        let (r_raw, g_raw, b_raw) = match frame.cfa_pattern {
+                            crate::raw_decoder::CfaPattern::Rggb => (s00, (s01 + s10) * 0.5, s11),
+                            crate::raw_decoder::CfaPattern::Bggr => (s11, (s01 + s10) * 0.5, s00),
+                            crate::raw_decoder::CfaPattern::Gbrg => (s10, (s00 + s11) * 0.5, s01),
+                            crate::raw_decoder::CfaPattern::Grbg => (s01, (s00 + s11) * 0.5, s10),
+                            _ => (s00, (s01 + s10) * 0.5, s11),
+                        };
+
+                        let r_norm = ((r_raw - black) * scale).clamp(0.0, 1.0);
+                        let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
+                        let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
+
+                        let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
+                        let g_wb = g_norm.clamp(0.0, 1.0);
+                        let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+
+                        let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
+                        let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);
+                        let b_rec = (m[2][0] * r_wb + m[2][1] * g_wb + m[2][2] * b_wb).max(0.0);
+
+                        let r16 = f32_to_f16(r_rec);
+                        let g16 = f32_to_f16(g_rec);
+                        let b16 = f32_to_f16(b_rec);
+                        let a16 = 0x3c00u16;
+
+                        let out_idx = bx * 8;
+                        row_bytes[out_idx..out_idx + 2].copy_from_slice(&r16.to_le_bytes());
+                        row_bytes[out_idx + 2..out_idx + 4].copy_from_slice(&g16.to_le_bytes());
+                        row_bytes[out_idx + 4..out_idx + 6].copy_from_slice(&b16.to_le_bytes());
+                        row_bytes[out_idx + 6..out_idx + 8].copy_from_slice(&a16.to_le_bytes());
+
+                        bx += 1;
+                    }
                 }
             });
 

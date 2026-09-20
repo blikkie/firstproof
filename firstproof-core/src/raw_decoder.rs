@@ -1,113 +1,16 @@
 use std::path::Path;
+pub use firstproof_types::{
+    f32_to_f16, CfaPattern, RawSensorFrame, CFA_COLOR_BLUE, CFA_COLOR_GREEN, CFA_COLOR_RED,
+};
 
-/// Canonical Bayer CFA color indices
-pub const CFA_COLOR_RED: usize = 0;
-pub const CFA_COLOR_GREEN: usize = 1;
-pub const CFA_COLOR_BLUE: usize = 2;
-
-/// Standard Color Filter Array patterns
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CfaPattern {
-    Rggb,
-    Bggr,
-    Gbrg,
-    Grbg,
-    XTrans,
-    LinearRgb,
+pub trait RawSensorFrameExt {
+    fn sensor_to_rec2020_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3;
 }
 
-/// A library-agnostic raw sensor frame representation.
-/// Completely decouples downstream demosaicing, tone mapping, and export pipelines
-/// from specific RAW decoding crates (rawler, libraw, dcraw, etc.).
-#[derive(Clone, Debug)]
-pub struct RawSensorFrame {
-    pub full_width: usize,
-    pub full_height: usize,
-    pub active_x: usize,
-    pub active_y: usize,
-    pub active_width: usize,
-    pub active_height: usize,
-    pub cfa_pattern: CfaPattern,
-    pub black_levels: [f32; 4],
-    pub white_levels: [f32; 4],
-    pub wb_coeffs: [f32; 4],
-    pub color_matrix: Option<[[f32; 3]; 3]>,
-    pub color_matrix_tungsten: Option<[[f32; 3]; 3]>,
-    pub camera_model: String,
-    pub sensor_data: Vec<u16>,
-}
-
-impl RawSensorFrame {
-    /// Returns the color index at the given (row, col) sensor coordinates.
-    /// 0 = Red, 1 = Green, 2 = Blue.
-    #[inline]
-    pub fn color_at(&self, row: usize, col: usize) -> usize {
-        match self.cfa_pattern {
-            CfaPattern::Rggb => match (row % 2, col % 2) {
-                (0, 0) => CFA_COLOR_RED,
-                (0, 1) => CFA_COLOR_GREEN,
-                (1, 0) => CFA_COLOR_GREEN,
-                (1, 1) => CFA_COLOR_BLUE,
-                _ => CFA_COLOR_GREEN,
-            },
-            CfaPattern::Bggr => match (row % 2, col % 2) {
-                (0, 0) => CFA_COLOR_BLUE,
-                (0, 1) => CFA_COLOR_GREEN,
-                (1, 0) => CFA_COLOR_GREEN,
-                (1, 1) => CFA_COLOR_RED,
-                _ => CFA_COLOR_GREEN,
-            },
-            CfaPattern::Gbrg => match (row % 2, col % 2) {
-                (0, 0) => CFA_COLOR_GREEN,
-                (0, 1) => CFA_COLOR_BLUE,
-                (1, 0) => CFA_COLOR_RED,
-                (1, 1) => CFA_COLOR_GREEN,
-                _ => CFA_COLOR_GREEN,
-            },
-            CfaPattern::Grbg => match (row % 2, col % 2) {
-                (0, 0) => CFA_COLOR_GREEN,
-                (0, 1) => CFA_COLOR_RED,
-                (1, 0) => CFA_COLOR_BLUE,
-                (1, 1) => CFA_COLOR_GREEN,
-                _ => CFA_COLOR_GREEN,
-            },
-            _ => CFA_COLOR_GREEN,
-        }
-    }
-
-    /// Normalized sensor photosite sample clamped to 0.0 .. 1.0 linear light
-    #[inline]
-    pub fn sample_normalized(&self, x: usize, y: usize) -> f32 {
-        let idx = y * self.full_width + x;
-        if idx >= self.sensor_data.len() {
-            return 0.0;
-        }
-        let raw_val = self.sensor_data[idx] as f32;
-        let black = self.black_levels[0].max(0.0);
-        let white = self.white_levels[0].max(black + 1.0);
-        let scale = 1.0 / (white - black);
-        ((raw_val - black) * scale).clamp(0.0, 1.0)
-    }
-
-    /// Camera As-Shot White Balance Red & Blue multipliers normalized to Green
-    #[inline]
-    pub fn as_shot_wb(&self) -> (f32, f32) {
-        let wb_r = if self.wb_coeffs[0] > 0.0 && self.wb_coeffs[1] > 0.0 {
-            self.wb_coeffs[0] / self.wb_coeffs[1]
-        } else {
-            2.0
-        };
-        let wb_b = if self.wb_coeffs[2] > 0.0 && self.wb_coeffs[1] > 0.0 {
-            self.wb_coeffs[2] / self.wb_coeffs[1]
-        } else {
-            1.5
-        };
-        (wb_r, wb_b)
-    }
-
+impl RawSensorFrameExt for RawSensorFrame {
     /// Computes the camera sensor to Linear Rec.2020 matrix dynamically interpolated
     /// for the specified white balance temperature (in Kelvin).
-    pub fn sensor_to_rec2020_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3 {
+    fn sensor_to_rec2020_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3 {
         if let (Some(m_tungsten), Some(m_daylight)) = (self.color_matrix_tungsten, self.color_matrix) {
             let dcp = crate::color::dcp::DcpProfile {
                 profile_name: format!("{} (Rawler Dual-Illuminant)", self.camera_model),

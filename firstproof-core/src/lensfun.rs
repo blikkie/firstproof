@@ -46,11 +46,11 @@ pub struct Lens {
     pub vignetting_calib: Vec<VignettingCalib>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(uniffi::Record, Debug, Clone, PartialEq)]
 pub struct LensCorrectionCoefficients {
-    pub distortion: [f32; 4],
-    pub tca: [f32; 2],
-    pub vignetting: [f32; 3],
+    pub distortion: Vec<f32>,
+    pub tca: Vec<f32>,
+    pub vignetting: Vec<f32>,
     pub distortion_model: String,
     pub has_distortion: bool,
     pub has_tca: bool,
@@ -60,9 +60,9 @@ pub struct LensCorrectionCoefficients {
 impl Default for LensCorrectionCoefficients {
     fn default() -> Self {
         Self {
-            distortion: [0.0, 0.0, 0.0, 0.0],
-            tca: [1.0, 1.0],
-            vignetting: [0.0, 0.0, 0.0],
+            distortion: vec![0.0, 0.0, 0.0, 0.0],
+            tca: vec![1.0, 1.0],
+            vignetting: vec![0.0, 0.0, 0.0],
             distortion_model: "poly3".to_string(),
             has_distortion: false,
             has_tca: false,
@@ -238,7 +238,7 @@ impl LensfunDatabase {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
             {
-                res.distortion = dist.coefficients;
+                res.distortion = dist.coefficients.to_vec();
                 res.distortion_model = dist.model.clone();
                 res.has_distortion = true;
             }
@@ -256,7 +256,7 @@ impl LensfunDatabase {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
             {
-                res.tca = tca.coefficients;
+                res.tca = tca.coefficients.to_vec();
                 res.has_tca = true;
             }
         }
@@ -277,7 +277,7 @@ impl LensfunDatabase {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
             {
-                res.vignetting = vig.coefficients;
+                res.vignetting = vig.coefficients.to_vec();
                 res.has_vignetting = true;
             }
         }

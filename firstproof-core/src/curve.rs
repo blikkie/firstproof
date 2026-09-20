@@ -1,51 +1,6 @@
-//! Monotone Cubic Spline (Fritsch-Carlson) tone curve evaluation engine.
+pub use firstproof_types::curve::{AllCurvesLutRecord, CurvePointRecord, ToneCurvesRecord};
 
-use serde::{Deserialize, Serialize};
 
-#[derive(uniffi::Record, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct CurvePointRecord {
-    pub x: f32,
-    pub y: f32,
-}
-
-#[derive(uniffi::Record, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ToneCurvesRecord {
-    pub master: Vec<CurvePointRecord>,
-    pub red: Vec<CurvePointRecord>,
-    pub green: Vec<CurvePointRecord>,
-    pub blue: Vec<CurvePointRecord>,
-}
-
-impl Default for ToneCurvesRecord {
-    fn default() -> Self {
-        Self {
-            master: vec![
-                CurvePointRecord { x: 0.0, y: 0.0 },
-                CurvePointRecord { x: 1.0, y: 1.0 },
-            ],
-            red: vec![
-                CurvePointRecord { x: 0.0, y: 0.0 },
-                CurvePointRecord { x: 1.0, y: 1.0 },
-            ],
-            green: vec![
-                CurvePointRecord { x: 0.0, y: 0.0 },
-                CurvePointRecord { x: 1.0, y: 1.0 },
-            ],
-            blue: vec![
-                CurvePointRecord { x: 0.0, y: 0.0 },
-                CurvePointRecord { x: 1.0, y: 1.0 },
-            ],
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, uniffi::Record)]
-pub struct AllCurvesLutRecord {
-    pub master: Vec<f32>,
-    pub red: Vec<f32>,
-    pub green: Vec<f32>,
-    pub blue: Vec<f32>,
-}
 
 /// Evaluates an arbitrary set of curve control points into a 256-sample lookup table (LUT)
 /// using the Fritsch-Carlson monotone cubic hermite spline algorithm.

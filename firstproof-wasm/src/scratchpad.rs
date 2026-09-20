@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 thread_local! {
-    static SCRATCHPAD: RefCell<ScratchpadBuffer> = RefCell::new(ScratchpadBuffer::new(64 * 1024 * 1024));
+    static SCRATCHPAD: RefCell<ScratchpadBuffer> = RefCell::new(ScratchpadBuffer::new(256 * 1024 * 1024));
 }
 
 pub struct ScratchpadBuffer {
