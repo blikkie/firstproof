@@ -1,4 +1,12 @@
-import { WasmBridge, EditSettingsPayload, XmpPayload, PreviewResult } from './WasmBridge';
+import {
+  WasmBridge,
+  EditSettingsPayload,
+  XmpPayload,
+  PreviewResult,
+  ColorProfileMode,
+  EmulsionArchetype,
+  PrintMediaMode,
+} from './WasmBridge';
 import { WebGLRenderer } from './WebGLRenderer';
 import { FolderIntake, PhotoFileEntry } from './FolderIntake';
 import { ToneCurveWidget } from './ToneCurveWidget';
@@ -17,18 +25,26 @@ import {
 } from './utils/formatters';
 import { readExifOrientationFromBlob } from './utils/exifReader';
 
-export function decodeExifOrientation(orientation?: number): { rotation: number; flipH: boolean; flipV: boolean } {
-  switch (orientation) {
-    case 1: return { rotation: 0, flipH: false, flipV: false };
-    case 2: return { rotation: 0, flipH: true, flipV: false };
-    case 3: return { rotation: 180, flipH: false, flipV: false };
-    case 4: return { rotation: 180, flipH: true, flipV: false };
-    case 5: return { rotation: 90, flipH: true, flipV: false };
-    case 6: return { rotation: 90, flipH: false, flipV: false };
-    case 7: return { rotation: 270, flipH: true, flipV: false };
-    case 8: return { rotation: 270, flipH: false, flipV: false };
-    default: return { rotation: 0, flipH: false, flipV: false };
-  }
+import { decode_exif_orientation } from 'firstproof-wasm';
+import type { ExifOrientationRecord } from 'firstproof-wasm';
+
+export function decodeExifOrientation(orientation?: number): {
+  rotation: number;
+  flipH: boolean;
+  flipV: boolean;
+  flip_horizontal: boolean;
+  flip_vertical: boolean;
+} {
+  const rec: ExifOrientationRecord = orientation
+    ? decode_exif_orientation(orientation)
+    : { rotation: 0, flip_horizontal: false, flip_vertical: false };
+  return {
+    rotation: rec.rotation,
+    flipH: rec.flip_horizontal,
+    flipV: rec.flip_vertical,
+    flip_horizontal: rec.flip_horizontal,
+    flip_vertical: rec.flip_vertical,
+  };
 }
 
 interface ActiveSliderScrub {
@@ -900,21 +916,21 @@ class DarkroomApp {
 
     // Tone Profile Select
     this.elements['select-tone-profile']?.addEventListener('change', (e) => {
-      this.edits.tone_profile = (e.target as HTMLSelectElement).value;
+      this.edits.tone_profile = (e.target as HTMLSelectElement).value as ColorProfileMode;
       this.renderCanvas();
       this.autoSaveSidecar();
     });
 
     // Emulsion Select
     this.elements['select-emulsion']?.addEventListener('change', (e) => {
-      this.edits.emulsion_archetype = (e.target as HTMLSelectElement).value;
+      this.edits.emulsion_archetype = (e.target as HTMLSelectElement).value as EmulsionArchetype;
       this.renderCanvas();
       this.autoSaveSidecar();
     });
 
     // Print Media Select
     this.elements['select-print-media']?.addEventListener('change', (e) => {
-      this.edits.print_media = (e.target as HTMLSelectElement).value;
+      this.edits.print_media = (e.target as HTMLSelectElement).value as PrintMediaMode;
       this.renderCanvas();
       this.autoSaveSidecar();
     });
@@ -1635,8 +1651,6 @@ class DarkroomApp {
               dateStyle: 'medium',
               timeStyle: 'short',
             });
-          } else if (preview.metadata.date_time) {
-            dateStr = preview.metadata.date_time;
           }
           this.elements['meta-date-taken'].innerText = dateStr;
         }

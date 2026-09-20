@@ -29,8 +29,9 @@ pub use modes::{
     ExportRenderingIntent, PrintMediaMode,
 };
 pub use preview::{
-    extract_metadata_from_bytes, extract_preview_slice, get_jpeg_dimensions,
-    is_displayable_rgb_jpeg, ImageMetadataRecord, PreviewResultRecord, RawLinearResultRecord,
+    decode_exif_orientation, extract_metadata_from_bytes, extract_preview_slice,
+    get_jpeg_dimensions, is_displayable_rgb_jpeg, ExifOrientationRecord, ImageMetadataRecord,
+    PreviewResultRecord, RawLinearResultRecord,
 };
 pub use raw::{
     f16_to_f32, f32_to_f16, CfaPattern, RawSensorFrame, CFA_COLOR_BLUE, CFA_COLOR_GREEN, CFA_COLOR_RED,
@@ -132,5 +133,80 @@ mod tests {
         let meta = extract_metadata_from_bytes(&bytes);
         assert_eq!(meta.raw_width, Some(5184));
         assert_eq!(meta.raw_height, Some(3456));
+    }
+
+    #[test]
+    fn test_decode_exif_orientation_all_cases() {
+        assert_eq!(
+            decode_exif_orientation(1),
+            ExifOrientationRecord { rotation: 0, flip_horizontal: false, flip_vertical: false }
+        );
+        assert_eq!(
+            decode_exif_orientation(2),
+            ExifOrientationRecord { rotation: 0, flip_horizontal: true, flip_vertical: false }
+        );
+        assert_eq!(
+            decode_exif_orientation(3),
+            ExifOrientationRecord { rotation: 180, flip_horizontal: false, flip_vertical: false }
+        );
+        assert_eq!(
+            decode_exif_orientation(4),
+            ExifOrientationRecord { rotation: 0, flip_horizontal: false, flip_vertical: true }
+        );
+        assert_eq!(
+            decode_exif_orientation(5),
+            ExifOrientationRecord { rotation: 270, flip_horizontal: true, flip_vertical: false }
+        );
+        assert_eq!(
+            decode_exif_orientation(6),
+            ExifOrientationRecord { rotation: 90, flip_horizontal: false, flip_vertical: false }
+        );
+        assert_eq!(
+            decode_exif_orientation(7),
+            ExifOrientationRecord { rotation: 90, flip_horizontal: true, flip_vertical: false }
+        );
+        assert_eq!(
+            decode_exif_orientation(8),
+            ExifOrientationRecord { rotation: 270, flip_horizontal: false, flip_vertical: false }
+        );
+        // Out of bounds / fallback
+        assert_eq!(
+            decode_exif_orientation(0),
+            ExifOrientationRecord { rotation: 0, flip_horizontal: false, flip_vertical: false }
+        );
+        assert_eq!(
+            decode_exif_orientation(9),
+            ExifOrientationRecord { rotation: 0, flip_horizontal: false, flip_vertical: false }
+        );
+    }
+
+    #[test]
+    fn test_default_temperature_is_5500() {
+        let edits = EditSettings::default();
+        assert_eq!(edits.temperature, 5500.0);
+    }
+
+    #[test]
+    fn test_extract_metadata_orientation_tag() {
+        // Construct minimal TIFF container with IFD0 containing Orientation = 6 (Rotate 90 CW)
+        let mut bytes = vec![0u8; 256];
+        bytes[0..4].copy_from_slice(b"II\x2A\x00");
+        bytes[4..8].copy_from_slice(&8u32.to_le_bytes());
+
+        // IFD0 at offset 8: 1 entry (0x0112 = Orientation, SHORT, count 1, value 6)
+        let entry_count = 1u16;
+        bytes[8..10].copy_from_slice(&entry_count.to_le_bytes());
+        bytes[10..12].copy_from_slice(&0x0112u16.to_le_bytes()); // Tag
+        bytes[12..14].copy_from_slice(&3u16.to_le_bytes());      // SHORT type
+        bytes[14..18].copy_from_slice(&1u32.to_le_bytes());      // Count
+        bytes[18..22].copy_from_slice(&6u32.to_le_bytes());      // Value = 6
+
+        let meta = extract_metadata_from_bytes(&bytes);
+        assert_eq!(meta.orientation, Some(6));
+
+        let orient = decode_exif_orientation(meta.orientation.unwrap());
+        assert_eq!(orient.rotation, 90);
+        assert!(!orient.flip_horizontal);
+        assert!(!orient.flip_vertical);
     }
 }

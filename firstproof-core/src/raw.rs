@@ -25,17 +25,8 @@ pub struct ImageMetadata {
 /// Decodes an EXIF orientation tag (1-8) into canonical rotation degrees (0, 90, 180, 270)
 /// and horizontal/vertical flip booleans.
 pub fn decode_exif_orientation(orientation: u32) -> (i32, bool, bool) {
-    match orientation {
-        1 => (0, false, false),    // Normal
-        2 => (0, true, false),     // Flip horizontal
-        3 => (180, false, false),  // Rotate 180
-        4 => (0, false, true),     // Flip vertical
-        5 => (270, true, false),   // Transpose: Flip horizontal + Rotate 270 CW
-        6 => (90, false, false),   // Rotate 90 CW
-        7 => (90, true, false),    // Transverse: Flip horizontal + Rotate 90 CW
-        8 => (270, false, false),  // Rotate 270 CW (90 CCW)
-        _ => (0, false, false),
-    }
+    let rec = firstproof_types::decode_exif_orientation(orientation);
+    (rec.rotation, rec.flip_horizontal, rec.flip_vertical)
 }
 
 /// Helper function to parse EXIF date string "YYYY:MM:DD HH:MM:SS" into a Unix timestamp.

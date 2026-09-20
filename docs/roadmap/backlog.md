@@ -7,11 +7,12 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Cross-Platform Linux Toolchain & Headless Development Engine (P1)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
-2. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-3. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
-4. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
-5. **Archival High-Precision Multi-Pass Export Engine (P2)**: Multi-pass AMaZE/RCD demosaicing and 2D spatial developer exhaustion diffusion.
+1. **Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1)**: 6 remaining stories establishing shader geometry/crop parity, desktop gesture interaction parity, zero-flashing preview staging, and eliminating the duplicate TypeScript oracle and fake 16-bit export slop.
+2. **Cross-Platform Linux Toolchain & Headless Development Engine (P1)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
+3. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
+4. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
+5. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
+6. **Archival High-Precision Multi-Pass Export Engine (P2)**: Multi-pass AMaZE/RCD demosaicing and 2D spatial developer exhaustion diffusion.
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
 
@@ -90,6 +91,53 @@ This document strictly tracks pending and deferred features calibrated against o
   - Host statically on GitHub Pages via GitHub Actions CI. Zero backend servers, 100% private on-device processing.
   - Clean, typography-driven landing page embedding the interactive web darkroom.
   - Strict anti-marketing principles: Zero email address capture, zero tracking scripts, zero waitlists. Direct link to open source repo and binaries when ready.
+
+
+### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1)
+
+A systematic initiative executed strictly under the [Subsystem Parity & Reference Deconstruction Protocol](file:///home/remco/src/firstproof/.agents/skills/firstproof-subsystem-parity/SKILL.md) to eliminate duplicated logic, establish single sources of truth in `firstproof-types`, achieve 1:1 mathematical and behavioral parity with native macOS Metal, and purge AI slop and fake parity.
+
+- **Story 3.8.2: Shader Geometry & Viewport Transformation Parity**:
+  - Port `transformGeometry()` from `Geometry.metal` to GLSL in `WebGLRenderer.ts`.
+  - Wire uniforms for `u_cropLeft`, `u_cropTop`, `u_cropRight`, `u_cropBottom`, `u_cropModeActive`, `u_straightenAngle`, and `u_cropConstrain`.
+  - Delete dead CPU-side vertex buffer mutation (`updateQuadGeometry`) in favor of GPU vertex/fragment coordinate transforms.
+  - Implement `isIntermediate` bypass invariant (pass through sampled color directly without re-applying tone curves or geometry).
+  - Optimize `sampleDisplayLuma` in WebGL to reuse `y_c` and avoid running the entire pipeline 5× per pixel for sharpening.
+  - *Verification*: Viewport inspection confirming cropped image fills canvas when exiting crop mode, straighten angle rotates cleanly, and intermediate textures bypass transforms.
+
+- **Story 3.8.3: Crop Controller & Desktop Interaction Parity**:
+  - Refactor `CropController.ts` into a stationary full-canvas gesture container covering the entire viewport, dimming outside the active crop box (fixing unscrimmed letterbox bars).
+  - Change outside-crop drag behavior: dragging outside the crop box initiates **straighten rotation** with a floating readout HUD matching `CropOverlayView.swift` (replacing `'create'` mode).
+  - Fix aspect ratio inversion for portrait images and verify the <kbd>X</kbd> flip shortcut.
+  - *Verification*: Interactive crop adjustments, outside-drag rotation, HUD placement, and keyboard shortcut parity.
+
+- **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity**:
+  - Update `RawDecodeWorker.ts` and `firstproof-wasm` to stream RAW files directly into 16-bit linear binned frames (`decode_raw_linear_from_scratchpad`) without extracting camera JPEGs first.
+  - Up-front edit staging: resolve baseline EXIF orientation and XMP edits *before* updating preview state.
+  - Immediately clear to the neutral dark canvas with the developing spinner during the 10–15ms photo switch to eliminate stale pixel flashing.
+  - *Verification*: Burst culling test with RAW files showing zero manufacturer JPEG flashes and clean dark transitions.
+
+- **Story 3.8.5: De-Slopping Parity Harness & Deleting the TypeScript Oracle**:
+  - Expose reference pixel and frame evaluation directly from Rust WASM in `firstproof-wasm`.
+  - Delete the 1,073-line pure TypeScript twin (`web/src/parity/ReferenceExport.ts`).
+  - Re-point `ParityHarness.ts` and `web/parity.html` directly to compiled Rust WASM as the sole ground truth.
+  - *Verification*: Automated parity test battery running in `parity.html` comparing WebGL shaders against compiled Rust WASM.
+
+- **Story 3.8.6: Client-Side Export Clean-Up & De-Slopping**:
+  - Replace the fake bitshifted 16-bit TIFF encoder (`tiffEncoder.ts`) with authentic 8-bit or real WASM-backed export.
+  - Fix Display P3 color transform (or cleanly scope to calibrated sRGB).
+  - Remove unimplemented "Ultra HDR" and "Rendering Intent" promises from `ExportModal.ts`.
+  - Decouple export execution from the live on-screen `<canvas>` so batch export does not resize the viewport during editing.
+  - *Verification*: Export single and batch photos to disk with verified color without viewport resizing.
+
+- **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,495 Lines)**:
+  - Extract dedicated modules from `main.ts`:
+    - `KeyboardShortcutController.ts` (first-responder shielded desktop shortcuts)
+    - `InspectorSyncController.ts` (slider bindings, curve listeners, tab navigation)
+    - `FilmstripController.ts` (thumbnail card rendering, DOM recycling, selection)
+    - `PhotoLoaderService.ts` (worker dispatch, debounce staging, cache coordinator)
+  - Reduce `main.ts` to a lean application coordinator (~200 lines).
+  - *Verification*: Full end-to-end regression check across all tools, keyboard shortcuts, and inspector tabs.
 
 ---
 

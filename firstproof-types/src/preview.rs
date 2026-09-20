@@ -3,6 +3,35 @@ use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExifOrientationRecord {
+    pub rotation: i32,
+    pub flip_horizontal: bool,
+    pub flip_vertical: bool,
+}
+
+/// Decodes an EXIF orientation tag (1-8) into canonical rotation degrees (0, 90, 180, 270)
+/// and horizontal/vertical flip booleans.
+pub fn decode_exif_orientation(orientation: u32) -> ExifOrientationRecord {
+    let (rotation, flip_horizontal, flip_vertical) = match orientation {
+        1 => (0, false, false),    // Normal
+        2 => (0, true, false),     // Flip horizontal
+        3 => (180, false, false),  // Rotate 180
+        4 => (0, false, true),     // Flip vertical
+        5 => (270, true, false),   // Transpose: Flip horizontal + Rotate 270 CW
+        6 => (90, false, false),   // Rotate 90 CW
+        7 => (90, true, false),    // Transverse: Flip horizontal + Rotate 90 CW
+        8 => (270, false, false),  // Rotate 270 CW (90 CCW)
+        _ => (0, false, false),
+    };
+    ExifOrientationRecord {
+        rotation,
+        flip_horizontal,
+        flip_vertical,
+    }
+}
+
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ImageMetadataRecord {
     pub camera_make: Option<String>,
@@ -625,6 +654,12 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
                     max_tiff_w = max_tiff_w.max(val as u32);
                 } else if tag == 0x0101 { // ImageLength
                     max_tiff_h = max_tiff_h.max(val as u32);
+                } else if tag == 0x0112 && orientation.is_none() { // Orientation
+                    if let Some(orient_val) = read_u16(bytes, entry_off + 8, le) {
+                        if (1..=8).contains(&orient_val) {
+                            orientation = Some(orient_val as u32);
+                        }
+                    }
                 } else if tag == 0x014A || tag == 0x8769 { // SubIFDs or ExifIFD
                     let count = read_u32(bytes, entry_off + 4, le).unwrap_or(1) as usize;
                     if count == 1 {

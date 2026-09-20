@@ -102,7 +102,7 @@ export function createDefaultEdits(): EditSettingsPayload {
     emulsion_format: 'Format35mm',
     emulsion_exposure: 0.0,
     print_media: 'None',
-    enlarger_filter: 'FilterGrade2',
+    enlarger_filter: 'NeutralPanchromatic',
     print_paper_grade: 2.0,
     print_base_warmth: 0.0,
     print_process_depth: 100.0,

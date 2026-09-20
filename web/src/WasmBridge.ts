@@ -1,106 +1,54 @@
 import initWasm, * as wasm from 'firstproof-wasm';
+import type {
+  ExifOrientationRecord,
+  ImageMetadataRecord,
+  PreviewResultRecord,
+  RawLinearResultRecord,
+  CurvePointRecord,
+  ToneCurvesRecord,
+  AllCurvesLutRecord,
+  ColorProfileMode,
+  ExportColorSpace,
+  ExportRenderingIntent,
+  EmulsionArchetype,
+  EmulsionFormat,
+  PrintMediaMode,
+  EnlargerFilterMode,
+  EditSettings,
+  XmpData,
+  AutoAdjustments,
+  AutoWhiteBalanceResult,
+} from 'firstproof-wasm';
 
-export interface ImageMetadata {
-  camera_make?: string;
-  camera_model?: string;
-  lens_model?: string;
-  iso?: number;
-  aperture?: number;
-  shutter_speed?: string;
-  focal_length?: number;
-  date_time?: string;
-  taken_time?: number;
-  orientation?: number;
-  raw_width?: number;
-  raw_height?: number;
-}
+export type {
+  ExifOrientationRecord,
+  ImageMetadataRecord,
+  PreviewResultRecord,
+  RawLinearResultRecord,
+  CurvePointRecord,
+  ToneCurvesRecord,
+  AllCurvesLutRecord,
+  ColorProfileMode,
+  ExportColorSpace,
+  ExportRenderingIntent,
+  EmulsionArchetype,
+  EmulsionFormat,
+  PrintMediaMode,
+  EnlargerFilterMode,
+  EditSettings,
+  XmpData,
+  AutoAdjustments,
+  AutoWhiteBalanceResult,
+};
 
-export interface PreviewResult {
-  preview_offset: number;
-  preview_len: number;
-  width: number;
-  height: number;
-  is_jpeg: boolean;
-  metadata: ImageMetadata;
-}
-
-export interface CurvePoint {
-  x: number;
-  y: number;
-}
-
-export interface ToneCurvesPayload {
-  master: CurvePoint[];
-  red: CurvePoint[];
-  green: CurvePoint[];
-  blue: CurvePoint[];
-  [key: string]: CurvePoint[];
-}
-
-export interface EvaluatedLut {
-  master: number[];
-  red: number[];
-  green: number[];
-  blue: number[];
-}
-
-export interface EditSettingsPayload {
-  exposure: number;
-  contrast: number;
-  highlights: number;
-  shadows: number;
-  whites: number;
-  blacks: number;
-  vibrance: number;
-  saturation: number;
-  deep_blue: number;
-  foliage: number;
-  temperature: number;
-  tint: number;
-  crop_left: number;
-  crop_top: number;
-  crop_right: number;
-  crop_bottom: number;
-  crop_angle: number;
-  perspective_vertical: number;
-  perspective_horizontal: number;
-  crop_constrain: boolean;
-  rotation: number;
-  flip_horizontal: boolean;
-  flip_vertical: boolean;
-  tone_profile: string;
-  lut_name?: string;
-  lut_intensity: number;
-  sharpening_amount: number;
-  sharpening_radius: number;
-  sharpening_masking: number;
-  noise_reduction: number;
-  emulsion_archetype: string;
-  emulsion_format: string;
-  emulsion_exposure: number;
-  curves: ToneCurvesPayload;
-  split_toning_shadow_hue: number;
-  split_toning_shadow_sat: number;
-  split_toning_highlight_hue: number;
-  split_toning_highlight_sat: number;
-  split_toning_balance: number;
-  print_media: string;
-  enlarger_filter: string;
-  print_paper_grade: number;
-  print_base_warmth: number;
-  print_process_depth: number;
-}
-
-export interface XmpPayload {
-  rating?: number;
-  status?: string;
-  title?: string;
-  description?: string;
-  creator?: string;
-  copyright?: string;
-  keywords?: string[];
-  edits: EditSettingsPayload;
-}
+// Aliases for backward compatibility with existing web darkroom modules
+export type EditSettingsPayload = EditSettings;
+export type XmpPayload = XmpData;
+export type ImageMetadata = ImageMetadataRecord;
+export type PreviewResult = PreviewResultRecord;
+export type ToneCurvesPayload = ToneCurvesRecord;
+export type CurvePoint = CurvePointRecord;
+export type EvaluatedLut = AllCurvesLutRecord;
 
 export class WasmBridge {
   private static instance: WasmBridge | null = null;
@@ -267,6 +215,14 @@ export class WasmBridge {
       return res as { temperature: number; tint: number };
     }
     return null;
+  }
+
+  public decodeExifOrientation(orientation: number): ExifOrientationRecord {
+    return wasm.decode_exif_orientation(orientation) as ExifOrientationRecord;
+  }
+
+  public extractMetadata(bytes: Uint8Array): ImageMetadataRecord {
+    return wasm.extract_metadata_from_bytes(bytes) as ImageMetadataRecord;
   }
 }
 

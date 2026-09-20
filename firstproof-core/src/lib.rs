@@ -20,7 +20,8 @@ pub mod checksum;
 pub use firstproof_types::{
     evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, ColorProfileMode,
     CurvePointRecord, EditSettings, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode,
-    ExportColorSpace, ExportRenderingIntent, PrintMediaMode, ToneCurvesRecord, WhiteBalanceResult,
+    ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent, PrintMediaMode,
+    ToneCurvesRecord, WhiteBalanceResult,
 };
 
 pub use lensfun::LensCorrectionCoefficients;
@@ -188,21 +189,9 @@ pub struct ImageMetadata {
     pub orientation: Option<u32>,
 }
 
-#[derive(uniffi::Record, Clone, Debug, PartialEq)]
-pub struct ExifOrientationRecord {
-    pub rotation: i32,
-    pub flip_horizontal: bool,
-    pub flip_vertical: bool,
-}
-
 #[uniffi::export]
 pub fn decode_exif_orientation(orientation: u32) -> ExifOrientationRecord {
-    let (rotation, flip_horizontal, flip_vertical) = raw::decode_exif_orientation(orientation);
-    ExifOrientationRecord {
-        rotation,
-        flip_horizontal,
-        flip_vertical,
-    }
+    firstproof_types::decode_exif_orientation(orientation)
 }
 
 #[derive(uniffi::Record)]
@@ -849,7 +838,7 @@ mod tests {
     fn test_edits_cache_signature_and_modification_detection() {
         let default_edits = EditSettings::default();
         assert!(!edits_has_modifications(&default_edits, None, None));
-        assert!(!edits_has_modifications(&default_edits, Some(5000.0), Some(0.0)));
+        assert!(!edits_has_modifications(&default_edits, Some(5500.0), Some(0.0)));
 
         let sig1 = edits_cache_signature(&default_edits);
         assert!(!sig1.is_empty());

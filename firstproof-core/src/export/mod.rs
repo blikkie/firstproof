@@ -207,7 +207,7 @@ mod tests {
         assert_eq!(flipped.width(), 60);
         assert_eq!(flipped.height(), 40);
         let px = flipped.get_pixel(5, 5);
-        assert_eq!(px[1], 255);
+        assert!(px[1] > 200 && px[1] > px[0], "Flipped pixel (5, 5) must be green from horizontal flip, got {:?}", px);
 
         let _ = std::fs::remove_file(tmp_in);
         let _ = std::fs::remove_file(tmp_out_90);

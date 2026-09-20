@@ -3,11 +3,12 @@ use wasm_bindgen::prelude::*;
 pub mod scratchpad;
 
 pub use firstproof_types::{
-    evaluate_all_curves_lut, evaluate_curve_lut, extract_metadata_from_bytes,
-    extract_preview_slice, generate_xmp_sidecar, get_jpeg_dimensions, parse_xmp_sidecar,
-    AllCurvesLutRecord, CfaPattern, ColorProfileMode, CurvePointRecord, EditSettings,
-    EmulsionArchetype, EmulsionFormat, EnlargerFilterMode, f16_to_f32, ImageMetadataRecord, PrintMediaMode,
-    PreviewResultRecord, RawLinearResultRecord, RawSensorFrame, ToneCurvesRecord, XmpData,
+    evaluate_all_curves_lut, evaluate_curve_lut, extract_preview_slice,
+    generate_xmp_sidecar, get_jpeg_dimensions, parse_xmp_sidecar, AllCurvesLutRecord,
+    AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode, CurvePointRecord,
+    EditSettings, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode, ExifOrientationRecord,
+    ExportColorSpace, ExportRenderingIntent, f16_to_f32, ImageMetadataRecord, PreviewResultRecord,
+    PrintMediaMode, RawLinearResultRecord, RawSensorFrame, ToneCurvesRecord, XmpData,
 };
 use scratchpad::with_scratchpad;
 
@@ -183,7 +184,7 @@ pub fn decode_raw_linear_from_scratchpad(input_len: usize) -> Result<JsValue, Js
             let slice = buf
                 .slice(0, input_len)
                 .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
-            extract_metadata_from_bytes(slice)
+            firstproof_types::extract_metadata_from_bytes(slice)
         };
 
         let linear_res = {
@@ -241,7 +242,7 @@ pub fn decode_raw_full_linear_from_scratchpad(input_len: usize) -> Result<JsValu
             let slice = buf
                 .slice(0, input_len)
                 .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
-            extract_metadata_from_bytes(slice)
+            firstproof_types::extract_metadata_from_bytes(slice)
         };
 
         let linear_res = {
@@ -294,7 +295,7 @@ pub fn decode_preview_from_scratchpad(input_len: usize) -> Result<JsValue, JsVal
             let slice = buf
                 .slice(0, input_len)
                 .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
-            extract_metadata_from_bytes(slice)
+            firstproof_types::extract_metadata_from_bytes(slice)
         };
 
         // 1. Try extracting high-res embedded preview JPEG
@@ -439,6 +440,198 @@ pub fn calculate_white_balance_from_sample(r: f32, g: f32, b: f32) -> JsValue {
     serde_wasm_bindgen::to_value(&wb).unwrap_or(JsValue::NULL)
 }
 
+#[wasm_bindgen]
+pub fn decode_exif_orientation(orientation: u32) -> JsValue {
+    let rec = firstproof_types::decode_exif_orientation(orientation);
+    serde_wasm_bindgen::to_value(&rec).unwrap_or(JsValue::NULL)
+}
+
+#[wasm_bindgen]
+pub fn extract_metadata_from_bytes(bytes: &[u8]) -> JsValue {
+    let meta = firstproof_types::extract_metadata_from_bytes(bytes);
+    serde_wasm_bindgen::to_value(&meta).unwrap_or(JsValue::NULL)
+}
+
+#[wasm_bindgen(typescript_custom_section)]
+const TS_DEFINITIONS: &'static str = r#"
+export interface ExifOrientationRecord {
+    rotation: number;
+    flip_horizontal: boolean;
+    flip_vertical: boolean;
+}
+
+export interface ImageMetadataRecord {
+    camera_make?: string;
+    camera_model?: string;
+    lens_model?: string;
+    iso?: number;
+    aperture?: number;
+    shutter_speed?: string;
+    focal_length?: number;
+    taken_time?: number;
+    orientation?: number;
+    raw_width?: number;
+    raw_height?: number;
+}
+
+export interface PreviewResultRecord {
+    preview_offset: number;
+    preview_len: number;
+    width: number;
+    height: number;
+    is_jpeg: boolean;
+    metadata: ImageMetadataRecord;
+}
+
+export interface RawLinearResultRecord {
+    linear_offset: number;
+    linear_len: number;
+    width: number;
+    height: number;
+    is_linear: boolean;
+    metadata: ImageMetadataRecord;
+}
+
+export interface CurvePointRecord {
+    x: number;
+    y: number;
+}
+
+export interface ToneCurvesRecord {
+    master: CurvePointRecord[];
+    red: CurvePointRecord[];
+    green: CurvePointRecord[];
+    blue: CurvePointRecord[];
+    [key: string]: CurvePointRecord[];
+}
+
+export interface AllCurvesLutRecord {
+    master: number[];
+    red: number[];
+    green: number[];
+    blue: number[];
+}
+
+export type ColorProfileMode =
+    | 'AgxVivid'
+    | 'AgxFilmic'
+    | 'CameraStandard'
+    | 'CameraPortrait'
+    | 'CameraLandscape'
+    | 'CameraVivid';
+
+export type ExportColorSpace =
+    | 'Srgb'
+    | 'DisplayP3';
+
+export type ExportRenderingIntent =
+    | 'Perceptual'
+    | 'RelativeColorimetric';
+
+export type EmulsionArchetype =
+    | 'None'
+    | 'RochesterPortrait400'
+    | 'AshigaraChrome50'
+    | 'RochesterK14Chrome64'
+    | 'RochesterCinema500'
+    | 'RochesterDaylight200'
+    | 'MobberleySilver400'
+    | 'CambridgeDiffusion100';
+
+export type EmulsionFormat =
+    | 'Format35mm'
+    | 'MediumFormat'
+    | 'LargeFormat4x5';
+
+export type PrintMediaMode =
+    | 'None'
+    | 'ChromogenicTypeC'
+    | 'SilverDyeBleach'
+    | 'CottonRagMatte'
+    | 'BarytaSilverGelatin'
+    | 'WarmtoneChlorobromide'
+    | 'PlatinumPalladium'
+    | 'Cyanotype';
+
+export type EnlargerFilterMode =
+    | 'NeutralPanchromatic'
+    | 'YellowK2'
+    | 'Orange16'
+    | 'Red25A'
+    | 'GreenX1'
+    | 'OrthochromaticVintage';
+
+export interface EditSettings {
+    exposure: number;
+    contrast: number;
+    highlights: number;
+    shadows: number;
+    whites: number;
+    blacks: number;
+    vibrance: number;
+    saturation: number;
+    deep_blue: number;
+    foliage: number;
+    temperature: number;
+    tint: number;
+    crop_left: number;
+    crop_top: number;
+    crop_right: number;
+    crop_bottom: number;
+    crop_angle: number;
+    perspective_vertical: number;
+    perspective_horizontal: number;
+    crop_constrain: boolean;
+    rotation: number;
+    flip_horizontal: boolean;
+    flip_vertical: boolean;
+    tone_profile: ColorProfileMode;
+    lut_name?: string;
+    lut_intensity: number;
+    sharpening_amount: number;
+    sharpening_radius: number;
+    sharpening_masking: number;
+    noise_reduction: number;
+    emulsion_archetype: EmulsionArchetype;
+    emulsion_format: EmulsionFormat;
+    emulsion_exposure: number;
+    curves: ToneCurvesRecord;
+    split_toning_shadow_hue: number;
+    split_toning_shadow_sat: number;
+    split_toning_highlight_hue: number;
+    split_toning_highlight_sat: number;
+    split_toning_balance: number;
+    print_media: PrintMediaMode;
+    enlarger_filter: EnlargerFilterMode;
+    print_paper_grade: number;
+    print_base_warmth: number;
+    print_process_depth: number;
+}
+
+export interface XmpData {
+    rating?: number;
+    status?: string;
+    title?: string;
+    description?: string;
+    creator?: string;
+    copyright?: string;
+    keywords?: string[];
+    latitude?: number;
+    longitude?: number;
+    edits: EditSettings;
+}
+
+export interface AutoAdjustments {
+    exposure: number;
+    contrast: number;
+}
+
+export interface AutoWhiteBalanceResult {
+    temperature: number;
+    tint: number;
+}
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -506,5 +699,40 @@ mod tests {
         assert_eq!(parsed.edits.rotation, 90);
         assert!(parsed.edits.flip_horizontal);
         assert!(!parsed.edits.flip_vertical);
+    }
+
+    #[test]
+    fn test_wasm_decode_exif_orientation() {
+        let r1 = firstproof_types::decode_exif_orientation(1);
+        assert_eq!(r1.rotation, 0);
+        assert!(!r1.flip_horizontal);
+        assert!(!r1.flip_vertical);
+
+        let r6 = firstproof_types::decode_exif_orientation(6);
+        assert_eq!(r6.rotation, 90);
+        assert!(!r6.flip_horizontal);
+        assert!(!r6.flip_vertical);
+
+        let r8 = firstproof_types::decode_exif_orientation(8);
+        assert_eq!(r8.rotation, 270);
+        assert!(!r8.flip_horizontal);
+        assert!(!r8.flip_vertical);
+    }
+
+    #[test]
+    fn test_wasm_extract_metadata_from_bytes() {
+        let mut bytes = vec![0u8; 256];
+        bytes[0..4].copy_from_slice(b"II\x2A\x00");
+        bytes[4..8].copy_from_slice(&8u32.to_le_bytes());
+
+        let entry_count = 1u16;
+        bytes[8..10].copy_from_slice(&entry_count.to_le_bytes());
+        bytes[10..12].copy_from_slice(&0x0112u16.to_le_bytes()); // Orientation
+        bytes[12..14].copy_from_slice(&3u16.to_le_bytes());      // SHORT
+        bytes[14..18].copy_from_slice(&1u32.to_le_bytes());      // Count
+        bytes[18..22].copy_from_slice(&8u32.to_le_bytes());      // Value = 8 (270 deg)
+
+        let meta = firstproof_types::extract_metadata_from_bytes(&bytes);
+        assert_eq!(meta.orientation, Some(8));
     }
 }

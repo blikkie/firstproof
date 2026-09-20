@@ -74,7 +74,7 @@ impl Default for EditSettings {
             saturation: 0.0,
             deep_blue: 0.0,
             foliage: 0.0,
-            temperature: 5000.0,
+            temperature: 5500.0,
             tint: 0.0,
             crop_left: 0.0,
             crop_top: 0.0,

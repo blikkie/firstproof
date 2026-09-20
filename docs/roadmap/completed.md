@@ -157,4 +157,10 @@ This archive tracks completed stories and features moved from the active backlog
   - Resolved Chromium `SecurityError: The directory selected contains system files` by defaulting destination to `~/Downloads (Browser Default)` streaming via browser downloads without requiring privileged directory handle access.
   - Implemented pure Rust edge-directed gradient-sensing CFA demosaicing in `firstproof-types/src/raw.rs` (`to_full_demosaiced_linear_f16`) and exposed through `firstproof-wasm` bridge (`decode_raw_full_linear_from_scratchpad`), allowing exports of RAW files at 1:1 native sensor resolution while preserving 10–15ms 2×2 binned viewport culling.
   - Created zero-dependency TypeScript 16-bit uncompressed TIFF 6.0 binary encoder (`tiffEncoder.ts`) with deterministic little-endian IFD directory packing.
+- **Story 3.8.1: Shared Primitives & Rust Source of Truth (`firstproof-types`, `firstproof-wasm`, `WasmBridge.ts`, `exifReader.ts`)**:
+  - Moved `ExifOrientationRecord` and `decode_exif_orientation(orientation: u32) -> ExifOrientationRecord` into shared domain crate `firstproof-types`, eliminating diverging rotation/flip logic across platforms. Re-exported via `firstproof-core` (UniFFI) and `firstproof-wasm` (WASM).
+  - Aligned baseline default temperature in `EditSettings::default()` from `5000.0` to `5500.0` (Daylight D55 neutral), matching Swift `AppViewModel`, Metal shaders, Rust `pipeline.rs`, and WebGL shaders.
+  - Eliminated duplicate 80-line manual TIFF/JPEG IFD offset parsing in `web/src/utils/exifReader.ts` in favor of shared WASM `extract_metadata_from_bytes`, supporting sub-0.1ms orientation extraction directly on 64KB byte slices.
+  - Derived clean TypeScript definitions directly from Rust types via `#[wasm_bindgen(typescript_custom_section)]` in `firstproof-wasm` and refactored `WasmBridge.ts` to re-export canonical Rust schemas (`ExifOrientationRecord`, `ImageMetadataRecord`, `EditSettings`, `ToneCurvesRecord`, `AllCurvesLutRecord`, `XmpData`, and enum types).
+  - Replaced handwritten switch statement in `web/src/main.ts` with delegation to shared WASM `decode_exif_orientation`.
 

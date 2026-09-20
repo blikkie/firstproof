@@ -108,6 +108,23 @@ console.log(`     - Contrast: +${parsedBack.edits.contrast}`);
 console.log(`     - Film Emulsion: ${parsedBack.edits.emulsion_archetype} [${parsedBack.edits.emulsion_format}]`);
 console.log(`     - Geometry: ${parsedBack.edits.rotation}° rotation, Flip(H): ${parsedBack.edits.flip_horizontal}`);
 
+// 6. Test EXIF Orientation decoding & byte-level metadata extraction
+console.log('\n6. Testing EXIF Orientation decoding and metadata extraction...');
+const ori6 = wasm.decode_exif_orientation(6);
+console.log(`   ✔ Tag 6 (Rotate 90 CW): rotation=${ori6.rotation}°, flip_h=${ori6.flip_horizontal}, flip_v=${ori6.flip_vertical}`);
+if (ori6.rotation !== 90 || ori6.flip_horizontal !== false) {
+  throw new Error(`decode_exif_orientation(6) failed: expected 90, got ${ori6.rotation}`);
+}
+
+const ori5 = wasm.decode_exif_orientation(5);
+console.log(`   ✔ Tag 5 (Transpose): rotation=${ori5.rotation}°, flip_h=${ori5.flip_horizontal}, flip_v=${ori5.flip_vertical}`);
+if (ori5.rotation !== 270 || ori5.flip_horizontal !== true) {
+  throw new Error(`decode_exif_orientation(5) failed: expected 270/flipH, got ${ori5.rotation}`);
+}
+
+const metaExtracted = wasm.extract_metadata_from_bytes(fileBuffer);
+console.log(`   ✔ Direct extract_metadata_from_bytes returned object (make=${metaExtracted.camera_make || 'N/A'}, orientation=${metaExtracted.orientation || 'N/A'})`);
+
 console.log('\n====================================================');
 console.log(' 🎉 ALL WEBASSMEBLY TESTS PASSED SUCCESSFULLY!       ');
 console.log('====================================================\n');
