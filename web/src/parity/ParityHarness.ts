@@ -7,7 +7,7 @@
 
 import { WebGLRenderer } from '../WebGLRenderer';
 import { EditSettingsPayload, EvaluatedLut, WasmBridge } from '../WasmBridge';
-import { evaluateReferencePixel, ParityPixelResult } from './ReferenceExport';
+import { evaluateReferencePixel, evaluateDisplayLuma, ParityPixelResult } from './ReferenceExport';
 
 export interface ParityTestCase {
   id: string;
@@ -228,6 +228,58 @@ export class ParityHarness {
     let worstExportRgb: [number, number, number] = [0, 0, 0];
 
     const heatmap = new ImageData(w, h);
+    const sharpAmount = test.edits.sharpening_amount ?? 0.0;
+    const nrAmount = test.edits.noise_reduction ?? 0.0;
+    const needsSharpening = sharpAmount > 0.0 || nrAmount > 0.0;
+    const r_step = Math.max(test.edits.sharpening_radius ?? 1.0, 0.5);
+
+    const f16ToF32 = (u: number): number => {
+      const sign = (u & 0x8000) ? -1 : 1;
+      const exp = (u & 0x7c00) >> 10;
+      const frac = u & 0x03ff;
+      if (exp === 0) return sign * Math.pow(2, -14) * (frac / 1024);
+      if (exp === 31) return frac ? NaN : sign * Infinity;
+      return sign * Math.pow(2, exp - 15) * (1 + frac / 1024);
+    };
+
+    const getTexelLum = (ix: number, iy: number): number => {
+      const clampedX = Math.min(Math.max(ix, 0), w - 1);
+      const clampedY = Math.min(Math.max(iy, 0), h - 1);
+      const idx = (clampedY * w + clampedX) * 4;
+      let r: number, g: number, b: number;
+      if (test.isLinearRec2020) {
+        const lin = texturePayload as { data: Uint16Array };
+        r = f16ToF32(lin.data[idx]);
+        g = f16ToF32(lin.data[idx + 1]);
+        b = f16ToF32(lin.data[idx + 2]);
+      } else {
+        const img = texturePayload as ImageData;
+        r = img.data[idx] / 255.0;
+        g = img.data[idx + 1] / 255.0;
+        b = img.data[idx + 2] / 255.0;
+      }
+      return evaluateDisplayLuma([r, g, b], test.isLinearRec2020, test.edits);
+    };
+
+    const sampleLumBilinear = (px: number, py: number): number => {
+      const cx = Math.min(Math.max(px, 0), w - 1);
+      const cy = Math.min(Math.max(py, 0), h - 1);
+      const x0 = Math.floor(cx);
+      const x1 = Math.min(x0 + 1, w - 1);
+      const y0 = Math.floor(cy);
+      const y1 = Math.min(y0 + 1, h - 1);
+      const fx = cx - x0;
+      const fy = cy - y0;
+
+      const l00 = getTexelLum(x0, y0);
+      const l10 = getTexelLum(x1, y0);
+      const l01 = getTexelLum(x0, y1);
+      const l11 = getTexelLum(x1, y1);
+
+      const top = l00 * (1.0 - fx) + l10 * fx;
+      const bottom = l01 * (1.0 - fx) + l11 * fx;
+      return top * (1.0 - fy) + bottom * fy;
+    };
 
     for (let y = 0; y < h; y++) {
       // In WebGL, row 0 in readPixels is bottom of viewport, row (h-1) is top.
@@ -243,15 +295,6 @@ export class ParityHarness {
         if (test.isLinearRec2020) {
           const lin = texturePayload as { data: Uint16Array; width: number; height: number };
           const linIdx = (y * w + x) * 4;
-          // Decode f16 to f32
-          const f16ToF32 = (u: number): number => {
-            const sign = (u & 0x8000) ? -1 : 1;
-            const exp = (u & 0x7c00) >> 10;
-            const frac = u & 0x03ff;
-            if (exp === 0) return sign * Math.pow(2, -14) * (frac / 1024);
-            if (exp === 31) return frac ? NaN : sign * Infinity;
-            return sign * Math.pow(2, exp - 15) * (1 + frac / 1024);
-          };
           inputPixel = [
             f16ToF32(lin.data[linIdx]),
             f16ToF32(lin.data[linIdx + 1]),
@@ -267,7 +310,16 @@ export class ParityHarness {
           ];
         }
 
-        const expRgb = evaluateReferencePixel(inputPixel, test.isLinearRec2020, test.edits, curveLut);
+        let neighbors: { y_c: number; y_l: number; y_r: number; y_t: number; y_b: number } | undefined;
+        if (needsSharpening) {
+          const y_l = sampleLumBilinear(x - r_step, y);
+          const y_r = sampleLumBilinear(x + r_step, y);
+          const y_t = sampleLumBilinear(x, y - r_step);
+          const y_b = sampleLumBilinear(x, y + r_step);
+          neighbors = { y_c: 0, y_l, y_r, y_t, y_b };
+        }
+
+        const expRgb = evaluateReferencePixel(inputPixel, test.isLinearRec2020, test.edits, curveLut, neighbors);
 
         const dr = Math.abs(glR - expRgb[0]);
         const dg = Math.abs(glG - expRgb[1]);
@@ -513,6 +565,36 @@ export class ParityHarness {
         name: 'Print Media: RA-4 Chromogenic Type-C Print',
         category: 'color',
         edits: { ...createDefaultEdits(), print_media: 'ChromogenicTypeC' },
+        isLinearRec2020: false,
+        textureWidth: w,
+        textureHeight: h,
+        createTexture: () => this.createMacbethTexture(),
+      },
+      {
+        id: 'sharpening_baseline_raw',
+        name: 'Sharpening Baseline (RAW Default: Amount 20, Radius 1.0, Masking 15)',
+        category: 'color',
+        edits: { ...createDefaultEdits(), sharpening_amount: 20.0, sharpening_radius: 1.0, sharpening_masking: 15.0 },
+        isLinearRec2020: false,
+        textureWidth: w,
+        textureHeight: h,
+        createTexture: () => this.createMacbethTexture(),
+      },
+      {
+        id: 'sharpening_crisp',
+        name: 'Sharpening Crisp (Amount 50, Radius 1.0, Masking 0)',
+        category: 'color',
+        edits: { ...createDefaultEdits(), sharpening_amount: 50.0, sharpening_radius: 1.0, sharpening_masking: 0.0 },
+        isLinearRec2020: false,
+        textureWidth: w,
+        textureHeight: h,
+        createTexture: () => this.createMacbethTexture(),
+      },
+      {
+        id: 'sharpening_edge_masked',
+        name: 'Sharpening Edge-Masked (Amount 70, Radius 1.0, Masking 35)',
+        category: 'color',
+        edits: { ...createDefaultEdits(), sharpening_amount: 70.0, sharpening_radius: 1.0, sharpening_masking: 35.0 },
         isLinearRec2020: false,
         textureWidth: w,
         textureHeight: h,

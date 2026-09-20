@@ -229,6 +229,20 @@ export class ParityModal {
     const edits = this.getActiveEdits();
     const photo = this.getActivePhoto ? this.getActivePhoto() : null;
 
+    const testEdits = {
+      ...edits,
+      rotation: 0,
+      flip_horizontal: false,
+      flip_vertical: false,
+      crop_left: 0.0,
+      crop_top: 0.0,
+      crop_right: 1.0,
+      crop_bottom: 1.0,
+      crop_angle: 0.0,
+      perspective_horizontal: 0.0,
+      perspective_vertical: 0.0,
+    };
+
     let activeTestCase: ParityTestCase;
 
     if (photo && photo.isLinearRec2020 && photo.linearData) {
@@ -253,7 +267,7 @@ export class ParityModal {
         id: 'active_photo_raw',
         name: 'Active RAW Frame (Linear Rec.2020) with Current Sliders',
         category: 'active_photo',
-        edits,
+        edits: testEdits,
         isLinearRec2020: true,
         textureWidth: w,
         textureHeight: h,
@@ -276,7 +290,7 @@ export class ParityModal {
         id: 'active_photo_jpeg',
         name: 'Active Photo Frame (sRGB Source) with Current Sliders',
         category: 'active_photo',
-        edits,
+        edits: testEdits,
         isLinearRec2020: false,
         textureWidth: w,
         textureHeight: h,
