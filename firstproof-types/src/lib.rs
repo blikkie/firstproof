@@ -1,6 +1,7 @@
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!("firstproof_types");
 
+pub mod auto;
 pub mod curve;
 pub mod modes;
 pub mod preview;
@@ -8,7 +9,11 @@ pub mod raw;
 pub mod settings;
 pub mod xmp;
 
-
+pub use auto::{
+    calculate_white_balance_from_sample, compute_auto_adjustments_from_f16_buffer,
+    compute_auto_adjustments_from_luminances, compute_auto_adjustments_from_u16_slice,
+    compute_auto_white_balance_from_u16_slice, AutoAdjustments, AutoWhiteBalanceResult,
+};
 pub use curve::{
     evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, CurvePointRecord,
     ToneCurvesRecord,

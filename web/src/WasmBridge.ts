@@ -206,4 +206,37 @@ export class WasmBridge {
     const jsonStr = JSON.stringify(xmp);
     return wasm.generate_xmp(jsonStr);
   }
+
+  public computeAutoAdjustments(linearData: Uint16Array, width: number, height: number): { exposure: number; contrast: number } | null {
+    if (typeof (wasm as any).compute_auto_adjustments_from_u16 === 'function') {
+      const res = (wasm as any).compute_auto_adjustments_from_u16(linearData, width, height);
+      return res as { exposure: number; contrast: number };
+    }
+    return null;
+  }
+
+  public computeAutoAdjustmentsFromLuminances(lums: Float32Array): { exposure: number; contrast: number } | null {
+    if (typeof (wasm as any).compute_auto_adjustments_from_luminances === 'function') {
+      const res = (wasm as any).compute_auto_adjustments_from_luminances(lums);
+      return res as { exposure: number; contrast: number };
+    }
+    return null;
+  }
+
+  public computeAutoWhiteBalance(linearData: Uint16Array, width: number, height: number): { temperature: number; tint: number } | null {
+    if (typeof (wasm as any).compute_auto_white_balance_from_u16 === 'function') {
+      const res = (wasm as any).compute_auto_white_balance_from_u16(linearData, width, height);
+      return res as { temperature: number; tint: number };
+    }
+    return null;
+  }
+
+  public calculateWhiteBalanceFromSample(r: number, g: number, b: number): { temperature: number; tint: number } | null {
+    if (typeof (wasm as any).calculate_white_balance_from_sample === 'function') {
+      const res = (wasm as any).calculate_white_balance_from_sample(r, g, b);
+      return res as { temperature: number; tint: number };
+    }
+    return null;
+  }
 }
+

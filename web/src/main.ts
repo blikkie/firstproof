@@ -36,11 +36,127 @@ class DarkroomApp {
   private thumbLoadingSet: Set<number> = new Set();
   private prewarmLoadingSet: Set<number> = new Set();
 
+  private activeLinearData: Uint16Array | null = null;
+  private activeLinearW: number = 0;
+  private activeLinearH: number = 0;
+
   private rawWorker: Worker | null = null;
   private workerMsgId: number = 0;
   private workerPendingMap: Map<number, (res: any) => void> = new Map();
 
   private elements: Record<string, HTMLElement> = {};
+
+  // Perceptual Mired mapping matching macOS TemperatureSliderRow
+  // Human color perception of blackbody temperature is linear in Mireds (10^6 / K), not linear Kelvin.
+  // 2000 K  -> 500 Mireds (pos = 0.0)
+  // 5500 K  -> 181.8 Mireds (pos = 0.707)
+  // 20000 K -> 50 Mireds (pos = 1.0)
+  private kelvinToMiredPos(kelvin: number): number {
+    const k = Math.min(Math.max(kelvin, 2000.0), 20000.0);
+    const mired = 1_000_000.0 / k;
+    const pos = (500.0 - mired) / 450.0;
+    return Math.min(Math.max(pos, 0.0), 1.0);
+  }
+
+  private miredPosToKelvin(pos: number): number {
+    const p = Math.min(Math.max(pos, 0.0), 1.0);
+    const mired = 500.0 - p * 450.0;
+    const rawK = 1_000_000.0 / mired;
+    // Stepped in 50K increments below 10,000K, 200K increments above
+    const steppedK = (rawK < 10000.0)
+      ? Math.round(rawK / 50.0) * 50.0
+      : Math.round(rawK / 200.0) * 200.0;
+    return Math.min(Math.max(steppedK, 2000.0), 20000.0);
+  }
+
+  private getSceneLuminances(): Float32Array {
+    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
+    const gl = canvas?.getContext('webgl2') as WebGL2RenderingContext;
+    if (!gl) return new Float32Array(0);
+
+    const sampleW = Math.min(100, canvas.width);
+    const sampleH = Math.min(100, canvas.height);
+    const startX = Math.max(0, Math.floor((canvas.width - sampleW) / 2));
+    const startY = Math.max(0, Math.floor((canvas.height - sampleH) / 2));
+    const pixels = new Uint8Array(sampleW * sampleH * 4);
+    gl.readPixels(startX, startY, sampleW, sampleH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+    const lums = new Float32Array(sampleW * sampleH);
+    for (let i = 0; i < sampleW * sampleH; i++) {
+      const r = pixels[i * 4] / 255.0;
+      const g = pixels[i * 4 + 1] / 255.0;
+      const b = pixels[i * 4 + 2] / 255.0;
+      lums[i] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+    return lums;
+  }
+
+  public applyAutoTone() {
+    if (this.activeIdx < 0) return;
+
+    let adj: { exposure: number; contrast: number } | null = null;
+    if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
+      adj = this.bridge.computeAutoAdjustments(this.activeLinearData, this.activeLinearW, this.activeLinearH);
+    }
+
+    if (!adj) {
+      const lums = this.getSceneLuminances();
+      if (lums.length > 0) {
+        adj = this.bridge.computeAutoAdjustmentsFromLuminances(lums);
+      }
+    }
+
+    if (adj) {
+      this.edits.exposure = adj.exposure;
+      this.edits.contrast = adj.contrast;
+      this.syncSliderUI();
+      this.renderCanvas();
+      this.autoSaveSidecar();
+      console.log(`⚡ [Auto Tone] Conservative Auto Tone applied: Exposure = ${adj.exposure > 0 ? '+' : ''}${adj.exposure.toFixed(2)} EV, Contrast = ${adj.contrast}`);
+    }
+  }
+
+  public applyAutoWhiteBalance() {
+    if (this.activeIdx < 0) return;
+
+    let wb: { temperature: number; tint: number } | null = null;
+    if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
+      wb = this.bridge.computeAutoWhiteBalance(this.activeLinearData, this.activeLinearW, this.activeLinearH);
+    }
+
+    if (!wb) {
+      const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
+      const gl = canvas?.getContext('webgl2') as WebGL2RenderingContext;
+      if (gl) {
+        const readW = Math.min(100, canvas.width);
+        const readH = Math.min(100, canvas.height);
+        const pixels = new Uint8Array(readW * readH * 4);
+        gl.readPixels(0, 0, readW, readH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        let rSum = 0, gSum = 0, bSum = 0, count = 0;
+        for (let i = 0; i < readW * readH; i++) {
+          const r = pixels[i * 4] / 255.0;
+          const g = pixels[i * 4 + 1] / 255.0;
+          const b = pixels[i * 4 + 2] / 255.0;
+          const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          if (y >= 0.05 && y <= 0.85) {
+            rSum += r; gSum += g; bSum += b; count++;
+          }
+        }
+        if (count > 20) {
+          wb = this.bridge.calculateWhiteBalanceFromSample(rSum / count, gSum / count, bSum / count);
+        }
+      }
+    }
+
+    if (wb) {
+      this.edits.temperature = wb.temperature;
+      this.edits.tint = wb.tint;
+      this.syncSliderUI();
+      this.renderCanvas();
+      this.autoSaveSidecar();
+      console.log(`⚡ [Auto WB] Applied: Temp = ${wb.temperature} K, Tint = ${wb.tint}`);
+    }
+  }
 
   private initWorker() {
     try {
@@ -206,7 +322,7 @@ class DarkroomApp {
       'meta-filename', 'meta-dimensions', 'meta-camera', 'meta-iso', 'meta-aperture', 'meta-shutter',
       'btn-pick', 'btn-reject', 'modal-shortcuts', 'btn-close-modal', 'select-tone-profile',
       'select-wb-preset', 'btn-wb-eyedropper', 'btn-white-point-picker', 'btn-black-point-picker',
-      'select-emulsion', 'select-print-media', 'btn-reset-curve',
+      'select-emulsion', 'select-print-media', 'btn-reset-curve', 'btn-auto-tone',
       'meta-input-title', 'meta-input-caption', 'meta-input-creator', 'meta-input-keywords'
     ];
     for (const id of ids) {
@@ -361,6 +477,9 @@ class DarkroomApp {
       }
     });
 
+    // Auto Tone Button (Light & Exposure section)
+    this.elements['btn-auto-tone']?.addEventListener('click', () => this.applyAutoTone());
+
     // Light Source Presets (Identical parity with Swift AppViewModel+Editor.swift)
     this.elements['select-wb-preset']?.addEventListener('change', (e) => {
       const preset = (e.target as HTMLSelectElement).value;
@@ -370,9 +489,7 @@ class DarkroomApp {
           this.edits.tint = 0.0;
           break;
         case 'Auto':
-          // Auto WB approximation
-          this.edits.temperature = 5400.0;
-          this.edits.tint = 2.0;
+          this.applyAutoWhiteBalance();
           break;
         case 'Daylight':
           this.edits.temperature = 5500.0;
@@ -441,7 +558,39 @@ class DarkroomApp {
     bindSlider('shadows', 'shadows', v => `${Math.round(v)}`, 0.0);
     bindSlider('whites', 'whites', v => `${Math.round(v)}`, 0.0);
     bindSlider('blacks', 'blacks', v => `${Math.round(v)}`, 0.0);
-    bindSlider('temp', 'temperature', v => `${Math.round(v)} K`, 5500.0);
+
+    // Temperature Slider with Perceptual Mired Non-Linear Mapping
+    const tempInput = document.getElementById('slider-temp') as HTMLInputElement;
+    const tempLabel = document.getElementById('val-temp') as HTMLElement;
+    const tempRowLabel = tempInput?.closest('.slider-row')?.querySelector('label');
+    if (tempInput && tempLabel) {
+      tempInput.addEventListener('input', () => {
+        const pos = parseFloat(tempInput.value);
+        const kelvin = this.miredPosToKelvin(pos);
+        this.edits.temperature = kelvin;
+        tempLabel.innerText = `${Math.round(kelvin)} K`;
+        if (this.elements['select-wb-preset']) {
+          (this.elements['select-wb-preset'] as HTMLSelectElement).value = 'Custom';
+        }
+        this.renderCanvas();
+      });
+      tempInput.addEventListener('change', () => this.autoSaveSidecar());
+
+      const resetTemp = () => {
+        this.edits.temperature = 5500.0;
+        tempInput.value = this.kelvinToMiredPos(5500.0).toFixed(4);
+        tempLabel.innerText = '5500 K';
+        if (this.elements['select-wb-preset']) {
+          (this.elements['select-wb-preset'] as HTMLSelectElement).value = 'Daylight';
+        }
+        this.renderCanvas();
+        this.autoSaveSidecar();
+      };
+
+      tempInput.addEventListener('dblclick', resetTemp);
+      tempRowLabel?.addEventListener('dblclick', resetTemp);
+    }
+
     bindSlider('tint', 'tint', v => `${Math.round(v)}`, 0.0);
     bindSlider('vibrance', 'vibrance', v => `${Math.round(v)}`, 0.0);
     bindSlider('saturation', 'saturation', v => `${Math.round(v)}`, 0.0);
@@ -450,6 +599,11 @@ class DarkroomApp {
     bindSlider('emulsion-exp', 'emulsion_exposure', v => formatExposure(v), 0.0);
     bindSlider('paper-grade', 'print_paper_grade', v => `${v.toFixed(1)}`, 0.0);
     bindSlider('base-warmth', 'print_base_warmth', v => `${Math.round(v)}`, 0.0);
+    bindSlider('process-depth', 'print_process_depth', v => `${Math.round(v)}%`, 100.0);
+    bindSlider('sharpen-amount', 'sharpening_amount', v => `${Math.round(v)}`, 0.0);
+    bindSlider('sharpen-radius', 'sharpening_radius', v => `${v.toFixed(1)} px`, 1.0);
+    bindSlider('sharpen-masking', 'sharpening_masking', v => `${Math.round(v)}`, 0.0);
+    bindSlider('noise-reduction', 'noise_reduction', v => `${Math.round(v)}`, 0.0);
     bindSlider('shadow-hue', 'split_toning_shadow_hue', v => `${Math.round(v)}°`, 0);
     bindSlider('shadow-sat', 'split_toning_shadow_sat', v => `${Math.round(v)}`, 0);
     bindSlider('highlight-hue', 'split_toning_highlight_hue', v => `${Math.round(v)}°`, 0);
@@ -506,6 +660,13 @@ class DarkroomApp {
       const activeEl = document.activeElement;
       if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || (activeEl as HTMLElement).isContentEditable)) {
         return; // Guardrail: Never intercept single-key shortcuts while user is typing in metadata fields!
+      }
+
+      // Cmd+U / Ctrl+U: Auto Tone calculation
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'u' || e.key === 'U')) {
+        e.preventDefault();
+        this.applyAutoTone();
+        return;
       }
 
       switch (e.key) {
@@ -965,10 +1126,16 @@ class DarkroomApp {
         let imgW = 0;
         let imgH = 0;
         if (linear16Data && linearW > 0 && linearH > 0) {
+          this.activeLinearData = linear16Data;
+          this.activeLinearW = linearW;
+          this.activeLinearH = linearH;
           imgW = linearW;
           imgH = linearH;
           this.renderer.uploadLinearRec2020Texture(linearW, linearH, linear16Data);
         } else {
+          this.activeLinearData = null;
+          this.activeLinearW = 0;
+          this.activeLinearH = 0;
           imgW = imgBitmap.width;
           imgH = imgBitmap.height;
           this.renderer.uploadImage(imgBitmap);
@@ -1031,7 +1198,13 @@ class DarkroomApp {
     setVal('shadows', this.edits.shadows, v => `${Math.round(v)}`);
     setVal('whites', this.edits.whites, v => `${Math.round(v)}`);
     setVal('blacks', this.edits.blacks, v => `${Math.round(v)}`);
-    setVal('temp', this.edits.temperature, v => `${Math.round(v)} K`);
+    const tempInput = document.getElementById('slider-temp') as HTMLInputElement;
+    const tempLabel = document.getElementById('val-temp') as HTMLElement;
+    if (tempInput && tempLabel) {
+      tempInput.value = this.kelvinToMiredPos(this.edits.temperature).toFixed(4);
+      tempLabel.innerText = `${Math.round(this.edits.temperature)} K`;
+    }
+
     setVal('tint', this.edits.tint, v => `${Math.round(v)}`);
     setVal('vibrance', this.edits.vibrance, v => `${Math.round(v)}`);
     setVal('saturation', this.edits.saturation, v => `${Math.round(v)}`);
@@ -1040,6 +1213,11 @@ class DarkroomApp {
     setVal('emulsion-exp', this.edits.emulsion_exposure, v => `${v > 0 ? '+' : ''}${v.toFixed(2)} EV`);
     setVal('paper-grade', this.edits.print_paper_grade, v => `${v.toFixed(1)}`);
     setVal('base-warmth', this.edits.print_base_warmth, v => `${Math.round(v)}`);
+    setVal('process-depth', this.edits.print_process_depth, v => `${Math.round(v)}%`);
+    setVal('sharpen-amount', this.edits.sharpening_amount, v => `${Math.round(v)}`);
+    setVal('sharpen-radius', this.edits.sharpening_radius, v => `${v.toFixed(1)} px`);
+    setVal('sharpen-masking', this.edits.sharpening_masking, v => `${Math.round(v)}`);
+    setVal('noise-reduction', this.edits.noise_reduction, v => `${Math.round(v)}`);
 
     if (this.elements['select-tone-profile']) {
       (this.elements['select-tone-profile'] as HTMLSelectElement).value = this.edits.tone_profile;

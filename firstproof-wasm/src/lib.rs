@@ -349,6 +349,38 @@ pub fn generate_xmp(xmp_json: &str) -> Result<String, JsValue> {
     Ok(generate_xmp_sidecar(&xmp))
 }
 
+#[wasm_bindgen]
+pub fn compute_auto_adjustments_from_u16(data: &js_sys::Uint16Array, width: u32, height: u32) -> JsValue {
+    let u16_len = (width * height * 4) as usize;
+    let target_len = u16_len.min(data.length() as usize);
+    let mut vec = vec![0u16; target_len];
+    data.copy_to(&mut vec);
+    let adj = firstproof_types::auto::compute_auto_adjustments_from_u16_slice(width, height, &vec);
+    serde_wasm_bindgen::to_value(&adj).unwrap_or(JsValue::NULL)
+}
+
+#[wasm_bindgen]
+pub fn compute_auto_adjustments_from_luminances(lums: &[f32]) -> JsValue {
+    let adj = firstproof_types::auto::compute_auto_adjustments_from_luminances(lums.to_vec());
+    serde_wasm_bindgen::to_value(&adj).unwrap_or(JsValue::NULL)
+}
+
+#[wasm_bindgen]
+pub fn compute_auto_white_balance_from_u16(data: &js_sys::Uint16Array, width: u32, height: u32) -> JsValue {
+    let u16_len = (width * height * 4) as usize;
+    let target_len = u16_len.min(data.length() as usize);
+    let mut vec = vec![0u16; target_len];
+    data.copy_to(&mut vec);
+    let wb = firstproof_types::auto::compute_auto_white_balance_from_u16_slice(width, height, &vec);
+    serde_wasm_bindgen::to_value(&wb).unwrap_or(JsValue::NULL)
+}
+
+#[wasm_bindgen]
+pub fn calculate_white_balance_from_sample(r: f32, g: f32, b: f32) -> JsValue {
+    let wb = firstproof_types::auto::calculate_white_balance_from_sample(r, g, b);
+    serde_wasm_bindgen::to_value(&wb).unwrap_or(JsValue::NULL)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
