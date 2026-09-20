@@ -140,6 +140,21 @@ This document strictly tracks pending and deferred features calibrated against o
   - While developing in the Linux environment, this track is held in place. It will be executed upon returning to a macOS environment or wired into a dedicated `macos-14` / `macos-15` GitHub Actions packaging runner.
   - Direct download links will be posted openly when binaries are ready—no email gates or signups.
 
+### 4.5 Swift Desktop Parameter Schema & Behavioral Interaction Parity (P1 - macOS Environment)
+- **UniFFI Schema Bridge**:
+  - Expose `AdjustmentDescriptor`, `all_adjustments()`, and Mired conversion math from `firstproof-types` via `firstproof-core` UniFFI scaffolding.
+- **Swift View & Model Schema Consumption**:
+  - Refactor `SliderRow.swift`, `DevelopInspectorView.swift`, and `AppViewModel.swift` to derive slider ranges, steps, defaults, and formatters directly from the canonical Rust descriptors rather than hardcoding values in Swift views.
+- **Unified Interaction Behavioral Contracts**:
+  - Implement the identical interaction state machine in native AppKit / SwiftUI matching [ui_architecture.md](file:///home/remco/src/firstproof/docs/architecture/ui_architecture.md):
+    - Record initial value on drag gesture start.
+    - <kbd>Shift</kbd>+drag fine-scrubbing ($0.1\times$ precision damper).
+    - <kbd>Escape</kbd> key drag rollback (cancels pending scrub and reverts value without pushing undo).
+    - Double-click / double-tap reset on slider thumb and row labels.
+    - Tabular lining numbers (`.monospacedDigit()`) across all inspector readout labels to eliminate width jitter.
+- **Cross-Platform Verification Gate**:
+  - Verify 1:1 parameter boundaries, visual feedback, and keyboard/mouse interaction parity between native macOS and WebAssembly darkroom targets.
+
 ---
 
 ## Phase 5: Post-v1 & Long-Term Vision

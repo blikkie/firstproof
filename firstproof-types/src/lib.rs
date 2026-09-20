@@ -6,8 +6,14 @@ pub mod curve;
 pub mod modes;
 pub mod preview;
 pub mod raw;
+pub mod schema;
 pub mod settings;
 pub mod xmp;
+
+pub use schema::{
+    all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,
+    AdjustmentDescriptor, ScaleMode, WorkspaceCategory,
+};
 
 pub use auto::{
     calculate_white_balance_from_sample, compute_auto_adjustments_from_f16_buffer,

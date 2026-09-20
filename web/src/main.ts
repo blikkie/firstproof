@@ -13,6 +13,21 @@ import {
   formatDimensions
 } from './utils/formatters';
 
+interface ActiveSliderScrub {
+  id: string;
+  prop?: keyof EditSettingsPayload;
+  input: HTMLInputElement;
+  label: HTMLElement;
+  format: (v: number) => string;
+  isTemp?: boolean;
+  initialValue: number;
+  initialInputValue: string;
+  startClientX: number;
+  startInputVal: number;
+  min: number;
+  max: number;
+}
+
 class DarkroomApp {
   private bridge!: WasmBridge;
   private renderer!: WebGLRenderer;
@@ -22,6 +37,7 @@ class DarkroomApp {
   private fileEntries: PhotoFileEntry[] = [];
   private activeIdx: number = -1;
   private dirHandle: any = null;
+  private activeScrub: ActiveSliderScrub | null = null;
 
   // Edit Settings state
   private edits: EditSettingsPayload = this.getDefaultEdits();
@@ -67,6 +83,22 @@ class DarkroomApp {
       ? Math.round(rawK / 50.0) * 50.0
       : Math.round(rawK / 200.0) * 200.0;
     return Math.min(Math.max(steppedK, 2000.0), 20000.0);
+  }
+
+  private rollbackActiveScrub() {
+    if (!this.activeScrub) return;
+    const scrub = this.activeScrub;
+    scrub.input.value = scrub.initialInputValue;
+    if (scrub.isTemp) {
+      this.edits.temperature = scrub.initialValue;
+      scrub.label.innerText = `${Math.round(scrub.initialValue)} K`;
+    } else if (scrub.prop) {
+      (this.edits[scrub.prop] as number) = scrub.initialValue;
+      scrub.label.innerText = scrub.format(scrub.initialValue);
+    }
+    this.renderCanvas();
+    scrub.input.blur();
+    this.activeScrub = null;
   }
 
   private getSceneLuminances(): Float32Array {
@@ -525,13 +557,51 @@ class DarkroomApp {
       this.autoSaveSidecar();
     });
 
-    // Sliders & Selects plumbing with double-click reset
+    // Sliders & Selects plumbing with double-click reset, Escape rollback, and Shift fine-scrubbing
     const bindSlider = (id: string, prop: keyof EditSettingsPayload, format: (val: number) => string, defaultVal: number = 0) => {
       const input = document.getElementById(`slider-${id}`) as HTMLInputElement;
       const label = document.getElementById(`val-${id}`) as HTMLElement;
       const rowLabel = input?.closest('.slider-row')?.querySelector('label');
       if (input && label) {
-        input.addEventListener('input', () => {
+        input.addEventListener('pointerdown', (e: PointerEvent) => {
+          this.activeScrub = {
+            id,
+            prop,
+            input,
+            label,
+            format,
+            isTemp: false,
+            initialValue: this.edits[prop] as number,
+            initialInputValue: input.value,
+            startClientX: e.clientX,
+            startInputVal: parseFloat(input.value),
+            min: parseFloat(input.min || '-100'),
+            max: parseFloat(input.max || '100'),
+          };
+        });
+
+        input.addEventListener('pointermove', (e: PointerEvent) => {
+          if (this.activeScrub && this.activeScrub.input === input && e.buttons === 1 && e.shiftKey) {
+            const rect = input.getBoundingClientRect();
+            const width = rect.width || 150;
+            const deltaX = e.clientX - this.activeScrub.startClientX;
+            const range = this.activeScrub.max - this.activeScrub.min;
+            const fineVal = Math.min(
+              this.activeScrub.max,
+              Math.max(
+                this.activeScrub.min,
+                this.activeScrub.startInputVal + (deltaX / width) * range * 0.1
+              )
+            );
+            input.value = fineVal.toString();
+            (this.edits[prop] as number) = fineVal;
+            label.innerText = format(fineVal);
+            this.renderCanvas();
+          }
+        });
+
+        input.addEventListener('input', (e: Event) => {
+          if ((e as any).shiftKey) return;
           const val = parseFloat(input.value);
           (this.edits[prop] as number) = val;
           label.innerText = format(val);
@@ -564,7 +634,47 @@ class DarkroomApp {
     const tempLabel = document.getElementById('val-temp') as HTMLElement;
     const tempRowLabel = tempInput?.closest('.slider-row')?.querySelector('label');
     if (tempInput && tempLabel) {
-      tempInput.addEventListener('input', () => {
+      tempInput.addEventListener('pointerdown', (e: PointerEvent) => {
+        this.activeScrub = {
+          id: 'temp',
+          input: tempInput,
+          label: tempLabel,
+          format: v => `${Math.round(v)} K`,
+          isTemp: true,
+          initialValue: this.edits.temperature,
+          initialInputValue: tempInput.value,
+          startClientX: e.clientX,
+          startInputVal: parseFloat(tempInput.value),
+          min: 0.0,
+          max: 1.0,
+        };
+      });
+
+      tempInput.addEventListener('pointermove', (e: PointerEvent) => {
+        if (this.activeScrub && this.activeScrub.input === tempInput && e.buttons === 1 && e.shiftKey) {
+          const rect = tempInput.getBoundingClientRect();
+          const width = rect.width || 150;
+          const deltaX = e.clientX - this.activeScrub.startClientX;
+          const finePos = Math.min(
+            1.0,
+            Math.max(
+              0.0,
+              this.activeScrub.startInputVal + (deltaX / width) * 0.1
+            )
+          );
+          tempInput.value = finePos.toFixed(4);
+          const kelvin = this.miredPosToKelvin(finePos);
+          this.edits.temperature = kelvin;
+          tempLabel.innerText = `${Math.round(kelvin)} K`;
+          if (this.elements['select-wb-preset']) {
+            (this.elements['select-wb-preset'] as HTMLSelectElement).value = 'Custom';
+          }
+          this.renderCanvas();
+        }
+      });
+
+      tempInput.addEventListener('input', (e: Event) => {
+        if ((e as any).shiftKey) return;
         const pos = parseFloat(tempInput.value);
         const kelvin = this.miredPosToKelvin(pos);
         this.edits.temperature = kelvin;
@@ -655,10 +765,39 @@ class DarkroomApp {
       }
     }
 
+    // Global pointer release & cancellation for slider scrubbing
+    window.addEventListener('pointerup', () => {
+      if (this.activeScrub) {
+        this.autoSaveSidecar();
+        this.activeScrub = null;
+      }
+    });
+
+    window.addEventListener('pointercancel', () => {
+      if (this.activeScrub) {
+        this.rollbackActiveScrub();
+      }
+    });
+
     // Keyboard Shortcuts filter with FIRST-RESPONDER TEXT FIELD SHIELDING
     window.addEventListener('keydown', (e: KeyboardEvent) => {
+      // Escape key rolls back active scrubbing slider if one is active
+      if (e.key === 'Escape') {
+        if (this.activeScrub) {
+          this.rollbackActiveScrub();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+      }
+
       const activeEl = document.activeElement;
-      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || (activeEl as HTMLElement).isContentEditable)) {
+      const isTextField = activeEl && (
+        (activeEl.tagName === 'INPUT' && (activeEl as HTMLInputElement).type !== 'range') ||
+        activeEl.tagName === 'TEXTAREA' ||
+        (activeEl as HTMLElement).isContentEditable
+      );
+      if (isTextField) {
         return; // Guardrail: Never intercept single-key shortcuts while user is typing in metadata fields!
       }
 
@@ -930,6 +1069,7 @@ class DarkroomApp {
 
     const requestId = ++this.selectRequestId;
     this.activeIdx = idx;
+    this.activeScrub = null;
 
     // 1. INSTANT UI updates (0ms delay!)
     const cards = document.querySelectorAll('.thumb-card');
