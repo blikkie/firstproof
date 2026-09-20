@@ -193,6 +193,34 @@ export class WasmBridge {
     return { res, linearData };
   }
 
+  public decodeRawFullLinear(bytes: Uint8Array): { res: any; linearData: Uint16Array } {
+    const liveBuf = this.getWasmMemoryBuffer();
+    const ptr = wasm.get_scratchpad_ptr();
+    if (liveBuf && ptr + bytes.length <= liveBuf.byteLength) {
+      new Uint8Array(liveBuf, ptr, bytes.length).set(bytes);
+    } else {
+      wasm.copy_into_scratchpad(0, bytes);
+    }
+
+    const resVal = (wasm as any).decode_raw_full_linear_from_scratchpad(bytes.length);
+    const res = resVal as any;
+
+    let linearData: Uint16Array;
+    if (typeof (wasm as any).get_scratchpad_u16_slice === 'function') {
+      linearData = (wasm as any).get_scratchpad_u16_slice(res.linear_offset, res.linear_len / 2);
+    } else {
+      const freshBuf = this.getWasmMemoryBuffer();
+      const absOffset = ptr + res.linear_offset;
+      if (freshBuf && absOffset + res.linear_len <= freshBuf.byteLength) {
+        linearData = new Uint16Array(freshBuf, absOffset, res.linear_len / 2).slice();
+      } else {
+        throw new Error(`WASM memory buffer bounds error`);
+      }
+    }
+
+    return { res, linearData };
+  }
+
   public evaluateCurves(curves: ToneCurvesPayload): EvaluatedLut {
     const jsonStr = JSON.stringify(curves);
     const res = wasm.evaluate_curves(jsonStr);

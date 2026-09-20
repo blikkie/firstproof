@@ -52,8 +52,13 @@
           </button>
         </div>
 
-        <button id="btn-export-proof" class="btn btn-secondary" title="Export high-resolution JPEG proof directly from WebGL canvas">
-          Export Proof
+        <button id="btn-export-proof" class="btn btn-secondary" title="Export Photo (Cmd+E)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+            <polyline points="16 6 12 2 8 6"/>
+            <line x1="12" y1="2" x2="12" y2="15"/>
+          </svg>
+          Export...
         </button>
 
         <button id="btn-parity-audit" class="btn btn-secondary" title="Audit Dual-Engine GL vs Export Parity">
@@ -546,6 +551,7 @@
           <tr><td><kbd>C</kbd></td><td>Toggle Interactive Crop & Straighten Tool</td></tr>
           <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Rotate 90° CCW / CW (Camera EXIF Orientation)</td></tr>
           <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd></td><td>Reset All Edits to As-Shot</td></tr>
+          <tr><td><kbd>Cmd</kbd>+<kbd>E</kbd></td><td>Export Photo... (JPEG / TIFF)</td></tr>
           <tr><td><kbd>1</kbd> .. <kbd>5</kbd></td><td>Set Star Rating (1 to 5 Stars)</td></tr>
           <tr><td><kbd>0</kbd></td><td>Clear Star Rating</td></tr>
           <tr><td><kbd>P</kbd></td><td>Set Pick Flag</td></tr>
@@ -554,6 +560,136 @@
           <tr><td><kbd>\</kbd></td><td>Press & Hold for As-Shot Original Peek</td></tr>
           <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Navigate Previous / Next Photo</td></tr>
         </table>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Export Modal (macOS ExportSheetView Parity) -->
+  <dialog id="modal-export" class="dialog-modal export-modal">
+    <div class="export-modal-card">
+      <!-- Header -->
+      <div class="export-modal-header">
+        <div class="export-header-title-group">
+          <svg class="export-header-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+            <polyline points="16 6 12 2 8 6"/>
+            <line x1="12" y1="2" x2="12" y2="15"/>
+          </svg>
+          <div class="export-header-text">
+            <h3 id="export-modal-title" class="export-title">Export Photo</h3>
+            <span id="export-modal-subtitle" class="export-subtitle hidden">Multi-core parallel processing via Rayon engine</span>
+          </div>
+        </div>
+        <button id="btn-cancel-export-header" class="btn btn-secondary btn-sm" type="button">Cancel</button>
+      </div>
+
+      <div class="export-divider"></div>
+
+      <!-- Body Form -->
+      <div class="export-modal-body">
+        <!-- Destination Folder -->
+        <div class="export-form-group">
+          <div class="export-dest-header">
+            <label class="export-group-label">Destination Folder:</label>
+            <button id="btn-export-reset-dest" class="btn-link-action hidden" type="button">Reset to ~/Downloads</button>
+          </div>
+          <div class="export-dest-row">
+            <div id="export-destination-display" class="export-dest-path" title="Browser downloads folder or chosen directory">
+              ~/Downloads (Browser Default)
+            </div>
+            <button id="btn-export-browse" class="btn btn-secondary btn-sm" type="button">Choose Folder...</button>
+          </div>
+          <span id="export-dest-hint" class="export-caption">
+            Exports save directly into ~/Downloads via browser download without directory restrictions.
+          </span>
+        </div>
+
+        <!-- Export Format -->
+        <div class="export-form-group">
+          <label class="export-group-label">Export Format:</label>
+          <div class="export-format-segmented">
+            <button type="button" class="segmented-btn active" data-format="JPEG">JPEG (.jpg)</button>
+            <button type="button" class="segmented-btn" data-format="TIFF">16-Bit TIFF (.tiff)</button>
+          </div>
+
+          <!-- JPEG Options -->
+          <div id="export-jpeg-options" class="export-jpeg-options">
+            <div class="export-quality-row">
+              <span id="export-quality-label" class="export-caption">Quality: 90%</span>
+              <input type="range" id="export-quality-slider" min="50" max="100" step="1" value="90" class="slider" />
+            </div>
+
+            <div class="export-hdr-row">
+              <label class="checkbox-label" for="export-toggle-ultra-hdr">
+                <input type="checkbox" id="export-toggle-ultra-hdr" />
+                <span class="checkbox-text">Ultra HDR (ISO 21496-1)</span>
+                <span class="badge-hdr">HDR</span>
+              </label>
+            </div>
+
+            <div id="export-ultra-hdr-desc" class="export-desc-text hidden">
+              Embeds a backward-compatible ISO 21496-1 gain map for Apple XDR displays, Android Ultra HDR, and Chrome/Safari.
+            </div>
+          </div>
+        </div>
+
+        <!-- Color Space & ICC Profile -->
+        <div class="export-form-group">
+          <label class="export-group-label">Color Space & ICC Profile:</label>
+          <div class="export-colorspace-row">
+            <div class="radio-group-horizontal">
+              <label class="radio-label">
+                <input type="radio" name="export-colorspace" value="sRGB" checked />
+                <span>sRGB</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="export-colorspace" value="DisplayP3" />
+                <span>Display P3</span>
+              </label>
+            </div>
+
+            <div id="export-intent-container" class="export-intent-row hidden">
+              <span class="export-caption">Intent:</span>
+              <select id="export-intent-select" class="dropdown-select dropdown-sm">
+                <option value="RelativeColorimetric" selected>Relative Colorimetric</option>
+                <option value="Perceptual">Perceptual</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Image Sizing -->
+        <div class="export-form-group">
+          <label class="export-group-label">Image Sizing:</label>
+          <div class="export-sizing-row">
+            <select id="export-size-select" class="dropdown-select full-width">
+              <option value="Original" selected>Original Resolution</option>
+              <option value="2048">Web (Long Edge 2048px)</option>
+              <option value="3840">4K Ultra HD (3840px)</option>
+              <option value="Custom">Custom Dimension</option>
+            </select>
+
+            <div id="export-custom-dim-row" class="export-custom-dim hidden">
+              <span class="export-caption">Max Dimension (px):</span>
+              <input type="number" id="export-custom-dim-input" class="text-input custom-dim-input" value="2048" min="64" max="16384" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Status / Result Message -->
+        <div id="export-status-message" class="export-status-message hidden"></div>
+      </div>
+
+      <div class="export-divider"></div>
+
+      <!-- Action Footer -->
+      <div class="export-modal-footer">
+        <div id="export-spinner" class="export-spinner-container hidden">
+          <div class="spinner-small"></div>
+        </div>
+        <button id="btn-perform-export" class="btn btn-primary" type="button">
+          Export
+        </button>
       </div>
     </div>
   </dialog>

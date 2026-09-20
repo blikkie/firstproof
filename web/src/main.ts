@@ -5,6 +5,8 @@ import { ToneCurveWidget } from './ToneCurveWidget';
 import { ThumbnailCacheStore } from './ThumbnailCacheStore';
 import { ParityModal } from './parity/ParityModal';
 import { CropController, CropRect } from './CropController';
+import { ExportModal, ExportExecutionOptions } from './ExportModal';
+import { encodeTiff } from './utils/tiffEncoder';
 import {
   formatAperture,
   formatShutterSpeed,
@@ -49,10 +51,12 @@ class DarkroomApp {
   private renderer!: WebGLRenderer;
   private curveWidget!: ToneCurveWidget;
   private parityModal: ParityModal = new ParityModal();
+  private exportModal: ExportModal = new ExportModal();
   private cropController!: CropController;
 
   private fileEntries: PhotoFileEntry[] = [];
   private activeIdx: number = -1;
+  private selectedIndices: Set<number> = new Set();
   private dirHandle: any = null;
   private activeScrub: ActiveSliderScrub | null = null;
 
@@ -250,11 +254,26 @@ class DarkroomApp {
     }
   }
 
-  private async decodeInWorker(arrayBuffer: ArrayBuffer, fileName: string): Promise<{ preview: PreviewResult; imageSlice: Uint8Array; linearData?: Uint16Array; linearW?: number; linearH?: number }> {
+  private async decodeInWorker(arrayBuffer: ArrayBuffer, fileName: string, fullResolution: boolean = false): Promise<{ preview: PreviewResult; imageSlice: Uint8Array; linearData?: Uint16Array; linearW?: number; linearH?: number }> {
     if (!this.rawWorker) {
       const bytes = new Uint8Array(arrayBuffer);
       const res = this.bridge.decodeImageBytes(bytes);
-      return res;
+      const ext = fileName.split('.').pop()?.toLowerCase() || '';
+      const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
+      let linearData: Uint16Array | undefined;
+      let linearW: number | undefined;
+      let linearH: number | undefined;
+      if (isRawFile) {
+        try {
+          const rawLin = fullResolution ? this.bridge.decodeRawFullLinear(bytes) : this.bridge.decodeRawLinear(bytes);
+          linearData = rawLin.linearData;
+          linearW = rawLin.res.width;
+          linearH = rawLin.res.height;
+        } catch (e) {
+          console.warn('[main] Fallback decodeRawLinear failed:', e);
+        }
+      }
+      return { preview: res.preview, imageSlice: res.imageSlice, linearData, linearW, linearH };
     }
 
     const id = ++this.workerMsgId;
@@ -278,7 +297,7 @@ class DarkroomApp {
         }
       });
       const workerBuffer = arrayBuffer.slice(0);
-      this.rawWorker!.postMessage({ id, arrayBuffer: workerBuffer, fileName }, [workerBuffer]);
+      this.rawWorker!.postMessage({ id, arrayBuffer: workerBuffer, fileName, fullResolution }, [workerBuffer]);
     });
   }
 
@@ -325,7 +344,10 @@ class DarkroomApp {
       }
     );
 
-    // 3. Init Tone Curve Widget
+    // 3. Init Export Modal (macOS ExportSheetView Parity)
+    this.exportModal.init((photos, options, onProgress) => this.handleExport(photos, options, onProgress));
+
+    // 4. Init Tone Curve Widget
     const curveCanvas = document.getElementById('curve-canvas') as HTMLCanvasElement;
     this.curveWidget = new ToneCurveWidget(curveCanvas, () => this.onCurveChange());
     const initialLut = this.bridge.evaluateCurves(this.edits.curves);
@@ -517,8 +539,8 @@ class DarkroomApp {
     btnPeek.addEventListener('mouseup', () => { this.isOriginalPeek = false; this.renderCanvas(); });
     btnPeek.addEventListener('mouseleave', () => { this.isOriginalPeek = false; this.renderCanvas(); });
 
-    // Export Proof
-    this.elements['btn-export-proof'].addEventListener('click', () => this.exportProofJpeg());
+    // Export Photo Modal (Cmd+E / Toolbar Button)
+    this.elements['btn-export-proof'].addEventListener('click', () => this.openExportModal());
 
     // Mechanical Parity Audit Modal
     this.elements['btn-parity-audit']?.addEventListener('click', () => this.parityModal.show());
@@ -1000,6 +1022,13 @@ class DarkroomApp {
         return;
       }
 
+      // Cmd+E / Ctrl+E: Export Photo... (macOS Parity)
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        this.openExportModal();
+        return;
+      }
+
       switch (e.key) {
         case '1': case '2': case '3': case '4': case '5':
           this.currentRating = parseInt(e.key, 10);
@@ -1117,7 +1146,33 @@ class DarkroomApp {
       card.appendChild(iconContainer);
       card.appendChild(title);
 
-      card.addEventListener('click', () => this.selectPhoto(idx, false));
+      card.addEventListener('click', (e: MouseEvent) => {
+        if (e.metaKey || e.ctrlKey) {
+          if (this.selectedIndices.has(idx)) {
+            if (this.selectedIndices.size > 1) {
+              this.selectedIndices.delete(idx);
+            }
+          } else {
+            this.selectedIndices.add(idx);
+          }
+          this.updateCardSelectionClasses();
+          this.selectPhoto(idx, false, true);
+        } else if (e.shiftKey && this.activeIdx >= 0) {
+          const start = Math.min(this.activeIdx, idx);
+          const end = Math.max(this.activeIdx, idx);
+          this.selectedIndices.clear();
+          for (let i = start; i <= end; i++) {
+            this.selectedIndices.add(i);
+          }
+          this.updateCardSelectionClasses();
+          this.selectPhoto(idx, false, true);
+        } else {
+          this.selectedIndices.clear();
+          this.selectedIndices.add(idx);
+          this.updateCardSelectionClasses();
+          this.selectPhoto(idx, false, false);
+        }
+      });
       filmstripScroll.appendChild(card);
 
       // Fast background EXIF orientation scan from raw byte slice (sub-0.1ms per image)
@@ -1395,16 +1450,39 @@ class DarkroomApp {
     }, 100);
   }
 
-  private async selectPhoto(idx: number, centerFilmstrip: boolean = false) {
+  private updateCardSelectionClasses() {
+    const cards = document.querySelectorAll('.thumb-card');
+    cards.forEach((c, i) => {
+      c.classList.toggle('active', i === this.activeIdx);
+      c.classList.toggle('selected', this.selectedIndices.has(i));
+    });
+  }
+
+  public getSelectedPhotos(): PhotoFileEntry[] {
+    if (this.selectedIndices.size > 1) {
+      const sorted = Array.from(this.selectedIndices).sort((a, b) => a - b);
+      return sorted.map(i => this.fileEntries[i]).filter(Boolean);
+    }
+    if (this.activeIdx >= 0 && this.activeIdx < this.fileEntries.length) {
+      return [this.fileEntries[this.activeIdx]];
+    }
+    return [];
+  }
+
+  private async selectPhoto(idx: number, centerFilmstrip: boolean = false, keepMultiSelection: boolean = false) {
     if (idx < 0 || idx >= this.fileEntries.length) return;
 
     const requestId = ++this.selectRequestId;
     this.activeIdx = idx;
     this.activeScrub = null;
 
+    if (!keepMultiSelection) {
+      this.selectedIndices.clear();
+      this.selectedIndices.add(idx);
+    }
+
     // 1. INSTANT UI updates (0ms delay!)
-    const cards = document.querySelectorAll('.thumb-card');
-    cards.forEach((c, i) => c.classList.toggle('active', i === idx));
+    this.updateCardSelectionClasses();
 
     if (centerFilmstrip) {
       this.centerActiveThumb(true);
@@ -2176,36 +2254,232 @@ class DarkroomApp {
     await FolderIntake.writeSidecarToDisk(entry, xml);
   }
 
-  private exportProofJpeg() {
+  private openExportModal() {
+    const photos = this.getSelectedPhotos();
+    if (photos.length === 0) return;
+    this.exportModal.open(photos);
+  }
+
+  private async handleExport(
+    photos: PhotoFileEntry[],
+    options: ExportExecutionOptions,
+    onProgress: (status: string, current: number, total: number) => void
+  ): Promise<{ success: boolean; message: string }> {
+    if (photos.length === 0) {
+      return { success: false, message: 'No photos selected for export.' };
+    }
+
     const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
-    if (canvas && this.activeIdx >= 0) {
-      const origW = canvas.width;
-      const origH = canvas.height;
+    if (!canvas) {
+      return { success: false, message: 'Darkroom canvas not found.' };
+    }
 
-      const rot = (this.edits.rotation ?? 0) % 360;
-      const isOrthogonal = rot === 90 || rot === 270;
-      const texW = this.renderer.textureWidth > 0 ? this.renderer.textureWidth : origW;
-      const texH = this.renderer.textureHeight > 0 ? this.renderer.textureHeight : origH;
-      const targetW = isOrthogonal ? texH : texW;
-      const targetH = isOrthogonal ? texW : texH;
+    const origW = canvas.width;
+    const origH = canvas.height;
+    const savedActiveIdx = this.activeIdx;
+    const savedEdits = JSON.parse(JSON.stringify(this.edits));
 
-      // Render clean final proof frame at full native photo resolution
-      canvas.width = targetW;
-      canvas.height = targetH;
-      this.renderer.render(this.edits, false, 1.0, { x: 0, y: 0 }, false);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    let successCount = 0;
+    let lastOutputPath = '';
 
-      // Restore viewport canvas dimensions & render state
+    try {
+      for (let i = 0; i < photos.length; i++) {
+        const entry = photos[i];
+        const entryIdx = this.fileEntries.indexOf(entry);
+        onProgress(`Exporting ${i + 1} of ${photos.length}...`, i + 1, photos.length);
+
+        // Determine edits for this photo
+        let photoEdits: EditSettingsPayload;
+        if (entryIdx === savedActiveIdx) {
+          photoEdits = savedEdits;
+        } else {
+          // Read XMP sidecar if exists, otherwise default edits
+          const sidecarXml = (await FolderIntake.readSidecarFromDisk(entry)) || localStorage.getItem(`fp_xmp_${entry.name}`);
+          if (sidecarXml) {
+            try {
+              const xmp = this.bridge.parseXmp(sidecarXml);
+              photoEdits = xmp.edits || this.getDefaultEdits();
+            } catch (_) {
+              photoEdits = this.getDefaultEdits();
+            }
+          } else {
+            photoEdits = this.getDefaultEdits();
+          }
+        }
+
+        const fileExt = entry.name.split('.').pop()?.toLowerCase() || '';
+        const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(fileExt);
+
+        // Load texture for photo: for RAW files, always decode full sensor resolution (1:1 demosaiced CFA)
+        let texW = 0;
+        let texH = 0;
+        if (isRawFile) {
+          const arrayBuffer = await entry.file.arrayBuffer();
+          const res = await this.decodeInWorker(arrayBuffer, entry.name, true);
+          if (res.linearData && res.linearW && res.linearH) {
+            this.renderer.uploadLinearRec2020Texture(res.linearW, res.linearH, res.linearData);
+            texW = res.linearW;
+            texH = res.linearH;
+          } else {
+            const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
+            const imgBitmap = await createImageBitmap(blob);
+            this.renderer.uploadImage(imgBitmap);
+            texW = imgBitmap.width;
+            texH = imgBitmap.height;
+          }
+        } else if (entryIdx === savedActiveIdx) {
+          texW = this.renderer.textureWidth;
+          texH = this.renderer.textureHeight;
+        } else {
+          const arrayBuffer = await entry.file.arrayBuffer();
+          const res = await this.decodeInWorker(arrayBuffer, entry.name, false);
+          const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
+          const imgBitmap = await createImageBitmap(blob);
+          this.renderer.uploadImage(imgBitmap);
+          texW = imgBitmap.width;
+          texH = imgBitmap.height;
+        }
+
+        if (texW <= 0) texW = origW;
+        if (texH <= 0) texH = origH;
+
+        // Calculate rotated and cropped dimensions
+        const rot = (photoEdits.rotation ?? 0) % 360;
+        const isOrthogonal = (rot === 90 || rot === 270);
+        const baseW = isOrthogonal ? texH : texW;
+        const baseH = isOrthogonal ? texW : texH;
+
+        const cropL = photoEdits.crop_left ?? 0.0;
+        const cropT = photoEdits.crop_top ?? 0.0;
+        const cropR = photoEdits.crop_right ?? 1.0;
+        const cropB = photoEdits.crop_bottom ?? 1.0;
+        const effectiveW = Math.max(1, Math.round(baseW * Math.max(0.01, cropR - cropL)));
+        const effectiveH = Math.max(1, Math.round(baseH * Math.max(0.01, cropB - cropT)));
+
+        // Sizing calculation
+        let targetW = effectiveW;
+        let targetH = effectiveH;
+        let maxDim: number | null = null;
+        if (options.sizeOption === '2048') maxDim = 2048;
+        else if (options.sizeOption === '3840') maxDim = 3840;
+        else if (options.sizeOption === 'Custom') maxDim = options.customDimension;
+
+        if (maxDim && (effectiveW > maxDim || effectiveH > maxDim)) {
+          if (effectiveW >= effectiveH) {
+            targetW = maxDim;
+            targetH = Math.max(1, Math.round((effectiveH * maxDim) / effectiveW));
+          } else {
+            targetH = maxDim;
+            targetW = Math.max(1, Math.round((effectiveW * maxDim) / effectiveH));
+          }
+        }
+
+        // Clamp to WebGL viewport capability
+        const maxGl = this.renderer.glContext.getParameter(this.renderer.glContext.MAX_VIEWPORT_DIMS)?.[0] || 8192;
+        if (targetW > maxGl || targetH > maxGl) {
+          const scale = maxGl / Math.max(targetW, targetH);
+          targetW = Math.max(1, Math.round(targetW * scale));
+          targetH = Math.max(1, Math.round(targetH * scale));
+        }
+
+        // Render frame at target resolution
+        canvas.width = targetW;
+        canvas.height = targetH;
+        this.renderer.render(photoEdits, false, 1.0, { x: 0, y: 0 }, false);
+
+        // Encode image (macOS Parity: ${baseName}_FirstProof.${ext})
+        const stem = entry.name.substring(0, entry.name.lastIndexOf('.')) || entry.name;
+        const ext = (options.format === 'TIFF') ? 'tiff' : 'jpg';
+        const filename = `${stem}_FirstProof.${ext}`;
+        lastOutputPath = filename;
+
+        let fileBlob: Blob;
+        if (options.format === 'TIFF') {
+          const pixels = this.renderer.readRgbaPixels(targetW, targetH);
+          const tiffBytes = encodeTiff(targetW, targetH, pixels, 16);
+          fileBlob = new Blob([tiffBytes.buffer as ArrayBuffer], { type: 'image/tiff' });
+        } else {
+          // JPEG format
+          if (options.colorSpace === 'DisplayP3') {
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = targetW;
+            exportCanvas.height = targetH;
+            const ctx = exportCanvas.getContext('2d', { colorSpace: 'display-p3' });
+            if (ctx) {
+              ctx.drawImage(canvas, 0, 0);
+              fileBlob = await new Promise<Blob>((resolve, reject) => {
+                exportCanvas.toBlob(
+                  (b) => b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
+                  'image/jpeg',
+                  options.quality / 100
+                );
+              });
+            } else {
+              fileBlob = await new Promise<Blob>((resolve, reject) => {
+                canvas.toBlob(
+                  (b) => b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
+                  'image/jpeg',
+                  options.quality / 100
+                );
+              });
+            }
+          } else {
+            fileBlob = await new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob(
+                (b) => b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
+                'image/jpeg',
+                options.quality / 100
+              );
+            });
+          }
+        }
+
+        // Write to destination directory or trigger browser download
+        if (options.destinationDirHandle) {
+          try {
+            const fileHandle = await options.destinationDirHandle.getFileHandle(filename, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(fileBlob);
+            await writable.close();
+          } catch (writeErr) {
+            console.warn('[Export] File system write failed, falling back to download:', writeErr);
+            this.triggerDownload(fileBlob, filename);
+          }
+        } else {
+          this.triggerDownload(fileBlob, filename);
+        }
+
+        successCount++;
+      }
+    } finally {
+      // Restore canvas viewport dimensions and state
       canvas.width = origW;
       canvas.height = origH;
-      this.renderCanvas();
 
-      const link = document.createElement('a');
-      const filename = `${this.fileEntries[this.activeIdx].name}_proof.jpg`;
-      link.download = filename;
-      link.href = dataUrl;
-      link.click();
+      // Restore active photo texture if batch modified it or if raw full-resolution was loaded
+      if (savedActiveIdx >= 0 && savedActiveIdx < this.fileEntries.length) {
+        await this.selectPhoto(savedActiveIdx, false, true);
+        this.edits = savedEdits;
+        this.syncSliderUI();
+        this.renderCanvas();
+      }
     }
+
+    const isBatch = photos.length > 1;
+    const message = isBatch
+      ? `Finished exporting ${successCount} of ${photos.length} photos`
+      : `Successfully exported to ${lastOutputPath}`;
+
+    return { success: successCount > 0, message };
+  }
+
+  private triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
   }
 
   private updateUI() {

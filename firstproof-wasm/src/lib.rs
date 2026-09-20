@@ -229,6 +229,64 @@ pub fn decode_raw_linear_from_scratchpad(input_len: usize) -> Result<JsValue, Js
     })
 }
 
+fn decode_raw_full_linear(slice: &[u8]) -> Option<(Vec<u16>, u32, u32)> {
+    let frame = decode_raw_sensor_frame(slice)?;
+    Some(frame.to_full_demosaiced_linear_f16())
+}
+
+#[wasm_bindgen]
+pub fn decode_raw_full_linear_from_scratchpad(input_len: usize) -> Result<JsValue, JsValue> {
+    with_scratchpad(|buf| {
+        let metadata = {
+            let slice = buf
+                .slice(0, input_len)
+                .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
+            extract_metadata_from_bytes(slice)
+        };
+
+        let linear_res = {
+            if let Some(slice) = buf.slice(0, input_len) {
+                decode_raw_full_linear(slice)
+            } else {
+                None
+            }
+        };
+
+        if let Some((u16_pixels, full_w, full_h)) = linear_res {
+            let bytes_needed = u16_pixels.len() * 2;
+            let aligned_offset = (input_len + 15) & !15;
+            let scratch_len = buf.len();
+            if aligned_offset + bytes_needed > scratch_len {
+                buf.resize(aligned_offset + bytes_needed);
+            }
+            if let Some(target_slice) = buf.slice_mut(aligned_offset, bytes_needed) {
+                let u8_view = unsafe {
+                    std::slice::from_raw_parts(
+                        u16_pixels.as_ptr() as *const u8,
+                        bytes_needed,
+                    )
+                };
+                target_slice.copy_from_slice(u8_view);
+                let res = RawLinearResultRecord {
+                    linear_offset: aligned_offset as u64,
+                    linear_len: bytes_needed as u64,
+                    width: full_w,
+                    height: full_h,
+                    is_linear: true,
+                    metadata,
+                };
+                web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
+                    "⚡ [RAW Full Demosaic Rec.2020 Event] Decoded full-resolution 16-bit linear RAW frame: {}x{} pixels ({} MB)",
+                    full_w, full_h, (bytes_needed as f32 / 1024.0 / 1024.0)
+                )));
+                return serde_wasm_bindgen::to_value(&res).map_err(|e| JsValue::from_str(&e.to_string()));
+            }
+        }
+
+        Err(JsValue::from_str("Failed to decode full-resolution 16-bit linear RAW frame"))
+    })
+}
+
 #[wasm_bindgen]
 pub fn decode_preview_from_scratchpad(input_len: usize) -> Result<JsValue, JsValue> {
     with_scratchpad(|buf| {

@@ -360,4 +360,139 @@ impl RawSensorFrame {
 
         (u16_pixels, bin_w, bin_h)
     }
+
+    /// Renders a full-resolution edge-directed demosaiced 16-bit float (f16) RGBA buffer in Linear Rec.2020 space.
+    /// Provides 1:1 sensor-pixel resolution for full-res export pipelines across native macOS and WebAssembly.
+    pub fn to_full_demosaiced_linear_f16(&self) -> (Vec<u16>, u32, u32) {
+        let active_w = self.active_width;
+        let active_h = self.active_height;
+        if active_w == 0 || active_h == 0 {
+            return (Vec::new(), 0, 0);
+        }
+
+        let full_w = self.full_width;
+        let full_h = self.full_height;
+        let sensor = &self.sensor_data;
+        if sensor.is_empty() || full_w == 0 || full_h == 0 {
+            return (Vec::new(), 0, 0);
+        }
+
+        let (wb_r, wb_b) = self.as_shot_wb();
+        let sensor_to_rec2020 = self.compute_sensor_to_rec2020();
+        let m00 = sensor_to_rec2020[0][0];
+        let m01 = sensor_to_rec2020[0][1];
+        let m02 = sensor_to_rec2020[0][2];
+        let m10 = sensor_to_rec2020[1][0];
+        let m11 = sensor_to_rec2020[1][1];
+        let m12 = sensor_to_rec2020[1][2];
+        let m20 = sensor_to_rec2020[2][0];
+        let m21 = sensor_to_rec2020[2][1];
+        let m22 = sensor_to_rec2020[2][2];
+
+        let black = self.black_levels[0].max(0.0);
+        let white = self.white_levels[0].max(black + 1.0);
+        let scale = 1.0 / (white - black);
+        let a16 = f32_to_f16(1.0);
+
+        // Site type lookup table per pattern:
+        // 0: R site (Red measured)
+        // 1: B site (Blue measured)
+        // 2: G site on R row (R horizontal, B vertical)
+        // 3: G site on B row (B horizontal, R vertical)
+        let site_map: [[u8; 2]; 2] = match self.cfa_pattern {
+            CfaPattern::Rggb => [[0, 2], [3, 1]],
+            CfaPattern::Bggr => [[1, 3], [2, 0]],
+            CfaPattern::Gbrg => [[3, 1], [0, 2]],
+            CfaPattern::Grbg => [[2, 0], [1, 3]],
+            _ => [[0, 2], [3, 1]],
+        };
+
+        let sample = |px: usize, py: usize| -> f32 {
+            let cx = px.min(full_w.saturating_sub(1));
+            let cy = py.min(full_h.saturating_sub(1));
+            let val = sensor.get(cy * full_w + cx).copied().unwrap_or(0) as f32;
+            ((val - black) * scale).clamp(0.0, 1.0)
+        };
+
+        let mut u16_pixels = vec![0u16; active_w * active_h * 4];
+
+        for y in 0..active_h {
+            let sy = self.active_y + y;
+            let sy_prev = sy.saturating_sub(1);
+            let sy_next = (sy + 1).min(full_h.saturating_sub(1));
+            let dst_row_off = y * active_w * 4;
+
+            for x in 0..active_w {
+                let sx = self.active_x + x;
+                let sx_prev = sx.saturating_sub(1);
+                let sx_next = (sx + 1).min(full_w.saturating_sub(1));
+
+                let site = site_map[sy % 2][sx % 2];
+                let (r, g, b) = match site {
+                    0 => {
+                        // R site: Red is measured
+                        let r = sample(sx, sy);
+                        let gh = (sample(sx_prev, sy) + sample(sx_next, sy)) * 0.5;
+                        let gv = (sample(sx, sy_prev) + sample(sx, sy_next)) * 0.5;
+                        let dh = (sample(sx_prev, sy) - sample(sx_next, sy)).abs();
+                        let dv = (sample(sx, sy_prev) - sample(sx, sy_next)).abs();
+                        let g = if dh < dv { gh } else if dv < dh { gv } else { (gh + gv) * 0.5 };
+                        let b = (sample(sx_prev, sy_prev)
+                            + sample(sx_next, sy_prev)
+                            + sample(sx_prev, sy_next)
+                            + sample(sx_next, sy_next))
+                            * 0.25;
+                        (r, g, b)
+                    }
+                    1 => {
+                        // B site: Blue is measured
+                        let b = sample(sx, sy);
+                        let gh = (sample(sx_prev, sy) + sample(sx_next, sy)) * 0.5;
+                        let gv = (sample(sx, sy_prev) + sample(sx, sy_next)) * 0.5;
+                        let dh = (sample(sx_prev, sy) - sample(sx_next, sy)).abs();
+                        let dv = (sample(sx, sy_prev) - sample(sx, sy_next)).abs();
+                        let g = if dh < dv { gh } else if dv < dh { gv } else { (gh + gv) * 0.5 };
+                        let r = (sample(sx_prev, sy_prev)
+                            + sample(sx_next, sy_prev)
+                            + sample(sx_prev, sy_next)
+                            + sample(sx_next, sy_next))
+                            * 0.25;
+                        (r, g, b)
+                    }
+                    2 => {
+                        // G site on R row: R is horizontal, B is vertical
+                        let g = sample(sx, sy);
+                        let r = (sample(sx_prev, sy) + sample(sx_next, sy)) * 0.5;
+                        let b = (sample(sx, sy_prev) + sample(sx, sy_next)) * 0.5;
+                        (r, g, b)
+                    }
+                    _ => {
+                        // G site on B row: B is horizontal, R is vertical
+                        let g = sample(sx, sy);
+                        let b = (sample(sx_prev, sy) + sample(sx_next, sy)) * 0.5;
+                        let r = (sample(sx, sy_prev) + sample(sx, sy_next)) * 0.5;
+                        (r, g, b)
+                    }
+                };
+
+                // As-shot white balance
+                let r_wb = (r * wb_r).clamp(0.0, 1.0);
+                let g_wb = g.clamp(0.0, 1.0);
+                let b_wb = (b * wb_b).clamp(0.0, 1.0);
+
+                // Sensor to Linear Rec.2020 matrix transform
+                let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
+                let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
+                let b_lin = (m20 * r_wb + m21 * g_wb + m22 * b_wb).max(0.0);
+
+                let dst_idx = dst_row_off + x * 4;
+                u16_pixels[dst_idx] = f32_to_f16(r_lin);
+                u16_pixels[dst_idx + 1] = f32_to_f16(g_lin);
+                u16_pixels[dst_idx + 2] = f32_to_f16(b_lin);
+                u16_pixels[dst_idx + 3] = a16;
+            }
+        }
+
+        (u16_pixels, active_w as u32, active_h as u32)
+    }
 }

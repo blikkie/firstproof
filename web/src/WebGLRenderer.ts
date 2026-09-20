@@ -946,6 +946,16 @@ export class WebGLRenderer {
     return this.texHeight;
   }
 
+  public get glContext(): WebGL2RenderingContext {
+    return this.gl;
+  }
+
+  public readRgbaPixels(width: number, height: number): Uint8Array {
+    const pixels = new Uint8Array(width * height * 4);
+    this.gl.readPixels(0, 0, width, height, this.gl.RGBA, this.gl.UNSIGNED_BYTE, pixels);
+    return pixels;
+  }
+
   // Uniform locations
   private uLocs: Record<string, WebGLUniformLocation | null> = {};
 

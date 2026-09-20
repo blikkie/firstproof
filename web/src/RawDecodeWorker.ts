@@ -10,6 +10,7 @@ import initWasm, {
   copy_into_scratchpad,
   decode_preview_from_scratchpad,
   decode_raw_linear_from_scratchpad,
+  decode_raw_full_linear_from_scratchpad,
   get_scratchpad_u8_slice,
   get_scratchpad_u16_slice,
 } from 'firstproof-wasm';
@@ -21,6 +22,7 @@ interface WorkerDecodeMessage {
   id: number;
   arrayBuffer: ArrayBuffer;
   fileName: string;
+  fullResolution?: boolean;
 }
 
 interface WorkerResponseMessage {
@@ -39,7 +41,7 @@ interface WorkerResponseMessage {
 }
 
 self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
-  const { id, arrayBuffer, fileName } = e.data;
+  const { id, arrayBuffer, fileName, fullResolution } = e.data;
 
   const markStart = `firstproof:decode:start:${id}`;
   const markEnd = `firstproof:decode:end:${id}`;
@@ -83,7 +85,9 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
 
     if (isRawFile) {
       try {
-        const rawLin = decode_raw_linear_from_scratchpad(inputBytes.length);
+        const rawLin = fullResolution
+          ? decode_raw_full_linear_from_scratchpad(inputBytes.length)
+          : decode_raw_linear_from_scratchpad(inputBytes.length);
         if (rawLin && rawLin.linear_len > 0) {
           linearW = rawLin.width;
           linearH = rawLin.height;
