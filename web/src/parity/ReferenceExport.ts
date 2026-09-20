@@ -164,6 +164,8 @@ export function isNeutralEdits(edits: {
   tone_profile?: string;
   split_toning_shadow_sat: number;
   split_toning_highlight_sat: number;
+  sharpening_amount?: number;
+  noise_reduction?: number;
   emulsion_archetype?: string;
   print_media?: string;
 }): boolean {
@@ -183,9 +185,148 @@ export function isNeutralEdits(edits: {
     edits.foliage === 0.0 &&
     edits.split_toning_shadow_sat === 0.0 &&
     edits.split_toning_highlight_sat === 0.0 &&
+    (edits.sharpening_amount === undefined || edits.sharpening_amount === 0.0) &&
+    (edits.noise_reduction === undefined || edits.noise_reduction === 0.0) &&
     (!edits.emulsion_archetype || edits.emulsion_archetype === 'None') &&
     (!edits.print_media || edits.print_media === 'None')
   );
+}
+
+// Detail, Sharpening & Noise Reduction (matching firstproof-core pipeline.rs & Detail.metal)
+export function applyDetailAndSharpeningRgb(
+  r: number, g: number, b: number,
+  y_c: number,
+  y_l: number, y_r: number, y_t: number, y_b: number,
+  amount: number,
+  masking: number,
+  noiseReduction: number
+): [number, number, number] {
+  if (amount <= 0.0 && noiseReduction <= 0.0) {
+    return [r, g, b];
+  }
+
+  // Unsharp mask: Laplacian high-frequency detail
+  const y_neighbors = 0.25 * (y_l + y_r + y_t + y_b);
+  const delta_y = y_c - y_neighbors;
+
+  // Sobel gradient magnitude
+  const gx = (y_r - y_l) * 0.5;
+  const gy = (y_b - y_t) * 0.5;
+  const grad_mag = Math.sqrt(gx * gx + gy * gy);
+
+  let w_edge = 1.0;
+  if (masking > 0.0) {
+    const m = Math.min(Math.max(masking / 100.0, 0.0), 1.0);
+    const threshold = Math.pow(m, 1.5) * 0.08;
+    const t = Math.min(Math.max(grad_mag / Math.max(threshold, 1e-4), 0.0), 1.0);
+    w_edge = t * t * (3.0 - 2.0 * t);
+  }
+
+  const sharp_gain = (amount / 100.0) * 1.5;
+  const sharp_term = sharp_gain * w_edge * delta_y;
+  const nr_term = (noiseReduction / 100.0) * (1.0 - w_edge) * delta_y;
+  const delta_adj = sharp_term - nr_term;
+
+  return [
+    Math.min(Math.max(r + delta_adj, 0.0), 1.0),
+    Math.min(Math.max(g + delta_adj, 0.0), 1.0),
+    Math.min(Math.max(b + delta_adj, 0.0), 1.0),
+  ];
+}
+
+export function evaluateDisplayLuma(
+  input: [number, number, number],
+  isLinearRec2020: boolean,
+  edits: {
+    exposure: number;
+    contrast: number;
+    highlights: number;
+    shadows: number;
+    whites: number;
+    blacks: number;
+    temperature: number;
+    tint: number;
+    tone_profile?: string;
+    emulsion_archetype?: string;
+    emulsion_exposure?: number;
+  }
+): number {
+  let rec2020: [number, number, number];
+  if (isLinearRec2020) {
+    rec2020 = [input[0], input[1], input[2]];
+  } else {
+    const srgbLin: [number, number, number] = [
+      srgbGammaToLinear(input[0]),
+      srgbGammaToLinear(input[1]),
+      srgbGammaToLinear(input[2]),
+    ];
+    rec2020 = matMul(LINEAR_SRGB_TO_REC2020, srgbLin);
+  }
+
+  if (Math.abs(edits.temperature - 5500.0) >= 1.0 || edits.tint !== 0.0) {
+    const tempNorm = Math.min(Math.max(edits.temperature / 5500.0, 0.25), 4.0);
+    let rScale = Math.pow(tempNorm, 0.75);
+    let bScale = Math.pow(1.0 / tempNorm, 0.75);
+    const tintFactor = edits.tint * 0.002;
+    const gScale = Math.max(1.0 - tintFactor, 0.01);
+    rScale = Math.max(rScale + tintFactor * 0.5, 0.01);
+    bScale = Math.max(bScale + tintFactor * 0.5, 0.01);
+    rec2020[0] *= rScale;
+    rec2020[1] *= gScale;
+    rec2020[2] *= bScale;
+  }
+
+  if (edits.exposure !== 0.0) {
+    const gain = Math.pow(2.0, edits.exposure);
+    rec2020[0] *= gain;
+    rec2020[1] *= gain;
+    rec2020[2] *= gain;
+  }
+
+  rec2020 = applyToneRecovery(rec2020, edits.highlights, edits.shadows, edits.whites, edits.blacks);
+
+  if (edits.emulsion_archetype && edits.emulsion_archetype !== 'None') {
+    rec2020 = applyRecordingEmulsion(rec2020, edits.emulsion_archetype, edits.emulsion_exposure ?? 0.0);
+  }
+
+  const contrastGain = edits.contrast >= 0.0 ? 1.0 + edits.contrast / 100.0 : 1.0 + (edits.contrast / 100.0) * 0.60;
+  const isAgxVivid = edits.tone_profile === 'AgxVivid' || !edits.tone_profile;
+  const isAgxFilmic = edits.tone_profile === 'AgxFilmic';
+
+  const CAM_MODE_MAP: Record<string, number> = {
+    CameraStandard: 1,
+    CameraPortrait: 2,
+    CameraLandscape: 3,
+    CameraVivid: 4,
+  };
+
+  let srgbOut: [number, number, number];
+  if (isAgxVivid) {
+    srgbOut = agxToneMapVivid(rec2020, contrastGain);
+  } else if (isAgxFilmic) {
+    srgbOut = agxToneMap(rec2020, contrastGain);
+  } else if (edits.tone_profile && edits.tone_profile in CAM_MODE_MAP) {
+    const camMode = CAM_MODE_MAP[edits.tone_profile];
+    const cSrgb = matMul(REC2020_TO_LINEAR_SRGB, rec2020);
+    const clampedSrgb: [number, number, number] = [
+      Math.max(cSrgb[0], 0.0),
+      Math.max(cSrgb[1], 0.0),
+      Math.max(cSrgb[2], 0.0),
+    ];
+    const hsv = rgb2hsv(clampedSrgb[0], clampedSrgb[1], clampedSrgb[2]);
+    const hsvAdj = applyCameraHueSat(hsv, camMode);
+    const rgbAdj = hsv2rgb(hsvAdj[0], hsvAdj[1], hsvAdj[2]);
+    const lum = 0.2126 * rgbAdj[0] + 0.7152 * rgbAdj[1] + 0.0722 * rgbAdj[2];
+    const lumCurved = applyCameraToneCurve(lum, camMode);
+    return Math.min(Math.max((lumCurved - 0.18) * contrastGain + 0.18, 0.0), 1.0);
+  } else {
+    const cSrgb = matMul(REC2020_TO_LINEAR_SRGB, rec2020);
+    srgbOut = [Math.min(Math.max(cSrgb[0], 0.0), 1.0), Math.min(Math.max(cSrgb[1], 0.0), 1.0), Math.min(Math.max(cSrgb[2], 0.0), 1.0)];
+  }
+
+  return 0.2126 * Math.min(Math.max(srgbOut[0], 0.0), 1.0) +
+         0.7152 * Math.min(Math.max(srgbOut[1], 0.0), 1.0) +
+         0.0722 * Math.min(Math.max(srgbOut[2], 0.0), 1.0);
 }
 
 function agxSigmoid(x: number, power: number): number {
@@ -739,6 +880,10 @@ export function evaluateReferencePixel(
     split_toning_highlight_hue: number;
     split_toning_highlight_sat: number;
     split_toning_balance: number;
+    sharpening_amount?: number;
+    sharpening_radius?: number;
+    sharpening_masking?: number;
+    noise_reduction?: number;
     emulsion_archetype?: string;
     emulsion_exposure?: number;
     print_media?: string;
@@ -747,7 +892,8 @@ export function evaluateReferencePixel(
     print_process_depth?: number;
     enlarger_filter?: string;
   },
-  curveLut?: { master?: number[]; red?: number[]; green?: number[]; blue?: number[] }
+  curveLut?: { master?: number[]; red?: number[]; green?: number[]; blue?: number[] },
+  neighbors?: { y_c: number; y_l: number; y_r: number; y_t: number; y_b: number }
 ): [number, number, number] {
   // Neutral JPEG Passthrough
   if (!isLinearRec2020 && isNeutralEdits(edits) && !curveLut?.master) {
@@ -793,13 +939,13 @@ export function evaluateReferencePixel(
     rec2020[2] *= gain;
   }
 
-  // 3b. Photochemical Recording Emulsion
+  // 3b. Tone Recovery
+  rec2020 = applyToneRecovery(rec2020, edits.highlights, edits.shadows, edits.whites, edits.blacks);
+
+  // 4. Photochemical Recording Emulsion
   if (edits.emulsion_archetype && edits.emulsion_archetype !== 'None') {
     rec2020 = applyRecordingEmulsion(rec2020, edits.emulsion_archetype, edits.emulsion_exposure ?? 0.0);
   }
-
-  // 4. Tone Recovery
-  rec2020 = applyToneRecovery(rec2020, edits.highlights, edits.shadows, edits.whites, edits.blacks);
 
   // 5. AgX Filmic Tone Mapping Engine OR Camera Matching Profiles
   const contrastGain = edits.contrast >= 0.0 ? 1.0 + edits.contrast / 100.0 : 1.0 + (edits.contrast / 100.0) * 0.60;
@@ -873,6 +1019,20 @@ export function evaluateReferencePixel(
     if (curveLut.red && curveLut.red.length === 256) finalColor[0] = sampleLut(curveLut.red, finalColor[0]);
     if (curveLut.green && curveLut.green.length === 256) finalColor[1] = sampleLut(curveLut.green, finalColor[1]);
     if (curveLut.blue && curveLut.blue.length === 256) finalColor[2] = sampleLut(curveLut.blue, finalColor[2]);
+  }
+
+  // 8.5 Detail, Sharpening & Noise Reduction (matching Shaders.metal step 8 & pipeline.rs)
+  const sharpAmount = edits.sharpening_amount ?? 0.0;
+  const nrAmount = edits.noise_reduction ?? 0.0;
+  if (neighbors && (sharpAmount > 0.0 || nrAmount > 0.0)) {
+    const y_c = 0.2126 * finalColor[0] + 0.7152 * finalColor[1] + 0.0722 * finalColor[2];
+    finalColor = applyDetailAndSharpeningRgb(
+      finalColor[0], finalColor[1], finalColor[2],
+      y_c, neighbors.y_l, neighbors.y_r, neighbors.y_t, neighbors.y_b,
+      sharpAmount,
+      edits.sharpening_masking ?? 0.0,
+      nrAmount
+    );
   }
 
   // 8b. Fine-Art Print Media Chemistry

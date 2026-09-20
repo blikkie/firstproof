@@ -276,11 +276,32 @@ fragment float4 fragmentShader(
         float4 topSample    = texture.sample(textureSampler, uv - float2(0.0, offset.y));
         float4 bottomSample = texture.sample(textureSampler, uv + float2(0.0, offset.y));
 
-        float y_c = dot(sampledColor.rgb, float3(0.2126, 0.7152, 0.0722));
-        float y_l = dot(leftSample.rgb, float3(0.2126, 0.7152, 0.0722));
-        float y_r = dot(rightSample.rgb, float3(0.2126, 0.7152, 0.0722));
-        float y_t = dot(topSample.rgb, float3(0.2126, 0.7152, 0.0722));
-        float y_b = dot(bottomSample.rgb, float3(0.2126, 0.7152, 0.0722));
+        float y_c = dot(srgbLinearOut, float3(0.2126, 0.7152, 0.0722));
+        float y_l, y_r, y_t, y_b;
+        if (uniforms.isLinearRaw == 0) {
+            y_l = dot(leftSample.rgb, float3(0.2126, 0.7152, 0.0722));
+            y_r = dot(rightSample.rgb, float3(0.2126, 0.7152, 0.0722));
+            y_t = dot(topSample.rgb, float3(0.2126, 0.7152, 0.0722));
+            y_b = dot(bottomSample.rgb, float3(0.2126, 0.7152, 0.0722));
+        } else {
+            // Map linear raw sensor samples through exposure, WB, and tone profile to calibrated display luminance
+            float3 wbExposureScale = float3(rScale, gScale, bScale) * exposureGain;
+            float3 cl = leftSample.rgb * wbExposureScale;
+            float3 cr = rightSample.rgb * wbExposureScale;
+            float3 ct = topSample.rgb * wbExposureScale;
+            float3 cb = bottomSample.rgb * wbExposureScale;
+            if (uniforms.toneProfileMode == 0) {
+                y_l = dot(clamp(agxToneMapVivid(cl, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
+                y_r = dot(clamp(agxToneMapVivid(cr, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
+                y_t = dot(clamp(agxToneMapVivid(ct, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
+                y_b = dot(clamp(agxToneMapVivid(cb, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
+            } else {
+                y_l = dot(clamp(agxToneMap(cl, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
+                y_r = dot(clamp(agxToneMap(cr, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
+                y_t = dot(clamp(agxToneMap(ct, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
+                y_b = dot(clamp(agxToneMap(cb, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
+            }
+        }
 
         finalColor = applyDetailAndSharpening(
             finalColor,

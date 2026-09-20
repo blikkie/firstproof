@@ -480,14 +480,16 @@ pub fn apply_detail_and_sharpening_rgb(
         t * t * (3.0 - 2.0 * t)
     };
 
-    let sharp_gain = (amount / 100.0) * 3.5;
+    let sharp_gain = (amount / 100.0) * 1.5;
     let sharp_term = sharp_gain * w_edge * delta_y;
     let nr_term = (noise_reduction / 100.0) * (1.0 - w_edge) * delta_y;
     let delta_adj = sharp_term - nr_term;
 
-    let k = ((y_c + delta_adj) / y_c.max(1e-5)).clamp(0.0, 3.0);
-
-    ((r * k).clamp(0.0, 1.0), (g * k).clamp(0.0, 1.0), (b * k).clamp(0.0, 1.0))
+    (
+        (r + delta_adj).clamp(0.0, 1.0),
+        (g + delta_adj).clamp(0.0, 1.0),
+        (b + delta_adj).clamp(0.0, 1.0),
+    )
 }
 
 

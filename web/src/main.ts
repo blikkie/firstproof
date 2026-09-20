@@ -375,7 +375,14 @@ class DarkroomApp {
     console.log('[App] Ready for photographic intake.');
   }
 
-  private getDefaultEdits(): EditSettingsPayload {
+  public isCurrentPhotoRaw(): boolean {
+    if (this.activeIdx < 0 || this.activeIdx >= this.fileEntries.length) return false;
+    const name = this.fileEntries[this.activeIdx].name;
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    return ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
+  }
+
+  private getDefaultEdits(isRaw: boolean = false): EditSettingsPayload {
     return {
       exposure: 0.0,
       contrast: 0.0,
@@ -402,9 +409,9 @@ class DarkroomApp {
       flip_vertical: false,
       tone_profile: 'AgxVivid',
       lut_intensity: 1.0,
-      sharpening_amount: 0.0,
+      sharpening_amount: isRaw ? 20.0 : 0.0,
       sharpening_radius: 1.0,
-      sharpening_masking: 0.0,
+      sharpening_masking: isRaw ? 15.0 : 0.0,
       noise_reduction: 0.0,
       emulsion_archetype: 'None',
       emulsion_format: 'Format35mm',
@@ -697,7 +704,7 @@ class DarkroomApp {
     });
 
     // Sliders & Selects plumbing with double-click reset, Escape rollback, and Shift fine-scrubbing
-    const bindSlider = (id: string, prop: keyof EditSettingsPayload, format: (val: number) => string, defaultVal: number = 0) => {
+    const bindSlider = (id: string, prop: keyof EditSettingsPayload, format: (val: number) => string, defaultVal: number | (() => number) = 0) => {
       const input = document.getElementById(`slider-${id}`) as HTMLInputElement;
       const label = document.getElementById(`val-${id}`) as HTMLElement;
       const rowLabel = input?.closest('.slider-row')?.querySelector('label');
@@ -755,9 +762,10 @@ class DarkroomApp {
         input.addEventListener('change', () => this.autoSaveSidecar());
 
         const resetFn = () => {
-          input.value = `${defaultVal}`;
-          (this.edits[prop] as number) = defaultVal;
-          label.innerText = format(defaultVal);
+          const resolvedDefault = typeof defaultVal === 'function' ? defaultVal() : defaultVal;
+          input.value = `${resolvedDefault}`;
+          (this.edits[prop] as number) = resolvedDefault;
+          label.innerText = format(resolvedDefault);
           if ((prop as string).startsWith('split_toning_')) {
             this.updateSplitToningHint();
           }
@@ -858,9 +866,9 @@ class DarkroomApp {
     bindSlider('paper-grade', 'print_paper_grade', v => `${v.toFixed(1)}`, 0.0);
     bindSlider('base-warmth', 'print_base_warmth', v => `${Math.round(v)}`, 0.0);
     bindSlider('process-depth', 'print_process_depth', v => `${Math.round(v)}%`, 100.0);
-    bindSlider('sharpen-amount', 'sharpening_amount', v => `${Math.round(v)}`, 0.0);
+    bindSlider('sharpen-amount', 'sharpening_amount', v => `${Math.round(v)}`, () => this.isCurrentPhotoRaw() ? 20.0 : 0.0);
     bindSlider('sharpen-radius', 'sharpening_radius', v => `${v.toFixed(1)} px`, 1.0);
-    bindSlider('sharpen-masking', 'sharpening_masking', v => `${Math.round(v)}`, 0.0);
+    bindSlider('sharpen-masking', 'sharpening_masking', v => `${Math.round(v)}`, () => this.isCurrentPhotoRaw() ? 15.0 : 0.0);
     bindSlider('noise-reduction', 'noise_reduction', v => `${Math.round(v)}`, 0.0);
     bindSlider('shadow-hue', 'split_toning_shadow_hue', v => `${Math.round(v)}°`, 215.0);
     bindSlider('shadow-sat', 'split_toning_shadow_sat', v => `${Math.round(v)}`, 0.0);
@@ -1602,9 +1610,12 @@ class DarkroomApp {
           this.elements['meta-sidecar-status'].style.color = sidecarXml ? '#4ade80' : 'var(--text-muted)';
         }
 
+        const ext = entry.name.split('.').pop()?.toLowerCase() || '';
+        const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
+
         if (sidecarXml) {
           const xmp = this.bridge.parseXmp(sidecarXml);
-          this.edits = { ...this.getDefaultEdits(), ...xmp.edits };
+          this.edits = { ...this.getDefaultEdits(isRawFile), ...xmp.edits };
           if (this.edits.rotation === undefined || this.edits.rotation === null) {
             this.edits.rotation = exifOri.rotation;
             this.edits.flip_horizontal = exifOri.flipH;
@@ -1617,7 +1628,7 @@ class DarkroomApp {
           (this.elements['meta-input-creator'] as HTMLInputElement).value = xmp.creator || '';
           (this.elements['meta-input-keywords'] as HTMLInputElement).value = (xmp.keywords || []).join(', ');
         } else {
-          this.edits = this.getDefaultEdits();
+          this.edits = this.getDefaultEdits(isRawFile);
           this.edits.rotation = exifOri.rotation;
           this.edits.flip_horizontal = exifOri.flipH;
           this.edits.flip_vertical = exifOri.flipV;
@@ -1641,8 +1652,6 @@ class DarkroomApp {
         this.syncRatingFlagUI();
 
         // Check if raw negative and extract uncompressed 16-bit Linear Rec.2020 sensor frame
-        const ext = entry.name.split('.').pop()?.toLowerCase() || '';
-        const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
 
         let linear16Data: Uint16Array | null = workerLinearData;
         let linearW = workerLinearW;
@@ -1740,7 +1749,8 @@ class DarkroomApp {
   public resetAllEdits() {
     const orientation = this.currentMetadata?.orientation ?? 1;
     const exifOri = decodeExifOrientation(orientation);
-    this.edits = this.getDefaultEdits();
+    const isRaw = this.isCurrentPhotoRaw();
+    this.edits = this.getDefaultEdits(isRaw);
     this.edits.rotation = exifOri.rotation;
     this.edits.flip_horizontal = exifOri.flipH;
     this.edits.flip_vertical = exifOri.flipV;
@@ -1758,7 +1768,7 @@ class DarkroomApp {
     this.updateCanvasDimensions();
     this.renderCanvas();
     this.autoSaveSidecar();
-    console.log('⚡ [App] Reset all edits to as-shot defaults');
+    console.log(`⚡ [App] Reset all edits to as-shot defaults (isRaw: ${isRaw}, sharpening: ${this.edits.sharpening_amount})`);
   }
 
   private updateCanvasDimensions() {
@@ -2098,7 +2108,7 @@ class DarkroomApp {
     const kwStr = (this.elements['meta-input-keywords'] as HTMLInputElement)?.value.trim();
     if (title || description || creator || kwStr) return true;
 
-    const d = this.getDefaultEdits();
+    const d = this.getDefaultEdits(this.isCurrentPhotoRaw());
     const e = this.edits;
     if (Math.abs(e.exposure - d.exposure) > 1e-4) return true;
     if (Math.abs(e.contrast - d.contrast) > 1e-4) return true;
@@ -2115,6 +2125,10 @@ class DarkroomApp {
     if (Math.abs(e.emulsion_exposure - d.emulsion_exposure) > 1e-4) return true;
     if (Math.abs(e.print_paper_grade - d.print_paper_grade) > 1e-4) return true;
     if (Math.abs(e.print_base_warmth - d.print_base_warmth) > 1e-4) return true;
+    if (Math.abs(e.sharpening_amount - d.sharpening_amount) > 1e-4) return true;
+    if (Math.abs(e.sharpening_radius - d.sharpening_radius) > 1e-4) return true;
+    if (Math.abs(e.sharpening_masking - d.sharpening_masking) > 1e-4) return true;
+    if (Math.abs(e.noise_reduction - d.noise_reduction) > 1e-4) return true;
     if (e.tone_profile !== d.tone_profile) return true;
     if (e.emulsion_archetype !== d.emulsion_archetype) return true;
     if (e.print_media !== d.print_media) return true;
@@ -2165,10 +2179,25 @@ class DarkroomApp {
   private exportProofJpeg() {
     const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
     if (canvas && this.activeIdx >= 0) {
-      // Temporarily render clean final proof frame (fit zoom, crop active = false)
+      const origW = canvas.width;
+      const origH = canvas.height;
+
+      const rot = (this.edits.rotation ?? 0) % 360;
+      const isOrthogonal = rot === 90 || rot === 270;
+      const texW = this.renderer.textureWidth > 0 ? this.renderer.textureWidth : origW;
+      const texH = this.renderer.textureHeight > 0 ? this.renderer.textureHeight : origH;
+      const targetW = isOrthogonal ? texH : texW;
+      const targetH = isOrthogonal ? texW : texH;
+
+      // Render clean final proof frame at full native photo resolution
+      canvas.width = targetW;
+      canvas.height = targetH;
       this.renderer.render(this.edits, false, 1.0, { x: 0, y: 0 }, false);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-      // Restore current active viewport zoom/crop state
+
+      // Restore viewport canvas dimensions & render state
+      canvas.width = origW;
+      canvas.height = origH;
       this.renderCanvas();
 
       const link = document.createElement('a');

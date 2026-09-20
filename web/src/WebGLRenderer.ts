@@ -53,6 +53,10 @@ uniform float u_splitShadowSat;
 uniform float u_splitHighlightHue;
 uniform float u_splitHighlightSat;
 uniform float u_splitBalance;
+uniform float u_sharpeningAmount;
+uniform float u_sharpeningRadius;
+uniform float u_sharpeningMasking;
+uniform float u_noiseReduction;
 uniform float u_cropLeft;
 uniform float u_cropTop;
 uniform float u_cropRight;
@@ -639,10 +643,98 @@ vec3 applyPrintMedia(vec3 rgb, int mediaMode, int filterMode, float paperGrade, 
     return rgb;
 }
 
+// Detail, Sharpening & Noise Reduction (Luminance USM with Edge Masking matching Detail.metal)
+vec3 applyDetailAndSharpening(
+    vec3 color,
+    float y_c,
+    float y_l, float y_r, float y_t, float y_b,
+    float amount,
+    float masking,
+    float noiseReduction
+) {
+    if (amount <= 0.0 && noiseReduction <= 0.0) {
+        return color;
+    }
+
+    // Unsharp mask: Laplacian high-frequency detail
+    float y_neighbors = 0.25 * (y_l + y_r + y_t + y_b);
+    float delta_y = y_c - y_neighbors;
+
+    // Sobel gradient magnitude
+    float gx = (y_r - y_l) * 0.5;
+    float gy = (y_b - y_t) * 0.5;
+    float grad_mag = sqrt(gx * gx + gy * gy);
+
+    // Edge masking weight:
+    // When masking <= 0, w_edge = 1.0 (uniform sharpening across entire image).
+    // When masking > 0, flat regions (grad_mag < threshold) are smoothly suppressed towards 0.
+    float w_edge = 1.0;
+    if (masking > 0.0) {
+        float m = clamp(masking / 100.0, 0.0, 1.0);
+        float threshold = pow(m, 1.5) * 0.08;
+        w_edge = smoothstep(0.0, max(threshold, 1e-4), grad_mag);
+    }
+
+    // Photographically calibrated gain: up to 1.5x unsharp mask detail delta
+    float sharp_gain = (amount / 100.0) * 1.5;
+    float sharp_term = sharp_gain * w_edge * delta_y;
+    float nr_term = (noiseReduction / 100.0) * (1.0 - w_edge) * delta_y;
+    float delta_adj = sharp_term - nr_term;
+
+    return clamp(color + vec3(delta_adj), 0.0, 1.0);
+}
+
 // Tone Curve Coordinate Mapping (Half-texel offset for exact 256-sample 1D LUT)
 vec2 sampleCurveCoord(float val) {
     float u = (clamp(val, 0.0, 1.0) * 255.0 + 0.5) / 256.0;
     return vec2(u, 0.5);
+}
+
+// Evaluates display-referred luminance for a given texture UV coordinate
+// Bypasses curve/LUT but accurately models exposure, WB, tone recovery, and AgX/camera tone profile
+// to ensure Laplacian unsharp mask operates on calibrated [0, 1] display luma without shadow noise explosion.
+float sampleDisplayLuma(vec2 uv) {
+    vec4 s = texture(u_texture, uv);
+    vec3 c;
+    if (u_isLinearRec2020) {
+        c = s.rgb;
+    } else {
+        c = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(s.rgb);
+    }
+    if (abs(u_temperature - 5500.0) >= 1.0 || u_tint != 0.0) {
+        float tempNorm = clamp(u_temperature / 5500.0, 0.25, 4.0);
+        float rScale = pow(tempNorm, 0.75);
+        float bScale = pow(1.0 / tempNorm, 0.75);
+        float tintFactor = u_tint * 0.002;
+        float gScale = max(1.0 - tintFactor, 0.01);
+        rScale = max(rScale + tintFactor * 0.5, 0.01);
+        bScale = max(bScale + tintFactor * 0.5, 0.01);
+        c *= vec3(rScale, gScale, bScale);
+    }
+    if (u_exposure != 0.0) {
+        c *= pow(2.0, u_exposure);
+    }
+    c = applyToneRecovery(c, u_highlights, u_shadows, u_whites, u_blacks);
+    if (u_emulsionArchetype != 0) {
+        c = applyRecordingEmulsion(c, u_emulsionArchetype, u_emulsionExposure);
+    }
+    float contrastGain = (u_contrast >= 0.0) ? (1.0 + u_contrast / 100.0) : (1.0 + (u_contrast / 100.0) * 0.60);
+    vec3 srgbOut;
+    if (u_toneProfileMode == 0) {
+        srgbOut = agxToneMapVivid(c, contrastGain);
+    } else if (u_toneProfileMode == 1) {
+        srgbOut = agxToneMap(c, contrastGain);
+    } else {
+        int camMode = u_toneProfileMode - 1;
+        vec3 c_srgb = max(REC2020_TO_LINEAR_SRGB * c, vec3(0.0));
+        vec3 hsv = rgb2hsv(c_srgb);
+        vec3 hsvAdjusted = applyCameraHueSat(hsv, camMode);
+        vec3 rgbAdjusted = hsv2rgb(hsvAdjusted);
+        float lum = dot(rgbAdjusted, vec3(0.2126, 0.7152, 0.0722));
+        float lumCurved = applyCameraToneCurve(lum, camMode);
+        return clamp((lumCurved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
+    }
+    return dot(clamp(srgbOut, 0.0, 1.0), vec3(0.2126, 0.7152, 0.0722));
 }
 
 void main() {
@@ -680,6 +772,8 @@ void main() {
                           (!u_hasRgbCurves) &&
                           (u_emulsionArchetype == 0) &&
                           (u_printMediaMode == 0) &&
+                          (u_sharpeningAmount == 0.0) &&
+                          (u_noiseReduction == 0.0) &&
                           (u_cropLeft <= 0.001) &&
                           (u_cropTop <= 0.001) &&
                           (u_cropRight >= 0.999) &&
@@ -716,13 +810,13 @@ void main() {
         rec2020Color *= pow(2.0, u_exposure);
     }
     
-    // 4. Photochemical Recording Emulsion
+    // 4. Tone Recovery
+    rec2020Color = applyToneRecovery(rec2020Color, u_highlights, u_shadows, u_whites, u_blacks);
+
+    // 5. Photochemical Recording Emulsion
     if (u_emulsionArchetype != 0) {
         rec2020Color = applyRecordingEmulsion(rec2020Color, u_emulsionArchetype, u_emulsionExposure);
     }
-
-    // 5. Tone Recovery
-    rec2020Color = applyToneRecovery(rec2020Color, u_highlights, u_shadows, u_whites, u_blacks);
     
     // 6. AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles
     float contrastGain = (u_contrast >= 0.0) ? (1.0 + u_contrast / 100.0) : (1.0 + (u_contrast / 100.0) * 0.60);
@@ -767,6 +861,27 @@ void main() {
         finalColor.r = texture(u_curveRgbLut, sampleCurveCoord(finalColor.r)).r;
         finalColor.g = texture(u_curveRgbLut, sampleCurveCoord(finalColor.g)).g;
         finalColor.b = texture(u_curveRgbLut, sampleCurveCoord(finalColor.b)).b;
+    }
+
+    // 9.5 Detail, Sharpening & Noise Reduction (matching Shaders.metal step 8 & pipeline.rs)
+    if (!u_isOriginal && (u_sharpeningAmount > 0.0 || u_noiseReduction > 0.0)) {
+        vec2 texSize = vec2(textureSize(u_texture, 0));
+        vec2 texelSize = 1.0 / texSize;
+        vec2 offset = max(texelSize, fwidth(v_texCoord)) * max(u_sharpeningRadius, 0.5);
+
+        float y_c = sampleDisplayLuma(v_texCoord);
+        float y_l = sampleDisplayLuma(v_texCoord - vec2(offset.x, 0.0));
+        float y_r = sampleDisplayLuma(v_texCoord + vec2(offset.x, 0.0));
+        float y_t = sampleDisplayLuma(v_texCoord - vec2(0.0, offset.y));
+        float y_b = sampleDisplayLuma(v_texCoord + vec2(0.0, offset.y));
+
+        finalColor = applyDetailAndSharpening(
+            finalColor,
+            y_c, y_l, y_r, y_t, y_b,
+            u_sharpeningAmount,
+            u_sharpeningMasking,
+            u_noiseReduction
+        );
     }
 
     // 10. Fine-Art Print Media Chemistry
@@ -823,6 +938,14 @@ export class WebGLRenderer {
   private texWidth: number = 1920;
   private texHeight: number = 1080;
 
+  public get textureWidth(): number {
+    return this.texWidth;
+  }
+
+  public get textureHeight(): number {
+    return this.texHeight;
+  }
+
   // Uniform locations
   private uLocs: Record<string, WebGLUniformLocation | null> = {};
 
@@ -869,6 +992,7 @@ export class WebGLRenderer {
       'u_toneProfileMode', 'u_emulsionArchetype', 'u_emulsionExposure',
       'u_printMediaMode', 'u_printPaperGrade', 'u_printBaseWarmth', 'u_printProcessDepth', 'u_enlargerFilterMode',
       'u_splitShadowHue', 'u_splitShadowSat', 'u_splitHighlightHue', 'u_splitHighlightSat', 'u_splitBalance',
+      'u_sharpeningAmount', 'u_sharpeningRadius', 'u_sharpeningMasking', 'u_noiseReduction',
       'u_fitScale', 'u_zoomScale', 'u_panOffset', 'u_cropLeft', 'u_cropTop', 'u_cropRight', 'u_cropBottom', 'u_cropModeActive',
       'u_isOriginal', 'u_isLinearRec2020', 'u_hasMasterCurve', 'u_hasRgbCurves'
     ];
@@ -1224,6 +1348,10 @@ export class WebGLRenderer {
     gl.uniform1f(this.uLocs['u_splitHighlightHue'], edits.split_toning_highlight_hue);
     gl.uniform1f(this.uLocs['u_splitHighlightSat'], edits.split_toning_highlight_sat);
     gl.uniform1f(this.uLocs['u_splitBalance'], edits.split_toning_balance);
+    gl.uniform1f(this.uLocs['u_sharpeningAmount'], edits.sharpening_amount ?? 0.0);
+    gl.uniform1f(this.uLocs['u_sharpeningRadius'], edits.sharpening_radius ?? 1.0);
+    gl.uniform1f(this.uLocs['u_sharpeningMasking'], edits.sharpening_masking ?? 0.0);
+    gl.uniform1f(this.uLocs['u_noiseReduction'], edits.noise_reduction ?? 0.0);
 
     gl.uniform1i(this.uLocs['u_isOriginal'], isOriginal ? 1 : 0);
     gl.uniform1i(this.uLocs['u_isLinearRec2020'], this.isLinearRec2020 ? 1 : 0);

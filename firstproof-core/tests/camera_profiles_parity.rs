@@ -849,15 +849,14 @@ fn test_sharpening_and_masking_parity() {
             let t = (grad_mag / threshold.max(1e-4)).clamp(0.0, 1.0);
             t * t * (3.0 - 2.0 * t)
         };
-        let sharp_gain = (amount / 100.0) * 3.5;
+        let sharp_gain = (amount / 100.0) * 1.5;
         let sharp_term = sharp_gain * w_edge * delta_y;
         let nr_term = (nr / 100.0) * (1.0 - w_edge) * delta_y;
         let delta_adj = sharp_term - nr_term;
-        let k = ((y_c + delta_adj) / y_c.max(1e-5)).clamp(0.0, 3.0);
         (
-            (color.0 * k).clamp(0.0, 1.0),
-            (color.1 * k).clamp(0.0, 1.0),
-            (color.2 * k).clamp(0.0, 1.0),
+            (color.0 + delta_adj).clamp(0.0, 1.0),
+            (color.1 + delta_adj).clamp(0.0, 1.0),
+            (color.2 + delta_adj).clamp(0.0, 1.0),
         )
     }
 

@@ -36,14 +36,13 @@ inline float3 applyDetailAndSharpening(
         w_edge = smoothstep(0.0, max(threshold, 1e-4), grad_mag);
     }
 
-    // Photographically calibrated gain: up to 3.5x boost at Amount=100 for crisp, unmistakable bite
-    float sharp_gain = (amount / 100.0) * 3.5;
+    // Photographically calibrated gain: up to 1.5x unsharp mask detail delta
+    float sharp_gain = (amount / 100.0) * 1.5;
     float sharp_term = sharp_gain * w_edge * delta_y;
     float nr_term = (noiseReduction / 100.0) * (1.0 - w_edge) * delta_y;
-    float delta_adj = sharp_term - nr_term;
 
-    float k = clamp((y_c + delta_adj) / max(y_c, 1e-5), 0.0, 3.0);
-    return clamp(color * k, 0.0, 1.0);
+    float delta_adj = sharp_term - nr_term;
+    return clamp(color + delta_adj, 0.0, 1.0);
 }
 
 #endif /* Detail_metal */
