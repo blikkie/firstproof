@@ -667,6 +667,12 @@ fn test_sliders_dual_engine_parity_sweep() {
             // Tone Recovery
             let (r_rec, g_rec, b_rec) = apply_tone_recovery(r_gpu, g_gpu, b_gpu, hl, sh, wh, bl);
             
+            // Color Adjustments in Linear Rec.2020
+            let (r_rec, g_rec, b_rec) = apply_color_adjustments(
+                r_rec, g_rec, b_rec,
+                vib, sat, 30.0, 20.0,
+            );
+
             // Tone Profile
             let contrast_gain = if contrast >= 0.0 {
                 1.0 + (contrast / 100.0)
@@ -676,15 +682,23 @@ fn test_sliders_dual_engine_parity_sweep() {
             let (r_disp_gpu, g_disp_gpu, b_disp_gpu) = match mode {
                 ColorProfileMode::AgxVivid => {
                     let srgb = agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
-                    (srgb.r().clamp(0.0, 1.0), srgb.g().clamp(0.0, 1.0), srgb.b().clamp(0.0, 1.0))
+                    (
+                        linear_to_srgb_gamma(srgb.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma(srgb.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma(srgb.b().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                    )
                 }
                 ColorProfileMode::AgxFilmic => {
                     let srgb = agx_tone_map(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
-                    (srgb.r().clamp(0.0, 1.0), srgb.g().clamp(0.0, 1.0), srgb.b().clamp(0.0, 1.0))
+                    (
+                        linear_to_srgb_gamma(srgb.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma(srgb.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma(srgb.b().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                    )
                 }
                 m => {
-                    let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r_rec, g_rec, b_rec));
-                    let (h, s, v) = rgb_to_hsv(c_srgb.r().max(0.0), c_srgb.g().max(0.0), c_srgb.b().max(0.0));
+                    let srgb_init = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r_rec, g_rec, b_rec));
+                    let (h, s, v) = rgb_to_hsv(srgb_init.r().max(0.0), srgb_init.g().max(0.0), srgb_init.b().max(0.0));
                     let hsm = match m {
                         ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_huesatmap(),
                         ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_huesatmap(),
@@ -692,7 +706,11 @@ fn test_sliders_dual_engine_parity_sweep() {
                         _ => DcpProfile::built_in_standard_huesatmap(),
                     };
                     let (h2, s2, v2) = hsm.apply_hsv(h, s, v);
-                    let (rm, gm, bm) = hsv_to_rgb(h2, s2, v2);
+                    let scotopic_weight = {
+                        let t = ((v2 - 0.01) / 0.07).clamp(0.0, 1.0);
+                        t * t * (3.0 - 2.0 * t)
+                    };
+                    let (rm, gm, bm) = hsv_to_rgb(h2, s2 * scotopic_weight, v2);
                     let curve = match m {
                         ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_tone_curve(),
                         ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_tone_curve(),
@@ -703,24 +721,19 @@ fn test_sliders_dual_engine_parity_sweep() {
                     let lum_curved = evaluate_tone_curve(lum, &curve);
                     let lum_adj = ((lum_curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
                     let gain = lum_adj / lum.max(1e-6);
+                    let srgb_lin = Color3::new((rm * gain).max(0.0), (gm * gain).max(0.0), (bm * gain).max(0.0));
                     (
-                        linear_to_srgb_gamma((rm * gain).clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                        linear_to_srgb_gamma((gm * gain).clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                        linear_to_srgb_gamma((bm * gain).clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma(srgb_lin.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma(srgb_lin.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma(srgb_lin.b().clamp(0.0, 1.0)).clamp(0.0, 1.0),
                     )
                 }
             };
             
-            // Color Adjustments
-            let (r_gpu_out, g_gpu_out, b_gpu_out) = apply_color_adjustments(
-                r_disp_gpu, g_disp_gpu, b_disp_gpu,
-                vib, sat, 30.0, 20.0,
-            );
-            
             let gpu_8bit = [
-                (r_gpu_out.clamp(0.0, 1.0) * 255.0).round() as u8,
-                (g_gpu_out.clamp(0.0, 1.0) * 255.0).round() as u8,
-                (b_gpu_out.clamp(0.0, 1.0) * 255.0).round() as u8,
+                (r_disp_gpu * 255.0).round() as u8,
+                (g_disp_gpu * 255.0).round() as u8,
+                (b_disp_gpu * 255.0).round() as u8,
             ];
             
             // 2. SIMULATE RUST EXPORT PIPELINE:
@@ -751,23 +764,10 @@ fn test_sliders_dual_engine_parity_sweep() {
             let r_disp_exp = demosaiced.data[0];
             let g_disp_exp = demosaiced.data[1];
             let b_disp_exp = demosaiced.data[2];
-            let (r_disp_exp, g_disp_exp, b_disp_exp) = if mode == ColorProfileMode::AgxVivid || mode == ColorProfileMode::AgxFilmic {
-                (r_disp_exp.clamp(0.0, 1.0), g_disp_exp.clamp(0.0, 1.0), b_disp_exp.clamp(0.0, 1.0))
-            } else {
-                (
-                    linear_to_srgb_gamma(r_disp_exp).clamp(0.0, 1.0),
-                    linear_to_srgb_gamma(g_disp_exp).clamp(0.0, 1.0),
-                    linear_to_srgb_gamma(b_disp_exp).clamp(0.0, 1.0),
-                )
-            };
-            let (r_exp_out, g_exp_out, b_exp_out) = apply_color_adjustments(
-                r_disp_exp, g_disp_exp, b_disp_exp,
-                vib, sat, 30.0, 20.0,
-            );
             let exp_8bit = [
-                (r_exp_out.clamp(0.0, 1.0) * 255.0).round() as u8,
-                (g_exp_out.clamp(0.0, 1.0) * 255.0).round() as u8,
-                (b_exp_out.clamp(0.0, 1.0) * 255.0).round() as u8,
+                (linear_to_srgb_gamma(r_disp_exp).clamp(0.0, 1.0) * 255.0).round() as u8,
+                (linear_to_srgb_gamma(g_disp_exp).clamp(0.0, 1.0) * 255.0).round() as u8,
+                (linear_to_srgb_gamma(b_disp_exp).clamp(0.0, 1.0) * 255.0).round() as u8,
             ];
             
             assert_eq!(

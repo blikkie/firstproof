@@ -8,7 +8,7 @@ use image::codecs::tiff::TiffEncoder;
 use crate::{EditSettings, ExportColorSpace, ExportRenderingIntent};
 use crate::color::linear_to_srgb_gamma;
 use super::decode::{decode_image, sample_bilinear};
-use super::pipeline::{apply_color_adjustments, apply_detail_and_sharpening_rgb, apply_edits, apply_split_toning};
+use super::pipeline::{apply_detail_and_sharpening_rgb, apply_edits};
 use super::icc::{create_display_p3_profile, inject_icc_profile_into_jpeg};
 
 /// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing, color space management, and Lensfun distortion correction.
@@ -116,12 +116,7 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     };
     let lut_intensity = edits.lut_intensity.clamp(0.0, 1.0);
 
-    let curve_lut = crate::curve::evaluate_curves_lut_ref(&edits.curves);
-    let has_master_curve = edits.curves.master.len() > 1;
-    let has_red_curve = edits.curves.red.len() > 1;
-    let has_green_curve = edits.curves.green.len() > 1;
-    let has_blue_curve = edits.curves.blue.len() > 1;
-    let has_any_curve = has_master_curve || has_red_curve || has_green_curve || has_blue_curve;
+
 
     for ty in 0..target_h {
         for tx in 0..target_w {
@@ -171,68 +166,19 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             let sx = (geom_x / (2.0 * aspect_ratio) + 0.5) * (orig_width as f32);
             let sy = (geom_y / 2.0 + 0.5) * (orig_height as f32);
             
-            let (r_val, g_val, b_val) = if !edits.crop_constrain && (sx < 0.0 || sx >= (orig_width - 1) as f32 || sy < 0.0 || sy >= (orig_height - 1) as f32) {
+            let (mut r_lin, mut g_lin, mut b_lin) = if !edits.crop_constrain && (sx < 0.0 || sx >= (orig_width - 1) as f32 || sy < 0.0 || sy >= (orig_height - 1) as f32) {
                 (0.0, 0.0, 0.0)
             } else {
                 sample_bilinear(&image, sx, sy)
             };
-            let (mut r_disp, mut g_disp, mut b_disp) = if edits.tone_profile == crate::ColorProfileMode::AgxVivid
-                || edits.tone_profile == crate::ColorProfileMode::AgxFilmic
-            {
-                (r_val.clamp(0.0, 1.0), g_val.clamp(0.0, 1.0), b_val.clamp(0.0, 1.0))
-            } else {
-                (
-                    linear_to_srgb_gamma(r_val).clamp(0.0, 1.0),
-                    linear_to_srgb_gamma(g_val).clamp(0.0, 1.0),
-                    linear_to_srgb_gamma(b_val).clamp(0.0, 1.0),
-                )
-            };
 
-            // 2b. Color Adjustments: Vibrance, Saturation, Deep Blue, Foliage
-            let (r_adj, g_adj, b_adj) = apply_color_adjustments(
-                r_disp, g_disp, b_disp,
-                edits.vibrance, edits.saturation, edits.deep_blue, edits.foliage,
-            );
-            r_disp = r_adj;
-            g_disp = g_adj;
-            b_disp = b_adj;
-
-            // 2b.1 Split Toning & Color Grading
-            let (r_st, g_st, b_st) = apply_split_toning(
-                r_disp, g_disp, b_disp,
-                edits.split_toning_shadow_hue, edits.split_toning_shadow_sat,
-                edits.split_toning_highlight_hue, edits.split_toning_highlight_sat,
-                edits.split_toning_balance,
-            );
-            r_disp = r_st;
-            g_disp = g_st;
-            b_disp = b_st;
-
-            // 2c. RGB Tone Curves (Master + R + G + B)
-            if has_any_curve {
-                if has_master_curve {
-                    r_disp = super::pipeline::sample_curve_lut(&curve_lut.master, r_disp);
-                    g_disp = super::pipeline::sample_curve_lut(&curve_lut.master, g_disp);
-                    b_disp = super::pipeline::sample_curve_lut(&curve_lut.master, b_disp);
-                }
-                if has_red_curve {
-                    r_disp = super::pipeline::sample_curve_lut(&curve_lut.red, r_disp);
-                }
-                if has_green_curve {
-                    g_disp = super::pipeline::sample_curve_lut(&curve_lut.green, g_disp);
-                }
-                if has_blue_curve {
-                    b_disp = super::pipeline::sample_curve_lut(&curve_lut.blue, b_disp);
-                }
-            }
-
-            // 3. 3D Look-Up Table (display-referred stage post-tone-mapping)
+            // 3. 3D Look-Up Table (display-referred linear stage post-tone-mapping)
             if let Some(ref lut) = active_lut {
                 if lut_intensity > 0.0 {
-                    let lut_out = lut.interpolate_tetrahedral([r_disp, g_disp, b_disp]);
-                    r_disp = r_disp * (1.0 - lut_intensity) + lut_out[0] * lut_intensity;
-                    g_disp = g_disp * (1.0 - lut_intensity) + lut_out[1] * lut_intensity;
-                    b_disp = b_disp * (1.0 - lut_intensity) + lut_out[2] * lut_intensity;
+                    let lut_out = lut.interpolate_tetrahedral([r_lin, g_lin, b_lin]);
+                    r_lin = r_lin * (1.0 - lut_intensity) + lut_out[0] * lut_intensity;
+                    g_lin = g_lin * (1.0 - lut_intensity) + lut_out[1] * lut_intensity;
+                    b_lin = b_lin * (1.0 - lut_intensity) + lut_out[2] * lut_intensity;
                 }
             }
 
@@ -243,51 +189,56 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                 let (rr, gr, br) = sample_bilinear(&image, sx + r_step, sy);
                 let (rt, gt, bt) = sample_bilinear(&image, sx, sy - r_step);
                 let (rb, gb, bb) = sample_bilinear(&image, sx, sy + r_step);
-                let y_c = 0.2126 * r_val + 0.7152 * g_val + 0.0722 * b_val;
+                let y_c = 0.2126 * r_lin + 0.7152 * g_lin + 0.0722 * b_lin;
                 let y_l = 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
                 let y_r = 0.2126 * rr + 0.7152 * gr + 0.0722 * br;
                 let y_t = 0.2126 * rt + 0.7152 * gt + 0.0722 * bt;
                 let y_b = 0.2126 * rb + 0.7152 * gb + 0.0722 * bb;
                 let (r_sharp, g_sharp, b_sharp) = apply_detail_and_sharpening_rgb(
-                    r_disp, g_disp, b_disp,
+                    r_lin, g_lin, b_lin,
                     y_c, y_l, y_r, y_t, y_b,
                     edits.sharpening_amount,
                     edits.sharpening_masking,
                     edits.noise_reduction,
                 );
-                r_disp = r_sharp;
-                g_disp = g_sharp;
-                b_disp = b_sharp;
+                r_lin = r_sharp;
+                g_lin = g_sharp;
+                b_lin = b_sharp;
             }
 
             // 3b.2 Fine-Art Print Media Archetypes & Chemical Darkroom Toning
             if edits.print_media != crate::PrintMediaMode::None {
                 let (rp, gp, bp) = crate::color::apply_print_media(
-                    r_disp,
-                    g_disp,
-                    b_disp,
+                    r_lin,
+                    g_lin,
+                    b_lin,
                     edits.print_media,
                     edits.enlarger_filter,
                     edits.print_paper_grade,
                     edits.print_base_warmth,
                     edits.print_process_depth,
                 );
-                r_disp = rp;
-                g_disp = gp;
-                b_disp = bp;
+                r_lin = rp;
+                g_lin = gp;
+                b_lin = bp;
             }
 
+            // TERMINAL STEP: Convert Linear to Display Gamma sRGB
+            let r_disp = linear_to_srgb_gamma(r_lin).clamp(0.0, 1.0);
+            let g_disp = linear_to_srgb_gamma(g_lin).clamp(0.0, 1.0);
+            let b_disp = linear_to_srgb_gamma(b_lin).clamp(0.0, 1.0);
+
             let srgb8 = [
-                (r_disp.clamp(0.0, 1.0) * 255.0).round() as u8,
-                (g_disp.clamp(0.0, 1.0) * 255.0).round() as u8,
-                (b_disp.clamp(0.0, 1.0) * 255.0).round() as u8,
+                (r_disp * 255.0).round() as u8,
+                (g_disp * 255.0).round() as u8,
+                (b_disp * 255.0).round() as u8,
             ];
             
             rgb_img.put_pixel(tx, ty, Rgb(srgb8));
 
             if ultra_hdr {
                 let y_sdr = 0.2126 * r_disp.clamp(0.0, 1.0) + 0.7152 * g_disp.clamp(0.0, 1.0) + 0.0722 * b_disp.clamp(0.0, 1.0);
-                let y_hdr = 0.2126 * r_val.max(0.0) + 0.7152 * g_val.max(0.0) + 0.0722 * b_val.max(0.0);
+                let y_hdr = 0.2126 * r_lin.max(0.0) + 0.7152 * g_lin.max(0.0) + 0.0722 * b_lin.max(0.0);
                 sdr_luma.push(y_sdr);
                 hdr_luma.push(y_hdr);
             }

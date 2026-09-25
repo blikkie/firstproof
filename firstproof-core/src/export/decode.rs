@@ -4,7 +4,6 @@ use rayon::prelude::*;
 use crate::color::{
     Color3, LINEAR_SRGB_TO_REC2020, srgb_gamma_to_linear,
 };
-use crate::raw_decoder::RawSensorFrameExt;
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
 
@@ -39,8 +38,12 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
         let (wb_r, wb_b) = frame.as_shot_wb();
         
         // Derive Camera -> Linear Rec.2020 matrix dynamically interpolated
-        // along the Planckian blackbody locus for the photo's as-shot / default daylight temperature (5500K).
-        let sensor_to_rec2020 = frame.sensor_to_rec2020_at(5500.0);
+        // along the Planckian blackbody locus for the photo's as-shot temperature.
+        let as_shot_temp = frame.as_shot_temperature();
+        let sensor_to_rec2020 = {
+            use crate::raw_decoder::RawSensorFrameExt;
+            frame.sensor_to_rec2020_matrix_at(as_shot_temp)
+        };
 
         let bayer_cfa = match frame.cfa_pattern {
             crate::raw_decoder::CfaPattern::Rggb => Some(bayer::CFA::RGGB),
@@ -56,10 +59,14 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
             let full_h = frame.full_height;
             let total_pixels = full_w * full_h;
             if total_pixels > 0 && frame.sensor_data.len() >= total_pixels {
+                let black_u16 = frame.black_levels[0].max(0.0).round() as u16;
+                // Subtract black level so demosaic operates on physical photon counts relative to true zero.
+                // This eliminates cubic cross-channel gradient corruption across dark sensor noise.
+                let sub_sensor_data: Vec<u16> = frame.sensor_data.iter().map(|&v| v.saturating_sub(black_u16)).collect();
                 let raw_u8_slice: &[u8] = unsafe {
                     std::slice::from_raw_parts(
-                        frame.sensor_data.as_ptr() as *const u8,
-                        frame.sensor_data.len() * 2,
+                        sub_sensor_data.as_ptr() as *const u8,
+                        sub_sensor_data.len() * 2,
                     )
                 };
                 let depth = if cfg!(target_endian = "big") {
@@ -96,16 +103,14 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                                 let g_raw = u16::from_ne_bytes([raw_bytes_slice[pixel_byte_idx + 2], raw_bytes_slice[pixel_byte_idx + 3]]) as f32;
                                 let b_raw = u16::from_ne_bytes([raw_bytes_slice[pixel_byte_idx + 4], raw_bytes_slice[pixel_byte_idx + 5]]) as f32;
 
-                                let r_norm = ((r_raw - black) * scale).clamp(0.0, 1.0);
-                                let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
-                                let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
+                                let r_norm = (r_raw * scale).max(0.0);
+                                let g_norm = (g_raw * scale).max(0.0);
+                                let b_norm = (b_raw * scale).max(0.0);
 
-                                let c_sensor = Color3::new(
-                                    (r_norm * wb_r).clamp(0.0, 1.0),
-                                    g_norm.clamp(0.0, 1.0),
-                                    (b_norm * wb_b).clamp(0.0, 1.0),
-                                );
-                                let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor);
+                                let (r_wb, g_wb, b_wb) = firstproof_types::blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
+                                let c_sensor = Color3::new(r_wb, g_wb, b_wb);
+                                let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
+                                let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);
 
                                 let out_idx = x * 3;
                                 row_slice[out_idx] = c_rec2020.r().max(0.0);
@@ -157,11 +162,13 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                         }
                     }
                     
-                    // Sensor linear RGB with white balance
-                    let c_sensor = Color3::new((r * wb_r).clamp(0.0, 1.0), g.clamp(0.0, 1.0), (b * wb_b).clamp(0.0, 1.0));
+                    // Sensor linear RGB with white balance and sensitometric highlight roll-off
+                    let (r_wb, g_wb, b_wb) = firstproof_types::blend_sensor_highlights(r, g, b, wb_r, wb_b);
+                    let c_sensor = Color3::new(r_wb, g_wb, b_wb);
+                    let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
                     
                     // Map to Wide-Gamut Linear Rec.2020 working space
-                    let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor);
+                    let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);
                     
                     let out_idx = (y * active_w + x) * 3;
                     demosaiced.data[out_idx] = c_rec2020.r().max(0.0);
@@ -339,8 +346,14 @@ pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32,
             let scale = 1.0 / (white - black);
             let (wb_r, wb_b) = frame.as_shot_wb();
 
-            let sensor_to_rec2020 = frame.sensor_to_rec2020_at(5500.0);
-            let m = sensor_to_rec2020.0;
+            let as_shot_temp = frame.as_shot_temperature();
+            let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
+            let m_base = frame.sensor_to_rec2020_at(as_shot_temp);
+            let m = [
+                [m_base[0][0] * baseline_gain, m_base[0][1] * baseline_gain, m_base[0][2] * baseline_gain],
+                [m_base[1][0] * baseline_gain, m_base[1][1] * baseline_gain, m_base[1][2] * baseline_gain],
+                [m_base[2][0] * baseline_gain, m_base[2][1] * baseline_gain, m_base[2][2] * baseline_gain],
+            ];
 
             let mut out_rgba_f16 = vec![0u8; binned_w * binned_h * 8];
             let full_w = frame.full_width;
@@ -428,9 +441,9 @@ pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32,
                             let b_norm = vminq_f32(vmaxq_f32(vmulq_f32(vsubq_f32(b_v, black_v), scale_v), zero), one);
 
                             // White balance multipliers
-                            let r_wb = vminq_f32(vmulq_f32(r_norm, wb_r_v), one);
+                            let r_wb = vmulq_f32(r_norm, wb_r_v);
                             let g_wb = g_norm;
-                            let b_wb = vminq_f32(vmulq_f32(b_norm, wb_b_v), one);
+                            let b_wb = vmulq_f32(b_norm, wb_b_v);
 
                             // NEON 128-bit SIMD matrix transformation (fmla.4s)
                             let r_rec = vmaxq_f32(
@@ -479,9 +492,9 @@ pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32,
                                 let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
                                 let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
 
-                                let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
-                                let g_wb = g_norm.clamp(0.0, 1.0);
-                                let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+                                let r_wb = r_norm * wb_r;
+                                let g_wb = g_norm;
+                                let b_wb = b_norm * wb_b;
 
                                 let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
                                 let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);
@@ -512,9 +525,9 @@ pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32,
                                 let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
                                 let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
 
-                                let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
-                                let g_wb = g_norm.clamp(0.0, 1.0);
-                                let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+                                let r_wb = r_norm * wb_r;
+                                let g_wb = g_norm;
+                                let b_wb = b_norm * wb_b;
 
                                 let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
                                 let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);
@@ -545,9 +558,9 @@ pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32,
                                 let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
                                 let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
 
-                                let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
-                                let g_wb = g_norm.clamp(0.0, 1.0);
-                                let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+                                let r_wb = r_norm * wb_r;
+                                let g_wb = g_norm;
+                                let b_wb = b_norm * wb_b;
 
                                 let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
                                 let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);
@@ -578,9 +591,9 @@ pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32,
                                 let g_norm = ((g_raw - black) * scale).clamp(0.0, 1.0);
                                 let b_norm = ((b_raw - black) * scale).clamp(0.0, 1.0);
 
-                                let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
-                                let g_wb = g_norm.clamp(0.0, 1.0);
-                                let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+                                let r_wb = r_norm * wb_r;
+                                let g_wb = g_norm;
+                                let b_wb = b_norm * wb_b;
 
                                 let r_rec = (m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb).max(0.0);
                                 let g_rec = (m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb).max(0.0);

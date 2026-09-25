@@ -61,6 +61,29 @@ pub fn f16_to_f32(val: u16) -> f32 {
     }
 }
 
+/// Sensitometrically blends raw white-balanced color towards neutral white as photosites approach saturation.
+/// Eliminates asymmetric highlight blowout (e.g. tungsten blue channel amplification)
+/// along a smooth C^1 Hermite curve while preserving full highlight luminance headroom.
+#[inline]
+pub fn blend_sensor_highlights(r: f32, g: f32, b: f32, wb_r: f32, wb_b: f32) -> (f32, f32, f32) {
+    let s_max = r.max(g).max(b);
+    let p_r = r * wb_r;
+    let p_g = g;
+    let p_b = b * wb_b;
+    if s_max > 0.88 {
+        let t = ((s_max - 0.88) / 0.12).clamp(0.0, 1.0);
+        let alpha = t * t * (3.0 - 2.0 * t);
+        let l_est = p_r.max(p_g).max(p_b);
+        (
+            (1.0 - alpha) * p_r + alpha * l_est,
+            (1.0 - alpha) * p_g + alpha * l_est,
+            (1.0 - alpha) * p_b + alpha * l_est,
+        )
+    } else {
+        (p_r, p_g, p_b)
+    }
+}
+
 /// A library-agnostic raw sensor frame representation.
 /// Completely decouples downstream demosaicing, tone mapping, and export pipelines
 /// from specific RAW decoding crates (rawler, libraw, dcraw, etc.).
@@ -79,7 +102,72 @@ pub struct RawSensorFrame {
     pub color_matrix: Option<[[f32; 3]; 3]>,
     pub color_matrix_tungsten: Option<[[f32; 3]; 3]>,
     pub camera_model: String,
+    pub baseline_exposure: f32,
     pub sensor_data: Vec<u16>,
+}
+
+/// Extracts Tag 50728 (BaselineExposure) from a DNG / TIFF byte buffer (IFD0).
+/// Returns linear exposure offset in EV (e.g. +0.831169).
+pub fn read_dng_baseline_exposure(bytes: &[u8]) -> Option<f32> {
+    if bytes.len() < 8 {
+        return None;
+    }
+    let is_le = match &bytes[0..2] {
+        b"II" => true,
+        b"MM" => false,
+        _ => return None,
+    };
+    let read_u16 = |buf: &[u8]| -> u16 {
+        if is_le { u16::from_le_bytes([buf[0], buf[1]]) }
+        else { u16::from_be_bytes([buf[0], buf[1]]) }
+    };
+    let read_u32 = |buf: &[u8]| -> u32 {
+        if is_le { u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]) }
+        else { u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]) }
+    };
+    let read_i32 = |buf: &[u8]| -> i32 {
+        if is_le { i32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]) }
+        else { i32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]) }
+    };
+
+    let magic = read_u16(&bytes[2..4]);
+    if magic != 42 && magic != 0x55 {
+        return None;
+    }
+    let ifd_offset = read_u32(&bytes[4..8]) as usize;
+    if ifd_offset + 2 > bytes.len() {
+        return None;
+    }
+    let num_entries = read_u16(&bytes[ifd_offset..ifd_offset + 2]) as usize;
+    let mut curr = ifd_offset + 2;
+
+    for _ in 0..num_entries {
+        if curr + 12 > bytes.len() {
+            break;
+        }
+        let tag = read_u16(&bytes[curr..curr + 2]);
+        let typ = read_u16(&bytes[curr + 2..curr + 4]);
+        if tag == 50728 {
+            let offset = read_u32(&bytes[curr + 8..curr + 12]) as usize;
+            if offset + 8 <= bytes.len() {
+                if typ == 10 { // SRATIONAL (2 x i32)
+                    let num = read_i32(&bytes[offset..offset + 4]);
+                    let den = read_i32(&bytes[offset + 4..offset + 8]);
+                    if den != 0 {
+                        return Some(num as f32 / den as f32);
+                    }
+                } else if typ == 5 { // RATIONAL (2 x u32)
+                    let num = read_u32(&bytes[offset..offset + 4]);
+                    let den = read_u32(&bytes[offset + 4..offset + 8]);
+                    if den != 0 {
+                        return Some(num as f32 / den as f32);
+                    }
+                }
+            }
+        }
+        curr += 12;
+    }
+    None
 }
 
 impl RawSensorFrame {
@@ -150,58 +238,174 @@ impl RawSensorFrame {
         (wb_r, wb_b)
     }
 
-    /// Computes the normalized camera Sensor to Linear Rec.2020 3x3 matrix from ColorMatrix.
+    /// Estimates the correlated color temperature (in Kelvin) from camera as-shot white balance
+    /// and dual-illuminant sensor calibration matrices.
+    pub fn as_shot_temperature(&self) -> f32 {
+        let (wb_r, wb_b) = self.as_shot_wb();
+        if let (Some(m_tungsten), Some(m_daylight)) = (self.color_matrix_tungsten, self.color_matrix) {
+            let m1 = glam::Mat3::from_cols_array(&[
+                m_tungsten[0][0], m_tungsten[1][0], m_tungsten[2][0],
+                m_tungsten[0][1], m_tungsten[1][1], m_tungsten[2][1],
+                m_tungsten[0][2], m_tungsten[1][2], m_tungsten[2][2],
+            ]);
+            let m2 = glam::Mat3::from_cols_array(&[
+                m_daylight[0][0], m_daylight[1][0], m_daylight[2][0],
+                m_daylight[0][1], m_daylight[1][1], m_daylight[2][1],
+                m_daylight[0][2], m_daylight[1][2], m_daylight[2][2],
+            ]);
+
+            // CIE XYZ coordinates for Standard Illuminant A (2856K) and D65 (6504K)
+            let xyz_a = glam::Vec3::new(1.09867, 1.0, 0.35592);
+            let xyz_d65 = glam::Vec3::new(0.95045, 1.0, 1.08906);
+
+            let n_a = m1 * xyz_a;
+            let n_d65 = m2 * xyz_d65;
+
+            let r1 = (n_a.x / n_a.z.max(1e-6)).max(1e-6);
+            let r2 = (n_d65.x / n_d65.z.max(1e-6)).max(1e-6);
+
+            let r_shot = (wb_b / wb_r.max(1e-6)).max(1e-6);
+
+            // Along reciprocal temperature locus (m = 1/T)
+            let m_inv1 = 1.0 / 2856.0;
+            let m_inv2 = 1.0 / 6504.0;
+
+            let w = if (r2 - r1).abs() > 1e-5 {
+                ((r_shot - r1) / (r2 - r1)).clamp(0.0, 1.0)
+            } else {
+                0.5
+            };
+
+            let m_inv = m_inv1 + w * (m_inv2 - m_inv1);
+            (1.0 / m_inv).clamp(2000.0, 25000.0)
+        } else {
+            // Standard empirical Kelvin estimate based on neutral R/B multiplier ratio
+            let r_shot = wb_b / wb_r.max(1e-6);
+            (5500.0 * (r_shot / 0.75).powf(0.85)).clamp(2000.0, 25000.0)
+        }
+    }
+
+    /// Computes the normalized camera Sensor to Linear Rec.2020 3x3 matrix interpolated
+    /// for the specified Kelvin temperature along the Planckian reciprocal temperature locus.
     /// Preserves neutral axis [1, 1, 1] per Adobe DNG / First Proof color science.
-    pub fn compute_sensor_to_rec2020(&self) -> [[f32; 3]; 3] {
-        let cm = match self.color_matrix {
-            Some(m) => glam::Mat3::from_cols_array(&[
-                m[0][0], m[1][0], m[2][0],
-                m[0][1], m[1][1], m[2][1],
-                m[0][2], m[1][2], m[2][2],
-            ]),
-            None => return [
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                [0.0, 0.0, 1.0],
-            ],
+    pub fn sensor_to_rec2020_at(&self, temp_kelvin: f32) -> [[f32; 3]; 3] {
+        let (cm1, cm2) = if let (Some(m_tungsten), Some(m_daylight)) = (self.color_matrix_tungsten, self.color_matrix) {
+            (m_tungsten, m_daylight)
+        } else if let Some(m_daylight) = self.color_matrix {
+            (m_daylight, m_daylight)
+        } else {
+            // Built-in calibrated fallback ColorMatrix (XYZ D50 -> Sensor RGB)
+            let m = self.camera_model.to_lowercase();
+            if m.contains("canon") || m.contains("eos") {
+                (
+                    [
+                        [ 0.7428, -0.1897, -0.0491],
+                        [-0.3505,  1.0963,  0.2929],
+                        [-0.0337,  0.1242,  0.6413],
+                    ],
+                    [
+                        [ 0.6719, -0.0994, -0.0925],
+                        [-0.4408,  1.2426,  0.2211],
+                        [-0.0887,  0.2129,  0.6051],
+                    ],
+                )
+            } else if m.contains("sony") || m.contains("ilce") || m.contains("alpha") {
+                (
+                    [
+                        [ 0.7483, -0.0851, -0.0534],
+                        [-0.4109,  1.2392,  0.1971],
+                        [-0.0701,  0.1884,  0.7071],
+                    ],
+                    [
+                        [ 0.6722,  0.0821,  0.1793],
+                        [ 0.2514,  0.6542,  0.0944],
+                        [-0.0084, -0.0782,  0.9118],
+                    ],
+                )
+            } else if m.contains("nikon") {
+                (
+                    [
+                        [ 0.7712, -0.0984, -0.0512],
+                        [-0.4011,  1.2281,  0.1974],
+                        [-0.0742,  0.2014,  0.7182],
+                    ],
+                    [
+                        [ 0.6881,  0.0714,  0.1892],
+                        [ 0.2612,  0.6481,  0.0907],
+                        [-0.0091, -0.0811,  0.9152],
+                    ],
+                )
+            } else {
+                (
+                    [
+                        [ 0.7428, -0.1897, -0.0491],
+                        [-0.3505,  1.0963,  0.2929],
+                        [-0.0337,  0.1242,  0.6413],
+                    ],
+                    [
+                        [ 0.6719, -0.0994, -0.0925],
+                        [-0.4408,  1.2426,  0.2211],
+                        [-0.0887,  0.2129,  0.6051],
+                    ],
+                )
+            }
         };
 
-        // REC2020_TO_XYZ (D65) column-major matrix
-        let rec2xyz = glam::Mat3::from_cols_array(&[
-            0.636958, 0.262700, 0.000000,
-            0.144617, 0.677998, 0.028073,
-            0.168881, 0.059302, 1.060985,
+        let t1 = 2856.0f32;
+        let t2 = 6504.0f32;
+        let m_inv1 = 1.0 / t1;
+        let m_inv2 = 1.0 / t2;
+        let m_inv = 1.0 / temp_kelvin.clamp(2000.0, 50000.0);
+        let w = ((m_inv - m_inv1) / (m_inv2 - m_inv1)).clamp(0.0, 1.0);
+
+        let mut cm = [[0.0f32; 3]; 3];
+        for r in 0..3 {
+            for c in 0..3 {
+                cm[r][c] = (1.0 - w) * cm1[r][c] + w * cm2[r][c];
+            }
+        }
+
+        let xyz2cam = glam::Mat3::from_cols_array(&[
+            cm[0][0], cm[1][0], cm[2][0],
+            cm[0][1], cm[1][1], cm[2][1],
+            cm[0][2], cm[1][2], cm[2][2],
         ]);
 
-        let rec2cam_raw = cm * rec2xyz;
+        let rec2020_to_xyz = glam::Mat3::from_cols_array(&[
+            0.6369580, 0.2627002, 0.0000000,
+            0.1446169, 0.6779981, 0.0280727,
+            0.1688810, 0.0593017, 1.0609851,
+        ]);
+
+        let rec2cam_raw = xyz2cam * rec2020_to_xyz;
+
         let r0 = rec2cam_raw.row(0);
         let r1 = rec2cam_raw.row(1);
         let r2 = rec2cam_raw.row(2);
 
-        let norm_r = (r0.x + r0.y + r0.z).max(1e-6);
-        let norm_g = (r1.x + r1.y + r1.z).max(1e-6);
-        let norm_b = (r2.x + r2.y + r2.z).max(1e-6);
+        let n0 = (r0.x + r0.y + r0.z).max(1e-6);
+        let n1 = (r1.x + r1.y + r1.z).max(1e-6);
+        let n2 = (r2.x + r2.y + r2.z).max(1e-6);
 
         let rec2cam = glam::Mat3::from_cols_array(&[
-            r0.x / norm_r, r1.x / norm_g, r2.x / norm_b,
-            r0.y / norm_r, r1.y / norm_g, r2.y / norm_b,
-            r0.z / norm_r, r1.z / norm_g, r2.z / norm_b,
+            r0.x / n0, r1.x / n1, r2.x / n2,
+            r0.y / n0, r1.y / n1, r2.y / n2,
+            r0.z / n0, r1.z / n1, r2.z / n2,
         ]);
 
-        let sensor_to_rec2020 = if rec2cam.determinant().abs() > 1e-12 {
-            rec2cam.inverse()
-        } else {
-            glam::Mat3::IDENTITY
-        };
+        let sensor_to_rec = rec2cam.inverse();
 
-        let c0 = sensor_to_rec2020.x_axis;
-        let c1 = sensor_to_rec2020.y_axis;
-        let c2 = sensor_to_rec2020.z_axis;
         [
-            [c0.x, c1.x, c2.x],
-            [c0.y, c1.y, c2.y],
-            [c0.z, c1.z, c2.z],
+            [sensor_to_rec.row(0).x, sensor_to_rec.row(0).y, sensor_to_rec.row(0).z],
+            [sensor_to_rec.row(1).x, sensor_to_rec.row(1).y, sensor_to_rec.row(1).z],
+            [sensor_to_rec.row(2).x, sensor_to_rec.row(2).y, sensor_to_rec.row(2).z],
         ]
+    }
+
+    /// Computes the normalized camera Sensor to Linear Rec.2020 3x3 matrix for the photo's as-shot Kelvin.
+    /// Preserves neutral axis [1, 1, 1] per Adobe DNG / First Proof color science.
+    pub fn compute_sensor_to_rec2020(&self) -> [[f32; 3]; 3] {
+        self.sensor_to_rec2020_at(self.as_shot_temperature())
     }
 
     /// Renders a fast 2x2 box-binned 16-bit float (f16) RGBA texture buffer in Linear Rec.2020 space.
@@ -217,15 +421,16 @@ impl RawSensorFrame {
 
         let (wb_r, wb_b) = self.as_shot_wb();
         let sensor_to_rec2020 = self.compute_sensor_to_rec2020();
-        let m00 = sensor_to_rec2020[0][0];
-        let m01 = sensor_to_rec2020[0][1];
-        let m02 = sensor_to_rec2020[0][2];
-        let m10 = sensor_to_rec2020[1][0];
-        let m11 = sensor_to_rec2020[1][1];
-        let m12 = sensor_to_rec2020[1][2];
-        let m20 = sensor_to_rec2020[2][0];
-        let m21 = sensor_to_rec2020[2][1];
-        let m22 = sensor_to_rec2020[2][2];
+        let baseline_gain = 2.0f32.powf(self.baseline_exposure);
+        let m00 = sensor_to_rec2020[0][0] * baseline_gain;
+        let m01 = sensor_to_rec2020[0][1] * baseline_gain;
+        let m02 = sensor_to_rec2020[0][2] * baseline_gain;
+        let m10 = sensor_to_rec2020[1][0] * baseline_gain;
+        let m11 = sensor_to_rec2020[1][1] * baseline_gain;
+        let m12 = sensor_to_rec2020[1][2] * baseline_gain;
+        let m20 = sensor_to_rec2020[2][0] * baseline_gain;
+        let m21 = sensor_to_rec2020[2][1] * baseline_gain;
+        let m22 = sensor_to_rec2020[2][2] * baseline_gain;
 
         let black = self.black_levels[0].max(0.0);
         let white = self.white_levels[0].max(black + 1.0);
@@ -260,9 +465,7 @@ impl RawSensorFrame {
                             let g_norm = (((p01 + p10) * 0.5 - black) * scale).clamp(0.0, 1.0);
                             let b_norm = ((p11 - black) * scale).clamp(0.0, 1.0);
 
-                            let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
-                            let g_wb = g_norm;
-                            let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+                            let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
 
                             let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
                             let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
@@ -286,9 +489,7 @@ impl RawSensorFrame {
                             let g_norm = (((p01 + p10) * 0.5 - black) * scale).clamp(0.0, 1.0);
                             let r_norm = ((p11 - black) * scale).clamp(0.0, 1.0);
 
-                            let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
-                            let g_wb = g_norm;
-                            let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+                            let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
 
                             let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
                             let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
@@ -312,9 +513,7 @@ impl RawSensorFrame {
                             let b_norm = ((p01 - black) * scale).clamp(0.0, 1.0);
                             let r_norm = ((p10 - black) * scale).clamp(0.0, 1.0);
 
-                            let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
-                            let g_wb = g_norm;
-                            let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+                            let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
 
                             let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
                             let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
@@ -338,9 +537,7 @@ impl RawSensorFrame {
                             let r_norm = ((p01 - black) * scale).clamp(0.0, 1.0);
                             let b_norm = ((p10 - black) * scale).clamp(0.0, 1.0);
 
-                            let r_wb = (r_norm * wb_r).clamp(0.0, 1.0);
-                            let g_wb = g_norm;
-                            let b_wb = (b_norm * wb_b).clamp(0.0, 1.0);
+                            let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
 
                             let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
                             let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
@@ -379,15 +576,16 @@ impl RawSensorFrame {
 
         let (wb_r, wb_b) = self.as_shot_wb();
         let sensor_to_rec2020 = self.compute_sensor_to_rec2020();
-        let m00 = sensor_to_rec2020[0][0];
-        let m01 = sensor_to_rec2020[0][1];
-        let m02 = sensor_to_rec2020[0][2];
-        let m10 = sensor_to_rec2020[1][0];
-        let m11 = sensor_to_rec2020[1][1];
-        let m12 = sensor_to_rec2020[1][2];
-        let m20 = sensor_to_rec2020[2][0];
-        let m21 = sensor_to_rec2020[2][1];
-        let m22 = sensor_to_rec2020[2][2];
+        let baseline_gain = 2.0f32.powf(self.baseline_exposure);
+        let m00 = sensor_to_rec2020[0][0] * baseline_gain;
+        let m01 = sensor_to_rec2020[0][1] * baseline_gain;
+        let m02 = sensor_to_rec2020[0][2] * baseline_gain;
+        let m10 = sensor_to_rec2020[1][0] * baseline_gain;
+        let m11 = sensor_to_rec2020[1][1] * baseline_gain;
+        let m12 = sensor_to_rec2020[1][2] * baseline_gain;
+        let m20 = sensor_to_rec2020[2][0] * baseline_gain;
+        let m21 = sensor_to_rec2020[2][1] * baseline_gain;
+        let m22 = sensor_to_rec2020[2][2] * baseline_gain;
 
         let black = self.black_levels[0].max(0.0);
         let white = self.white_levels[0].max(black + 1.0);
@@ -407,78 +605,99 @@ impl RawSensorFrame {
             _ => [[0, 2], [3, 1]],
         };
 
-        let sample = |px: usize, py: usize| -> f32 {
-            let cx = px.min(full_w.saturating_sub(1));
-            let cy = py.min(full_h.saturating_sub(1));
+        let sample = |px: isize, py: isize| -> f32 {
+            let cx = px.clamp(0, (full_w - 1) as isize) as usize;
+            let cy = py.clamp(0, (full_h - 1) as isize) as usize;
             let val = sensor.get(cy * full_w + cx).copied().unwrap_or(0) as f32;
             ((val - black) * scale).clamp(0.0, 1.0)
+        };
+
+        // Malvar-He-Cutler (2004) 5x5 gradient-corrected linear demosaicing filters:
+        // GR_GB: Green at Red or Blue site (using discrete Laplacian of measured channel)
+        let g_at_rb = |px: isize, py: isize| -> f32 {
+            (
+                4.0 * sample(px, py)
+                + 2.0 * (sample(px - 1, py) + sample(px + 1, py) + sample(px, py - 1) + sample(px, py + 1))
+                - (sample(px - 2, py) + sample(px + 2, py) + sample(px, py - 2) + sample(px, py + 2))
+            ) * 0.125
+        };
+
+        // Horizontal: R (or B) at Green site with horizontal R (or B) neighbors
+        let c_at_g_horiz = |px: isize, py: isize| -> f32 {
+            (
+                5.0 * sample(px, py)
+                + 4.0 * (sample(px - 1, py) + sample(px + 1, py))
+                - (sample(px - 2, py) + sample(px + 2, py))
+                - (sample(px - 1, py - 1) + sample(px + 1, py - 1) + sample(px - 1, py + 1) + sample(px + 1, py + 1))
+                + 0.5 * (sample(px, py - 2) + sample(px, py + 2))
+            ) * 0.125
+        };
+
+        // Vertical: R (or B) at Green site with vertical R (or B) neighbors (transpose of horizontal)
+        let c_at_g_vert = |px: isize, py: isize| -> f32 {
+            (
+                5.0 * sample(px, py)
+                + 4.0 * (sample(px, py - 1) + sample(px, py + 1))
+                - (sample(px - 2, py) + sample(px + 2, py))
+                - (sample(px - 1, py - 1) + sample(px + 1, py - 1) + sample(px - 1, py + 1) + sample(px + 1, py + 1))
+                + 0.5 * (sample(px - 2, py) + sample(px + 2, py))
+            ) * 0.125
+        };
+
+        // Opposite: R at Blue site, or B at Red site
+        let c_at_opp = |px: isize, py: isize| -> f32 {
+            (
+                6.0 * sample(px, py)
+                + 2.0 * (sample(px - 1, py - 1) + sample(px + 1, py - 1) + sample(px - 1, py + 1) + sample(px + 1, py + 1))
+                - 1.5 * (sample(px - 2, py) + sample(px + 2, py) + sample(px, py - 2) + sample(px, py + 2))
+            ) * 0.125
         };
 
         let mut u16_pixels = vec![0u16; active_w * active_h * 4];
 
         for y in 0..active_h {
             let sy = self.active_y + y;
-            let sy_prev = sy.saturating_sub(1);
-            let sy_next = (sy + 1).min(full_h.saturating_sub(1));
             let dst_row_off = y * active_w * 4;
 
             for x in 0..active_w {
                 let sx = self.active_x + x;
-                let sx_prev = sx.saturating_sub(1);
-                let sx_next = (sx + 1).min(full_w.saturating_sub(1));
 
                 let site = site_map[sy % 2][sx % 2];
+                let isx = sx as isize;
+                let isy = sy as isize;
                 let (r, g, b) = match site {
                     0 => {
                         // R site: Red is measured
-                        let r = sample(sx, sy);
-                        let gh = (sample(sx_prev, sy) + sample(sx_next, sy)) * 0.5;
-                        let gv = (sample(sx, sy_prev) + sample(sx, sy_next)) * 0.5;
-                        let dh = (sample(sx_prev, sy) - sample(sx_next, sy)).abs();
-                        let dv = (sample(sx, sy_prev) - sample(sx, sy_next)).abs();
-                        let g = if dh < dv { gh } else if dv < dh { gv } else { (gh + gv) * 0.5 };
-                        let b = (sample(sx_prev, sy_prev)
-                            + sample(sx_next, sy_prev)
-                            + sample(sx_prev, sy_next)
-                            + sample(sx_next, sy_next))
-                            * 0.25;
-                        (r, g, b)
+                        let r = sample(isx, isy);
+                        let g = g_at_rb(isx, isy);
+                        let b = c_at_opp(isx, isy);
+                        (r.max(0.0), g.max(0.0), b.max(0.0))
                     }
                     1 => {
                         // B site: Blue is measured
-                        let b = sample(sx, sy);
-                        let gh = (sample(sx_prev, sy) + sample(sx_next, sy)) * 0.5;
-                        let gv = (sample(sx, sy_prev) + sample(sx, sy_next)) * 0.5;
-                        let dh = (sample(sx_prev, sy) - sample(sx_next, sy)).abs();
-                        let dv = (sample(sx, sy_prev) - sample(sx, sy_next)).abs();
-                        let g = if dh < dv { gh } else if dv < dh { gv } else { (gh + gv) * 0.5 };
-                        let r = (sample(sx_prev, sy_prev)
-                            + sample(sx_next, sy_prev)
-                            + sample(sx_prev, sy_next)
-                            + sample(sx_next, sy_next))
-                            * 0.25;
-                        (r, g, b)
+                        let b = sample(isx, isy);
+                        let g = g_at_rb(isx, isy);
+                        let r = c_at_opp(isx, isy);
+                        (r.max(0.0), g.max(0.0), b.max(0.0))
                     }
                     2 => {
                         // G site on R row: R is horizontal, B is vertical
-                        let g = sample(sx, sy);
-                        let r = (sample(sx_prev, sy) + sample(sx_next, sy)) * 0.5;
-                        let b = (sample(sx, sy_prev) + sample(sx, sy_next)) * 0.5;
-                        (r, g, b)
+                        let g = sample(isx, isy);
+                        let r = c_at_g_horiz(isx, isy);
+                        let b = c_at_g_vert(isx, isy);
+                        (r.max(0.0), g.max(0.0), b.max(0.0))
                     }
                     _ => {
                         // G site on B row: B is horizontal, R is vertical
-                        let g = sample(sx, sy);
-                        let b = (sample(sx_prev, sy) + sample(sx_next, sy)) * 0.5;
-                        let r = (sample(sx, sy_prev) + sample(sx, sy_next)) * 0.5;
-                        (r, g, b)
+                        let g = sample(isx, isy);
+                        let b = c_at_g_horiz(isx, isy);
+                        let r = c_at_g_vert(isx, isy);
+                        (r.max(0.0), g.max(0.0), b.max(0.0))
                     }
                 };
 
-                // As-shot white balance
-                let r_wb = (r * wb_r).clamp(0.0, 1.0);
-                let g_wb = g.clamp(0.0, 1.0);
-                let b_wb = (b * wb_b).clamp(0.0, 1.0);
+                // As-shot white balance with sensitometric highlight roll-off
+                let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r, g, b, wb_r, wb_b);
 
                 // Sensor to Linear Rec.2020 matrix transform
                 let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);

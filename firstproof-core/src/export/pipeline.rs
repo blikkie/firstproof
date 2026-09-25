@@ -4,6 +4,11 @@ use crate::color::{
 use crate::EditSettings;
 use super::decode::DemosaicedImage;
 
+#[inline(always)]
+fn is_curve_active(pts: &[crate::CurvePointRecord]) -> bool {
+    pts.len() > 2 || (pts.len() == 2 && ((pts[0].x - pts[0].y).abs() > 1e-4 || (pts[1].x - pts[1].y).abs() > 1e-4))
+}
+
 /// Applies user edits (Exposure, White Balance, Contrast, Display gamma) in 16-bit linear space.
 pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
     let total_exposure = edits.exposure;
@@ -23,6 +28,13 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
     r_scale = (r_scale + tint_factor * 0.5).max(0.01);
     b_scale = (b_scale + tint_factor * 0.5).max(0.01);
     
+    let curve_lut = crate::curve::evaluate_curves_lut_ref(&edits.curves);
+    let has_master_curve = is_curve_active(&edits.curves.master);
+    let has_red_curve = is_curve_active(&edits.curves.red);
+    let has_green_curve = is_curve_active(&edits.curves.green);
+    let has_blue_curve = is_curve_active(&edits.curves.blue);
+    let has_any_curve = has_master_curve || has_red_curve || has_green_curve || has_blue_curve;
+
     let total_pixels = image.width * image.height;
     let has_tone_recovery = edits.highlights != 0.0 || edits.shadows != 0.0 || edits.whites != 0.0 || edits.blacks != 0.0;
     
@@ -35,7 +47,7 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
             let r = image.data[idx] * r_scale * exposure_gain;
             let g = image.data[idx + 1] * g_scale * exposure_gain;
             let b = image.data[idx + 2] * b_scale * exposure_gain;
-            plane.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
+            plane.push(0.2627 * r + 0.6780 * g + 0.0593 * b);
         }
         Some(plane)
     } else {
@@ -48,17 +60,17 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
         let mut g = image.data[idx + 1];
         let mut b = image.data[idx + 2];
         
-        // 1. White Balance
+        // 1. White Balance in Linear Rec.2020
         r *= r_scale;
         g *= g_scale;
         b *= b_scale;
         
-        // 2. Linear Exposure (including baseline camera gain for RAW)
+        // 2. Linear Exposure (including baseline camera gain for RAW) in Linear Rec.2020
         r *= exposure_gain;
         g *= exposure_gain;
         b *= exposure_gain;
         
-        // 2b. Advanced Bilateral Base/Detail Tone Recovery (Highlights, Shadows, Whites, Blacks)
+        // 2b. Advanced Bilateral Base/Detail Tone Recovery (Highlights, Shadows, Whites, Blacks) in Linear Rec.2020
         if let Some(ref luma) = luma_plane {
             let x = i % image.width;
             let y = i / image.width;
@@ -93,7 +105,7 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
             b = b_rec;
         }
         
-        // 2c. Upstream Recording Emulsion (DIR Chemical Couplers & Sensitometric Curves)
+        // 2c. Upstream Recording Emulsion (DIR Chemical Couplers & Sensitometric Curves) in Linear Rec.2020
         if edits.emulsion_archetype != crate::EmulsionArchetype::None {
             let (r_em, g_em, b_em) = crate::color::apply_recording_emulsion(
                 r, g, b,
@@ -104,11 +116,48 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
             g = g_em;
             b = b_em;
         }
+
+        // 2d. Wide-Gamut Tone Curves (Master + RGB) in Linear Rec.2020
+        if has_any_curve {
+            if has_master_curve {
+                r = sample_curve_lut(&curve_lut.master, r);
+                g = sample_curve_lut(&curve_lut.master, g);
+                b = sample_curve_lut(&curve_lut.master, b);
+            }
+            if has_red_curve {
+                r = sample_curve_lut(&curve_lut.red, r);
+            }
+            if has_green_curve {
+                g = sample_curve_lut(&curve_lut.green, g);
+            }
+            if has_blue_curve {
+                b = sample_curve_lut(&curve_lut.blue, b);
+            }
+        }
+
+        // 2e. Color Adjustments: Vibrance, Saturation, Deep Blue, Foliage in Linear Rec.2020
+        let (r_adj, g_adj, b_adj) = apply_color_adjustments(
+            r, g, b,
+            edits.vibrance, edits.saturation, edits.deep_blue, edits.foliage,
+        );
+        r = r_adj;
+        g = g_adj;
+        b = b_adj;
+
+        // 2f. Split Toning & Color Grading in Linear Rec.2020
+        let (r_st, g_st, b_st) = apply_split_toning(
+            r, g, b,
+            edits.split_toning_shadow_hue, edits.split_toning_shadow_sat,
+            edits.split_toning_highlight_hue, edits.split_toning_highlight_sat,
+            edits.split_toning_balance,
+        );
+        r = r_st;
+        g = g_st;
+        b = b_st;
         
-        // 3. AgX Filmic or Camera-Matching Tone Profiles
-        // Tone profiles output sRGB (display-referred for AgX, linear sRGB for camera profiles / raw passthrough).
-        // Outputting sRGB directly avoids matrix inversion back into Rec.2020 and eliminates channel cross-talk
-        // or clamping discrepancies prior to bilinear interpolation.
+        // 3. TERMINAL STAGE: AgX Filmic or Camera-Matching Tone Profiles -> Linear sRGB Output
+        // Tone profiles output linear sRGB at the terminal stage, ensuring all tone, curve,
+        // and color adjustments execute with physical wide-gamut fidelity in Linear Rec.2020.
         if image.is_raw || edits.contrast != 0.0 || edits.highlights != 0.0 || edits.shadows != 0.0 || edits.whites != 0.0 || edits.blacks != 0.0 || edits.emulsion_archetype != crate::EmulsionArchetype::None || edits.tone_profile != crate::ColorProfileMode::AgxFilmic {
             match edits.tone_profile {
                 crate::ColorProfileMode::AgxVivid => {
@@ -126,18 +175,29 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
                     b = c_srgb.b();
                 }
                 mode => {
+                    // Terminal Stage 10: Convert Rec.2020 working space to Linear sRGB
                     let c_rec2020 = Color3::new(r, g, b);
                     let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
-                    let (h, s, v) = crate::color::rgb_to_hsv(c_srgb.r().max(0.0), c_srgb.g().max(0.0), c_srgb.b().max(0.0));
-                    
+                    let r_init = c_srgb.r().max(0.0);
+                    let g_init = c_srgb.g().max(0.0);
+                    let b_init = c_srgb.b().max(0.0);
+
                     let huesatmap = match mode {
                         crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_huesatmap(),
                         crate::ColorProfileMode::CameraLandscape => crate::color::dcp::DcpProfile::built_in_landscape_huesatmap(),
                         crate::ColorProfileMode::CameraVivid => crate::color::dcp::DcpProfile::built_in_vivid_huesatmap(),
                         _ => crate::color::dcp::DcpProfile::built_in_standard_huesatmap(),
                     };
+                    // Memory colors in standard sRGB chromaticity space
+                    let (h, s, v) = crate::color::rgb_to_hsv(r_init, g_init, b_init);
                     let (h2, s2, v2) = huesatmap.apply_hsv(h, s, v);
-                    let (r_mapped, g_mapped, b_mapped) = crate::color::hsv_to_rgb(h2, s2, v2);
+                    // Optical Scotopic / Mesopic desaturation: As luminance approaches sensor read noise floor,
+                    // rod-dominant vision has zero chromaticity. Suppresses thermal noise spikes without edge clipping.
+                    let scotopic_weight = {
+                        let t = ((v2 - 0.01) / 0.07).clamp(0.0, 1.0);
+                        t * t * (3.0 - 2.0 * t)
+                    };
+                    let (r_mapped, g_mapped, b_mapped) = crate::color::hsv_to_rgb(h2, s2 * scotopic_weight, v2);
                     
                     let curve = match mode {
                         crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_tone_curve(),
@@ -146,27 +206,27 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
                         _ => crate::color::dcp::DcpProfile::built_in_standard_tone_curve(),
                     };
                     
-                    // Luminance-scaled tone curve: preserves chromaticity ratios (R/Y, G/Y, B/Y) without hue twisting
+                    // Linear sRGB scene luminance-scaled tone curve: preserves chromaticity ratios (R/Y, G/Y, B/Y) without hue twisting
                     let lum = 0.2126 * r_mapped + 0.7152 * g_mapped + 0.0722 * b_mapped;
                     let lum_curved = crate::color::evaluate_tone_curve(lum, &curve);
                     let lum_adj = ((lum_curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
                     let gain = lum_adj / lum.max(1e-6);
                     
-                    r = (r_mapped * gain).clamp(0.0, 1.0);
-                    g = (g_mapped * gain).clamp(0.0, 1.0);
-                    b = (b_mapped * gain).clamp(0.0, 1.0);
+                    r = (r_mapped * gain).max(0.0);
+                    g = (g_mapped * gain).max(0.0);
+                    b = (b_mapped * gain).max(0.0);
                 }
             }
         } else {
             // Passthrough for non-raw with no profile adjustments: convert Rec.2020 working space to linear sRGB
             let c_rec2020 = Color3::new(r, g, b);
             let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
-            r = c_srgb.r();
-            g = c_srgb.g();
-            b = c_srgb.b();
+            r = c_srgb.r().max(0.0);
+            g = c_srgb.g().max(0.0);
+            b = c_srgb.b().max(0.0);
         }
         
-        // Store sRGB color values (display-referred for AgX, linear sRGB for camera profiles)
+        // Store linear sRGB color values
         image.data[idx] = r.max(0.0);
         image.data[idx + 1] = g.max(0.0);
         image.data[idx + 2] = b.max(0.0);
@@ -274,7 +334,7 @@ pub fn apply_tone_recovery(
     if highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0 {
         return (r, g, b);
     }
-    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let lum = 0.2627 * r + 0.6780 * g + 0.0593 * b;
     let neighbors = [lum; 8];
     apply_bilateral_tone_recovery_rgb(r, g, b, lum, &neighbors, highlights, shadows, whites, blacks)
 }
@@ -293,7 +353,7 @@ pub fn apply_color_adjustments(
         return (r, g, b);
     }
 
-    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let lum = 0.2627 * r + 0.6780 * g + 0.0593 * b;
 
     // 1. Global Saturation (-100..+100)
     // Standard chromaticity scaling relative to perceptual luminance
@@ -389,7 +449,7 @@ pub fn apply_split_toning(
         return (r, g, b);
     }
 
-    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let lum = 0.2627 * r + 0.6780 * g + 0.0593 * b;
     let y_clamp = lum.clamp(0.0, 1.0);
 
     // Midpoint threshold shifted by balance (-100..+100)
@@ -404,7 +464,7 @@ pub fn apply_split_toning(
         let u_s = (t - y_clamp) / t;
         let w_s = u_s * u_s * (3.0 - 2.0 * u_s) * (shadow_sat / 100.0);
         let (tr, tg, tb) = crate::color::hsv_to_rgb(shadow_hue, 1.0, 1.0);
-        let t_lum = 0.2126 * tr + 0.7152 * tg + 0.0722 * tb;
+        let t_lum = 0.2627 * tr + 0.6780 * tg + 0.0593 * tb;
         delta_r += w_s * (tr - t_lum);
         delta_g += w_s * (tg - t_lum);
         delta_b += w_s * (tb - t_lum);
@@ -415,7 +475,7 @@ pub fn apply_split_toning(
         let u_h = (y_clamp - t) / (1.0 - t);
         let w_h = u_h * u_h * (3.0 - 2.0 * u_h) * (highlight_sat / 100.0);
         let (tr, tg, tb) = crate::color::hsv_to_rgb(highlight_hue, 1.0, 1.0);
-        let t_lum = 0.2126 * tr + 0.7152 * tg + 0.0722 * tb;
+        let t_lum = 0.2627 * tr + 0.6780 * tg + 0.0593 * tb;
         delta_r += w_h * (tr - t_lum);
         delta_g += w_h * (tg - t_lum);
         delta_b += w_h * (tb - t_lum);

@@ -33,9 +33,12 @@
     ```
 
 - **Color Science Pipeline & Working Space Invariants**:
-  - Internal image adjustments (exposure, contrast, tone curves, saturation, film grain) must strictly execute in **Linear Rec.2020 wide-gamut** color space, NOT gamma-encoded sRGB or display P3.
+  - **Terminal RGB Conversion Invariant**: Conversion to display/output RGB (sRGB, Display P3, or gamma encoding) must strictly be the **VERY LAST step of the entire pipeline**, both in GPU viewport shaders (`Shaders.metal`, `FragmentShader.ts`) and CPU export pipelines (`export/pipeline.rs`, `encoders.rs`).
+  - Internal image adjustments (exposure, contrast, tone curves, vibrance, saturation, split toning, detail sharpening, film grain, print media) must strictly execute in **Linear Rec.2020 wide-gamut** color space ($Y = 0.2627 R + 0.6780 G + 0.0593 B$), NOT gamma-encoded sRGB or display P3.
+  - Never apply color adjustments, saturation, tone curves, or sharpening to narrow sRGB or gamma-encoded values. Doing so truncates wide-gamut hues, distorts $R/G$ chromaticity ratios, and produces muddy skin tones or posterized clipping knees.
   - Raw Bayer CFA sensor pixels are mapped into linear Rec.2020 via camera matrix / Adobe DCP profiles before any tone adjustments occur.
-  - Tone-mapping to display luminance occurs at the end of the pipeline via AgX (Vivid/Neutral) or Camera DCP profiles.
+  - Tone-mapping to display luminance occurs at the very end of the pipeline via AgX (Vivid/Neutral) or Camera DCP profiles.
+  - **Physical Sensitometric Grain & Emulsion Placement**: Film grain simulates the physical response of silver halide crystals or dye clouds reacting to incident scene photons in the optical/chemical domain before optical tonality and print transfer. Applying grain post-tone-mapping in narrow gamma sRGB non-linearly distorts shadow noise floors. Grain must be evaluated in the wide-gamut optical domain.
   - Final offline exports must maintain bit-level parity with GPU viewport rendering and embed color space ICC profiles using `img-parts` and `lcms2`.
   - **Print & Web First (SDR Viewport Default)**: Even when running on an HDR/EDR-capable screen (e.g. MacBook Liquid Retina XDR, Pro Display XDR), the viewport canvas must always initialize and default to standard dynamic range (`isHdrEnabled = false`). EDR is an explicit user opt-in inspection mode, ensuring the photographer's default tonal decisions remain calibrated for print and universal web viewing rather than eye-searing local hardware radiance.
 

@@ -117,38 +117,86 @@ pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
     (r1 + m, g1 + m, b1 + m)
 }
 
-/// Evaluates a tone curve defined as a piecewise spline of (x, y) coordinates.
+/// Evaluates a tone curve defined by (x, y) control knots using a C^1 continuous
+/// monotonic cubic Hermite spline (Fritsch-Carlson algorithm).
+///
+/// Guarantees:
+/// 1. Passes exactly through each control point (x_k, y_k).
+/// 2. C^1 derivative continuity throughout [0.0, 1.0] without slope discontinuities.
+/// 3. Strictly monotonic: non-negative slope everywhere, eliminating solarization and flat plateaus.
 pub fn evaluate_tone_curve(x: f32, curve: &[(f32, f32)]) -> f32 {
-    if curve.is_empty() {
+    let n = curve.len();
+    if n == 0 {
         return x;
     }
-    if curve.len() == 1 {
+    if n == 1 {
         return curve[0].1;
     }
     let x_clamped = x.clamp(0.0, 1.0);
     if x_clamped <= curve[0].0 {
         return curve[0].1;
     }
-    if x_clamped >= curve[curve.len() - 1].0 {
-        return curve[curve.len() - 1].1;
+    if x_clamped >= curve[n - 1].0 {
+        return curve[n - 1].1;
     }
 
-    for i in 0..curve.len() - 1 {
-        let (x0, y0) = curve[i];
-        let (x1, y1) = curve[i + 1];
+    // 1. Calculate secant slopes d_k = (y_{k+1} - y_k) / (x_{k+1} - x_k)
+    let mut d = [0.0f32; 32];
+    let n_segs = (n - 1).min(32);
+    for k in 0..n_segs {
+        let dx = curve[k + 1].0 - curve[k].0;
+        let dy = curve[k + 1].1 - curve[k].1;
+        d[k] = if dx.abs() > 1e-6 { dy / dx } else { 0.0 };
+    }
+
+    // 2. Initialize knot tangents m_k as average of adjacent secants
+    let mut m = [0.0f32; 32];
+    m[0] = d[0];
+    m[n_segs] = d[n_segs - 1];
+    for k in 1..n_segs {
+        m[k] = 0.5 * (d[k - 1] + d[k]);
+    }
+
+    // 3. Apply Fritsch-Carlson monotonicity condition
+    for k in 0..n_segs {
+        if d[k].abs() < 1e-6 {
+            m[k] = 0.0;
+            m[k + 1] = 0.0;
+        } else {
+            let alpha = m[k] / d[k];
+            let beta = m[k + 1] / d[k];
+            let hyp = alpha * alpha + beta * beta;
+            if hyp > 9.0 {
+                let tau = 3.0 / hyp.sqrt();
+                m[k] = tau * alpha * d[k];
+                m[k + 1] = tau * beta * d[k];
+            }
+        }
+    }
+
+    // 4. Locate active interval and evaluate cubic Hermite polynomial
+    for k in 0..n_segs {
+        let x0 = curve[k].0;
+        let x1 = curve[k + 1].0;
         if x_clamped >= x0 && x_clamped <= x1 {
             let dx = x1 - x0;
             if dx.abs() < 1e-6 {
-                return y0;
+                return curve[k].1;
             }
             let t = (x_clamped - x0) / dx;
             let t2 = t * t;
             let t3 = t2 * t;
+
             let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
+            let h10 = t3 - 2.0 * t2 + t;
             let h01 = -2.0 * t3 + 3.0 * t2;
-            return (h00 * y0 + h01 * y1).clamp(0.0, 1.0);
+            let h11 = t3 - t2;
+
+            let y = h00 * curve[k].1 + h10 * m[k] * dx + h01 * curve[k + 1].1 + h11 * m[k + 1] * dx;
+            return y.clamp(0.0, 1.0);
         }
     }
+
     x_clamped
 }
 
@@ -774,25 +822,17 @@ impl DcpProfile {
             illuminant1: ILLUMINANT_STANDARD_A,
             illuminant2: Some(ILLUMINANT_D65),
             color_matrix1: Matrix3x3([
-                [ 0.7928, -0.1090, -0.0537],
-                [-0.3894,  1.2153,  0.1982],
-                [-0.0786,  0.2264,  0.7303],
+                [ 0.7428, -0.1897, -0.0491],
+                [-0.3505,  1.0963,  0.2929],
+                [-0.0337,  0.1242,  0.6413],
             ]),
             color_matrix2: Some(Matrix3x3([
-                [ 0.7034,  0.0613,  0.1995],
-                [ 0.2721,  0.6409,  0.0870],
-                [-0.0102, -0.0841,  0.9193],
+                [ 0.6719, -0.0994, -0.0925],
+                [-0.4408,  1.2426,  0.2211],
+                [-0.0887,  0.2129,  0.6051],
             ])),
-            forward_matrix1: Some(Matrix3x3([
-                [ 0.6557,  0.1557,  0.1528],
-                [ 0.2606,  0.7247,  0.0147],
-                [ 0.0210, -0.1147,  0.9188],
-            ])),
-            forward_matrix2: Some(Matrix3x3([
-                [ 0.6094,  0.2312,  0.1236],
-                [ 0.2831,  0.6876,  0.0293],
-                [ 0.0177, -0.0632,  0.8706],
-            ])),
+            forward_matrix1: None,
+            forward_matrix2: None,
             tone_curve: Some(Self::built_in_standard_tone_curve()),
             hue_sat_map1: Some(Self::built_in_standard_huesatmap()),
             hue_sat_map2: Some(Self::built_in_standard_huesatmap()),
@@ -815,16 +855,8 @@ impl DcpProfile {
                 [ 0.2514,  0.6542,  0.0944],
                 [-0.0084, -0.0782,  0.9118],
             ])),
-            forward_matrix1: Some(Matrix3x3([
-                [ 0.6738,  0.1412,  0.1492],
-                [ 0.2741,  0.7102,  0.0157],
-                [ 0.0221, -0.1082,  0.9112],
-            ])),
-            forward_matrix2: Some(Matrix3x3([
-                [ 0.6281,  0.2114,  0.1247],
-                [ 0.2911,  0.6792,  0.0297],
-                [ 0.0182, -0.0594,  0.8663],
-            ])),
+            forward_matrix1: None,
+            forward_matrix2: None,
             tone_curve: Some(Self::built_in_standard_tone_curve()),
             hue_sat_map1: Some(Self::built_in_standard_huesatmap()),
             hue_sat_map2: Some(Self::built_in_standard_huesatmap()),
@@ -847,16 +879,8 @@ impl DcpProfile {
                 [ 0.2612,  0.6481,  0.0907],
                 [-0.0091, -0.0811,  0.9152],
             ])),
-            forward_matrix1: Some(Matrix3x3([
-                [ 0.6641,  0.1482,  0.1511],
-                [ 0.2672,  0.7171,  0.0152],
-                [ 0.0215, -0.1112,  0.9151],
-            ])),
-            forward_matrix2: Some(Matrix3x3([
-                [ 0.6184,  0.2211,  0.1241],
-                [ 0.2871,  0.6832,  0.0295],
-                [ 0.0179, -0.0612,  0.8684],
-            ])),
+            forward_matrix1: None,
+            forward_matrix2: None,
             tone_curve: Some(Self::built_in_standard_tone_curve()),
             hue_sat_map1: Some(Self::built_in_standard_huesatmap()),
             hue_sat_map2: Some(Self::built_in_standard_huesatmap()),

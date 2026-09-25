@@ -155,7 +155,7 @@ fragment float4 fragmentShader(
         float4 s_bl = texture.sample(textureSampler, uv + float2(-step.x,  step.y));
         float4 s_br = texture.sample(textureSampler, uv + float2( step.x,  step.y));
         
-        float y_c = dot(rec2020Color, float3(0.2126, 0.7152, 0.0722));
+        float y_c = dot(rec2020Color, float3(0.2627, 0.6780, 0.0593));
         float3 wbExposureScale = float3(rScale, gScale, bScale) * exposureGain;
         
         float4 s_neighbors[8] = { s_l, s_r, s_t, s_b, s_tl, s_tr, s_bl, s_br };
@@ -169,7 +169,7 @@ fragment float4 fragmentShader(
                 c = LINEAR_SRGB_TO_REC2020 * srgbLinear;
             }
             c *= wbExposureScale;
-            y_neighbors[i] = dot(c, float3(0.2126, 0.7152, 0.0722));
+            y_neighbors[i] = dot(c, float3(0.2627, 0.6780, 0.0593));
         }
         
         rec2020Color = applyBilateralToneRecovery(
@@ -192,7 +192,92 @@ fragment float4 fragmentShader(
         );
     }
     
-    // 5. AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles
+    // 5. RGB Tone Curves (Master + R + G + B) in Linear Rec.2020 Working Space
+    if (uniforms.hasCurves != 0 && uniforms.isOriginal < 0.5) {
+        if (uniforms.hasMasterCurve != 0) {
+            rec2020Color.r = curveMasterTexture.sample(curveSampler, clamp(rec2020Color.r, 0.0, 1.0)).r;
+            rec2020Color.g = curveMasterTexture.sample(curveSampler, clamp(rec2020Color.g, 0.0, 1.0)).r;
+            rec2020Color.b = curveMasterTexture.sample(curveSampler, clamp(rec2020Color.b, 0.0, 1.0)).r;
+        }
+        if (uniforms.hasRgbCurves != 0) {
+            float3 rgbCurved = float3(
+                curveRgbTexture.sample(curveSampler, clamp(rec2020Color.r, 0.0, 1.0)).r,
+                curveRgbTexture.sample(curveSampler, clamp(rec2020Color.g, 0.0, 1.0)).g,
+                curveRgbTexture.sample(curveSampler, clamp(rec2020Color.b, 0.0, 1.0)).b
+            );
+            rec2020Color = rgbCurved;
+        }
+    }
+
+    // 6. Color & Vibrance Adjustments in Linear Rec.2020
+    rec2020Color = applyColorAdjustments(rec2020Color, editVibrance, editSaturation, editDeepBlue, editFoliage);
+
+    // 7. Split Toning & Color Grading with Optical Balance Anchoring in Linear Rec.2020
+    rec2020Color = applySplitToning(
+        rec2020Color,
+        uniforms.splitToningShadowHue,
+        editSplitShadowSat,
+        uniforms.splitToningHighlightHue,
+        editSplitHighlightSat,
+        uniforms.splitToningBalance
+    );
+
+    // 8. Detail, Sharpening & Noise Reduction in Linear Rec.2020
+    float editSharpening = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.sharpeningAmount;
+    float editNoiseReduction = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.noiseReduction;
+    if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
+        float2 texelSize = 1.0 / float2(texture.get_width(), texture.get_height());
+        float2 offset = texelSize * max(uniforms.sharpeningRadius, 0.5);
+        float4 leftSample   = texture.sample(textureSampler, uv - float2(offset.x, 0.0));
+        float4 rightSample  = texture.sample(textureSampler, uv + float2(offset.x, 0.0));
+        float4 topSample    = texture.sample(textureSampler, uv - float2(0.0, offset.y));
+        float4 bottomSample = texture.sample(textureSampler, uv + float2(0.0, offset.y));
+
+        float y_c = dot(rec2020Color, float3(0.2627, 0.6780, 0.0593));
+        float y_l, y_r, y_t, y_b;
+        if (uniforms.isLinearRaw == 0) {
+            float3 cl = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(leftSample.rgb);
+            float3 cr = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(rightSample.rgb);
+            float3 ct = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(topSample.rgb);
+            float3 cb = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(bottomSample.rgb);
+            y_l = dot(cl, float3(0.2627, 0.6780, 0.0593));
+            y_r = dot(cr, float3(0.2627, 0.6780, 0.0593));
+            y_t = dot(ct, float3(0.2627, 0.6780, 0.0593));
+            y_b = dot(cb, float3(0.2627, 0.6780, 0.0593));
+        } else {
+            float3 wbExposureScale = float3(rScale, gScale, bScale) * exposureGain;
+            float3 cl = leftSample.rgb * wbExposureScale;
+            float3 cr = rightSample.rgb * wbExposureScale;
+            float3 ct = topSample.rgb * wbExposureScale;
+            float3 cb = bottomSample.rgb * wbExposureScale;
+            y_l = dot(cl, float3(0.2627, 0.6780, 0.0593));
+            y_r = dot(cr, float3(0.2627, 0.6780, 0.0593));
+            y_t = dot(ct, float3(0.2627, 0.6780, 0.0593));
+            y_b = dot(cb, float3(0.2627, 0.6780, 0.0593));
+        }
+
+        rec2020Color = applyDetailAndSharpening(
+            rec2020Color,
+            y_c, y_l, y_r, y_t, y_b,
+            editSharpening,
+            uniforms.sharpeningMasking,
+            editNoiseReduction
+        );
+    }
+
+    // 8.2 Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration in Linear Rec.2020
+    if (uniforms.isOriginal < 0.5 && uniforms.printMediaMode != 0) {
+        rec2020Color = applyPrintMedia(
+            rec2020Color,
+            uniforms.printMediaMode,
+            uniforms.enlargerFilterMode,
+            uniforms.printPaperGrade,
+            uniforms.printBaseWarmth,
+            uniforms.printProcessDepth
+        );
+    }
+
+    // 9. TERMINAL STAGE: AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles -> Linear sRGB
     // Calibrated contrast: Ceiling 2.0x (+100), Floor 0.40x (-100) preventing flat gray collapse
     float contrastGain = (editContrast >= 0.0)
         ? (1.0 + editContrast / 100.0)
@@ -221,107 +306,17 @@ fragment float4 fragmentShader(
         float lumAdj = clamp((lumCurved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
         float gain = lumAdj / max(lum, 1e-6);
         
-        srgbLinearOut = clamp(rgbAdjusted * gain, 0.0, 1.0);
+        srgbLinearOut = max(rgbAdjusted * gain, float3(0.0));
     }
-    
-    // 6. Display Target Transform (Linear wide-gamut output for extended linear display)
+
     float3 finalColor = srgbLinearOut;
-    
-    // 6b. Color & Vibrance Adjustments
-    finalColor = applyColorAdjustments(finalColor, editVibrance, editSaturation, editDeepBlue, editFoliage);
-    
-    // 6b.1 Split Toning & Color Grading with Optical Balance Anchoring
-    finalColor = applySplitToning(
-        finalColor,
-        uniforms.splitToningShadowHue,
-        editSplitShadowSat,
-        uniforms.splitToningHighlightHue,
-        editSplitHighlightSat,
-        uniforms.splitToningBalance
-    );
-    
-    // 6c. RGB Tone Curves (Master + R + G + B)
-    if (uniforms.hasCurves != 0 && uniforms.isOriginal < 0.5) {
-        if (uniforms.hasMasterCurve != 0) {
-            finalColor.r = curveMasterTexture.sample(curveSampler, clamp(finalColor.r, 0.0, 1.0)).r;
-            finalColor.g = curveMasterTexture.sample(curveSampler, clamp(finalColor.g, 0.0, 1.0)).r;
-            finalColor.b = curveMasterTexture.sample(curveSampler, clamp(finalColor.b, 0.0, 1.0)).r;
-        }
-        if (uniforms.hasRgbCurves != 0) {
-            float3 rgbCurved = float3(
-                curveRgbTexture.sample(curveSampler, clamp(finalColor.r, 0.0, 1.0)).r,
-                curveRgbTexture.sample(curveSampler, clamp(finalColor.g, 0.0, 1.0)).g,
-                curveRgbTexture.sample(curveSampler, clamp(finalColor.b, 0.0, 1.0)).b
-            );
-            finalColor = rgbCurved;
-        }
-    }
-    
-    // 7. Creative 3D Look-Up Table (Post-Tone-Mapping)
+
+    // 10. Creative 3D Look-Up Table (Post-Tone-Mapping in Linear sRGB)
     if (uniforms.lutEnabled != 0 && uniforms.lutIntensity > 0.0 && uniforms.isOriginal < 0.5) {
         float size = max(uniforms.lutSize, 2.0);
         float3 lutCoord = (finalColor * (size - 1.0) + 0.5) / size;
         float3 lutSample = lutTexture.sample(lutSampler, lutCoord).rgb;
         finalColor = mix(finalColor, lutSample, clamp(uniforms.lutIntensity, 0.0, 1.0));
-    }
-
-    // 8. Detail, Sharpening & Noise Reduction
-    float editSharpening = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.sharpeningAmount;
-    float editNoiseReduction = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.noiseReduction;
-    if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
-        float2 texelSize = 1.0 / float2(texture.get_width(), texture.get_height());
-        float2 offset = texelSize * max(uniforms.sharpeningRadius, 0.5);
-        float4 leftSample   = texture.sample(textureSampler, uv - float2(offset.x, 0.0));
-        float4 rightSample  = texture.sample(textureSampler, uv + float2(offset.x, 0.0));
-        float4 topSample    = texture.sample(textureSampler, uv - float2(0.0, offset.y));
-        float4 bottomSample = texture.sample(textureSampler, uv + float2(0.0, offset.y));
-
-        float y_c = dot(srgbLinearOut, float3(0.2126, 0.7152, 0.0722));
-        float y_l, y_r, y_t, y_b;
-        if (uniforms.isLinearRaw == 0) {
-            y_l = dot(leftSample.rgb, float3(0.2126, 0.7152, 0.0722));
-            y_r = dot(rightSample.rgb, float3(0.2126, 0.7152, 0.0722));
-            y_t = dot(topSample.rgb, float3(0.2126, 0.7152, 0.0722));
-            y_b = dot(bottomSample.rgb, float3(0.2126, 0.7152, 0.0722));
-        } else {
-            // Map linear raw sensor samples through exposure, WB, and tone profile to calibrated display luminance
-            float3 wbExposureScale = float3(rScale, gScale, bScale) * exposureGain;
-            float3 cl = leftSample.rgb * wbExposureScale;
-            float3 cr = rightSample.rgb * wbExposureScale;
-            float3 ct = topSample.rgb * wbExposureScale;
-            float3 cb = bottomSample.rgb * wbExposureScale;
-            if (uniforms.toneProfileMode == 0) {
-                y_l = dot(clamp(agxToneMapVivid(cl, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
-                y_r = dot(clamp(agxToneMapVivid(cr, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
-                y_t = dot(clamp(agxToneMapVivid(ct, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
-                y_b = dot(clamp(agxToneMapVivid(cb, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
-            } else {
-                y_l = dot(clamp(agxToneMap(cl, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
-                y_r = dot(clamp(agxToneMap(cr, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
-                y_t = dot(clamp(agxToneMap(ct, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
-                y_b = dot(clamp(agxToneMap(cb, contrastGain), 0.0, 1.0), float3(0.2126, 0.7152, 0.0722));
-            }
-        }
-
-        finalColor = applyDetailAndSharpening(
-            finalColor,
-            y_c, y_l, y_r, y_t, y_b,
-            editSharpening,
-            uniforms.sharpeningMasking,
-            editNoiseReduction
-        );
-    }
-
-    // 8.2 Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration
-    if (uniforms.isOriginal < 0.5 && uniforms.printMediaMode != 0) {
-        finalColor = applyPrintMedia(
-            finalColor,
-            uniforms.printMediaMode,
-            uniforms.enlargerFilterMode,
-            uniforms.printPaperGrade,
-            uniforms.printBaseWarmth,
-            uniforms.printProcessDepth
-        );
     }
     
     // 9. Apple EDR Radiance & Dynamic Range Expansion
@@ -379,10 +374,6 @@ fragment float4 fragmentShader(
         finalColor = clamp(finalColor, 0.0, 1.0);
         
         // Match standard display target transform for sRGB layer and thumbnail capture
-        if (uniforms.toneProfileMode <= 1) {
-            return float4(finalColor, sampledColor.a);
-        } else {
-            return float4(linearToSrgbGamma3(finalColor), sampledColor.a);
-        }
+        return float4(linearToSrgbGamma3(finalColor), sampledColor.a);
     }
 }

@@ -4,13 +4,13 @@ pub use firstproof_types::{
 };
 
 pub trait RawSensorFrameExt {
-    fn sensor_to_rec2020_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3;
+    fn sensor_to_rec2020_matrix_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3;
 }
 
 impl RawSensorFrameExt for RawSensorFrame {
     /// Computes the camera sensor to Linear Rec.2020 matrix dynamically interpolated
     /// for the specified white balance temperature (in Kelvin).
-    fn sensor_to_rec2020_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3 {
+    fn sensor_to_rec2020_matrix_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3 {
         if let (Some(m_tungsten), Some(m_daylight)) = (self.color_matrix_tungsten, self.color_matrix) {
             let dcp = crate::color::dcp::DcpProfile {
                 profile_name: format!("{} (Rawler Dual-Illuminant)", self.camera_model),
@@ -144,6 +144,17 @@ impl RawDecoder for RawlerDecoder {
         let wb = raw.wb_coeffs;
         let wb_coeffs = [wb[0], wb[1], wb[2], wb[3]];
 
+        let baseline_exposure = std::fs::File::open(path)
+            .ok()
+            .and_then(|mut f| {
+                use std::io::Read;
+                let mut header = vec![0u8; 65536];
+                let n = f.read(&mut header).ok()?;
+                header.truncate(n);
+                firstproof_types::read_dng_baseline_exposure(&header)
+            })
+            .unwrap_or(0.0);
+
         let sensor_data = match raw.data {
             rawler::RawImageData::Integer(cfa) => cfa,
             _ => return Err("Unsupported rawler data format (non-integer sensor CFA)".to_string()),
@@ -163,6 +174,7 @@ impl RawDecoder for RawlerDecoder {
             color_matrix,
             color_matrix_tungsten,
             camera_model,
+            baseline_exposure,
             sensor_data,
         })
     }

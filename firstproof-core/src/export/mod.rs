@@ -77,19 +77,10 @@ mod tests {
         apply_edits(&mut img, &edits);
         
         let c_srgb = Color3::new(img.data[0], img.data[1], img.data[2]);
-        let srgb8 = if edits.tone_profile == crate::ColorProfileMode::AgxVivid
-            || edits.tone_profile == crate::ColorProfileMode::AgxFilmic
-        {
-            [
-                (c_srgb.r().clamp(0.0, 1.0) * 255.0).round() as u8,
-                (c_srgb.g().clamp(0.0, 1.0) * 255.0).round() as u8,
-                (c_srgb.b().clamp(0.0, 1.0) * 255.0).round() as u8,
-            ]
-        } else {
-            crate::color::linear_rgb_to_srgb8(c_srgb)
-        };
+        let srgb8 = crate::color::linear_rgb_to_srgb8(c_srgb);
         
-        assert!(srgb8[0] >= 120 && srgb8[0] <= 135, "Expected display midtone range, got {}", srgb8[0]);
+        eprintln!("DEBUG: c_srgb = {:?}, srgb8 = {:?}", c_srgb, srgb8);
+        assert!(srgb8[0] >= 105 && srgb8[0] <= 118, "Expected display midtone range (105..118), got {}", srgb8[0]);
         assert_eq!(srgb8[0], srgb8[1]);
         assert_eq!(srgb8[1], srgb8[2]);
     }
@@ -243,7 +234,7 @@ mod tests {
     #[test]
     fn test_bilateral_tone_recovery_flat_patch() {
         let (r, g, b) = (0.05, 0.04, 0.03);
-        let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        let lum = 0.2627 * r + 0.6780 * g + 0.0593 * b;
         let neighbors = [lum; 8];
 
         let bilateral = apply_bilateral_tone_recovery_rgb(r, g, b, lum, &neighbors, -30.0, 40.0, 10.0, -15.0);
@@ -436,9 +427,9 @@ mod tests {
 
         // 5. Photometric luminance preservation: split toning adds pure chrominance
         let gray = 0.35f32;
-        let lum_before = 0.2126 * gray + 0.7152 * gray + 0.0722 * gray;
+        let lum_before = 0.2627 * gray + 0.6780 * gray + 0.0593 * gray;
         let (rt, gt, bt) = apply_split_toning(gray, gray, gray, 215.0, 40.0, 45.0, 0.0, 0.0);
-        let lum_after = 0.2126 * rt + 0.7152 * gt + 0.0722 * bt;
+        let lum_after = 0.2627 * rt + 0.6780 * gt + 0.0593 * bt;
         assert!((lum_after - lum_before).abs() < 1e-3, "Photometric luminance should be preserved");
     }
 

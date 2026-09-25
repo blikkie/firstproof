@@ -25,6 +25,9 @@ This document strictly tracks pending and deferred features calibrated against o
 > First Proof's primary workhorse default is **pure optical RAW capture via AgX filmic tone mapping**. The core workspaces (**Light**, **Color**, **Detail**, **Optics**) are dedicated strictly to sensor reality: standard White Balance (Temperature & Tint), exposure, tone recovery, and sensor sharpness. Photos look 90% finished immediately without any analog styling.  
 > 
 > Film stock and print media emulation are **not** the main workflow and **not** a complex simulator. They are an exquisite, 100% opt-in **fine-art treat and differentiator** housed in a dedicated **Emulsion** workspace tab (`InspectorTab.emulsion`). Default state is always `None / Bypass`. When activated, the engine does all the heavy lifting under the hood so the photographer simply selects a curated stock or print medium without fiddling with chemical dials.
+>
+> **Roadmap Reconsideration: Physical Film Grain in Wide-Gamut Linear Space**  
+> Previous attempts at simulating film grain recoiled because grain was evaluated post-tone-mapping in narrow gamma-encoded sRGB, artificially amplifying shadow noise floors and clipping non-linearly. In real physical film, silver halide crystals and dye clouds react to incident scene photons in the optical domain before optical tone-mapping and print transfer. When re-evaluating grain down the roadmap, it must strictly execute inside the Wide-Gamut Linear Rec.2020 domain using physical sensitometric optical density ($D = \log_{10}(1/T)$) prior to the terminal display transform.
 
 ### 3.3 Archival Open DNG Converter & Lossless Compression Engine (P2)
 - **Lossless Bayer CFA Transcoding**:

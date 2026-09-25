@@ -34,7 +34,7 @@ pub use preview::{
     PreviewResultRecord, RawLinearResultRecord,
 };
 pub use raw::{
-    f16_to_f32, f32_to_f16, CfaPattern, RawSensorFrame, CFA_COLOR_BLUE, CFA_COLOR_GREEN, CFA_COLOR_RED,
+    blend_sensor_highlights, f16_to_f32, f32_to_f16, read_dng_baseline_exposure, CfaPattern, RawSensorFrame, CFA_COLOR_BLUE, CFA_COLOR_GREEN, CFA_COLOR_RED,
 };
 pub use settings::{EditSettings, WhiteBalanceResult};
 pub use xmp::{
@@ -209,4 +209,97 @@ mod tests {
         assert!(!orient.flip_horizontal);
         assert!(!orient.flip_vertical);
     }
+
+    #[test]
+    fn test_as_shot_temperature_and_dual_illuminant_matrix() {
+        use crate::raw::{RawSensorFrame, CfaPattern};
+
+        // Canon EOS 60D color matrices
+        let cm_tungsten: [[f32; 3]; 3] = [
+            [0.6722, -0.0635, -0.0963],
+            [-0.4285, 1.2448, 0.2117],
+            [-0.0908, 0.2162, 0.5668],
+        ];
+        let cm_daylight: [[f32; 3]; 3] = [
+            [0.6947, -0.1168, -0.0779],
+            [-0.4127, 1.2209, 0.2138],
+            [-0.0710, 0.1799, 0.6303],
+        ];
+
+        // Frame with Tungsten as-shot WB (wb_r = 1.2031, wb_b = 3.1699)
+        let frame_tungsten = RawSensorFrame {
+            full_width: 10,
+            full_height: 10,
+            active_x: 0,
+            active_y: 0,
+            active_width: 10,
+            active_height: 10,
+            cfa_pattern: CfaPattern::Rggb,
+            black_levels: [2046.0; 4],
+            white_levels: [15000.0; 4],
+            wb_coeffs: [1.2031, 1.0, 3.1699, 1.0],
+            color_matrix: Some(cm_daylight),
+            color_matrix_tungsten: Some(cm_tungsten),
+            camera_model: "Canon EOS 60D".to_string(),
+            baseline_exposure: 0.0,
+            sensor_data: vec![2046; 100],
+        };
+
+        let temp_tungsten = frame_tungsten.as_shot_temperature();
+        assert!(
+            temp_tungsten >= 2400.0 && temp_tungsten <= 3200.0,
+            "Expected tungsten Kelvin around 2856K, got {}",
+            temp_tungsten
+        );
+
+        // Frame with Daylight as-shot WB (wb_r = 2.0, wb_b = 1.5)
+        let frame_daylight = RawSensorFrame {
+            full_width: 10,
+            full_height: 10,
+            active_x: 0,
+            active_y: 0,
+            active_width: 10,
+            active_height: 10,
+            cfa_pattern: CfaPattern::Rggb,
+            black_levels: [2046.0; 4],
+            white_levels: [15000.0; 4],
+            wb_coeffs: [2.0, 1.0, 1.5, 1.0],
+            color_matrix: Some(cm_daylight),
+            color_matrix_tungsten: Some(cm_tungsten),
+            camera_model: "Canon EOS 60D".to_string(),
+            baseline_exposure: 0.0,
+            sensor_data: vec![2046; 100],
+        };
+
+        let temp_daylight = frame_daylight.as_shot_temperature();
+        assert!(
+            temp_daylight >= 5000.0 && temp_daylight <= 7500.0,
+            "Expected daylight Kelvin around 5500-6500K, got {}",
+            temp_daylight
+        );
+
+        // Verify neutral axis mapping in sensor_to_rec2020: [1, 1, 1] maps to ~[1, 1, 1]
+        let m = frame_tungsten.sensor_to_rec2020_at(2856.0);
+        let neutral_rec2020 = [
+            m[0][0] + m[0][1] + m[0][2],
+            m[1][0] + m[1][1] + m[1][2],
+            m[2][0] + m[2][1] + m[2][2],
+        ];
+        assert!((neutral_rec2020[0] - 1.0).abs() < 0.05);
+        assert!((neutral_rec2020[1] - 1.0).abs() < 0.05);
+        assert!((neutral_rec2020[2] - 1.0).abs() < 0.05);
+    }
+
+    #[test]
+    fn test_dng_baseline_exposure_extraction() {
+        use crate::raw::read_dng_baseline_exposure;
+        let test_path = std::path::Path::new("/home/remco/Pictures/Lightroom/from laptop/2015/2015-03-14/_MG_2332.dng");
+        if test_path.exists() {
+            let bytes = std::fs::read(test_path).expect("Read DNG file");
+            let exp = read_dng_baseline_exposure(&bytes).expect("BaselineExposure tag 50728 not found");
+            assert!((exp - 0.831169).abs() < 1e-4, "Expected +0.831169 EV, got {}", exp);
+        }
+    }
+
 }
+

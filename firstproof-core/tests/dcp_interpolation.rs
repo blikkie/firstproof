@@ -220,41 +220,41 @@ fn test_synthetic_dcp_parsing() {
 #[test]
 fn test_planckian_interpolation_endpoints_and_midpoint() {
     let profile = DcpProfile::built_in_canon_eos();
-    let fm1 = profile.forward_matrix1.unwrap();
-    let fm2 = profile.forward_matrix2.unwrap();
+    let cm1 = profile.color_matrix1;
+    let cm2 = profile.color_matrix2.unwrap();
 
     let t1 = illuminant_to_temperature(profile.illuminant1); // 2856.0
     let t2 = illuminant_to_temperature(profile.illuminant2.unwrap()); // 6504.0
 
-    // 1. Below T1: should equal FM1 exactly (clamped weight 0.0)
-    let interp_low = profile.interpolate_forward_matrix(2000.0).unwrap();
+    // 1. Below T1: should equal CM1 exactly (clamped weight 0.0)
+    let interp_low = profile.interpolate_color_matrix(2000.0);
     for r in 0..3 {
         for c in 0..3 {
             assert!(
-                (interp_low.0[r][c] - fm1.0[r][c]).abs() < 1e-6,
+                (interp_low.0[r][c] - cm1.0[r][c]).abs() < 1e-6,
                 "Lower clamp mismatch at ({},{})", r, c
             );
         }
     }
 
-    // 2. Above T2: should equal FM2 exactly (clamped weight 1.0)
-    let interp_high = profile.interpolate_forward_matrix(8000.0).unwrap();
+    // 2. Above T2: should equal CM2 exactly (clamped weight 1.0)
+    let interp_high = profile.interpolate_color_matrix(8000.0);
     for r in 0..3 {
         for c in 0..3 {
             assert!(
-                (interp_high.0[r][c] - fm2.0[r][c]).abs() < 1e-6,
+                (interp_high.0[r][c] - cm2.0[r][c]).abs() < 1e-6,
                 "Upper clamp mismatch at ({},{})", r, c
             );
         }
     }
 
     // 3. Exact T1 and T2
-    let interp_t1 = profile.interpolate_forward_matrix(t1).unwrap();
-    let interp_t2 = profile.interpolate_forward_matrix(t2).unwrap();
+    let interp_t1 = profile.interpolate_color_matrix(t1);
+    let interp_t2 = profile.interpolate_color_matrix(t2);
     for r in 0..3 {
         for c in 0..3 {
-            assert!((interp_t1.0[r][c] - fm1.0[r][c]).abs() < 1e-6);
-            assert!((interp_t2.0[r][c] - fm2.0[r][c]).abs() < 1e-6);
+            assert!((interp_t1.0[r][c] - cm1.0[r][c]).abs() < 1e-6);
+            assert!((interp_t2.0[r][c] - cm2.0[r][c]).abs() < 1e-6);
         }
     }
 
@@ -265,10 +265,10 @@ fn test_planckian_interpolation_endpoints_and_midpoint() {
     let m_mid = 1.0 / t_mid;
     let expected_w = (m_mid - m1) / (m2 - m1);
 
-    let interp_mid = profile.interpolate_forward_matrix(t_mid).unwrap();
+    let interp_mid = profile.interpolate_color_matrix(t_mid);
     for r in 0..3 {
         for c in 0..3 {
-            let expected_val = (1.0 - expected_w) * fm1.0[r][c] + expected_w * fm2.0[r][c];
+            let expected_val = (1.0 - expected_w) * cm1.0[r][c] + expected_w * cm2.0[r][c];
             assert!(
                 (interp_mid.0[r][c] - expected_val).abs() < 1e-5,
                 "Midpoint interpolation deviation at ({},{}): got {}, expected {}",

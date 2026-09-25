@@ -43,20 +43,20 @@ pub const AGX_OUTSET_MATRIX: Matrix3x3 = Matrix3x3([
     [-0.1413298, -0.1106066,  1.2519364],
 ]);
 
-/// Minimum log2 exposure value (-15.2 stops relative to 0.18 middle gray)
-pub const AGX_MIN_EV: f32 = -15.2;
+/// Minimum log2 exposure value (-10.0 stops relative to 0.18 middle gray)
+pub const AGX_MIN_EV: f32 = -10.0;
 
-/// Maximum log2 exposure value (+5.0 stops relative to 0.18 middle gray)
-pub const AGX_MAX_EV: f32 = 5.0;
+/// Maximum log2 exposure value (+6.5 stops relative to 0.18 middle gray)
+pub const AGX_MAX_EV: f32 = 6.5;
 
-/// Total dynamic range in EV stops (20.2 stops: 5.0 - (-15.2))
-pub const AGX_EV_RANGE: f32 = 20.2;
+/// Total dynamic range in EV stops (16.5 stops: 6.5 - (-10.0))
+pub const AGX_EV_RANGE: f32 = 16.5;
 
 /// Gamma linearization exponent for AgX display calibration
-pub const AGX_GAMMA: f32 = 2.4;
+pub const AGX_GAMMA: f32 = 2.2;
 
-/// Middle gray normalized point in log2 space: (log2(1.0) - AGX_MIN_EV) / AGX_EV_RANGE = 15.2 / 20.2
-pub const AGX_MID_GRAY_NORM: f32 = 0.75247525;
+/// Middle gray normalized point in log2 space: (log2(1.0) - AGX_MIN_EV) / AGX_EV_RANGE = 10.0 / 16.5
+pub const AGX_MID_GRAY_NORM: f32 = 0.6060606;
 
 /// Compresses out-of-gamut scene values to prevent negative numbers before log-encoding.
 #[inline(always)]
@@ -154,8 +154,15 @@ pub fn agx_tone_map_vivid(c: Color3, contrast_gain: f32) -> Color3 {
     
     // Skin tone protection (15..45 deg, centered around 25 deg)
     let skin_weight = (1.0 - ((h - 25.0).abs() / 20.0)).clamp(0.0, 1.0);
-    // Sky blue covers 200..270 deg, centered around 235 deg
-    let sky_weight = (1.0 - ((h - 235.0).abs() / 35.0)).clamp(0.0, 1.0);
+    // Sky blue covers 200..270 deg, centered around 235 deg.
+    // Guarded by continuous smoothstep so sky memory-color tuning strictly activates on
+    // bright outdoor skies (V >= 0.35, S >= 0.15) rather than noisy underexposed shadows/skin.
+    let mut sky_weight = (1.0 - ((h - 235.0).abs() / 35.0)).clamp(0.0, 1.0);
+    let v_t = ((v - 0.20) / 0.20).clamp(0.0, 1.0);
+    let v_sky = v_t * v_t * (3.0 - 2.0 * v_t);
+    let s_t = ((s - 0.08) / 0.17).clamp(0.0, 1.0);
+    let s_sky = s_t * s_t * (3.0 - 2.0 * s_t);
+    sky_weight *= v_sky * s_sky;
     
     // Azure sky shift
     h -= 18.0 * sky_weight;
@@ -168,8 +175,20 @@ pub fn agx_tone_map_vivid(c: Color3, contrast_gain: f32) -> Color3 {
         h -= 360.0;
     }
     
-    // Vibrant midtone chroma with sky saturation normalized and delicate skin tones protected
-    s = (s * (1.18 - 0.20 * skin_weight - 0.15 * sky_weight)).clamp(0.0, 1.0);
+    // Vibrant midtone chroma with sky saturation normalized and delicate skin tones protected.
+    // Shadow noise protection: scale chroma boost with luminance floor so read noise in deep shadows (V < 0.05) is not amplified.
+    let v_shadow = ((v - 0.03) / 0.12).clamp(0.0, 1.0);
+    let shadow_weight = v_shadow * v_shadow * (3.0 - 2.0 * v_shadow);
+    let sat_boost = (0.18 - 0.20 * skin_weight - 0.15 * sky_weight) * shadow_weight;
+    s = (s * (1.0 + sat_boost)).clamp(0.0, 1.0);
+
+    // Optical Scotopic / Mesopic desaturation: As luminance approaches sensor read noise floor,
+    // rod-dominant vision has zero chromaticity. Suppresses thermal noise spikes without edge clipping.
+    let scotopic_weight = {
+        let t = ((v - 0.01) / 0.07).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    s *= scotopic_weight;
     
     let (r, g, b) = super::hsv_to_rgb(h, s, v);
     Color3::new(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
@@ -201,11 +220,11 @@ mod tests {
 
     #[test]
     fn test_agx_middle_gray_level() {
-        // 0.18 linear mid-gray lands at normalized 15.2 / 20.2 = 0.75248, curve 0.75588,
-        // linearized with gamma 2.4 to ~0.51085 linear sRGB (display sRGB ~188/255).
+        // 0.18 linear mid-gray lands at normalized 10.0 / 16.5 = 0.60606, curve 0.43446,
+        // linearized with gamma 2.2 to ~0.16117 linear sRGB (display sRGB ~111/255).
         let mid_gray = Color3::new(0.18, 0.18, 0.18);
         let out = agx_tone_map(mid_gray, 1.0);
-        assert!((out.r() - 0.51085).abs() < 0.005, "Mid gray unexpected value: {}", out.r());
+        assert!((out.r() - 0.16117).abs() < 0.005, "Mid gray unexpected value: {}", out.r());
     }
 
     #[test]

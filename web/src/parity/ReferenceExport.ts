@@ -112,9 +112,15 @@ export function hsv2rgb(h: number, s: number, v: number): [number, number, numbe
   return [r + m, g + m, b + m];
 }
 
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0.0), 1.0);
+  return t * t * (3.0 - 2.0 * t);
+}
+
 export function applyCameraToneCurve(x: number, mode: number): number {
   const xc = Math.min(Math.max(x, 0.0), 1.0);
-  const mid = mode === 2 ? 0.185 : mode === 3 ? 0.200 : mode === 4 ? 0.210 : 0.190;
+  // mode 1: Standard, mode 2: Portrait, mode 3: Landscape, mode 4: Vivid
+  const mid = mode === 1 ? 0.185 : mode === 2 ? 0.180 : mode === 3 ? 0.200 : mode === 4 ? 0.210 : 0.185;
   if (xc <= 0.18) {
     const t = xc / 0.18;
     return mid * (t * t * (3.0 - 2.0 * t));
@@ -126,7 +132,11 @@ export function applyCameraToneCurve(x: number, mode: number): number {
 
 export function applyCameraHueSat(hsv: [number, number, number], mode: number): [number, number, number] {
   let [h, s, v] = hsv;
-  const skyWeight = Math.min(Math.max(1.0 - Math.abs(h - 235.0) / 35.0, 0.0), 1.0);
+  let skyWeight = Math.min(Math.max(1.0 - Math.abs(h - 235.0) / 35.0, 0.0), 1.0);
+  const vSky = smoothstep(0.20, 0.40, v);
+  const sSky = smoothstep(0.08, 0.25, s);
+  skyWeight *= (vSky * sSky);
+
   const greenWeight = Math.min(Math.max(1.0 - Math.abs(h - 120.0) / 35.0, 0.0), 1.0);
   const skinWeight = Math.min(Math.max(1.0 - Math.abs(h - 30.0) / 20.0, 0.0), 1.0);
 
@@ -307,16 +317,10 @@ export function evaluateDisplayLuma(
     srgbOut = agxToneMap(rec2020, contrastGain);
   } else if (edits.tone_profile && edits.tone_profile in CAM_MODE_MAP) {
     const camMode = CAM_MODE_MAP[edits.tone_profile];
-    const cSrgb = matMul(REC2020_TO_LINEAR_SRGB, rec2020);
-    const clampedSrgb: [number, number, number] = [
-      Math.max(cSrgb[0], 0.0),
-      Math.max(cSrgb[1], 0.0),
-      Math.max(cSrgb[2], 0.0),
-    ];
-    const hsv = rgb2hsv(clampedSrgb[0], clampedSrgb[1], clampedSrgb[2]);
+    const hsv = rgb2hsv(rec2020[0], rec2020[1], rec2020[2]);
     const hsvAdj = applyCameraHueSat(hsv, camMode);
     const rgbAdj = hsv2rgb(hsvAdj[0], hsvAdj[1], hsvAdj[2]);
-    const lum = 0.2126 * rgbAdj[0] + 0.7152 * rgbAdj[1] + 0.0722 * rgbAdj[2];
+    const lum = 0.2627 * rgbAdj[0] + 0.6780 * rgbAdj[1] + 0.0593 * rgbAdj[2];
     const lumCurved = applyCameraToneCurve(lum, camMode);
     return Math.min(Math.max((lumCurved - 0.18) * contrastGain + 0.18, 0.0), 1.0);
   } else {
@@ -371,7 +375,10 @@ export function agxToneMapVivid(rec2020: [number, number, number], contrastGain:
   let [h, s, v] = rgb2hsv(base[0], base[1], base[2]);
 
   const skinWeight = Math.min(Math.max(1.0 - Math.abs(h - 25.0) / 20.0, 0.0), 1.0);
-  const skyWeight = Math.min(Math.max(1.0 - Math.abs(h - 235.0) / 35.0, 0.0), 1.0);
+  let skyWeight = Math.min(Math.max(1.0 - Math.abs(h - 235.0) / 35.0, 0.0), 1.0);
+  const vSky = smoothstep(0.20, 0.40, v);
+  const sSky = smoothstep(0.08, 0.25, s);
+  skyWeight *= (vSky * sSky);
 
   h -= 18.0 * skyWeight;
   h -= 3.0 * skinWeight;
@@ -432,7 +439,7 @@ export function applyColorAdjustments(
   if (vibrance === 0 && saturation === 0 && deepBlue === 0 && foliage === 0) return rgb;
 
   let [r, g, b] = [Math.min(Math.max(rgb[0], 0.0), 1.0), Math.min(Math.max(rgb[1], 0.0), 1.0), Math.min(Math.max(rgb[2], 0.0), 1.0)];
-  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const lum = 0.2627 * r + 0.6780 * g + 0.0593 * b;
 
   if (saturation !== 0) {
     const satGain = Math.max(1.0 + saturation / 100.0, 0.0);
@@ -506,7 +513,7 @@ export function applySplitToning(
 ): [number, number, number] {
   if (shadowSat <= 0.0 && highlightSat <= 0.0) return rgb;
 
-  const lum = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+  const lum = 0.2627 * rgb[0] + 0.6780 * rgb[1] + 0.0593 * rgb[2];
   const yClamp = Math.min(Math.max(lum, 0.0), 1.0);
   const t = Math.min(Math.max(0.5 - (balance / 100.0) * 0.25, 0.1), 0.9);
   let [dr, dg, db] = [0.0, 0.0, 0.0];
@@ -515,7 +522,7 @@ export function applySplitToning(
     const uS = (t - yClamp) / t;
     const wS = uS * uS * (3.0 - 2.0 * uS) * (shadowSat / 100.0);
     const tintRgb = hsv2rgb(shadowHue, 1.0, 1.0);
-    const tLum = 0.2126 * tintRgb[0] + 0.7152 * tintRgb[1] + 0.0722 * tintRgb[2];
+    const tLum = 0.2627 * tintRgb[0] + 0.6780 * tintRgb[1] + 0.0593 * tintRgb[2];
     dr += wS * (tintRgb[0] - tLum);
     dg += wS * (tintRgb[1] - tLum);
     db += wS * (tintRgb[2] - tLum);
@@ -525,7 +532,7 @@ export function applySplitToning(
     const uH = (yClamp - t) / (1.0 - t);
     const wH = uH * uH * (3.0 - 2.0 * uH) * (highlightSat / 100.0);
     const tintRgb = hsv2rgb(highlightHue, 1.0, 1.0);
-    const tLum = 0.2126 * tintRgb[0] + 0.7152 * tintRgb[1] + 0.0722 * tintRgb[2];
+    const tLum = 0.2627 * tintRgb[0] + 0.6780 * tintRgb[1] + 0.0593 * tintRgb[2];
     dr += wH * (tintRgb[0] - tLum);
     dg += wH * (tintRgb[1] - tLum);
     db += wH * (tintRgb[2] - tLum);
@@ -947,9 +954,68 @@ export function evaluateReferencePixel(
     rec2020 = applyRecordingEmulsion(rec2020, edits.emulsion_archetype, edits.emulsion_exposure ?? 0.0);
   }
 
-  // 5. AgX Filmic Tone Mapping Engine OR Camera Matching Profiles
+  // 5. Tone Curves (Master + R + G + B) in Linear Rec.2020 Working Space
+  const sampleLut = (lut: number[], val: number): number => {
+    const idx = Math.min(Math.max(Math.round(val * 255), 0), 255);
+    return lut[idx];
+  };
+  if (curveLut?.master && curveLut.master.length === 256) {
+    rec2020[0] = sampleLut(curveLut.master, rec2020[0]);
+    rec2020[1] = sampleLut(curveLut.master, rec2020[1]);
+    rec2020[2] = sampleLut(curveLut.master, rec2020[2]);
+  }
+  if (curveLut) {
+    if (curveLut.red && curveLut.red.length === 256) rec2020[0] = sampleLut(curveLut.red, rec2020[0]);
+    if (curveLut.green && curveLut.green.length === 256) rec2020[1] = sampleLut(curveLut.green, rec2020[1]);
+    if (curveLut.blue && curveLut.blue.length === 256) rec2020[2] = sampleLut(curveLut.blue, rec2020[2]);
+  }
+
+  // 6. Color & Vibrance in Linear Rec.2020
+  rec2020 = applyColorAdjustments(rec2020, edits.vibrance, edits.saturation, edits.deep_blue, edits.foliage);
+
+  // 7. Split Toning in Linear Rec.2020
+  rec2020 = applySplitToning(
+    rec2020,
+    edits.split_toning_shadow_hue,
+    edits.split_toning_shadow_sat,
+    edits.split_toning_highlight_hue,
+    edits.split_toning_highlight_sat,
+    edits.split_toning_balance
+  );
+
+  // 8. Detail, Sharpening & Noise Reduction in Linear Rec.2020
+  const sharpAmount = edits.sharpening_amount ?? 0.0;
+  const nrAmount = edits.noise_reduction ?? 0.0;
+  if (neighbors && (sharpAmount > 0.0 || nrAmount > 0.0)) {
+    const y_c = 0.2627 * rec2020[0] + 0.6780 * rec2020[1] + 0.0593 * rec2020[2];
+    rec2020 = applyDetailAndSharpeningRgb(
+      rec2020[0], rec2020[1], rec2020[2],
+      y_c, neighbors.y_l, neighbors.y_r, neighbors.y_t, neighbors.y_b,
+      sharpAmount,
+      edits.sharpening_masking ?? 0.0,
+      nrAmount
+    );
+  }
+
+  // 8b. Fine-Art Print Media Chemistry in Linear Rec.2020
+  if (edits.print_media && edits.print_media !== 'None') {
+    const filterMap: Record<string, number> = {
+      NeutralPanchromatic: 0, FilterGrade2: 0, YellowK2: 1, Orange16: 2, Red25A: 3, GreenX1: 4, Orthochromatic: 5
+    };
+    const filterMode = filterMap[edits.enlarger_filter ?? ''] ?? 0;
+    rec2020 = applyPrintMedia(
+      rec2020,
+      edits.print_media,
+      edits.print_paper_grade ?? 0.0,
+      edits.print_base_warmth ?? 0.0,
+      edits.print_process_depth ?? 100.0,
+      filterMode
+    );
+  }
+
+  // 9. TERMINAL STAGE: AgX Filmic Tone Mapping Engine OR Camera Matching Profiles -> Linear sRGB
   const contrastGain = edits.contrast >= 0.0 ? 1.0 + edits.contrast / 100.0 : 1.0 + (edits.contrast / 100.0) * 0.60;
-  let finalColor: [number, number, number];
+  let srgbLinearOut: [number, number, number];
   const isAgxVivid = edits.tone_profile === 'AgxVivid' || !edits.tone_profile;
   const isAgxFilmic = edits.tone_profile === 'AgxFilmic';
 
@@ -961,109 +1027,37 @@ export function evaluateReferencePixel(
   };
 
   if (isAgxVivid) {
-    finalColor = agxToneMapVivid(rec2020, contrastGain);
+    srgbLinearOut = agxToneMapVivid(rec2020, contrastGain);
   } else if (isAgxFilmic) {
-    finalColor = agxToneMap(rec2020, contrastGain);
+    srgbLinearOut = agxToneMap(rec2020, contrastGain);
   } else if (edits.tone_profile in CAM_MODE_MAP) {
     const camMode = CAM_MODE_MAP[edits.tone_profile];
-    const cSrgb = matMul(REC2020_TO_LINEAR_SRGB, rec2020);
-    const clampedSrgb: [number, number, number] = [
-      Math.max(cSrgb[0], 0.0),
-      Math.max(cSrgb[1], 0.0),
-      Math.max(cSrgb[2], 0.0),
-    ];
-    const hsv = rgb2hsv(clampedSrgb[0], clampedSrgb[1], clampedSrgb[2]);
+    const hsv = rgb2hsv(rec2020[0], rec2020[1], rec2020[2]);
     const hsvAdj = applyCameraHueSat(hsv, camMode);
     const rgbAdj = hsv2rgb(hsvAdj[0], hsvAdj[1], hsvAdj[2]);
 
-    const lum = 0.2126 * rgbAdj[0] + 0.7152 * rgbAdj[1] + 0.0722 * rgbAdj[2];
+    const lum = 0.2627 * rgbAdj[0] + 0.6780 * rgbAdj[1] + 0.0593 * rgbAdj[2];
     const lumCurved = applyCameraToneCurve(lum, camMode);
     const lumAdj = Math.min(Math.max((lumCurved - 0.18) * contrastGain + 0.18, 0.0), 1.0);
     const gain = lumAdj / Math.max(lum, 1e-6);
 
-    finalColor = [
+    const curvedRec2020: [number, number, number] = [
       Math.min(Math.max(rgbAdj[0] * gain, 0.0), 1.0),
       Math.min(Math.max(rgbAdj[1] * gain, 0.0), 1.0),
       Math.min(Math.max(rgbAdj[2] * gain, 0.0), 1.0),
     ];
+    srgbLinearOut = matMul(REC2020_TO_LINEAR_SRGB, curvedRec2020);
   } else {
     // Fallback
-    const cSrgb = matMul(REC2020_TO_LINEAR_SRGB, rec2020);
-    finalColor = [Math.min(Math.max(cSrgb[0], 0.0), 1.0), Math.min(Math.max(cSrgb[1], 0.0), 1.0), Math.min(Math.max(cSrgb[2], 0.0), 1.0)];
+    srgbLinearOut = matMul(REC2020_TO_LINEAR_SRGB, rec2020);
   }
 
-  // 6. Color & Vibrance
-  finalColor = applyColorAdjustments(finalColor, edits.vibrance, edits.saturation, edits.deep_blue, edits.foliage);
-
-  // 7. Split Toning
-  finalColor = applySplitToning(
-    finalColor,
-    edits.split_toning_shadow_hue,
-    edits.split_toning_shadow_sat,
-    edits.split_toning_highlight_hue,
-    edits.split_toning_highlight_sat,
-    edits.split_toning_balance
-  );
-
-  // 8. Curves
-  const sampleLut = (lut: number[], val: number): number => {
-    const idx = Math.min(Math.max(Math.round(val * 255), 0), 255);
-    return lut[idx];
-  };
-  if (curveLut?.master && curveLut.master.length === 256) {
-    finalColor[0] = sampleLut(curveLut.master, finalColor[0]);
-    finalColor[1] = sampleLut(curveLut.master, finalColor[1]);
-    finalColor[2] = sampleLut(curveLut.master, finalColor[2]);
-  }
-  if (curveLut) {
-    if (curveLut.red && curveLut.red.length === 256) finalColor[0] = sampleLut(curveLut.red, finalColor[0]);
-    if (curveLut.green && curveLut.green.length === 256) finalColor[1] = sampleLut(curveLut.green, finalColor[1]);
-    if (curveLut.blue && curveLut.blue.length === 256) finalColor[2] = sampleLut(curveLut.blue, finalColor[2]);
-  }
-
-  // 8.5 Detail, Sharpening & Noise Reduction (matching Shaders.metal step 8 & pipeline.rs)
-  const sharpAmount = edits.sharpening_amount ?? 0.0;
-  const nrAmount = edits.noise_reduction ?? 0.0;
-  if (neighbors && (sharpAmount > 0.0 || nrAmount > 0.0)) {
-    const y_c = 0.2126 * finalColor[0] + 0.7152 * finalColor[1] + 0.0722 * finalColor[2];
-    finalColor = applyDetailAndSharpeningRgb(
-      finalColor[0], finalColor[1], finalColor[2],
-      y_c, neighbors.y_l, neighbors.y_r, neighbors.y_t, neighbors.y_b,
-      sharpAmount,
-      edits.sharpening_masking ?? 0.0,
-      nrAmount
-    );
-  }
-
-  // 8b. Fine-Art Print Media Chemistry
-  if (edits.print_media && edits.print_media !== 'None') {
-    const filterMap: Record<string, number> = {
-      NeutralPanchromatic: 0, FilterGrade2: 0, YellowK2: 1, Orange16: 2, Red25A: 3, GreenX1: 4, Orthochromatic: 5
-    };
-    const filterMode = filterMap[edits.enlarger_filter ?? ''] ?? 0;
-    finalColor = applyPrintMedia(
-      finalColor,
-      edits.print_media,
-      edits.print_paper_grade ?? 0.0,
-      edits.print_base_warmth ?? 0.0,
-      edits.print_process_depth ?? 100.0,
-      filterMode
-    );
-  }
-
-  // 9. Display Target Transform matching Shaders.metal and encoders.rs:
-  // AgX (modes 0 & 1) is already display-referred. Camera Matching profiles output linear sRGB.
-  const outColor: [number, number, number] = (isAgxVivid || isAgxFilmic)
-    ? [
-        Math.min(Math.max(finalColor[0], 0.0), 1.0),
-        Math.min(Math.max(finalColor[1], 0.0), 1.0),
-        Math.min(Math.max(finalColor[2], 0.0), 1.0),
-      ]
-    : [
-        linearToSrgbGamma(finalColor[0]),
-        linearToSrgbGamma(finalColor[1]),
-        linearToSrgbGamma(finalColor[2]),
-      ];
+  // 10. Final Display Output: Display Gamma (Terminal Step)
+  const outColor: [number, number, number] = [
+    linearToSrgbGamma(srgbLinearOut[0]),
+    linearToSrgbGamma(srgbLinearOut[1]),
+    linearToSrgbGamma(srgbLinearOut[2]),
+  ];
 
   return [
     Math.round(outColor[0] * 255),

@@ -154,6 +154,8 @@ fn decode_raw_sensor_frame(slice: &[u8]) -> Option<RawSensorFrame> {
             }
         }));
 
+    let baseline_exposure = firstproof_types::read_dng_baseline_exposure(slice).unwrap_or(0.0);
+
     Some(RawSensorFrame {
         full_width: raw.width,
         full_height: raw.height,
@@ -168,6 +170,7 @@ fn decode_raw_sensor_frame(slice: &[u8]) -> Option<RawSensorFrame> {
         color_matrix,
         color_matrix_tungsten,
         camera_model,
+        baseline_exposure,
         sensor_data,
     })
 }

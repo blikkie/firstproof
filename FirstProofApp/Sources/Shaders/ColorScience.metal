@@ -54,16 +54,63 @@ inline float3 hsv2rgb(float3 c) {
     return rgb + float3(m);
 }
 
-// Camera manufacturer S-curve:
+// MARK: - Calibrated Camera-Matching Monotonic Cubic Hermite Tone Curves (Fritsch-Carlson C^1 Continuous)
+
+constant float2 DCP_KNOTS_STANDARD[7] = {
+    float2(0.00, 0.000), float2(0.02, 0.008), float2(0.05, 0.028),
+    float2(0.18, 0.190), float2(0.50, 0.540), float2(0.80, 0.840), float2(1.00, 1.000)
+};
+constant float DCP_TANGENTS_STANDARD[7] = { 0.4000, 0.5333, 0.9564, 1.1700, 1.0469, 0.9000, 0.8000 };
+
+constant float2 DCP_KNOTS_PORTRAIT[7] = {
+    float2(0.00, 0.000), float2(0.02, 0.010), float2(0.05, 0.035),
+    float2(0.18, 0.185), float2(0.50, 0.510), float2(0.80, 0.820), float2(1.00, 1.000)
+};
+constant float DCP_TANGENTS_PORTRAIT[7] = { 0.5000, 0.6667, 0.9936, 1.0847, 1.0245, 0.9667, 0.9000 };
+
+constant float2 DCP_KNOTS_LANDSCAPE[7] = {
+    float2(0.00, 0.000), float2(0.02, 0.006), float2(0.05, 0.022),
+    float2(0.18, 0.200), float2(0.50, 0.560), float2(0.80, 0.860), float2(1.00, 1.000)
+};
+constant float DCP_TANGENTS_LANDSCAPE[7] = { 0.3000, 0.4167, 0.9513, 1.2471, 1.0625, 0.8500, 0.7000 };
+
+constant float2 DCP_KNOTS_VIVID[7] = {
+    float2(0.00, 0.000), float2(0.02, 0.004), float2(0.05, 0.018),
+    float2(0.18, 0.210), float2(0.50, 0.580), float2(0.80, 0.880), float2(1.00, 1.000)
+};
+constant float DCP_TANGENTS_VIVID[7] = { 0.2000, 0.3333, 0.9718, 1.3166, 1.0781, 0.8000, 0.6000 };
+
+inline float evalCameraHermite7(float x, constant float2* knots, constant float* m) {
+    if (x <= knots[0].x) return knots[0].y;
+    if (x >= knots[6].x) return knots[6].y;
+    for (int k = 0; k < 6; ++k) {
+        if (x <= knots[k + 1].x) {
+            float dx = knots[k + 1].x - knots[k].x;
+            float t = (x - knots[k].x) / dx;
+            float t2 = t * t;
+            float t3 = t2 * t;
+            float h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
+            float h10 = t3 - 2.0 * t2 + t;
+            float h01 = -2.0 * t3 + 3.0 * t2;
+            float h11 = t3 - t2;
+            return clamp(h00 * knots[k].y + h10 * m[k] * dx + h01 * knots[k + 1].y + h11 * m[k + 1] * dx, 0.0, 1.0);
+        }
+    }
+    return x;
+}
+
+// Camera manufacturer S-curve with verified C^1 derivative continuity:
 inline float applyCameraToneCurve(float x, int mode) {
     x = clamp(x, 0.0, 1.0);
-    float mid = (mode == 2) ? 0.185 : ((mode == 3) ? 0.200 : ((mode == 4) ? 0.210 : 0.190));
-    if (x <= 0.18) {
-        float t = x / 0.18;
-        return mix(0.0, mid, t * t * (3.0 - 2.0 * t));
+    // mode 1: Standard, mode 2: Portrait, mode 3: Landscape, mode 4: Vivid
+    if (mode == 2) {
+        return evalCameraHermite7(x, DCP_KNOTS_PORTRAIT, DCP_TANGENTS_PORTRAIT);
+    } else if (mode == 3) {
+        return evalCameraHermite7(x, DCP_KNOTS_LANDSCAPE, DCP_TANGENTS_LANDSCAPE);
+    } else if (mode == 4) {
+        return evalCameraHermite7(x, DCP_KNOTS_VIVID, DCP_TANGENTS_VIVID);
     } else {
-        float t = (x - 0.18) / 0.82;
-        return mix(mid, 1.0, t * (2.0 - t));
+        return evalCameraHermite7(x, DCP_KNOTS_STANDARD, DCP_TANGENTS_STANDARD);
     }
 }
 
@@ -74,6 +121,10 @@ inline float3 applyCameraHueSat(float3 hsv, int mode) {
     float v = hsv.z;
     
     float skyWeight = clamp(1.0 - abs(h - 235.0) / 35.0, 0.0, 1.0);
+    float vSky = smoothstep(0.20, 0.40, v);
+    float sSky = smoothstep(0.08, 0.25, s);
+    skyWeight *= (vSky * sSky);
+
     float greenWeight = clamp(1.0 - abs(h - 120.0) / 35.0, 0.0, 1.0);
     float skinWeight = clamp(1.0 - abs(h - 30.0) / 20.0, 0.0, 1.0);
     
@@ -97,6 +148,10 @@ inline float3 applyCameraHueSat(float3 hsv, int mode) {
         // Camera Vivid
         s *= (1.20 - 0.15 * skyWeight);
     }
+    // Optical Scotopic / Mesopic desaturation: As luminance approaches sensor read noise floor,
+    // rod-dominant vision has zero chromaticity. Suppresses thermal noise spikes without edge clipping.
+    float scotopicWeight = smoothstep(0.01, 0.08, v);
+    s *= scotopicWeight;
     return float3(h, clamp(s, 0.0, 1.0), clamp(v, 0.0, 1.0));
 }
 
@@ -134,11 +189,11 @@ constant float3x3 AGX_OUTSET_MATRIX = float3x3(
     float3(-0.0164939, -0.0164939,  1.2519364)
 );
 
-constant float AGX_MIN_EV = -15.2;
-constant float AGX_MAX_EV = 5.0;
-constant float AGX_EV_RANGE = 20.2;
-constant float AGX_GAMMA = 2.4;
-constant float AGX_MID_GRAY_NORM = 0.75247525;
+constant float AGX_MIN_EV = -10.0;
+constant float AGX_MAX_EV = 6.5;
+constant float AGX_EV_RANGE = 16.5;
+constant float AGX_GAMMA = 2.2;
+constant float AGX_MID_GRAY_NORM = 0.6060606;
 
 inline float agxSigmoid(float x, float power) {
     return x / pow(1.0 + pow(x, power), 1.0 / power);
@@ -185,13 +240,26 @@ inline float3 agxToneMapVivid(float3 rec2020Color, float contrastGain) {
     
     float skinWeight = clamp(1.0 - abs(hsv.x - 25.0) / 20.0, 0.0, 1.0);
     float skyWeight = clamp(1.0 - abs(hsv.x - 235.0) / 35.0, 0.0, 1.0);
+    float vSky = smoothstep(0.20, 0.40, hsv.z);
+    float sSky = smoothstep(0.08, 0.25, hsv.y);
+    skyWeight *= (vSky * sSky);
     
     hsv.x -= 18.0 * skyWeight;
     hsv.x -= 3.0 * skinWeight;
     if (hsv.x < 0.0) { hsv.x += 360.0; }
     if (hsv.x >= 360.0) { hsv.x -= 360.0; }
     
-    hsv.y = clamp(hsv.y * (1.18 - 0.20 * skinWeight - 0.15 * skyWeight), 0.0, 1.0);
+    // Vibrant midtone chroma with sky saturation normalized and delicate skin tones protected.
+    // Shadow noise protection: scale chroma boost with luminance floor so read noise in deep shadows (V < 0.05) is not amplified.
+    float vShadow = clamp((hsv.z - 0.03) / 0.12, 0.0, 1.0);
+    float shadowWeight = vShadow * vShadow * (3.0 - 2.0 * vShadow);
+    float satBoost = (0.18 - 0.20 * skinWeight - 0.15 * skyWeight) * shadowWeight;
+    hsv.y = clamp(hsv.y * (1.0 + satBoost), 0.0, 1.0);
+
+    // Optical Scotopic / Mesopic desaturation: As luminance approaches sensor read noise floor,
+    // rod-dominant vision has zero chromaticity. Suppresses thermal noise spikes without edge clipping.
+    float scotopicWeight = smoothstep(0.01, 0.08, hsv.z);
+    hsv.y *= scotopicWeight;
     return clamp(hsv2rgb(hsv), 0.0, 1.0);
 }
 
@@ -286,7 +354,7 @@ inline float3 applyToneRecovery(float3 color, float highlights, float shadows, f
     if (highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0) {
         return color;
     }
-    float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+    float lum = 0.2627 * color.r + 0.6780 * color.g + 0.0593 * color.b;
     float neighbors[8] = { lum, lum, lum, lum, lum, lum, lum, lum };
     return applyBilateralToneRecovery(color, lum, neighbors, highlights, shadows, whites, blacks);
 }
@@ -304,7 +372,7 @@ inline float3 applyColorAdjustments(
     }
     
     float3 c = clamp(rgb, 0.0, 1.0);
-    float lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    float lum = 0.2627 * c.r + 0.6780 * c.g + 0.0593 * c.b;
 
     if (saturation != 0.0) {
         float satGain = max(1.0 + saturation / 100.0, 0.0);
@@ -380,7 +448,7 @@ inline float3 applySplitToning(
         return rgb;
     }
 
-    float lum = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+    float lum = 0.2627 * rgb.r + 0.6780 * rgb.g + 0.0593 * rgb.b;
     float yClamp = clamp(lum, 0.0, 1.0);
 
     // Midpoint threshold shifted by balance (-100..+100)
@@ -393,7 +461,7 @@ inline float3 applySplitToning(
         float u_s = (t - yClamp) / t;
         float w_s = u_s * u_s * (3.0 - 2.0 * u_s) * (shadowSat / 100.0);
         float3 tintRgb = hsv2rgb(float3(shadowHue, 1.0, 1.0));
-        float tLum = 0.2126 * tintRgb.r + 0.7152 * tintRgb.g + 0.0722 * tintRgb.b;
+        float tLum = 0.2627 * tintRgb.r + 0.6780 * tintRgb.g + 0.0593 * tintRgb.b;
         delta += w_s * (tintRgb - float3(tLum));
     }
 
@@ -402,7 +470,7 @@ inline float3 applySplitToning(
         float u_h = (yClamp - t) / (1.0 - t);
         float w_h = u_h * u_h * (3.0 - 2.0 * u_h) * (highlightSat / 100.0);
         float3 tintRgb = hsv2rgb(float3(highlightHue, 1.0, 1.0));
-        float tLum = 0.2126 * tintRgb.r + 0.7152 * tintRgb.g + 0.0722 * tintRgb.b;
+        float tLum = 0.2627 * tintRgb.r + 0.6780 * tintRgb.g + 0.0593 * tintRgb.b;
         delta += w_h * (tintRgb - float3(tLum));
     }
 

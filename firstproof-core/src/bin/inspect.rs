@@ -97,10 +97,27 @@ fn main() {
         }
         "export-photo" => {
             if args.len() < 4 {
-                eprintln!("Usage: inspect export-photo <input> <output>");
+                eprintln!("Usage: inspect export-photo <input> <output> [--profile <AgxVivid|AgxFilmic|CameraStandard|CameraPortrait|CameraLandscape|CameraVivid>]");
                 std::process::exit(1);
             }
-            let edits = read_xmp_file(Path::new(&args[2])).map(|x| x.edits).unwrap_or_default();
+            let mut edits = read_xmp_file(Path::new(&args[2])).map(|x| x.edits).unwrap_or_default();
+            for i in 4..args.len() {
+                if args[i] == "--profile" && i + 1 < args.len() {
+                    match args[i + 1].as_str() {
+                        "AgxVivid" => edits.tone_profile = firstproof_core::ColorProfileMode::AgxVivid,
+                        "AgxFilmic" => edits.tone_profile = firstproof_core::ColorProfileMode::AgxFilmic,
+                        "CameraStandard" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraStandard,
+                        "CameraPortrait" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraPortrait,
+                        "CameraLandscape" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraLandscape,
+                        "CameraVivid" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraVivid,
+                        other => eprintln!("Unknown profile: {}", other),
+                    }
+                } else if args[i] == "--exposure" && i + 1 < args.len() {
+                    if let Ok(ev) = args[i + 1].parse::<f32>() {
+                        edits.exposure = ev;
+                    }
+                }
+            }
             firstproof_core::export::export_photo_file(
                 &args[2],
                 &args[3],
@@ -112,7 +129,197 @@ fn main() {
                 firstproof_core::ExportRenderingIntent::Perceptual,
                 false,
             ).unwrap();
-            println!("Exported successfully to {}", args[3]);
+            println!("Exported successfully to {} with profile {:?}", args[3], edits.tone_profile);
+        }
+        "extract-preview" => {
+            if args.len() < 4 {
+                eprintln!("Usage: inspect extract-preview <input> <output>");
+                std::process::exit(1);
+            }
+            let jpeg_bytes = firstproof_core::raw::extract_preview_jpeg(&args[2]).expect("Failed to extract preview");
+            std::fs::write(&args[3], jpeg_bytes).expect("Failed to write preview JPEG");
+            println!("Extracted embedded preview ({} bytes) to {}", std::fs::metadata(&args[3]).unwrap().len(), args[3]);
+        }
+        "dump-sensor-patch" => {
+            use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
+            let path = Path::new(&args[2]);
+            let cx: usize = args[3].parse().unwrap();
+            let cy: usize = args[4].parse().unwrap();
+            let frame = RawlerDecoder.decode(path).unwrap();
+            let (wb_r, wb_b) = frame.as_shot_wb();
+            let temp = frame.as_shot_temperature();
+            let m = frame.compute_sensor_to_rec2020();
+            let dcp = firstproof_core::color::dcp::DcpProfile::built_in_for_camera(&frame.camera_model);
+            let dcp_m = dcp.interpolate_sensor_to_rec2020(temp);
+            let black = frame.black_levels[0];
+            let white = frame.white_levels[0];
+            let scale = 1.0 / (white - black);
+            println!("Camera: {}, Temp: {:.1}K", frame.camera_model, temp);
+            println!("CFA: {:?}, Black: {}, White: {}, Scale: {}", frame.cfa_pattern, black, white, scale);
+            println!("Active Crop: x={}, y={}, w={}, h={} (Full: {}x{})",
+                frame.active_x, frame.active_y, frame.active_width, frame.active_height, frame.full_width, frame.full_height);
+            println!("WB: R={}, B={}", wb_r, wb_b);
+            println!("Rawler color_matrix: {:?}", frame.color_matrix);
+            println!("Rawler color_matrix_tungsten: {:?}", frame.color_matrix_tungsten);
+            println!("Frame ColorMatrix Inverted:\n{:?}", m);
+            println!("DCP Profile (with ForwardMatrix):\n{:?}", dcp_m.0);
+            use firstproof_core::raw_decoder::RawSensorFrameExt;
+            println!("RawSensorFrameExt sensor_to_rec2020:\n{:?}", frame.sensor_to_rec2020_matrix_at(temp).0);
+            println!("Raw Sensor Values around ({}, {}):", cx, cy);
+            for dy in -2i32..=2 {
+                let y = (cy as i32 + dy) as usize;
+                let mut row_str = String::new();
+                for dx in -2i32..=2 {
+                    let x = (cx as i32 + dx) as usize;
+                    let val = frame.sensor_data[y * frame.full_width + x];
+                    let col_name = match frame.color_at(y, x) {
+                        0 => "R",
+                        1 => "G",
+                        2 => "B",
+                        _ => "?",
+                    };
+                    row_str.push_str(&format!("{}:{:5} ", col_name, val));
+                }
+                println!("{}", row_str);
+            }
+        }
+        "trace-pixel" => {
+            use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder, RawSensorFrameExt};
+            let path = Path::new(&args[2]);
+            let cx: usize = args[3].parse().unwrap();
+            let cy: usize = args[4].parse().unwrap();
+            let frame = RawlerDecoder.decode(path).unwrap();
+            let (wb_r, wb_b) = frame.as_shot_wb();
+            let temp = frame.as_shot_temperature();
+            let black = frame.black_levels[0];
+            let white = frame.white_levels[0];
+            let scale = 1.0 / (white - black);
+
+            // Compute both matrices
+            let m_hardcoded = frame.compute_sensor_to_rec2020();
+            let m_real_dng = frame.sensor_to_rec2020_matrix_at(temp);
+
+            println!("============================================================");
+            println!("🔬 First Proof Pipeline Tracer at ({}, {})", cx, cy);
+            println!("============================================================");
+            println!("📷 Camera: {}, Temp: {:.1}K, CFA: {:?}", frame.camera_model, temp, frame.cfa_pattern);
+            println!("🎨 Black: {}, White: {}, Scale: {:.8}", black, white, scale);
+            println!("🎨 As-Shot WB Multipliers: R={:.4}, B={:.4}", wb_r, wb_b);
+
+            // Sample raw sensor 2x2 block
+            let full_x = frame.active_x + cx;
+            let full_y = frame.active_y + cy;
+            let val = frame.sensor_data[full_y * frame.full_width + full_x] as f32;
+            let c_type = match frame.color_at(full_y, full_x) {
+                0 => "Red",
+                1 => "Green",
+                2 => "Blue",
+                _ => "Unknown",
+            };
+            println!("1. CFA Pixel ({}, {}): Raw Count = {} ({})", full_x, full_y, val, c_type);
+
+            // Let's also decode the full demosaiced image to inspect the interpolated pixel
+            let img = firstproof_core::export::decode_image(path).unwrap();
+            let idx = (cy * img.width + cx) * 3;
+            let r_rec = img.data[idx];
+            let g_rec = img.data[idx + 1];
+            let b_rec = img.data[idx + 2];
+            let c_rec = Color3::new(r_rec, g_rec, b_rec);
+            println!("\n2. Demosaiced Linear Rec.2020 (Current Engine):");
+            println!("   R={:.6}, G={:.6}, B={:.6}", r_rec, g_rec, b_rec);
+
+            println!("\n3. Dual-Engine Matrix Comparison:");
+            println!("   Hardcoded Matrix:\n   {:?}", m_hardcoded);
+            println!("   Real DNG Matrix:\n   {:?}", m_real_dng.0);
+
+            let c_srgb = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec);
+            println!("\n4. Linear sRGB Working Space:");
+            println!("   R={:.6}, G={:.6}, B={:.6}", c_srgb.r(), c_srgb.g(), c_srgb.b());
+            let (h, s, v) = firstproof_core::color::rgb_to_hsv(c_srgb.r().max(0.0), c_srgb.g().max(0.0), c_srgb.b().max(0.0));
+            println!("   HSV in sRGB: H={:.1}°, S={:.4}, V={:.4}", h, s, v);
+
+            let agx_vivid = firstproof_core::color::agx_tone_map_vivid(c_rec, 1.0);
+            let srgb_gamma = |c: f32| -> u8 {
+                let v = if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.max(0.0).powf(1.0 / 2.4) - 0.055 };
+                (v.clamp(0.0, 1.0) * 255.0).round() as u8
+            };
+            println!("\n5. Output Profiles:");
+            println!("   AgX Vivid (Linear sRGB):  R={:.6}, G={:.6}, B={:.6} -> Display RGB: ({}, {}, {})",
+                agx_vivid.r(), agx_vivid.g(), agx_vivid.b(),
+                srgb_gamma(agx_vivid.r()), srgb_gamma(agx_vivid.g()), srgb_gamma(agx_vivid.b())
+            );
+
+            let std_curve = firstproof_core::color::dcp::DcpProfile::built_in_standard_tone_curve();
+            let lum = 0.2126 * c_srgb.r().max(0.0) + 0.7152 * c_srgb.g().max(0.0) + 0.0722 * c_srgb.b().max(0.0);
+            let lum_curved = firstproof_core::color::evaluate_tone_curve(lum, &std_curve);
+            let gain = lum_curved / lum.max(1e-6);
+            let cam_r = c_srgb.r().max(0.0) * gain;
+            let cam_g = c_srgb.g().max(0.0) * gain;
+            let cam_b = c_srgb.b().max(0.0) * gain;
+            println!("   Camera Standard (sRGB):   R={:.6}, G={:.6}, B={:.6} -> Display RGB: ({}, {}, {})",
+                cam_r, cam_g, cam_b,
+                srgb_gamma(cam_r), srgb_gamma(cam_g), srgb_gamma(cam_b)
+            );
+        }
+        "find-highlights" => {
+            use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
+            let path = Path::new(&args[2]);
+            let frame = RawlerDecoder.decode(path).unwrap();
+            let img = firstproof_core::export::decode_image(path).unwrap();
+            let (_wb_r, _wb_b) = frame.as_shot_wb();
+            let _black = frame.black_levels[0];
+            let _white = frame.white_levels[0];
+            let _scale = 1.0 / (_white - _black);
+
+            println!("Searching highlights in {} ({}x{})...", path.display(), img.width, img.height);
+            let srgb_gamma = |c: f32| -> u8 {
+                let v = if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.max(0.0).powf(1.0 / 2.4) - 0.055 };
+                (v.clamp(0.0, 1.0) * 255.0).round() as u8
+            };
+
+            // Sample grid every 100 pixels
+            for y in (100..img.height - 100).step_by(100) {
+                for x in (100..img.width - 100).step_by(100) {
+                    let idx = (y * img.width + x) * 3;
+                    let r_rec = img.data[idx];
+                    let g_rec = img.data[idx + 1];
+                    let b_rec = img.data[idx + 2];
+                    let c_rec = Color3::new(r_rec, g_rec, b_rec);
+                    let agx = firstproof_core::color::agx_tone_map_vivid(c_rec, 1.0);
+                    let rgb = (srgb_gamma(agx.r()), srgb_gamma(agx.g()), srgb_gamma(agx.b()));
+                    
+                    // Look for bright skin or blown highlights: high green or blue, or high brightness
+                    if (rgb.0 > 120 || rgb.1 > 120 || rgb.2 > 120) && (rgb.2 > rgb.0 || rgb.1 > rgb.0) {
+                        let full_x = frame.active_x + x;
+                        let full_y = frame.active_y + y;
+                        let raw_val = frame.sensor_data[full_y * frame.full_width + full_x];
+                        println!("At ({:4}, {:4}): RawCount={:5} | Rec2020: ({:.3}, {:.3}, {:.3}) | Display: ({:3}, {:3}, {:3})",
+                            x, y, raw_val, r_rec, g_rec, b_rec, rgb.0, rgb.1, rgb.2);
+                    }
+                }
+            }
+        }
+        "test-types-full-demosaic" => {
+            use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
+            let path = Path::new(&args[2]);
+            let cx: usize = args[3].parse().unwrap();
+            let cy: usize = args[4].parse().unwrap();
+            let frame = RawlerDecoder.decode(path).unwrap();
+            println!("Decoding with frame.to_full_demosaiced_linear_f16()...");
+            let (f16_buf, w, h) = frame.to_full_demosaiced_linear_f16();
+            println!("Decoded {}x{} RGBA f16 buffer", w, h);
+            let idx = (cy * (w as usize) + cx) * 4;
+            let r = firstproof_core::export::f16_to_f32(f16_buf[idx]);
+            let g = firstproof_core::export::f16_to_f32(f16_buf[idx + 1]);
+            let b = firstproof_core::export::f16_to_f32(f16_buf[idx + 2]);
+            println!("Linear Rec.2020 at ({}, {}): R={:.6}, G={:.6}, B={:.6}", cx, cy, r, g, b);
+            let c_rec = Color3::new(r, g, b);
+            let agx_vivid = firstproof_core::color::agx_tone_map_vivid(c_rec, 1.0);
+            let srgb_gamma = |c: f32| -> u8 {
+                let v = if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.max(0.0).powf(1.0 / 2.4) - 0.055 };
+                (v.clamp(0.0, 1.0) * 255.0).round() as u8
+            };
+            println!("AgX Vivid Display: R={}, G={}, B={}", srgb_gamma(agx_vivid.r()), srgb_gamma(agx_vivid.g()), srgb_gamma(agx_vivid.b()));
         }
         _ => {
             eprintln!("Unknown command: {}", command);
@@ -145,15 +352,11 @@ fn cmd_inspect_photo(path_str: &str) {
     }
 
     if let Ok(frame) = firstproof_core::raw_decoder::RawDecoder::decode(&firstproof_core::raw_decoder::RawlerDecoder, path) {
-        use firstproof_core::raw_decoder::RawSensorFrameExt;
-        println!("\n🖼️  Dimensions: full={}x{}, active={}x{}, origin=({}, {})", frame.full_width, frame.full_height, frame.active_width, frame.active_height, frame.active_x, frame.active_y);
-        println!("🧩 CFA Pattern: {:?}, Black: {:?}, White: {:?}, As-Shot WB: {:?}", frame.cfa_pattern, frame.black_levels, frame.white_levels, frame.as_shot_wb());
-        println!("🎨 Frame color_matrix: {:?}", frame.color_matrix);
-        println!("🎨 Frame color_matrix_tungsten: {:?}", frame.color_matrix_tungsten);
-        let m_core = frame.sensor_to_rec2020_at(5500.0);
-        println!("🎨 Core sensor_to_rec2020_at(5500K): {:?}", m_core.0);
-        let m_types = frame.compute_sensor_to_rec2020();
-        println!("🎨 Types compute_sensor_to_rec2020(): {:?}", m_types);
+        println!("🎨 Frame wb_coeffs: {:?}", frame.wb_coeffs);
+        println!("🎨 Frame as_shot_wb: {:?}", frame.as_shot_wb());
+        println!("🎨 Frame as_shot_temperature: {:.1}K", frame.as_shot_temperature());
+        let m = frame.compute_sensor_to_rec2020();
+        println!("🎨 Sensor to Rec.2020: {:?}", m);
     }
 
     // 2. Lensfun Lookup
