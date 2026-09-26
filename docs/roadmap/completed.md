@@ -24,6 +24,13 @@ This archive tracks completed stories and features moved from the active backlog
 - **Story 5.4: Camera-Matching Tone Profiles & DCP HueSatMap Engine**: DCP HueSatMap 3D HSV delta tables and manufacturer tone curves. Swappable profiles ("First Proof Neutral (AgX)", "Camera Standard", "Camera Portrait", "Camera Landscape", "Camera Vivid"). Verified with `camera_profiles_parity`.
 - **Story 5.5: Secondary 3D LUT Engine (.cube) & Color Nuance**: Evaluated post-tone-mapping in collapsible Fine Tuning disclosure panel. 3D Metal texture with trilinear filtering; SIMD tetrahedral interpolation in Rust CPU export.
 - **Story 5.6: Dual-Target Export (Display P3 & sRGB)**: Export color space selector with embedded ICC profiles generated via `lcms2` and injected via `img-parts`.
+- **Story 5.7: Authentic DNG ForwardMatrix & Edge-Directed PPG RAW Calibration**:
+  - Integrated Adobe DNG §6 ForwardMatrix dual-illuminant Planckian interpolation for Canon, Sony, and Nikon camera families into Linear Rec.2020 wide-gamut working space.
+  - Replaced independent-channel cubic demosaicing with edge-directed PPG (Patterned Pixel Grouping) demosaicing in the export pipeline via `correct_blacklevel_cfa` on normalized `f32` data.
+  - Aligned highlight reconstruction knee to physical sensor saturation ($0.97$), preserving photopic luminance without false color knees.
+  - Fixed DNG baseline exposure tag parsing (Tag 50730).
+  - Quantitative verification against camera reference JPEG (`_MG_2332.CR2`): MSE dropped from 299.11 to 225.84 (-24.5%), PSNR rose from 23.37 dB to 24.59 dB, metal handrail delta matched at `[+2, +2, +2]`, and skin melanin G/R chromaticity ratio matched to 0.500 vs 0.504.
+  - Built diagnostic calibration suite (`calibrate`, `inspect`) generating 1:1 detail crop and full-frame diff triptychs.
 
 ---
 

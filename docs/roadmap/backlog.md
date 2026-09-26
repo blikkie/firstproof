@@ -48,11 +48,11 @@ This document strictly tracks pending and deferred features calibrated against o
 ### 3.5 Archival High-Precision Multi-Pass Export Engine (P2)
 - **Decoupled Quality Controls in Export Sheet**:
   - Cleanly separate general optical RAW demosaicing precision from spatial chemical edge diffusion in `ExportSheetView.swift`:
-    1. *RAW Demosaicing Precision*: `Standard (Fast)` vs. `Archival (Edge-Adaptive AMaZE / RCD)`.
+    1. *RAW Demosaicing Precision*: `Standard (PPG Demosaic)` vs. `Archival (Edge-Adaptive AMaZE / RCD with Chromatic Median Filtering)`.
     2. *Spatial Chemical Edge Diffusion (Mackie Lines)*: Dedicated toggle when an emulsion is active.
-- **Control 1: Multi-Pass Edge-Directed Demosaicing (AMaZE / RCD)**:
-  - *Standard (Fast)*: Near-instant batch exports (150–250ms per RAW) using optimized cubic Bayer demosaicing.
-  - *Archival (Edge-Adaptive)*: Directional edge-adaptive demosaicing (AMaZE / RCD) with chromatic moiré suppression passes (~500ms per RAW). Eliminates "zipper" artifacts, maze patterns, and false color fringing on high-frequency fabrics, architectural grids, and bird feathers on 45–61MP sensors.
+- **Control 1: Multi-Pass Edge-Directed Demosaicing & Chromatic Median Filtering**:
+  - *Standard (PPG Demosaic)*: Integrated in Story 5.7 via `PPGDemosaic`, eliminating primary checkerboard moiré.
+  - *Archival (Edge-Adaptive RCD/AMaZE + Chromatic Median Filtering)*: Directional edge-adaptive demosaicing with 1–2 passes of chromatic difference median filtering ($(R - G)$ and $(B - G)$). Eliminates residual subtle checkerboard/maze artifacts observed on smooth, out-of-focus skin transitions (e.g. child's cheek in `_MG_2332.CR2`) and high-frequency fabric moiré, while strictly preserving 100% of spatial luminance sharpness ($G$).
 - **Control 2: Spatial Lateral Chemical Diffusion (Mackie Lines / Developer Exhaustion)**:
   - Extends vertical DIR coupling to 2D spatial inhibitor diffusion across contrasting borders, recreating authentic photochemical Mackie lines and developer exhaustion boundaries for organic edge acutance without digital unsharp masking.
 - **Strict WYSIWYG Tonal & Color Parity Invariant**:
