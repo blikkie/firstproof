@@ -201,10 +201,6 @@ vec3 applyCameraHueSat(vec3 hsv, int mode) {
     } else if (mode == 4) {
         s *= (1.20 - 0.15 * skyWeight);
     }
-    // Optical Scotopic / Mesopic desaturation: As luminance approaches sensor read noise floor,
-    // rod-dominant vision has zero chromaticity. Suppresses thermal noise spikes without edge clipping.
-    float scotopicWeight = smoothstep(0.01, 0.08, v);
-    s *= scotopicWeight;
     return vec3(h, clamp(s, 0.0, 1.0), clamp(v, 0.0, 1.0));
 }
 
@@ -269,11 +265,6 @@ vec3 agxToneMapVivid(vec3 rec2020Color, float contrastGain) {
     float shadowWeight = vShadow * vShadow * (3.0 - 2.0 * vShadow);
     float satBoost = (0.18 - 0.20 * skinWeight - 0.15 * skyWeight) * shadowWeight;
     hsv.y = clamp(hsv.y * (1.0 + satBoost), 0.0, 1.0);
-
-    // Optical Scotopic / Mesopic desaturation: As luminance approaches sensor read noise floor,
-    // rod-dominant vision has zero chromaticity. Suppresses thermal noise spikes without edge clipping.
-    float scotopicWeight = smoothstep(0.01, 0.08, hsv.z);
-    hsv.y *= scotopicWeight;
     return clamp(hsv2rgb(hsv), 0.0, 1.0);
 }
 

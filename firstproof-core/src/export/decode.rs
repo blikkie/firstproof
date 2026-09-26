@@ -1,4 +1,3 @@
-use std::io::Cursor;
 use std::path::Path;
 use rayon::prelude::*;
 use crate::color::{
@@ -45,114 +44,81 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
             frame.sensor_to_rec2020_matrix_at(as_shot_temp)
         };
 
-        let bayer_cfa = match frame.cfa_pattern {
-            crate::raw_decoder::CfaPattern::Rggb => Some(bayer::CFA::RGGB),
-            crate::raw_decoder::CfaPattern::Bggr => Some(bayer::CFA::BGGR),
-            crate::raw_decoder::CfaPattern::Gbrg => Some(bayer::CFA::GBRG),
-            crate::raw_decoder::CfaPattern::Grbg => Some(bayer::CFA::GRBG),
+        let ppg_cfa = match frame.cfa_pattern {
+            crate::raw_decoder::CfaPattern::Rggb => Some("RGGB"),
+            crate::raw_decoder::CfaPattern::Bggr => Some("BGGR"),
+            crate::raw_decoder::CfaPattern::Gbrg => Some("GBRG"),
+            crate::raw_decoder::CfaPattern::Grbg => Some("GRBG"),
             _ => None,
         };
 
-        let mut demosaiced_with_bayer = false;
-        if let Some(cfa) = bayer_cfa {
+        let mut demosaiced_with_ppg = false;
+        if let Some(patname) = ppg_cfa {
             let full_w = frame.full_width;
             let full_h = frame.full_height;
             let total_pixels = full_w * full_h;
             if total_pixels > 0 && frame.sensor_data.len() >= total_pixels {
-                let black_u16 = frame.black_levels[0].max(0.0).round() as u16;
-                // Subtract black level so demosaic operates on physical photon counts relative to true zero.
-                // This eliminates cubic cross-channel gradient corruption across dark sensor noise.
-                let sub_sensor_data: Vec<u16> = frame.sensor_data.iter().map(|&v| v.saturating_sub(black_u16)).collect();
-                let raw_u8_slice: &[u8] = unsafe {
-                    std::slice::from_raw_parts(
-                        sub_sensor_data.as_ptr() as *const u8,
-                        sub_sensor_data.len() * 2,
-                    )
-                };
-                let depth = if cfg!(target_endian = "big") {
-                    bayer::BayerDepth::Depth16BE
-                } else {
-                    bayer::BayerDepth::Depth16LE
-                };
+                let mut norm_pixels: Vec<f32> = frame.sensor_data.iter().map(|&v| v as f32).collect();
+                rawler::imgop::raw::correct_blacklevel_cfa(
+                    &mut norm_pixels,
+                    full_w,
+                    full_h,
+                    &frame.black_levels,
+                    &frame.white_levels,
+                );
 
-                demosaiced_with_bayer = crate::export::arena::with_decode_arena(|arena| {
-                    let success = {
-                        let rgb_raw_bytes = arena.acquire_raw_bytes(total_pixels * 6);
-                        let mut raster = bayer::RasterMut::new(full_w, full_h, bayer::RasterDepth::Depth16, rgb_raw_bytes);
-                        bayer::run_demosaic(
-                            &mut Cursor::new(raw_u8_slice),
-                            depth,
-                            cfa,
-                            bayer::Demosaic::Cubic,
-                            &mut raster,
-                        ).is_ok()
-                    };
+                let pixels = rawler::pixarray::PixF32::new_with(norm_pixels, full_w, full_h);
+                let cfa = rawler::CFA::new(patname);
+                let colors = rawler::cfa::PlaneColor::new(patname);
+                let roi = rawler::imgop::Rect::new(
+                    rawler::imgop::Point::new(frame.active_x, frame.active_y),
+                    rawler::imgop::Dim2::new(active_w, active_h),
+                );
 
-                    if success {
-                        let black = frame.black_levels[0].max(0.0);
-                        let white = frame.white_levels[0].max(black + 1.0);
-                        let scale = 1.0 / (white - black);
-                        let raw_bytes_slice: &[u8] = &arena.rgb_raw_bytes[..total_pixels * 6];
+                use rawler::imgop::sensor::Demosaic;
+                let ppg = rawler::imgop::sensor::bayer::ppg::PPGDemosaic::new();
+                let demosaiced_rgb = ppg.demosaic(&pixels, &cfa, &colors, roi);
 
-                        demosaiced.data.par_chunks_exact_mut(active_w * 3).enumerate().for_each(|(y, row_slice)| {
-                            let full_y = (frame.active_y + y).min(full_h - 1);
-                            for x in 0..active_w {
-                                let full_x = (frame.active_x + x).min(full_w - 1);
-                                let pixel_byte_idx = (full_y * full_w + full_x) * 6;
-                                let r_raw = u16::from_ne_bytes([raw_bytes_slice[pixel_byte_idx], raw_bytes_slice[pixel_byte_idx + 1]]) as f32;
-                                let g_raw = u16::from_ne_bytes([raw_bytes_slice[pixel_byte_idx + 2], raw_bytes_slice[pixel_byte_idx + 3]]) as f32;
-                                let b_raw = u16::from_ne_bytes([raw_bytes_slice[pixel_byte_idx + 4], raw_bytes_slice[pixel_byte_idx + 5]]) as f32;
+                if demosaiced_rgb.width == active_w && demosaiced_rgb.height == active_h && demosaiced_rgb.data.len() == active_w * active_h {
+                    demosaiced.data.par_chunks_exact_mut(active_w * 3).enumerate().for_each(|(y, row_slice)| {
+                        let row_start = y * active_w;
+                        for x in 0..active_w {
+                            let [r_norm, g_norm, b_norm] = demosaiced_rgb.data[row_start + x];
+                            let (r_wb, g_wb, b_wb) = firstproof_types::blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
+                            let c_sensor = Color3::new(r_wb, g_wb, b_wb);
+                            let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
+                            let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);
 
-                                let r_norm = (r_raw * scale).max(0.0);
-                                let g_norm = (g_raw * scale).max(0.0);
-                                let b_norm = (b_raw * scale).max(0.0);
-
-                                let (r_wb, g_wb, b_wb) = firstproof_types::blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
-                                let c_sensor = Color3::new(r_wb, g_wb, b_wb);
-                                let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
-                                let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);
-
-                                let out_idx = x * 3;
-                                row_slice[out_idx] = c_rec2020.r().max(0.0);
-                                row_slice[out_idx + 1] = c_rec2020.g().max(0.0);
-                                row_slice[out_idx + 2] = c_rec2020.b().max(0.0);
-                            }
-                        });
-                        true
-                    } else {
-                        false
-                    }
-                });
+                            let out_idx = x * 3;
+                            row_slice[out_idx] = c_rec2020.r().max(0.0);
+                            row_slice[out_idx + 1] = c_rec2020.g().max(0.0);
+                            row_slice[out_idx + 2] = c_rec2020.b().max(0.0);
+                        }
+                    });
+                    demosaiced_with_ppg = true;
+                }
             }
         }
 
-        if !demosaiced_with_bayer {
+        if !demosaiced_with_ppg {
             for y in 0..active_h {
                 let full_y = (frame.active_y + y).min(frame.full_height - 2).max(1);
-                
                 for x in 0..active_w {
                     let full_x = (frame.active_x + x).min(frame.full_width - 2).max(1);
-                    
                     let color = frame.color_at(full_y, full_x);
-                    
                     let r: f32;
                     let g: f32;
                     let b: f32;
-                    
                     if color == crate::raw_decoder::CFA_COLOR_RED {
-                        // Red photosite
                         r = frame.sample_normalized(full_x, full_y);
                         g = 0.25 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y) + frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
                         b = 0.25 * (frame.sample_normalized(full_x - 1, full_y - 1) + frame.sample_normalized(full_x + 1, full_y - 1) + frame.sample_normalized(full_x - 1, full_y + 1) + frame.sample_normalized(full_x + 1, full_y + 1));
                     } else if color == crate::raw_decoder::CFA_COLOR_BLUE {
-                        // Blue photosite
                         b = frame.sample_normalized(full_x, full_y);
                         g = 0.25 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y) + frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
                         r = 0.25 * (frame.sample_normalized(full_x - 1, full_y - 1) + frame.sample_normalized(full_x + 1, full_y - 1) + frame.sample_normalized(full_x - 1, full_y + 1) + frame.sample_normalized(full_x + 1, full_y + 1));
                     } else {
-                        // Green photosite
                         g = frame.sample_normalized(full_x, full_y);
-                        // Check if Red is horizontal or vertical neighbor
                         if frame.color_at(full_y, full_x - 1) == crate::raw_decoder::CFA_COLOR_RED || frame.color_at(full_y, full_x + 1) == crate::raw_decoder::CFA_COLOR_RED {
                             r = 0.5 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y));
                             b = 0.5 * (frame.sample_normalized(full_x, full_y - 1) + frame.sample_normalized(full_x, full_y + 1));
@@ -161,15 +127,10 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                             b = 0.5 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y));
                         }
                     }
-                    
-                    // Sensor linear RGB with white balance and sensitometric highlight roll-off
                     let (r_wb, g_wb, b_wb) = firstproof_types::blend_sensor_highlights(r, g, b, wb_r, wb_b);
                     let c_sensor = Color3::new(r_wb, g_wb, b_wb);
                     let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
-                    
-                    // Map to Wide-Gamut Linear Rec.2020 working space
                     let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);
-                    
                     let out_idx = (y * active_w + x) * 3;
                     demosaiced.data[out_idx] = c_rec2020.r().max(0.0);
                     demosaiced.data[out_idx + 1] = c_rec2020.g().max(0.0);
@@ -177,7 +138,7 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                 }
             }
         }
-        
+
         return Ok(demosaiced);
     }
     
@@ -703,3 +664,5 @@ pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32,
     // Fallback for non-RAW or non-Bayer formats
     decode_raw_preview_buffer(path, Some(2048))
 }
+
+

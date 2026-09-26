@@ -183,21 +183,18 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
                     let b_init = c_srgb.b().max(0.0);
 
                     let huesatmap = match mode {
-                        crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_huesatmap(),
-                        crate::ColorProfileMode::CameraLandscape => crate::color::dcp::DcpProfile::built_in_landscape_huesatmap(),
-                        crate::ColorProfileMode::CameraVivid => crate::color::dcp::DcpProfile::built_in_vivid_huesatmap(),
-                        _ => crate::color::dcp::DcpProfile::built_in_standard_huesatmap(),
+                        crate::ColorProfileMode::CameraPortrait => Some(crate::color::dcp::DcpProfile::built_in_portrait_huesatmap()),
+                        crate::ColorProfileMode::CameraLandscape => Some(crate::color::dcp::DcpProfile::built_in_landscape_huesatmap()),
+                        crate::ColorProfileMode::CameraVivid => Some(crate::color::dcp::DcpProfile::built_in_vivid_huesatmap()),
+                        _ => Some(crate::color::dcp::DcpProfile::built_in_standard_huesatmap()),
                     };
-                    // Memory colors in standard sRGB chromaticity space
-                    let (h, s, v) = crate::color::rgb_to_hsv(r_init, g_init, b_init);
-                    let (h2, s2, v2) = huesatmap.apply_hsv(h, s, v);
-                    // Optical Scotopic / Mesopic desaturation: As luminance approaches sensor read noise floor,
-                    // rod-dominant vision has zero chromaticity. Suppresses thermal noise spikes without edge clipping.
-                    let scotopic_weight = {
-                        let t = ((v2 - 0.01) / 0.07).clamp(0.0, 1.0);
-                        t * t * (3.0 - 2.0 * t)
+                    let (r_mapped, g_mapped, b_mapped) = if let Some(hsm) = huesatmap {
+                        let (h, s, v) = crate::color::rgb_to_hsv(r_init, g_init, b_init);
+                        let (h2, s2, v2) = hsm.apply_hsv(h, s, v);
+                        crate::color::hsv_to_rgb(h2, s2, v2)
+                    } else {
+                        (r_init, g_init, b_init)
                     };
-                    let (r_mapped, g_mapped, b_mapped) = crate::color::hsv_to_rgb(h2, s2 * scotopic_weight, v2);
                     
                     let curve = match mode {
                         crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_tone_curve(),

@@ -11,38 +11,15 @@ impl RawSensorFrameExt for RawSensorFrame {
     /// Computes the camera sensor to Linear Rec.2020 matrix dynamically interpolated
     /// for the specified white balance temperature (in Kelvin).
     fn sensor_to_rec2020_matrix_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3 {
+        let mut dcp = crate::color::dcp::DcpProfile::built_in_for_camera(&self.camera_model);
         if let (Some(m_tungsten), Some(m_daylight)) = (self.color_matrix_tungsten, self.color_matrix) {
-            let dcp = crate::color::dcp::DcpProfile {
-                profile_name: format!("{} (Rawler Dual-Illuminant)", self.camera_model),
-                illuminant1: crate::color::dcp::ILLUMINANT_STANDARD_A,
-                illuminant2: Some(crate::color::dcp::ILLUMINANT_D65),
-                color_matrix1: crate::color::Matrix3x3(m_tungsten),
-                color_matrix2: Some(crate::color::Matrix3x3(m_daylight)),
-                forward_matrix1: None,
-                forward_matrix2: None,
-                tone_curve: None,
-                hue_sat_map1: None,
-                hue_sat_map2: None,
-            };
-            dcp.interpolate_sensor_to_rec2020(temp_kelvin)
+            dcp.color_matrix1 = crate::color::Matrix3x3(m_tungsten);
+            dcp.color_matrix2 = Some(crate::color::Matrix3x3(m_daylight));
         } else if let Some(m_daylight) = self.color_matrix {
-            let dcp = crate::color::dcp::DcpProfile {
-                profile_name: format!("{} (Single Illuminant)", self.camera_model),
-                illuminant1: crate::color::dcp::ILLUMINANT_D65,
-                illuminant2: None,
-                color_matrix1: crate::color::Matrix3x3(m_daylight),
-                color_matrix2: None,
-                forward_matrix1: None,
-                forward_matrix2: None,
-                tone_curve: None,
-                hue_sat_map1: None,
-                hue_sat_map2: None,
-            };
-            dcp.interpolate_sensor_to_rec2020(temp_kelvin)
-        } else {
-            let dcp = crate::color::dcp::DcpProfile::built_in_for_camera(&self.camera_model);
-            dcp.interpolate_sensor_to_rec2020(temp_kelvin)
+            dcp.color_matrix1 = crate::color::Matrix3x3(m_daylight);
+            dcp.color_matrix2 = None;
         }
+        dcp.interpolate_sensor_to_rec2020(temp_kelvin)
     }
 }
 
@@ -153,7 +130,18 @@ impl RawDecoder for RawlerDecoder {
                 header.truncate(n);
                 firstproof_types::read_dng_baseline_exposure(&header)
             })
-            .unwrap_or(0.0);
+            .unwrap_or_else(|| {
+                let m = camera_model.to_lowercase();
+                if m.contains("canon") || m.contains("eos") {
+                    0.886
+                } else if m.contains("sony") || m.contains("ilce") || m.contains("alpha") {
+                    0.50
+                } else if m.contains("nikon") {
+                    0.50
+                } else {
+                    0.0
+                }
+            });
 
         let sensor_data = match raw.data {
             rawler::RawImageData::Integer(cfa) => cfa,

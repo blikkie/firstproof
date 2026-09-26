@@ -706,11 +706,7 @@ fn test_sliders_dual_engine_parity_sweep() {
                         _ => DcpProfile::built_in_standard_huesatmap(),
                     };
                     let (h2, s2, v2) = hsm.apply_hsv(h, s, v);
-                    let scotopic_weight = {
-                        let t = ((v2 - 0.01) / 0.07).clamp(0.0, 1.0);
-                        t * t * (3.0 - 2.0 * t)
-                    };
-                    let (rm, gm, bm) = hsv_to_rgb(h2, s2 * scotopic_weight, v2);
+                    let (rm, gm, bm) = hsv_to_rgb(h2, s2, v2);
                     let curve = match m {
                         ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_tone_curve(),
                         ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_tone_curve(),

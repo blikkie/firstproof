@@ -70,10 +70,10 @@ pub fn blend_sensor_highlights(r: f32, g: f32, b: f32, wb_r: f32, wb_b: f32) -> 
     let p_r = r * wb_r;
     let p_g = g;
     let p_b = b * wb_b;
-    if s_max > 0.88 {
-        let t = ((s_max - 0.88) / 0.12).clamp(0.0, 1.0);
+    if s_max > 0.97 {
+        let t = ((s_max - 0.97) / 0.03).clamp(0.0, 1.0);
         let alpha = t * t * (3.0 - 2.0 * t);
-        let l_est = p_r.max(p_g).max(p_b);
+        let l_est = (0.25 * p_r + 0.65 * p_g + 0.10 * p_b).max(p_r.min(p_g));
         (
             (1.0 - alpha) * p_r + alpha * l_est,
             (1.0 - alpha) * p_g + alpha * l_est,
@@ -147,7 +147,7 @@ pub fn read_dng_baseline_exposure(bytes: &[u8]) -> Option<f32> {
         }
         let tag = read_u16(&bytes[curr..curr + 2]);
         let typ = read_u16(&bytes[curr + 2..curr + 4]);
-        if tag == 50728 {
+        if tag == 50730 {
             let offset = read_u32(&bytes[curr + 8..curr + 12]) as usize;
             if offset + 8 <= bytes.len() {
                 if typ == 10 { // SRATIONAL (2 x i32)
@@ -289,6 +289,58 @@ impl RawSensorFrame {
     /// for the specified Kelvin temperature along the Planckian reciprocal temperature locus.
     /// Preserves neutral axis [1, 1, 1] per Adobe DNG / First Proof color science.
     pub fn sensor_to_rec2020_at(&self, temp_kelvin: f32) -> [[f32; 3]; 3] {
+        let m = self.camera_model.to_lowercase();
+        let fwd_matrices = if m.contains("canon") || m.contains("eos") {
+            Some((
+                [
+                    [ 0.7550,  0.0645,  0.1448],
+                    [ 0.2138,  0.8936, -0.1075],
+                    [-0.0005, -0.4306,  1.2562],
+                ],
+                [
+                    [ 0.7286,  0.1385,  0.0972],
+                    [ 0.2600,  0.9468, -0.2068],
+                    [ 0.0093, -0.2268,  1.0426],
+                ],
+            ))
+        } else {
+            None
+        };
+
+        if let Some((fm1, fm2)) = fwd_matrices {
+            let t1 = 2856.0f32;
+            let t2 = 6504.0f32;
+            let m_inv1 = 1.0 / t1;
+            let m_inv2 = 1.0 / t2;
+            let m_inv = 1.0 / temp_kelvin.clamp(2000.0, 50000.0);
+            let w = ((m_inv - m_inv1) / (m_inv2 - m_inv1)).clamp(0.0, 1.0);
+
+            let mut fm = [[0.0f32; 3]; 3];
+            for r in 0..3 {
+                for c in 0..3 {
+                    fm[r][c] = (1.0 - w) * fm1[r][c] + w * fm2[r][c];
+                }
+            }
+
+            // Universal XYZ D50 -> CAT16 -> Linear Rec.2020 matrix:
+            let d50_to_rec2020 = glam::Mat3::from_cols_array(&[
+                1.7005930, -0.66840535, 0.017304685,
+                -0.43057728, 1.6541731, -0.029557694,
+                -0.25366065, -0.01167498, 1.2275668,
+            ]);
+            let fm_mat = glam::Mat3::from_cols_array(&[
+                fm[0][0], fm[1][0], fm[2][0],
+                fm[0][1], fm[1][1], fm[2][1],
+                fm[0][2], fm[1][2], fm[2][2],
+            ]);
+            let sensor_to_rec = d50_to_rec2020 * fm_mat;
+            return [
+                [sensor_to_rec.row(0).x, sensor_to_rec.row(0).y, sensor_to_rec.row(0).z],
+                [sensor_to_rec.row(1).x, sensor_to_rec.row(1).y, sensor_to_rec.row(1).z],
+                [sensor_to_rec.row(2).x, sensor_to_rec.row(2).y, sensor_to_rec.row(2).z],
+            ];
+        }
+
         let (cm1, cm2) = if let (Some(m_tungsten), Some(m_daylight)) = (self.color_matrix_tungsten, self.color_matrix) {
             (m_tungsten, m_daylight)
         } else if let Some(m_daylight) = self.color_matrix {

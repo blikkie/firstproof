@@ -182,13 +182,7 @@ pub fn agx_tone_map_vivid(c: Color3, contrast_gain: f32) -> Color3 {
     let sat_boost = (0.18 - 0.20 * skin_weight - 0.15 * sky_weight) * shadow_weight;
     s = (s * (1.0 + sat_boost)).clamp(0.0, 1.0);
 
-    // Optical Scotopic / Mesopic desaturation: As luminance approaches sensor read noise floor,
-    // rod-dominant vision has zero chromaticity. Suppresses thermal noise spikes without edge clipping.
-    let scotopic_weight = {
-        let t = ((v - 0.01) / 0.07).clamp(0.0, 1.0);
-        t * t * (3.0 - 2.0 * t)
-    };
-    s *= scotopic_weight;
+
     
     let (r, g, b) = super::hsv_to_rgb(h, s, v);
     Color3::new(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))

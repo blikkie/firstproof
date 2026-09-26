@@ -42,11 +42,24 @@ struct ParityAuditReport {
 }
 
 fn print_usage() {
+    eprintln!("================================================================================");
+    eprintln!("🔬 First Proof Darkroom Inspection & Color Science Analysis Suite");
+    eprintln!("================================================================================");
     eprintln!("Usage: inspect <command> [args...]");
-    eprintln!("Commands:");
-    eprintln!("  inspect-photo <path>              Show metadata, XMP edits, and lens calibration");
-    eprintln!("  audit-parity <path> [--diff-map <out.png>]  Run full dual-engine parity audit");
-    eprintln!("  json-parity <path>                Run parity audit and output JSON report for agents");
+    eprintln!("\n📷 Photographic & Sensor Inspection:");
+    eprintln!("  inspect-photo <path>                        Show metadata, XMP edits, and lens calibration");
+    eprintln!("  dump-raw-details <path>                     Show sensor CFA, black/white levels, and WB multipliers");
+    eprintln!("  dump-dng-profile <dng_path>                 Extract and dump embedded DNG profiles and matrices");
+    eprintln!("  trace-pixel <path> <x> <y>                  Trace single pixel through all 5 pipeline stages");
+    eprintln!("  extract-preview <raw_path> <out.jpg>        Extract embedded camera manufacturer JPEG");
+    eprintln!("  export-photo <input> <output> [opts...]     Render photo with specific profile and exposure");
+    eprintln!("\n🧪 Color Science & Parity Benchmarks:");
+    eprintln!("  compare-images <img1> <img2>                Full-frame pixel delta and chromaticity audit");
+    eprintln!("  compare-camera-preview <raw_path>           Benchmark CameraStandard render against camera JPEG");
+    eprintln!("  audit-parity <path> [--diff-map <out.png>]  Run dual-engine (Metal VP vs CPU export) audit");
+    eprintln!("  audit-synthetic [--json]                    Audit synthetic 24-patch Macbeth chart parity");
+    eprintln!("  json-parity <path>                          JSON parity audit for automated test harnesses");
+    eprintln!("================================================================================");
 }
 
 fn main() {
@@ -87,6 +100,13 @@ fn main() {
                 std::process::exit(1);
             }
             cmd_compare_images(&args[2], &args[3]);
+        }
+        "compare-camera-preview" => {
+            if args.len() < 3 {
+                eprintln!("Error: missing raw path. Usage: inspect compare-camera-preview <raw_path>");
+                std::process::exit(1);
+            }
+            cmd_compare_camera_preview(&args[2]);
         }
         "json-parity" => {
             if args.len() < 3 {
@@ -139,6 +159,136 @@ fn main() {
             let jpeg_bytes = firstproof_core::raw::extract_preview_jpeg(&args[2]).expect("Failed to extract preview");
             std::fs::write(&args[3], jpeg_bytes).expect("Failed to write preview JPEG");
             println!("Extracted embedded preview ({} bytes) to {}", std::fs::metadata(&args[3]).unwrap().len(), args[3]);
+        }
+        "dump-dng-profile" => {
+            let path = Path::new(&args[2]);
+            let bytes = std::fs::read(path).unwrap();
+            match firstproof_core::color::dcp::DcpProfile::from_bytes(&bytes) {
+                Ok(profile) => {
+                    println!("Profile Name: {}", profile.profile_name);
+                    println!("Illuminant 1: {}", profile.illuminant1);
+                    println!("Illuminant 2: {:?}", profile.illuminant2);
+                    println!("Color Matrix 1:\n{:?}", profile.color_matrix1.0);
+                    println!("Color Matrix 2:\n{:?}", profile.color_matrix2.map(|m| m.0));
+                    println!("Forward Matrix 1:\n{:?}", profile.forward_matrix1.map(|m| m.0));
+                    println!("Forward Matrix 2:\n{:?}", profile.forward_matrix2.map(|m| m.0));
+                    let m_fwd = profile.interpolate_sensor_to_rec2020(2856.0);
+                    println!("Derived Sensor to Rec.2020 at 2856K with ForwardMatrix:\n{:?}", m_fwd.0);
+                    let d50_to_d65 = firstproof_core::color::cat16_adaptation_matrix((0.3457, 0.3585), (0.3127, 0.3290));
+                    let xyz_to_rec2020 = firstproof_core::color::ColorSpacePrimaries::REC2020.xyz_to_rgb_matrix();
+                    let d50_to_rec2020 = xyz_to_rec2020.multiply_matrix(&d50_to_d65);
+                    println!("Universal XYZ_D50 -> Linear Rec.2020 Matrix:\n{:?}", d50_to_rec2020.0);
+                    println!("Tone curve present: {}", profile.tone_curve.is_some());
+                    println!("HueSatMap 1 present: {}", profile.hue_sat_map1.is_some());
+                    println!("HueSatMap 2 present: {}", profile.hue_sat_map2.is_some());
+                }
+                Err(e) => println!("Error parsing DcpProfile from DNG: {:?}", e),
+            }
+        }
+        "compare-pixel-matrices" => {
+            use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
+            let path = Path::new(&args[2]);
+            let frame = RawlerDecoder.decode(path).unwrap();
+            let dng_bytes = std::fs::read("/home/remco/Pictures/Lightroom/from laptop/2015/2015-03-14/_MG_2332.dng").unwrap();
+            let dcp = firstproof_core::color::dcp::DcpProfile::from_bytes(&dng_bytes).unwrap();
+            let temp = frame.as_shot_temperature();
+            let m_fwd = dcp.interpolate_sensor_to_rec2020(temp);
+
+            let (wb_r, wb_b) = frame.as_shot_wb();
+            let srgb_gamma = |c: f32| -> u8 {
+                let v = if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.max(0.0).powf(1.0 / 2.4) - 0.055 };
+                (v.clamp(0.0, 1.0) * 255.0).round() as u8
+            };
+            let std_curve = firstproof_core::color::dcp::DcpProfile::built_in_standard_tone_curve();
+
+            println!("Derived ForwardMatrix at {:.1}K:\n{:?}", temp, m_fwd.0);
+
+            for &(cx, cy, label) in &[(362, 1347, "Shadow/Child"), (1503, 1416, "Midtone/Clothing")] {
+                println!("\n--- Testing Pixel ({}, {}) - {} ---", cx, cy, label);
+                let full_x = frame.active_x + cx;
+                let full_y = frame.active_y + cy;
+                let black = frame.black_levels[0].max(0.0);
+                let white = frame.white_levels[0].max(black + 1.0);
+                let scale = 1.0 / (white - black);
+
+                // Sample 3x3 surrounding photosites to get accurate local raw color
+                let mut r_sum = 0.0f32; let mut r_cnt = 0.0f32;
+                let mut g_sum = 0.0f32; let mut g_cnt = 0.0f32;
+                let mut b_sum = 0.0f32; let mut b_cnt = 0.0f32;
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        let px = (full_x as isize + dx) as usize;
+                        let py = (full_y as isize + dy) as usize;
+                        let val = frame.sensor_data[py * frame.full_width + px] as f32;
+                        let norm = ((val - black) * scale).max(0.0);
+                        match frame.color_at(py, px) {
+                            0 => { r_sum += norm; r_cnt += 1.0; }
+                            1 => { g_sum += norm; g_cnt += 1.0; }
+                            2 => { b_sum += norm; b_cnt += 1.0; }
+                            _ => {}
+                        }
+                    }
+                }
+                let r_norm = if r_cnt > 0.0 { r_sum / r_cnt } else { 0.0 };
+                let g_norm = if g_cnt > 0.0 { g_sum / g_cnt } else { 0.0 };
+                let b_norm = if b_cnt > 0.0 { b_sum / b_cnt } else { 0.0 };
+
+                let (r_wb, g_wb, b_wb) = firstproof_types::blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
+                println!("Raw Norm: R={:.5}, G={:.5}, B={:.5}", r_norm, g_norm, b_norm);
+                println!("WB Signal: R={:.5}, G={:.5}, B={:.5}", r_wb, g_wb, b_wb);
+
+                // 1. Current Inverted ColorMatrix at +0.0 EV
+                let m_inv = frame.sensor_to_rec2020_at(temp);
+                let r_inv = (m_inv[0][0] * r_wb + m_inv[0][1] * g_wb + m_inv[0][2] * b_wb).max(0.0);
+                let g_inv = (m_inv[1][0] * r_wb + m_inv[1][1] * g_wb + m_inv[1][2] * b_wb).max(0.0);
+                let b_inv = (m_inv[2][0] * r_wb + m_inv[2][1] * g_wb + m_inv[2][2] * b_wb).max(0.0);
+                let c_inv_srgb = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r_inv, g_inv, b_inv));
+                let lum_inv = 0.2126 * c_inv_srgb.r().max(0.0) + 0.7152 * c_inv_srgb.g().max(0.0) + 0.0722 * c_inv_srgb.b().max(0.0);
+                let lum_curved_inv = firstproof_core::color::evaluate_tone_curve(lum_inv, &std_curve);
+                let gain_inv = lum_curved_inv / lum_inv.max(1e-6);
+                let disp_inv = (
+                    srgb_gamma(c_inv_srgb.r().max(0.0) * gain_inv),
+                    srgb_gamma(c_inv_srgb.g().max(0.0) * gain_inv),
+                    srgb_gamma(c_inv_srgb.b().max(0.0) * gain_inv),
+                );
+
+                // 2. ForwardMatrix at +0.75 EV (Standard Canon EOS baseline exposure)
+                let base_gain = 2.0f32.powf(0.75);
+                let r_fwd = (m_fwd.0[0][0] * r_wb + m_fwd.0[0][1] * g_wb + m_fwd.0[0][2] * b_wb).max(0.0) * base_gain;
+                let g_fwd = (m_fwd.0[1][0] * r_wb + m_fwd.0[1][1] * g_wb + m_fwd.0[1][2] * b_wb).max(0.0) * base_gain;
+                let b_fwd = (m_fwd.0[2][0] * r_wb + m_fwd.0[2][1] * g_wb + m_fwd.0[2][2] * b_wb).max(0.0) * base_gain;
+                let c_fwd_srgb = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r_fwd, g_fwd, b_fwd));
+                let lum_fwd = 0.2126 * c_fwd_srgb.r().max(0.0) + 0.7152 * c_fwd_srgb.g().max(0.0) + 0.0722 * c_fwd_srgb.b().max(0.0);
+                let lum_curved_fwd = firstproof_core::color::evaluate_tone_curve(lum_fwd, &std_curve);
+                let gain_fwd = lum_curved_fwd / lum_fwd.max(1e-6);
+                let disp_fwd = (
+                    srgb_gamma(c_fwd_srgb.r().max(0.0) * gain_fwd),
+                    srgb_gamma(c_fwd_srgb.g().max(0.0) * gain_fwd),
+                    srgb_gamma(c_fwd_srgb.b().max(0.0) * gain_fwd),
+                );
+
+                println!("1. Old Inverted ColorMatrix (+0.0 EV): Display RGB = {:?}", disp_inv);
+                println!("2. New ForwardMatrix        (+0.75 EV): Display RGB = {:?}", disp_fwd);
+
+                let agx_fwd = firstproof_core::color::agx_tone_map_vivid(Color3::new(r_fwd, g_fwd, b_fwd), 1.0);
+                let disp_agx_fwd = (
+                    srgb_gamma(agx_fwd.r()),
+                    srgb_gamma(agx_fwd.g()),
+                    srgb_gamma(agx_fwd.b()),
+                );
+                println!("3. New ForwardMatrix + AgX Vivid:        Display RGB = {:?}", disp_agx_fwd);
+            }
+        }
+        "dump-raw-details" => {
+            let path = Path::new(&args[2]);
+            let raw_file = rawler::decode_file(path).unwrap();
+            println!("Rawler clean_make: {}", raw_file.clean_make);
+            println!("Rawler clean_model: {}", raw_file.clean_model);
+            println!("Rawler blacklevel: {:?}", raw_file.blacklevel.levels);
+            println!("Rawler whitelevel: {:?}", raw_file.whitelevel);
+            println!("Rawler wb_coeffs: {:?}", raw_file.wb_coeffs);
+            println!("Rawler color_matrix: {:?}", raw_file.color_matrix);
+            println!("Rawler cfa: {:?}", raw_file.camera.cfa);
         }
         "dump-sensor-patch" => {
             use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
@@ -205,6 +355,8 @@ fn main() {
             println!("📷 Camera: {}, Temp: {:.1}K, CFA: {:?}", frame.camera_model, temp, frame.cfa_pattern);
             println!("🎨 Black: {}, White: {}, Scale: {:.8}", black, white, scale);
             println!("🎨 As-Shot WB Multipliers: R={:.4}, B={:.4}", wb_r, wb_b);
+            println!("🎨 ColorMatrix Tungsten: {:?}", frame.color_matrix_tungsten);
+            println!("🎨 ColorMatrix Daylight: {:?}", frame.color_matrix);
 
             // Sample raw sensor 2x2 block
             let full_x = frame.active_x + cx;
@@ -217,6 +369,20 @@ fn main() {
                 _ => "Unknown",
             };
             println!("1. CFA Pixel ({}, {}): Raw Count = {} ({})", full_x, full_y, val, c_type);
+            println!("   4x4 Raw Sensor Neighborhood:");
+            for dy in -2..=2 {
+                let py = full_y as isize + dy;
+                let mut line = String::new();
+                for dx in -2..=2 {
+                    let px = full_x as isize + dx;
+                    let pval = frame.sensor_data[py as usize * frame.full_width + px as usize];
+                    let cname = match frame.color_at(py as usize, px as usize) {
+                        0 => "R", 1 => "G", 2 => "B", _ => "?",
+                    };
+                    line.push_str(&format!("{}:{:5} ", cname, pval));
+                }
+                println!("     {}", line);
+            }
 
             // Let's also decode the full demosaiced image to inspect the interpolated pixel
             let img = firstproof_core::export::decode_image(path).unwrap();
@@ -227,6 +393,9 @@ fn main() {
             let c_rec = Color3::new(r_rec, g_rec, b_rec);
             println!("\n2. Demosaiced Linear Rec.2020 (Current Engine):");
             println!("   R={:.6}, G={:.6}, B={:.6}", r_rec, g_rec, b_rec);
+            let inv_m = m_real_dng.inverse().unwrap_or(firstproof_core::color::Matrix3x3::IDENTITY);
+            let c_sensor_est = inv_m.multiply_vector(c_rec);
+            println!("   Estimated Sensor (wb applied): R={:.6}, G={:.6}, B={:.6}", c_sensor_est.r(), c_sensor_est.g(), c_sensor_est.b());
 
             println!("\n3. Dual-Engine Matrix Comparison:");
             println!("   Hardcoded Matrix:\n   {:?}", m_hardcoded);
@@ -355,6 +524,7 @@ fn cmd_inspect_photo(path_str: &str) {
         println!("🎨 Frame wb_coeffs: {:?}", frame.wb_coeffs);
         println!("🎨 Frame as_shot_wb: {:?}", frame.as_shot_wb());
         println!("🎨 Frame as_shot_temperature: {:.1}K", frame.as_shot_temperature());
+        println!("🎨 Frame baseline_exposure: {:.3} EV (gain: {:.3}x)", frame.baseline_exposure, 2.0f32.powf(frame.baseline_exposure));
         let m = frame.compute_sensor_to_rec2020();
         println!("🎨 Sensor to Rec.2020: {:?}", m);
     }
@@ -655,6 +825,102 @@ fn cmd_compare_images(path1_str: &str, path2_str: &str) {
         let py = ((target_h as f32) * ry).min((target_h - 1) as f32) as u32;
         let p1 = img1.get_pixel(px, py);
         let p2 = img2_resized.get_pixel(px, py);
+        let gr1 = p1.0[1] as f32 / p1.0[0].max(1) as f32;
+        let gr2 = p2.0[1] as f32 / p2.0[0].max(1) as f32;
+        println!("{:<20} {:<15?} {:<15?} [{:+3}, {:+3}, {:+3}]     {:.3} vs {:.3}",
+            label, p1.0, p2.0,
+            p2.0[0] as i16 - p1.0[0] as i16,
+            p2.0[1] as i16 - p1.0[1] as i16,
+            p2.0[2] as i16 - p1.0[2] as i16,
+            gr1, gr2);
+    }
+}
+
+fn cmd_compare_camera_preview(raw_path_str: &str) {
+    let raw_path = Path::new(raw_path_str);
+    println!("Extracting camera manufacturer preview from {}...", raw_path_str);
+    let preview_bytes = firstproof_core::raw::extract_preview_jpeg(raw_path)
+        .expect("Failed to extract embedded preview JPEG");
+    let preview_img = image::load_from_memory(&preview_bytes)
+        .expect("Failed to decode embedded camera preview")
+        .to_rgb8();
+
+    println!("Rendering First Proof CameraStandard export from {}...", raw_path_str);
+    let temp_export = std::env::temp_dir().join(format!("fp_cam_std_{}.jpg", std::process::id()));
+    let mut edits = read_xmp_file(raw_path).map(|x| x.edits).unwrap_or_default();
+    edits.tone_profile = firstproof_core::ColorProfileMode::CameraStandard;
+
+    firstproof_core::export::export_photo_file(
+        raw_path,
+        &temp_export,
+        &edits,
+        None,
+        92,
+        None,
+        firstproof_core::ExportColorSpace::Srgb,
+        firstproof_core::ExportRenderingIntent::Perceptual,
+        false,
+    ).expect("Failed to export First Proof CameraStandard preview");
+
+    let export_img = image::open(&temp_export)
+        .expect("Failed to open exported image")
+        .to_rgb8();
+    let _ = std::fs::remove_file(&temp_export);
+
+    println!("\nComparing Camera Preview vs First Proof CameraStandard Export:");
+    println!("  Camera Preview: {}x{}", preview_img.width(), preview_img.height());
+    println!("  CameraStandard: {}x{}", export_img.width(), export_img.height());
+
+    let target_w = preview_img.width();
+    let target_h = preview_img.height();
+    let export_resized = if export_img.width() != target_w || export_img.height() != target_h {
+        image::imageops::resize(&export_img, target_w, target_h, image::imageops::FilterType::Lanczos3)
+    } else {
+        export_img
+    };
+
+    let mut total_diff_r = 0u64;
+    let mut total_diff_g = 0u64;
+    let mut total_diff_b = 0u64;
+    let count = (target_w as u64) * (target_h as u64);
+
+    for y in 0..target_h {
+        for x in 0..target_w {
+            let p1 = preview_img.get_pixel(x, y);
+            let p2 = export_resized.get_pixel(x, y);
+            total_diff_r += (p1.0[0] as i32 - p2.0[0] as i32).abs() as u64;
+            total_diff_g += (p1.0[1] as i32 - p2.0[1] as i32).abs() as u64;
+            total_diff_b += (p1.0[2] as i32 - p2.0[2] as i32).abs() as u64;
+        }
+    }
+
+    println!("\nOverall Pixel Deltas across {} pixels:", count);
+    println!("  Mean RGB Delta: R={:.2}, G={:.2}, B={:.2} (out of 255)",
+        total_diff_r as f64 / count as f64,
+        total_diff_g as f64 / count as f64,
+        total_diff_b as f64 / count as f64);
+    let mean_rgb = (total_diff_r + total_diff_g + total_diff_b) as f64 / (3.0 * count as f64);
+    println!("  Mean Total Error: {:.2}/255 ({:.2}%)", mean_rgb, (mean_rgb / 255.0) * 100.0);
+
+    let test_points = [
+        ("Center", 0.50f32, 0.50f32),
+        ("Girl Cheek", 0.35f32, 0.55f32),
+        ("Subway Wall", 0.60f32, 0.15f32),
+        ("Metal Handrail", 0.75f32, 0.25f32),
+        ("Orange Seat", 0.15f32, 0.30f32),
+        ("Top-Right Corner", 0.85f32, 0.15f32),
+        ("Bottom-Left Corner", 0.15f32, 0.85f32),
+    ];
+
+    println!("\nKey Point Verification:");
+    println!("{:<20} {:<15} {:<15} {:<15} {:<15}",
+        "Region", "Camera Preview", "FP CameraStd", "Delta [R,G,B]", "G/R (Cam vs FP)");
+    println!("--------------------------------------------------------------------------------");
+    for (label, rx, ry) in test_points {
+        let px = ((target_w as f32) * rx).min((target_w - 1) as f32) as u32;
+        let py = ((target_h as f32) * ry).min((target_h - 1) as f32) as u32;
+        let p1 = preview_img.get_pixel(px, py);
+        let p2 = export_resized.get_pixel(px, py);
         let gr1 = p1.0[1] as f32 / p1.0[0].max(1) as f32;
         let gr2 = p2.0[1] as f32 / p2.0[0].max(1) as f32;
         println!("{:<20} {:<15?} {:<15?} [{:+3}, {:+3}, {:+3}]     {:.3} vs {:.3}",

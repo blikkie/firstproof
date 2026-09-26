@@ -97,11 +97,6 @@ fn metal_shader_agx_vivid_sim(rec2020_r: f32, rec2020_g: f32, rec2020_b: f32, co
     let shadow_weight = v_shadow * v_shadow * (3.0 - 2.0 * v_shadow);
     let sat_boost = (0.18 - 0.20 * skin_weight - 0.15 * sky_weight) * shadow_weight;
     s = (s * (1.0 + sat_boost)).clamp(0.0, 1.0);
-    let scotopic_weight = {
-        let t = ((v - 0.01) / 0.07).clamp(0.0, 1.0);
-        t * t * (3.0 - 2.0 * t)
-    };
-    s *= scotopic_weight;
     let (r, g, b) = firstproof_core::color::hsv_to_rgb(h, s, v);
     (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
 }
