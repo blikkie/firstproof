@@ -169,40 +169,6 @@ float applyCameraToneCurve(float x, int mode) {
     }
 }
 
-// Camera HueSatMap Memory Color Adjustments matching ColorScience.metal
-vec3 applyCameraHueSat(vec3 hsv, int mode) {
-    float h = hsv.x;
-    float s = hsv.y;
-    float v = hsv.z;
-    
-    float skyWeight = clamp(1.0 - abs(h - 235.0) / 35.0, 0.0, 1.0);
-    float vSky = smoothstep(0.20, 0.40, v);
-    float sSky = smoothstep(0.08, 0.25, s);
-    skyWeight *= (vSky * sSky);
-
-    float greenWeight = clamp(1.0 - abs(h - 120.0) / 35.0, 0.0, 1.0);
-    float skinWeight = clamp(1.0 - abs(h - 30.0) / 20.0, 0.0, 1.0);
-    
-    h -= 18.0 * skyWeight;
-    if (h < 0.0) { h += 360.0; }
-    
-    if (mode == 1) {
-        // Camera Standard: natural azure sky, vivid foliage, healthy skin
-        s *= (1.0 - 0.20 * skyWeight + 0.10 * greenWeight + 0.05 * skinWeight);
-        v *= (1.0 - 0.03 * skyWeight + 0.03 * skinWeight);
-    } else if (mode == 2) {
-        // Camera Portrait: gentle skin smoothing, calm skies
-        s *= (1.0 - 0.05 * skinWeight - 0.22 * skyWeight);
-        v *= (1.0 + 0.04 * skinWeight);
-    } else if (mode == 3) {
-        // Camera Landscape: punchy azure sky & greens
-        s *= (1.0 - 0.12 * skyWeight + 0.20 * greenWeight);
-        v *= (1.0 - 0.05 * skyWeight - 0.04 * greenWeight);
-    } else if (mode == 4) {
-        s *= (1.20 - 0.15 * skyWeight);
-    }
-    return vec3(h, clamp(s, 0.0, 1.0), clamp(v, 0.0, 1.0));
-}
 
 // AgX Filmic Tone Curve Sigmoids
 float agxSigmoid(float x, float p) {

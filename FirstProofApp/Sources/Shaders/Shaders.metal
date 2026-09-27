@@ -297,16 +297,21 @@ fragment float4 fragmentShader(
         // Modes 2..5: Camera Matching (Standard, Portrait, Landscape, Vivid)
         int camMode = uniforms.toneProfileMode - 1; // 2->1 (Standard), 3->2 (Portrait), 4->3 (Landscape), 5->4 (Vivid)
         float3 c_srgb = max(REC2020_TO_LINEAR_SRGB * rec2020Color, float3(0.0));
-        float3 hsv = rgb2hsv(c_srgb);
-        float3 hsvAdjusted = applyCameraHueSat(hsv, camMode);
-        float3 rgbAdjusted = hsv2rgb(hsvAdjusted);
+        float3 rgbAdjusted = c_srgb;
         
-        float lum = dot(rgbAdjusted, float3(0.2126, 0.7152, 0.0722));
-        float lumCurved = applyCameraToneCurve(lum, camMode);
-        float lumAdj = clamp((lumCurved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
-        float gain = lumAdj / max(lum, 1e-6);
-        
-        srgbLinearOut = max(rgbAdjusted * gain, float3(0.0));
+        // Continuous sensitometric per-channel tone curve (Hurter-Driffield film D-log H model):
+        // Evaluates each channel through the smooth C^1 camera spline.
+        // Naturally self-limiting to [0.0, 1.0] and desaturates highlights to white along the shoulder without arbitrary thresholds.
+        float3 curved = float3(
+            applyCameraToneCurve(rgbAdjusted.r, camMode),
+            applyCameraToneCurve(rgbAdjusted.g, camMode),
+            applyCameraToneCurve(rgbAdjusted.b, camMode)
+        );
+        if (abs(contrastGain - 1.0) > 0.001) {
+            srgbLinearOut = clamp((curved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
+        } else {
+            srgbLinearOut = clamp(curved, 0.0, 1.0);
+        }
     }
 
     float3 finalColor = srgbLinearOut;

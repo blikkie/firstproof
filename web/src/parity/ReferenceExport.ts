@@ -130,34 +130,6 @@ export function applyCameraToneCurve(x: number, mode: number): number {
   }
 }
 
-export function applyCameraHueSat(hsv: [number, number, number], mode: number): [number, number, number] {
-  let [h, s, v] = hsv;
-  let skyWeight = Math.min(Math.max(1.0 - Math.abs(h - 235.0) / 35.0, 0.0), 1.0);
-  const vSky = smoothstep(0.20, 0.40, v);
-  const sSky = smoothstep(0.08, 0.25, s);
-  skyWeight *= (vSky * sSky);
-
-  const greenWeight = Math.min(Math.max(1.0 - Math.abs(h - 120.0) / 35.0, 0.0), 1.0);
-  const skinWeight = Math.min(Math.max(1.0 - Math.abs(h - 30.0) / 20.0, 0.0), 1.0);
-
-  h -= 18.0 * skyWeight;
-  if (h < 0.0) { h += 360.0; }
-
-  if (mode === 1) { // Camera Standard
-    s *= (1.0 - 0.20 * skyWeight + 0.10 * greenWeight + 0.05 * skinWeight);
-    v *= (1.0 - 0.03 * skyWeight + 0.03 * skinWeight);
-  } else if (mode === 2) { // Camera Portrait
-    s *= (1.0 - 0.05 * skinWeight - 0.22 * skyWeight);
-    v *= (1.0 + 0.04 * skinWeight);
-  } else if (mode === 3) { // Camera Landscape
-    s *= (1.0 - 0.12 * skyWeight + 0.20 * greenWeight);
-    v *= (1.0 - 0.05 * skyWeight - 0.04 * greenWeight);
-  } else if (mode === 4) { // Camera Vivid
-    s *= (1.20 - 0.15 * skyWeight);
-  }
-  return [h, Math.min(Math.max(s, 0.0), 1.0), Math.min(Math.max(v, 0.0), 1.0)];
-}
-
 export function isNeutralEdits(edits: {
   exposure: number;
   contrast: number;
@@ -317,10 +289,8 @@ export function evaluateDisplayLuma(
     srgbOut = agxToneMap(rec2020, contrastGain);
   } else if (edits.tone_profile && edits.tone_profile in CAM_MODE_MAP) {
     const camMode = CAM_MODE_MAP[edits.tone_profile];
-    const hsv = rgb2hsv(rec2020[0], rec2020[1], rec2020[2]);
-    const hsvAdj = applyCameraHueSat(hsv, camMode);
-    const rgbAdj = hsv2rgb(hsvAdj[0], hsvAdj[1], hsvAdj[2]);
-    const lum = 0.2627 * rgbAdj[0] + 0.6780 * rgbAdj[1] + 0.0593 * rgbAdj[2];
+    const cSrgb = matMul(REC2020_TO_LINEAR_SRGB, rec2020);
+    const lum = 0.2627 * cSrgb[0] + 0.6780 * cSrgb[1] + 0.0593 * cSrgb[2];
     const lumCurved = applyCameraToneCurve(lum, camMode);
     return Math.min(Math.max((lumCurved - 0.18) * contrastGain + 0.18, 0.0), 1.0);
   } else {
@@ -1032,21 +1002,20 @@ export function evaluateReferencePixel(
     srgbLinearOut = agxToneMap(rec2020, contrastGain);
   } else if (edits.tone_profile in CAM_MODE_MAP) {
     const camMode = CAM_MODE_MAP[edits.tone_profile];
-    const hsv = rgb2hsv(rec2020[0], rec2020[1], rec2020[2]);
-    const hsvAdj = applyCameraHueSat(hsv, camMode);
-    const rgbAdj = hsv2rgb(hsvAdj[0], hsvAdj[1], hsvAdj[2]);
+    const cSrgb = matMul(REC2020_TO_LINEAR_SRGB, rec2020);
 
-    const lum = 0.2627 * rgbAdj[0] + 0.6780 * rgbAdj[1] + 0.0593 * rgbAdj[2];
-    const lumCurved = applyCameraToneCurve(lum, camMode);
-    const lumAdj = Math.min(Math.max((lumCurved - 0.18) * contrastGain + 0.18, 0.0), 1.0);
-    const gain = lumAdj / Math.max(lum, 1e-6);
+    const applyCurve = (v: number) => {
+      const c = applyCameraToneCurve(Math.max(v, 0.0), camMode);
+      return Math.abs(contrastGain - 1.0) > 0.001
+        ? Math.min(Math.max((c - 0.18) * contrastGain + 0.18, 0.0), 1.0)
+        : Math.min(Math.max(c, 0.0), 1.0);
+    };
 
-    const curvedRec2020: [number, number, number] = [
-      Math.min(Math.max(rgbAdj[0] * gain, 0.0), 1.0),
-      Math.min(Math.max(rgbAdj[1] * gain, 0.0), 1.0),
-      Math.min(Math.max(rgbAdj[2] * gain, 0.0), 1.0),
+    srgbLinearOut = [
+      applyCurve(cSrgb[0]),
+      applyCurve(cSrgb[1]),
+      applyCurve(cSrgb[2]),
     ];
-    srgbLinearOut = matMul(REC2020_TO_LINEAR_SRGB, curvedRec2020);
   } else {
     // Fallback
     srgbLinearOut = matMul(REC2020_TO_LINEAR_SRGB, rec2020);

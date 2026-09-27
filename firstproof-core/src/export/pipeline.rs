@@ -182,19 +182,8 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
                     let g_init = c_srgb.g().max(0.0);
                     let b_init = c_srgb.b().max(0.0);
 
-                    let huesatmap = match mode {
-                        crate::ColorProfileMode::CameraPortrait => Some(crate::color::dcp::DcpProfile::built_in_portrait_huesatmap()),
-                        crate::ColorProfileMode::CameraLandscape => Some(crate::color::dcp::DcpProfile::built_in_landscape_huesatmap()),
-                        crate::ColorProfileMode::CameraVivid => Some(crate::color::dcp::DcpProfile::built_in_vivid_huesatmap()),
-                        _ => Some(crate::color::dcp::DcpProfile::built_in_standard_huesatmap()),
-                    };
-                    let (r_mapped, g_mapped, b_mapped) = if let Some(hsm) = huesatmap {
-                        let (h, s, v) = crate::color::rgb_to_hsv(r_init, g_init, b_init);
-                        let (h2, s2, v2) = hsm.apply_hsv(h, s, v);
-                        crate::color::hsv_to_rgb(h2, s2, v2)
-                    } else {
-                        (r_init, g_init, b_init)
-                    };
+                    // Clean camera profiles operate directly in linear sRGB without synthetic hue-twisting.
+                    let (r_mapped, g_mapped, b_mapped) = (r_init, g_init, b_init);
                     
                     let curve = match mode {
                         crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_tone_curve(),
@@ -203,15 +192,21 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
                         _ => crate::color::dcp::DcpProfile::built_in_standard_tone_curve(),
                     };
                     
-                    // Linear sRGB scene luminance-scaled tone curve: preserves chromaticity ratios (R/Y, G/Y, B/Y) without hue twisting
-                    let lum = 0.2126 * r_mapped + 0.7152 * g_mapped + 0.0722 * b_mapped;
-                    let lum_curved = crate::color::evaluate_tone_curve(lum, &curve);
-                    let lum_adj = ((lum_curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
-                    let gain = lum_adj / lum.max(1e-6);
-                    
-                    r = (r_mapped * gain).max(0.0);
-                    g = (g_mapped * gain).max(0.0);
-                    b = (b_mapped * gain).max(0.0);
+                    // Continuous sensitometric per-channel tone curve (Hurter-Driffield film D-log H model):
+                    // Evaluates each channel through the smooth C^1 camera spline.
+                    // Naturally self-limiting to [0.0, 1.0] and desaturates highlights to white along the shoulder without arbitrary thresholds.
+                    let apply_curve = |v: f32| -> f32 {
+                        let curved = crate::color::evaluate_tone_curve(v, &curve);
+                        if (contrast_gain - 1.0).abs() > 0.001 {
+                            ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
+                        } else {
+                            curved.clamp(0.0, 1.0)
+                        }
+                    };
+
+                    r = apply_curve(r_mapped);
+                    g = apply_curve(g_mapped);
+                    b = apply_curve(b_mapped);
                 }
             }
         } else {

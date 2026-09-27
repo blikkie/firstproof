@@ -616,4 +616,37 @@ mod tests {
         let (r_push, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 1.0);
         assert!(r_push > r_base, "Pushed exposure must produce higher density than normal");
     }
+
+    #[test]
+    fn test_chromatic_median_filtering() {
+        // 1. Uniform patch is unaffected
+        let mut uniform = vec![[0.4, 0.4, 0.4]; 25];
+        apply_chromatic_median_filter(&mut uniform, 5, 5, 1);
+        for p in &uniform {
+            assert_eq!(*p, [0.4, 0.4, 0.4]);
+        }
+
+        // 2. Spatial green step edge remains 100% sharp
+        let mut edge = Vec::with_capacity(25);
+        for _y in 0..5 {
+            for x in 0..5 {
+                let g = if x < 2 { 0.2 } else { 0.8 };
+                edge.push([g, g, g]);
+            }
+        }
+        apply_chromatic_median_filter(&mut edge, 5, 5, 1);
+        for x in 0..5 {
+            let expected_g = if x < 2 { 0.2 } else { 0.8 };
+            assert!((edge[2 * 5 + x][1] - expected_g).abs() < 1e-6);
+        }
+
+        // 3. Isolated red/blue chromatic outlier is rejected by median filter
+        let mut outlier_grid = vec![[0.5, 0.5, 0.5]; 25];
+        // Center pixel (2, 2) has a +0.2 red checkerboard spike:
+        outlier_grid[2 * 5 + 2][0] = 0.7; // R = 0.7, G = 0.5 -> C_r = +0.2
+        apply_chromatic_median_filter(&mut outlier_grid, 5, 5, 1);
+        // Center pixel's R should be filtered back to 0.5 by median filter
+        assert!((outlier_grid[2 * 5 + 2][0] - 0.5).abs() < 1e-4);
+    }
 }
+

@@ -603,7 +603,7 @@ fn test_cr2_0194_full_pipeline_parity() {
 
 #[test]
 fn test_sliders_dual_engine_parity_sweep() {
-    use firstproof_core::color::{Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB, agx_tone_map, agx_tone_map_vivid, evaluate_tone_curve, linear_to_srgb_gamma, rgb_to_hsv, hsv_to_rgb};
+    use firstproof_core::color::{Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB, agx_tone_map, agx_tone_map_vivid, evaluate_tone_curve, linear_to_srgb_gamma};
     use firstproof_core::export::{apply_tone_recovery, apply_color_adjustments};
     use firstproof_core::color::dcp::DcpProfile;
     use firstproof_core::ColorProfileMode;
@@ -698,26 +698,24 @@ fn test_sliders_dual_engine_parity_sweep() {
                 }
                 m => {
                     let srgb_init = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r_rec, g_rec, b_rec));
-                    let (h, s, v) = rgb_to_hsv(srgb_init.r().max(0.0), srgb_init.g().max(0.0), srgb_init.b().max(0.0));
-                    let hsm = match m {
-                        ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_huesatmap(),
-                        ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_huesatmap(),
-                        ColorProfileMode::CameraVivid => DcpProfile::built_in_vivid_huesatmap(),
-                        _ => DcpProfile::built_in_standard_huesatmap(),
-                    };
-                    let (h2, s2, v2) = hsm.apply_hsv(h, s, v);
-                    let (rm, gm, bm) = hsv_to_rgb(h2, s2, v2);
+                    let rm = srgb_init.r().max(0.0);
+                    let gm = srgb_init.g().max(0.0);
+                    let bm = srgb_init.b().max(0.0);
                     let curve = match m {
                         ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_tone_curve(),
                         ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_tone_curve(),
                         ColorProfileMode::CameraVivid => DcpProfile::built_in_vivid_tone_curve(),
                         _ => DcpProfile::built_in_standard_tone_curve(),
                     };
-                    let lum = 0.2126 * rm + 0.7152 * gm + 0.0722 * bm;
-                    let lum_curved = evaluate_tone_curve(lum, &curve);
-                    let lum_adj = ((lum_curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
-                    let gain = lum_adj / lum.max(1e-6);
-                    let srgb_lin = Color3::new((rm * gain).max(0.0), (gm * gain).max(0.0), (bm * gain).max(0.0));
+                    let apply_curve = |v: f32| -> f32 {
+                        let curved = evaluate_tone_curve(v, &curve);
+                        if (contrast_gain - 1.0).abs() > 0.001 {
+                            ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
+                        } else {
+                            curved.clamp(0.0, 1.0)
+                        }
+                    };
+                    let srgb_lin = Color3::new(apply_curve(rm), apply_curve(gm), apply_curve(bm));
                     (
                         linear_to_srgb_gamma(srgb_lin.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
                         linear_to_srgb_gamma(srgb_lin.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),

@@ -419,12 +419,9 @@ fn main() {
             );
 
             let std_curve = firstproof_core::color::dcp::DcpProfile::built_in_standard_tone_curve();
-            let lum = 0.2126 * c_srgb.r().max(0.0) + 0.7152 * c_srgb.g().max(0.0) + 0.0722 * c_srgb.b().max(0.0);
-            let lum_curved = firstproof_core::color::evaluate_tone_curve(lum, &std_curve);
-            let gain = lum_curved / lum.max(1e-6);
-            let cam_r = c_srgb.r().max(0.0) * gain;
-            let cam_g = c_srgb.g().max(0.0) * gain;
-            let cam_b = c_srgb.b().max(0.0) * gain;
+            let cam_r = firstproof_core::color::evaluate_tone_curve(c_srgb.r().max(0.0), &std_curve);
+            let cam_g = firstproof_core::color::evaluate_tone_curve(c_srgb.g().max(0.0), &std_curve);
+            let cam_b = firstproof_core::color::evaluate_tone_curve(c_srgb.b().max(0.0), &std_curve);
             println!("   Camera Standard (sRGB):   R={:.6}, G={:.6}, B={:.6} -> Display RGB: ({}, {}, {})",
                 cam_r, cam_g, cam_b,
                 srgb_gamma(cam_r), srgb_gamma(cam_g), srgb_gamma(cam_b)
@@ -521,6 +518,8 @@ fn cmd_inspect_photo(path_str: &str) {
     }
 
     if let Ok(frame) = firstproof_core::raw_decoder::RawDecoder::decode(&firstproof_core::raw_decoder::RawlerDecoder, path) {
+        println!("🎨 Frame black_levels: {:?}", frame.black_levels);
+        println!("🎨 Frame white_levels: {:?}", frame.white_levels);
         println!("🎨 Frame wb_coeffs: {:?}", frame.wb_coeffs);
         println!("🎨 Frame as_shot_wb: {:?}", frame.as_shot_wb());
         println!("🎨 Frame as_shot_temperature: {:.1}K", frame.as_shot_temperature());

@@ -96,9 +96,7 @@ float sampleDisplayLuma(vec2 uv) {
     } else {
         int camMode = u_toneProfileMode - 1;
         vec3 c_srgb = max(REC2020_TO_LINEAR_SRGB * c, vec3(0.0));
-        vec3 hsv = rgb2hsv(c_srgb);
-        vec3 hsvAdjusted = applyCameraHueSat(hsv, camMode);
-        vec3 rgbAdjusted = hsv2rgb(hsvAdjusted);
+        vec3 rgbAdjusted = c_srgb;
         float lum = dot(rgbAdjusted, vec3(0.2627, 0.6780, 0.0593));
         float lumCurved = applyCameraToneCurve(lum, camMode);
         return clamp((lumCurved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
@@ -237,17 +235,21 @@ void main() {
         // Modes 2..5: Camera Matching (2: Standard, 3: Portrait, 4: Landscape, 5: Vivid)
         int camMode = u_toneProfileMode - 1;
         vec3 c_srgb = max(REC2020_TO_LINEAR_SRGB * rec2020Color, vec3(0.0));
-        vec3 hsv = rgb2hsv(c_srgb);
-        vec3 hsvAdjusted = applyCameraHueSat(hsv, camMode);
-        vec3 rgbAdjusted = hsv2rgb(hsvAdjusted);
+        vec3 rgbAdjusted = c_srgb;
         
-        // Linear sRGB scene luminance-scaled tone curve
-        float lum = dot(rgbAdjusted, vec3(0.2126, 0.7152, 0.0722));
-        float lumCurved = applyCameraToneCurve(lum, camMode);
-        float lumAdj = clamp((lumCurved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
-        float gain = lumAdj / max(lum, 1e-6);
-        
-        srgbLinearOut = max(rgbAdjusted * gain, vec3(0.0));
+        // Continuous sensitometric per-channel tone curve (Hurter-Driffield film D-log H model):
+        // Evaluates each channel through the smooth C^1 camera spline.
+        // Naturally self-limiting to [0.0, 1.0] and desaturates highlights to white along the shoulder without arbitrary thresholds.
+        vec3 curved = vec3(
+            applyCameraToneCurve(rgbAdjusted.r, camMode),
+            applyCameraToneCurve(rgbAdjusted.g, camMode),
+            applyCameraToneCurve(rgbAdjusted.b, camMode)
+        );
+        if (abs(contrastGain - 1.0) > 0.001) {
+            srgbLinearOut = clamp((curved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
+        } else {
+            srgbLinearOut = clamp(curved, 0.0, 1.0);
+        }
     }
 
     // 11. Final Display Output: Display Gamma (The VERY LAST step!)
