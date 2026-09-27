@@ -31,6 +31,13 @@ This archive tracks completed stories and features moved from the active backlog
   - Fixed DNG baseline exposure tag parsing (Tag 50730).
   - Quantitative verification against camera reference JPEG (`_MG_2332.CR2`): MSE dropped from 299.11 to 225.84 (-24.5%), PSNR rose from 23.37 dB to 24.59 dB, metal handrail delta matched at `[+2, +2, +2]`, and skin melanin G/R chromaticity ratio matched to 0.500 vs 0.504.
   - Built diagnostic calibration suite (`calibrate`, `inspect`) generating 1:1 detail crop and full-frame diff triptychs.
+- **Story 5.8: Continuous Sensitometric Per-Channel Tone Curves, Soft-Adaptive Bayer Demosaicing, & Pure CIE Color Pipeline**:
+  - Replaced scalar luminance tone curve scaling ($k = f(Y)/Y$) with continuous $C^1$ per-channel Hurter-Driffield spline evaluation across Metal (`Shaders.metal`), Rust CPU (`pipeline.rs`), and WebGL (`FragmentShader.ts`, `ReferenceExport.ts`), naturally self-limiting to $[0.0, 1.0]$ and eliminating tungsten skin highlight blowouts and cyan blotches.
+  - Implemented soft-adaptive Hamilton-Adams Bayer demosaicing with smooth Hermite directional blending, eliminating zipper, maze, and checkerboard artifacts along low-gradient skin transitions.
+  - Added pre-demosaicing CFA white balance scaling, ensuring cross-channel Laplacian gradients operate in calibrated optical units and preventing asymmetric high-ISO noise amplification.
+  - Implemented chromatic difference median filtering on $(R - G)$ and $(B - G)$ difference planes, eliminating false-color chroma speckles while preserving 100% of spatial green luminance ($G$) optical sharpness.
+  - Completely eliminated heuristic `applyCameraHueSat` and synthetic 3D HueSatMaps, grounding the color pipeline strictly in physical CIE spectral matrices and sensitometric tone mapping.
+  - Quantitative verification against camera reference JPEG (`_MG_2332.CR2`): MSE dropped from 299.11 to 135.65 (-54.6%), PSNR rose from 23.37 dB to 26.81 dB, Mean Total Error dropped to 8.91/255 (3.49%), and full-frame blue parity matched at 94.3 vs 94.2.
 
 ---
 
