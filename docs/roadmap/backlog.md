@@ -7,12 +7,17 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1)**: 6 remaining stories establishing shader geometry/crop parity, desktop gesture interaction parity, zero-flashing preview staging, and eliminating the duplicate TypeScript oracle and fake 16-bit export slop.
-2. **Cross-Platform Linux Toolchain & Headless Development Engine (P1)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
-3. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-4. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
-5. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
-6. **Archival High-Precision Multi-Pass Export Engine (P2)**: Multi-pass AMaZE/RCD demosaicing and 2D spatial developer exhaustion diffusion.
+1. **Sensitometric Manifolds & Heuristic Threshold Elimination Initiative (P0)**:
+   - *5.9 Monotonic Highlight & Shadow Recovery*: Replace bounded half-sine lobes with smooth monotonic logistic/Hermite shoulders so highlights plateau at maximum recovery rather than dropping to zero above +4 EV.
+   - *5.10 Continuous Melanin Ellipse for Skin-Safe Vibrance*: Replace binary `(r > g) && (g > b)` check with a continuous 2D Gaussian distance metric around the human melanin locus $(r_n, g_n) = (0.44, 0.32)$ with a smooth Hermite shadow fade.
+   - *5.11 Smooth Selective Color Response (Deep Blue & Foliage)*: Replace piecewise sign branching and $C^0$ creases with symmetric continuous manifolds.
+   - *5.12 Unified Analytical Characteristic Curves for Emulsions & Print Media*: Replace piecewise zone branching (`base > 0.65`, `c > 0.70`) with unified analytical sigmoids.
+2. **Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1)**: 6 remaining stories establishing shader geometry/crop parity, desktop gesture interaction parity, zero-flashing preview staging, and eliminating the duplicate TypeScript oracle and fake 16-bit export slop.
+3. **Cross-Platform Linux Toolchain & Headless Development Engine (P1)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
+4. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
+5. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
+6. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
+7. **Archival High-Precision Multi-Pass Export Engine (P2)**: Multi-pass AMaZE/RCD demosaicing and 2D spatial developer exhaustion diffusion.
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
 
