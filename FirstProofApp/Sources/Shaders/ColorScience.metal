@@ -651,7 +651,8 @@ inline float3 applyDirChemicalCoupling(
 inline float3 applyRecordingEmulsion(
     float3 rgb,
     int archetype,
-    float pushPullEv
+    float pushPullEv,
+    int filterMode = 0
 ) {
     if (archetype == 0) {
         return rgb;
@@ -702,7 +703,8 @@ inline float3 applyRecordingEmulsion(
             );
         }
         case 6: { // MobberleySilver400 - Ref: Ilford Technical Info Sheet (HP5 Plus), ID-11 Developer (1+1)
-            float panLum = 0.28 * curRgb.r + 0.62 * curRgb.g + 0.10 * curRgb.b;
+            float3 w = getEnlargerFilterWeights(filterMode);
+            float panLum = dot(curRgb, w);
             float mono = applyFilmCharacteristicCurve(panLum, 1.08, 0.30, 0.25);
             return float3(mono);
         }

@@ -188,7 +188,8 @@ fragment float4 fragmentShader(
         rec2020Color = applyRecordingEmulsion(
             rec2020Color,
             uniforms.emulsionArchetype,
-            uniforms.emulsionExposure
+            uniforms.emulsionExposure,
+            uniforms.enlargerFilterMode
         );
     }
     

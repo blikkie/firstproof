@@ -87,7 +87,7 @@ float sampleDisplayLuma(vec2 uv) {
     }
     c = applyToneRecovery(c, u_highlights, u_shadows, u_whites, u_blacks);
     if (u_emulsionArchetype != 0) {
-        c = applyRecordingEmulsion(c, u_emulsionArchetype, u_emulsionExposure);
+        c = applyRecordingEmulsion(c, u_emulsionArchetype, u_emulsionExposure, u_enlargerFilterMode);
     }
     float contrastGain = (u_contrast >= 0.0) ? (1.0 + u_contrast / 100.0) : (1.0 + (u_contrast / 100.0) * 0.60);
     vec3 srgbOut;
@@ -178,7 +178,7 @@ void main() {
 
     // 4. Photochemical Recording Emulsion in Linear Rec.2020
     if (u_emulsionArchetype != 0) {
-        rec2020Color = applyRecordingEmulsion(rec2020Color, u_emulsionArchetype, u_emulsionExposure);
+        rec2020Color = applyRecordingEmulsion(rec2020Color, u_emulsionArchetype, u_emulsionExposure, u_enlargerFilterMode);
     }
 
     // 5. Tone Curves in Linear Rec.2020 Working Space

@@ -483,7 +483,7 @@ class DarkroomApp {
       'meta-sensor-res', 'meta-date-taken', 'meta-sidecar-status', 'btn-reset-all',
       'btn-pick', 'btn-reject', 'modal-shortcuts', 'btn-close-modal', 'select-tone-profile',
       'select-wb-preset', 'btn-wb-eyedropper', 'btn-white-point-picker', 'btn-black-point-picker',
-      'select-emulsion', 'select-print-media', 'btn-reset-curve', 'btn-auto-tone',
+      'select-emulsion', 'select-print-media', 'select-enlarger-filter', 'row-enlarger-filter', 'btn-reset-curve', 'btn-auto-tone',
       'meta-input-title', 'meta-input-caption', 'meta-input-creator', 'meta-input-keywords',
       'btn-crop-tool', 'btn-rotate-ccw', 'btn-rotate-cw', 'zoom-badge', 'peek-badge'
     ];
@@ -933,6 +933,7 @@ class DarkroomApp {
     // Emulsion Select
     this.elements['select-emulsion']?.addEventListener('change', (e) => {
       this.edits.emulsion_archetype = (e.target as HTMLSelectElement).value as EmulsionArchetype;
+      this.updateEnlargerFilterVisibility();
       this.renderCanvas();
       this.autoSaveSidecar();
     });
@@ -940,6 +941,14 @@ class DarkroomApp {
     // Print Media Select
     this.elements['select-print-media']?.addEventListener('change', (e) => {
       this.edits.print_media = (e.target as HTMLSelectElement).value as PrintMediaMode;
+      this.updateEnlargerFilterVisibility();
+      this.renderCanvas();
+      this.autoSaveSidecar();
+    });
+
+    // Enlarger Filter Select
+    this.elements['select-enlarger-filter']?.addEventListener('change', (e) => {
+      this.edits.enlarger_filter = (e.target as HTMLSelectElement).value as any;
       this.renderCanvas();
       this.autoSaveSidecar();
     });
@@ -2186,11 +2195,30 @@ class DarkroomApp {
     if (this.elements['select-print-media']) {
       (this.elements['select-print-media'] as HTMLSelectElement).value = this.edits.print_media;
     }
+    if (this.elements['select-enlarger-filter']) {
+      (this.elements['select-enlarger-filter'] as HTMLSelectElement).value = this.edits.enlarger_filter ?? 'NeutralPanchromatic';
+    }
+
+    this.updateEnlargerFilterVisibility();
 
     if (this.edits.curves) {
       this.curveWidget.setPoints(this.edits.curves);
       const lut = this.bridge.evaluateCurves(this.edits.curves);
       this.renderer.updateToneCurvesLut(lut);
+    }
+  }
+
+  private updateEnlargerFilterVisibility() {
+    const isMonochrome =
+      this.edits.print_media === 'BarytaSilverGelatin' ||
+      this.edits.print_media === 'WarmtoneChlorobromide' ||
+      this.edits.print_media === 'PlatinumPalladium' ||
+      this.edits.print_media === 'Cyanotype' ||
+      this.edits.emulsion_archetype === 'MobberleySilver400';
+
+    const row = this.elements['row-enlarger-filter'];
+    if (row) {
+      row.classList.toggle('hidden', !isMonochrome);
     }
   }
 
@@ -2271,6 +2299,8 @@ class DarkroomApp {
     if (e.tone_profile !== d.tone_profile) return true;
     if (e.emulsion_archetype !== d.emulsion_archetype) return true;
     if (e.print_media !== d.print_media) return true;
+    if (e.enlarger_filter !== d.enlarger_filter) return true;
+    if (Math.abs((e.print_process_depth ?? 100.0) - (d.print_process_depth ?? 100.0)) > 1e-4) return true;
     if (Math.abs((e.crop_left ?? 0.0) - 0.0) > 1e-4) return true;
     if (Math.abs((e.crop_top ?? 0.0) - 0.0) > 1e-4) return true;
     if (Math.abs((e.crop_right ?? 1.0) - 1.0) > 1e-4) return true;
