@@ -32,23 +32,17 @@ pub fn apply_film_characteristic_curve(val: f32, gamma: f32, shoulder: f32, toe:
         v
     };
 
-    // 2. Sensitometric highlight shoulder roll-off (cubic Hermite smoothly bounding maximum density)
-    let after_shoulder = if shoulder > 0.0 && base > 0.65 {
-        let t = ((base - 0.65) / 0.35).clamp(0.0, 1.0);
-        let comp = shoulder * 0.12 * t * t * (3.0 - 2.0 * t);
-        base - comp
-    } else {
-        base
-    };
+    // 2. Sensitometric highlight shoulder roll-off:
+    // Continuous C1 Hermite shoulder naturally vanishing at base <= 0.65 with zero derivative
+    let t_s = ((base - 0.65) / 0.35).clamp(0.0, 1.0);
+    let comp_s = shoulder * 0.12 * t_s * t_s * (3.0 - 2.0 * t_s);
 
-    // 3. Shadow toe compression (quadratic D-min roll-off)
-    if toe > 0.0 && after_shoulder < 0.35 {
-        let t = (after_shoulder / 0.35).clamp(0.0, 1.0);
-        let comp = toe * 0.06 * (1.0 - t) * (1.0 - t);
-        (after_shoulder - comp).max(0.0)
-    } else {
-        after_shoulder
-    }
+    // 3. Shadow toe compression:
+    // Continuous C1 quadratic roll-off naturally vanishing at base >= 0.35 with zero derivative
+    let t_t = (base / 0.35).clamp(0.0, 1.0);
+    let comp_t = toe * 0.06 * (1.0 - t_t) * (1.0 - t_t);
+
+    (base - comp_s - comp_t).max(0.0)
 }
 
 /// Active DIR Chemical Crosstalk Coupler Matrix in Optical Density Space:

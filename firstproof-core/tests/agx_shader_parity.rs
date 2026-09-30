@@ -79,26 +79,15 @@ fn test_metal_rust_dual_engine_parity() {
 
 /// Simulates the exact single-precision Metal shader implementation (`agxToneMapVivid` in ColorScience.metal)
 fn metal_shader_agx_vivid_sim(rec2020_r: f32, rec2020_g: f32, rec2020_b: f32, contrast_gain: f32) -> (f32, f32, f32) {
-    let (br, bg, bb) = metal_shader_agx_sim(rec2020_r, rec2020_g, rec2020_b, contrast_gain * 1.15);
-    let (mut h, mut s, v) = firstproof_core::color::rgb_to_hsv(br, bg, bb);
-    let skin_weight = (1.0 - (h - 25.0).abs() / 20.0).clamp(0.0, 1.0);
-    let mut sky_weight = (1.0 - (h - 235.0).abs() / 35.0).clamp(0.0, 1.0);
-    let v_t = ((v - 0.20) / 0.20).clamp(0.0, 1.0);
-    let v_sky = v_t * v_t * (3.0 - 2.0 * v_t);
-    let s_t = ((s - 0.08) / 0.17).clamp(0.0, 1.0);
-    let s_sky = s_t * s_t * (3.0 - 2.0 * s_t);
-    sky_weight *= v_sky * s_sky;
-
-    h -= 18.0 * sky_weight;
-    h -= 3.0 * skin_weight;
-    if h < 0.0 { h += 360.0; }
-    if h >= 360.0 { h -= 360.0; }
-    let v_shadow = ((v - 0.03) / 0.12).clamp(0.0, 1.0);
-    let shadow_weight = v_shadow * v_shadow * (3.0 - 2.0 * v_shadow);
-    let sat_boost = (0.18 - 0.20 * skin_weight - 0.15 * sky_weight) * shadow_weight;
-    s = (s * (1.0 + sat_boost)).clamp(0.0, 1.0);
-    let (r, g, b) = firstproof_core::color::hsv_to_rgb(h, s, v);
-    (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
+    let punchy_contrast = contrast_gain * 1.15;
+    let (br, bg, bb) = metal_shader_agx_sim(rec2020_r, rec2020_g, rec2020_b, punchy_contrast);
+    let lum = 0.2126 * br + 0.7152 * bg + 0.0722 * bb;
+    let sat = 1.20;
+    (
+        (lum + sat * (br - lum)).clamp(0.0, 1.0),
+        (lum + sat * (bg - lum)).clamp(0.0, 1.0),
+        (lum + sat * (bb - lum)).clamp(0.0, 1.0),
+    )
 }
 
 #[test]
@@ -267,3 +256,71 @@ fn test_metal_rust_split_toning_parity() {
         }
     }
 }
+
+#[test]
+fn test_synthetic_greyscale_wedge_photometric_continuity() {
+    // 21-step photometric wedge covering the entire 16.5-stop dynamic range (-10.0 EV to +6.5 EV)
+    // relative to 0.18 middle gray.
+    const STEPS: usize = 21;
+    let mut prev_output = -1.0f32;
+
+    for i in 0..STEPS {
+        let ev = -10.0 + (i as f32) * (16.5 / (STEPS - 1) as f32);
+        let linear_val = 0.18 * 2.0f32.powf(ev);
+        let input = Color3::new(linear_val, linear_val, linear_val);
+        let out = agx_tone_map(input, 1.0);
+
+        // 1. Strict achromatic purity
+        assert!(
+            (out.r() - out.g()).abs() < 1e-5 && (out.g() - out.b()).abs() < 1e-5,
+            "Achromatic axis broken on step {i} (EV {ev:.2}): ({}, {}, {})",
+            out.r(), out.g(), out.b()
+        );
+
+        // 2. Strict monotonicity (f'(x) > 0: every stop must be strictly brighter than the previous)
+        assert!(
+            out.r() > prev_output,
+            "Monotonicity violation on step {i} (EV {ev:.2}): current {} <= prev {}",
+            out.r(), prev_output
+        );
+
+        // 3. Boundary anchoring:
+        // Deep shadow floor (-10 EV): output must be >= 0.0 and < 0.005 (not negative, not lifted).
+        // Highlight ceiling (+6.5 EV): output must roll off smoothly near 1.0 without blowout.
+        if i == 0 {
+            assert!(
+                out.r() >= 0.0 && out.r() < 0.005,
+                "Shadow boundary anchor violated at -10 EV: {}",
+                out.r()
+            );
+        }
+        if i == STEPS - 1 {
+            assert!(
+                out.r() <= 1.0 && out.r() >= 0.99,
+                "Highlight boundary anchor violated at +6.5 EV: {}",
+                out.r()
+            );
+        }
+
+        // 4. No premature clipping:
+        // Stops above -9.5 EV must have real positive photons (> 0.0).
+        if ev > -9.5 {
+            assert!(
+                out.r() > 0.0,
+                "Premature shadow clipping at EV {ev:.2}: out={}",
+                out.r()
+            );
+        }
+        // Stops below +6.0 EV must not be fully blown out (< 0.99).
+        if ev < 6.0 {
+            assert!(
+                out.r() < 0.99,
+                "Premature highlight clipping at EV {ev:.2}: out={}",
+                out.r()
+            );
+        }
+
+        prev_output = out.r();
+    }
+}
+

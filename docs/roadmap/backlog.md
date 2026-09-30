@@ -7,12 +7,8 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Sensitometric Manifolds & Heuristic Threshold Elimination Initiative (P0)**:
-   - *5.9 Monotonic Highlight & Shadow Recovery*: Replace bounded half-sine lobes with smooth monotonic logistic/Hermite shoulders so highlights plateau at maximum recovery rather than dropping to zero above +4 EV.
-   - *5.10 Continuous Melanin Ellipse for Skin-Safe Vibrance*: Replace binary `(r > g) && (g > b)` check with a continuous 2D Gaussian distance metric around the human melanin locus $(r_n, g_n) = (0.44, 0.32)$ with a smooth Hermite shadow fade.
-   - *5.11 Smooth Selective Color Response (Deep Blue & Foliage)*: Replace piecewise sign branching and $C^0$ creases with symmetric continuous manifolds.
-   - *5.12 Unified Analytical Characteristic Curves for Emulsions & Print Media*: Replace piecewise zone branching (`base > 0.65`, `c > 0.70`) with unified analytical sigmoids.
-2. **Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1)**: 6 remaining stories establishing shader geometry/crop parity, desktop gesture interaction parity, zero-flashing preview staging, and eliminating the duplicate TypeScript oracle and fake 16-bit export slop.
+1. **Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1)**: 6 remaining stories establishing shader geometry/crop parity, desktop gesture interaction parity, zero-flashing preview staging, and eliminating the duplicate TypeScript oracle and fake 16-bit export slop.
+2. **Unified RAW Container Intake & Camera Calibration Registry Engine (P1)**: Consolidate ad-hoc TIFF, EXIF, and DNG parsers into a strongly-typed container manifest and authoritative camera calibration registry.
 3. **Cross-Platform Linux Toolchain & Headless Development Engine (P1)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
 4. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
 5. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
@@ -146,6 +142,19 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
     - `PhotoLoaderService.ts` (worker dispatch, debounce staging, cache coordinator)
   - Reduce `main.ts` to a lean application coordinator (~200 lines).
   - *Verification*: Full end-to-end regression check across all tools, keyboard shortcuts, and inspector tabs.
+
+### 3.9 Unified RAW Container Intake & Camera Calibration Registry Engine (P1)
+- **Eliminate Ad-Hoc Tag Scanning (`firstproof-types::container`)**:
+  - Replace fragmented, hand-rolled binary scanners (`preview.rs`, `raw.rs`, `dcp.rs`) with a single, strongly-typed `RawContainerManifest` parser.
+  - Parse TIFF/DNG IFD hierarchies (IFD0, SubIFDs, ExifIFD) in a single pass, strongly typing all DNG specification tags: `BaselineExposure` (Tag 50728), `BaselineNoise` (Tag 50730), `BaselineSharpness` (Tag 50731), `LinearResponseLimit` (Tag 50734), `ColorMatrix1/2`, `ForwardMatrix1/2`, `AnalogBalance`, `AsShotNeutral`, and `ActiveArea`.
+- **Structured Camera Calibration Database (`CameraCalibrationRegistry`)**:
+  - Build an in-memory, zero-allocation calibration database mapping camera make and model to authoritative physical sensor properties.
+  - Harness `rawler`'s built-in 700+ camera calibration dataset (MIT / Apache-2.0) for sensor CFA patterns, active crop areas, and dual-illuminant color matrices.
+  - Augment with Adobe DNG Converter baseline exposure offsets and ForwardMatrices across major camera families (Canon EOS, Sony Alpha, Nikon Z/D, Fujifilm X, Panasonic Lumix, OM System/Olympus, Leica, Hasselblad).
+  - Eliminate all fragile ad-hoc string heuristics (`if m.contains("canon")`) in favor of exact model indexing with principled manufacturer-family fallbacks.
+- **Dual-Format RAW vs DNG Regression Suite**:
+  - Integration test `test_raw_vs_dng_intake_parity` auditing paired proprietary RAWs and their Adobe DNG converted counterparts (e.g. `_MG_2332.CR2` vs `_MG_2332.dng`).
+  - Guarantees bit-level agreement: baseline exposure delta $\Delta \text{EV} < 0.01$, identical active sensor crop, and photometric wedge continuity across both native and web darkroom targets.
 
 ---
 

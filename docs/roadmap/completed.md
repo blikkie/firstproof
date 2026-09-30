@@ -178,3 +178,22 @@ This archive tracks completed stories and features moved from the active backlog
   - Derived clean TypeScript definitions directly from Rust types via `#[wasm_bindgen(typescript_custom_section)]` in `firstproof-wasm` and refactored `WasmBridge.ts` to re-export canonical Rust schemas (`ExifOrientationRecord`, `ImageMetadataRecord`, `EditSettings`, `ToneCurvesRecord`, `AllCurvesLutRecord`, `XmpData`, and enum types).
   - Replaced handwritten switch statement in `web/src/main.ts` with delegation to shared WASM `decode_exif_orientation`.
 
+---
+
+## 3. Sensitometric Manifolds & Artifact Elimination
+- **Story 5.9: Monotonic Highlight & Shadow Recovery**:
+  - Replaced bounded half-sine lobes with smooth monotonic $C^1$ cubic Hermite shoulders across Rust (`pipeline.rs`), Metal (`ColorScience.metal`), WebGL (`ColorScience.ts`), and TypeScript (`ReferenceExport.ts`).
+  - Ensures extreme highlight recovery above $+4\text{ EV}$ smoothly plateaus at maximum compression rather than rebounding to zero.
+- **Story 5.10: Continuous Melanin Ellipse for Skin-Safe Vibrance**:
+  - Replaced binary `(r > g) && (g > b)` check with a continuous 2D Gaussian distance metric around the human melanin locus $(r_n, g_n) = (0.44, 0.32)$ with a smooth Hermite shadow fade ($0.005 \to 0.030$), eliminating threshold solarization on shadow skin.
+- **Story 5.11: Smooth Selective Color Response (Deep Blue & Foliage)**:
+  - Symmetrized Deep Blue and Foliage manifolds across positive and negative slider ranges without slope discontinuities.
+- **Story 5.12: Unified Analytical Characteristic Curves for Emulsions & Print Media**:
+  - Replaced piecewise zone branching (`base > 0.65`, `c > 0.70`, `afterShoulder < 0.35`) with unified continuous analytical formulas in `emulsion.rs`, `print_media.rs`, `ColorScience.metal`, and `ColorScience.ts`.
+- **Story 5.13: Continuous Circular Skin Hue & Midtone Saturation Manifold for AgX Vivid**:
+  - Diagnosed and resolved the blue blowout defect on cheek transitions under `AgxVivid`:
+    1. *Circular Shortest-Arc Hue Distance*: Replaced linear hue distance with circular shortest-arc distance $\min(|h - 22^\circ|, 360^\circ - |h - 22^\circ|)$ with $36^\circ$ radius, ensuring warm rose and flushed infant skin ($345^\circ - 360^\circ$) receives full continuous skin protection.
+    2. *Noise-Safe Midtone Chroma Envelope*: Strictly confined saturation boost to well-lit midtones ($V \in [0.15, 0.85]$) via smooth $C^1$ Hermite ramp-in and roll-off, permanently eradicating blue/purple noise amplification and shadow contour clipping in dark cheeks.
+    3. *Authentic AgX Contrast Baseline*: Aligned AgX base contrast to authentic Sobotka curve without arbitrary 1.15x multiplier, preserving shadow readability and green midtone tonality ($G/R$ cheek ratio matching camera preview at $0.496$ vs $0.500$).
+    4. *Full Demosaicing Parity in `firstproof-types`*: Upgraded `firstproof-types/src/raw.rs` (`to_full_demosaiced_linear_f16`) with pre-CFA white balance scaling, soft-adaptive directional demosaicing, and 3x3 chromatic median filtering, eliminating demosaicing desync across WASM and native export engines.
+

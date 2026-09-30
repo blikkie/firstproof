@@ -46,9 +46,11 @@ uniform float u_sharpeningMasking;
 uniform float u_noiseReduction;
 
 uniform int u_isOriginal;
+uniform int u_isCameraJpeg;
 uniform int u_isLinearRec2020;
 uniform int u_hasMasterCurve;
 uniform int u_hasRgbCurves;
+uniform sampler2D u_cameraJpegTexture;
 
 ${COLOR_SCIENCE_GLSL}
 ${DETAIL_GLSL}
@@ -105,6 +107,12 @@ float sampleDisplayLuma(vec2 uv) {
 }
 
 void main() {
+    // Quick peek camera manufacturer JPEG (J key)
+    if (u_isCameraJpeg != 0) {
+        fragColor = texture(u_cameraJpegTexture, v_texCoord);
+        return;
+    }
+
     vec4 sampled = texture(u_texture, v_texCoord);
     
     // Quick peek original as-shot frame

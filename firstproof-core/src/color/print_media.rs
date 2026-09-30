@@ -85,12 +85,8 @@ pub fn apply_print_media(
 
             // Sensitometric highlight compression: smooth cubic Hermite soft-shoulder roll-off
             let compress = |c: f32| -> f32 {
-                if c > 0.70 {
-                    let u = ((c - 0.70) / 0.30).clamp(0.0, 1.0);
-                    c - 0.045 * depth * u * u * (3.0 - 2.0 * u)
-                } else {
-                    c
-                }
+                let u = ((c - 0.70) / 0.30).clamp(0.0, 1.0);
+                c - 0.045 * depth * u * u * (3.0 - 2.0 * u)
             };
             let r_p = compress(r_graded);
             let g_p = compress(g_graded);

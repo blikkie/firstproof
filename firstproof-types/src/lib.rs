@@ -34,7 +34,7 @@ pub use preview::{
     PreviewResultRecord, RawLinearResultRecord,
 };
 pub use raw::{
-    blend_sensor_highlights, f16_to_f32, f32_to_f16, read_dng_baseline_exposure, CfaPattern, RawSensorFrame, CFA_COLOR_BLUE, CFA_COLOR_GREEN, CFA_COLOR_RED,
+    blend_sensor_highlights, f16_to_f32, f32_to_f16, read_dng_baseline_exposure, resolve_baseline_exposure, CfaPattern, RawSensorFrame, CFA_COLOR_BLUE, CFA_COLOR_GREEN, CFA_COLOR_RED,
 };
 pub use settings::{EditSettings, WhiteBalanceResult};
 pub use xmp::{

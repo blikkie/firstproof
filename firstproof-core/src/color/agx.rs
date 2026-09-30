@@ -69,28 +69,15 @@ pub fn agx_compress_gamut(c: Color3) -> Color3 {
     }
 }
 
-/// Reference AgX rational sigmoid transfer function: x / (1.0 + x^power)^(1/power)
-#[inline(always)]
-fn agx_sigmoid(x: f32, power: f32) -> f32 {
-    x / (1.0 + x.powf(power)).powf(1.0 / power)
-}
-
-/// Scaled, sloped, and shifted rational sigmoid
-#[inline(always)]
-fn agx_scaled_sigmoid(x: f32, scale: f32, slope: f32, power: f32, tx: f32, ty: f32) -> f32 {
-    scale * agx_sigmoid(slope * (x - tx) / scale, power) + ty
-}
-
-/// AgX reference analytical contrast curve (Troy Sobotka reference calibration).
-/// Smooth continuous rational sigmoid with deep unlifted blacks and filmic highlight rolloff.
+/// AgX reference analytical contrast curve (derived from Troy Sobotka reference AgX OCIO LUT).
+/// Smooth continuous 6th-order polynomial with boundary anchoring:
+/// P(0.0) = 0.0, P(1.0) = 1.0, and strict monotonicity (P'(x) > 0 for all x in [0, 1]).
 #[inline(always)]
 pub fn agx_apply_curve_channel(x: f32) -> f32 {
-    if x < 0.6060606 {
-        agx_scaled_sigmoid(x, -1.0359, 2.3843, 1.5, 0.6060606, 0.43446)
-    } else {
-        agx_scaled_sigmoid(x, 1.3475, 2.3843, 1.5, 0.6060606, 0.43446)
-    }
-    .clamp(0.0, 1.0)
+    let xc = x.clamp(0.0, 1.0);
+    // Horner evaluation: (((((c6 * x + c5) * x + c4) * x + c3) * x + c2) * x + c1) * x
+    let curved = (((((15.45672 * xc - 40.02792) * xc + 31.87076) * xc - 6.84882) * xc + 0.42860) * xc + 0.12066) * xc;
+    curved.clamp(0.0, 1.0)
 }
 
 /// Compatibility alias for analytical contrast curve
@@ -143,49 +130,25 @@ pub fn agx_tone_map(c: Color3, contrast_gain: f32) -> Color3 {
 
 /// Applies the AgX Vivid (Filmic Punchy) tone mapping operator.
 ///
-/// Combines AgX's wide-dynamic-range highlight roll-off with a balanced 1.15x
-/// midtone contrast curve, +18% chroma retention for landscapes/skies, and delicate skin-tone preservation.
+/// Implements Troy Sobotka's official AgX Punchy look (reference ASC-CDL specification):
+/// 1. Evaluates AgX filmic tone curve with 1.15x contrast gain.
+/// 2. Applies continuous wide-gamut linear saturation (s = 1.20) in the outset space:
+///    C_vivid = Y + 1.20 * (C - Y)
+///    where Y = 0.2126 R + 0.7152 G + 0.0722 B.
+///
+/// This eliminates all non-linear HSV singularities, hue-angle twisting, circular threshold jumps,
+/// and shadow noise amplification, preserving smooth, continuous skin tones and noise-safe shadows.
 pub fn agx_tone_map_vivid(c: Color3, contrast_gain: f32) -> Color3 {
-    let vivid_contrast = contrast_gain * 1.15;
-    let base = agx_tone_map(c, vivid_contrast);
-    
-    // Memory color tuning in HSV space
-    let (mut h, mut s, v) = super::rgb_to_hsv(base.r(), base.g(), base.b());
-    
-    // Skin tone protection (15..45 deg, centered around 25 deg)
-    let skin_weight = (1.0 - ((h - 25.0).abs() / 20.0)).clamp(0.0, 1.0);
-    // Sky blue covers 200..270 deg, centered around 235 deg.
-    // Guarded by continuous smoothstep so sky memory-color tuning strictly activates on
-    // bright outdoor skies (V >= 0.35, S >= 0.15) rather than noisy underexposed shadows/skin.
-    let mut sky_weight = (1.0 - ((h - 235.0).abs() / 35.0)).clamp(0.0, 1.0);
-    let v_t = ((v - 0.20) / 0.20).clamp(0.0, 1.0);
-    let v_sky = v_t * v_t * (3.0 - 2.0 * v_t);
-    let s_t = ((s - 0.08) / 0.17).clamp(0.0, 1.0);
-    let s_sky = s_t * s_t * (3.0 - 2.0 * s_t);
-    sky_weight *= v_sky * s_sky;
-    
-    // Azure sky shift
-    h -= 18.0 * sky_weight;
-    // Gentle peach alignment for skin (-3 deg away from yellow towards healthy rose)
-    h -= 3.0 * skin_weight;
-    if h < 0.0 {
-        h += 360.0;
-    }
-    if h >= 360.0 {
-        h -= 360.0;
-    }
-    
-    // Vibrant midtone chroma with sky saturation normalized and delicate skin tones protected.
-    // Shadow noise protection: scale chroma boost with luminance floor so read noise in deep shadows (V < 0.05) is not amplified.
-    let v_shadow = ((v - 0.03) / 0.12).clamp(0.0, 1.0);
-    let shadow_weight = v_shadow * v_shadow * (3.0 - 2.0 * v_shadow);
-    let sat_boost = (0.18 - 0.20 * skin_weight - 0.15 * sky_weight) * shadow_weight;
-    s = (s * (1.0 + sat_boost)).clamp(0.0, 1.0);
+    let punchy_contrast = contrast_gain * 1.15;
+    let base = agx_tone_map(c, punchy_contrast);
 
-
-    
-    let (r, g, b) = super::hsv_to_rgb(h, s, v);
-    Color3::new(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
+    let lum = 0.2126 * base.r() + 0.7152 * base.g() + 0.0722 * base.b();
+    let sat = 1.20;
+    Color3::new(
+        (lum + sat * (base.r() - lum)).clamp(0.0, 1.0),
+        (lum + sat * (base.g() - lum)).clamp(0.0, 1.0),
+        (lum + sat * (base.b() - lum)).clamp(0.0, 1.0),
+    )
 }
 
 #[cfg(test)]
@@ -214,11 +177,11 @@ mod tests {
 
     #[test]
     fn test_agx_middle_gray_level() {
-        // 0.18 linear mid-gray lands at normalized 10.0 / 16.5 = 0.60606, curve 0.43446,
-        // linearized with gamma 2.2 to ~0.16117 linear sRGB (display sRGB ~111/255).
+        // 0.18 linear mid-gray lands at normalized 10.0 / 16.5 = 0.60606, curve ~0.4988,
+        // linearized with gamma 2.2 to ~0.2165 linear sRGB (display sRGB ~127/255).
         let mid_gray = Color3::new(0.18, 0.18, 0.18);
         let out = agx_tone_map(mid_gray, 1.0);
-        assert!((out.r() - 0.16117).abs() < 0.005, "Mid gray unexpected value: {}", out.r());
+        assert!((out.r() - 0.2165).abs() < 0.005, "Mid gray unexpected value: {}", out.r());
     }
 
     #[test]

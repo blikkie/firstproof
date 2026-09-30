@@ -10,7 +10,9 @@
 
 - **Toolchain Sandbox Permissions**: Commands involving the Darwin linker or Swift compiler (`swift build`, `make bundle`) require `BypassSandbox: true`. Pure Rust tests (`cargo test --manifest-path firstproof-core/Cargo.toml`) and git inspection can run in standard sandboxed mode.
 
-- **Adversarial Code Reviews**: Before every commit and check-in, perform an adversarial review (probing diffs for race conditions, memory leaks/retain cycles, error boundary misses, out-of-order async responses, and main-thread bottlenecks).
+- **Adversarial Code Reviews & Anti-Magic Number Audit**: Before every commit and check-in, perform an adversarial review:
+  - Probe diffs for race conditions, memory leaks/retain cycles, WebGL/Metal texture clobbering, error boundary misses, out-of-order async responses, and main-thread bottlenecks.
+  - **Audit for Arbitrary Constants & Heuristics**: Rigorously inspect every camera processing, color science, and exposure adjustment in the diff for arbitrary magic numbers, localized scalar multipliers, or piecewise if/else heuristics. Any new numerical parameter must trace directly to published sensitometric standards (e.g. DNG specification, Troy Sobotka's AgX specification, CIE photopic luminance) rather than trial-and-error curve fitting.
 
 - **Verification Gatekeeping Before Commit Tours**:
   - Whenever implementation work is completed, ALWAYS first prompt the user with the concrete manual verification steps committed to in the implementation plan (e.g. running the app, testing UI controls, validating shortcuts or image renders).
@@ -53,6 +55,26 @@
   - Tonal curves must be smooth $C^1$ or $C^\infty$ analytical functions (e.g. bounded cubic polynomial S-curves $f(x) = x + \alpha \cdot x(1-x)(2x-1)$, smooth Hermite shoulders, or sigmoidal density curves). Fractional power laws $x^\gamma$ with infinite derivative ($f' \to \infty$) at bounds are forbidden.
   - Spectral absorption must obey physical laws (e.g. subtractive Beer-Lambert law $T = e^{-\alpha \cdot D}$ for dye clouds and pigments, multiplicative physical reflectance $I \cdot W_{\text{base}}$ for paper base warmth, quadratic surface scatter $f(1-x)^2$ for uncalendered rag matte).
   - Piecewise logic with discontinuous first derivatives ($C^0$ or discontinuous slopes) creates posterization, harsh solarization knees, and unnatural clipping. Always formulate adjustments as continuous mathematical manifolds.
+
+- **First-Principles Transfer Invariants Over Downstream Curve Fitting**:
+  - When encountering color casts, clipping, muddy tones, or blowout, **never apply localized scalar multipliers, arbitrary hue offsets, or downstream saturation tweaks** to mask symptoms.
+  - **Boundary Anchoring Invariant**: Transfer curves must satisfy $f(0.0) \equiv 0.0$ and $f(1.0) \equiv 1.0$ exactly. A transfer function must never plunge negative or cross zero prematurely inside the dynamic range.
+  - **Strict Monotonicity Invariant**: Transfer curves must have $f'(x) > 0$ for all $x \in (0, 1)$. Flat spots, premature clipping, or downward slopes are strictly forbidden.
+  - **Continuous First Derivative ($C^1$)**: Transitions between shoulders, toes, and midtones must possess matching first derivatives without slope discontinuities or hard knees.
+  - If a tone curve flatlines below $-3.7\text{ EV}$, no downstream color tuning can ever recover it. Always fix the transfer function at the root.
+
+- **Global Field & Wedge Verification Invariant (Never Spot-Check in Isolation)**:
+  - Never declare an image quality, color science, or develop adjustment "resolved" based on a single pixel coordinate, isolated crop, or hand-picked spot audit (Spot-Check Confirmation Bias).
+  - Every color science adjustment must pass three levels of global verification:
+    1. **Synthetic Greyscale Wedge (-10 EV to +6.5 EV)**: Proves that zero stops are clipped or flattened across the entire 16.5-stop dynamic range.
+    2. **Full-Frame Clipping Telemetry**: Proves that real RAW shadow floors and highlight ceilings do not exhibit artificial spikes at 0.0 or 1.0.
+    3. **Decomposed CIELAB Error ($\Delta L^*, \Delta C^*, \Delta h$)**: Distinguishes whether an error is caused by luminance transfer ($\Delta L^*$), chroma scale ($\Delta C^*$), or hue rotation ($\Delta h$), preventing luminance errors from being masked with chroma hacks.
+
+- **Strict Separation of Color Models (No Model Conflation)**:
+  - Never benchmark an open-domain filmic tone mapper against a closed-domain manufacturer camera curve:
+  - **Camera Matching (`CameraStandard`)**: Emulates Canon/Sony/Nikon DIGIC processing via Adobe DCP ForwardMatrix and proprietary camera S-curves. It is the **only** profile that should be benchmarked against camera reference JPEGs.
+  - **AgX Filmic (`AgxFilmic`, `AgxVivid`)**: Troy Sobotka's open-domain cinematic tone mapper designed for 16.5 stops of scene radiance and natural highlight desaturation. It must **never** be hacked with arbitrary "memory color" offsets (`h -= 18`, `h -= 3`, `sat_boost = 0.18`) to mimic a camera JPEG.
+  - Conflating the two produces slop: artificial heuristics that destroy wide-gamut filmic highlights and crush shadows.
 
 - **Real-Time Viewport Thumbnail Invalidation**:
   - Viewport adjustments (sliders, curves, rotation) must never trigger slow disk re-renders or LibRaw demosaicing.

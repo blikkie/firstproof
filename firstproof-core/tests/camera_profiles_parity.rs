@@ -950,13 +950,13 @@ fn test_bilateral_tone_recovery_metal_parity() {
             delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
         }
         if shadows != 0.0 {
-            let u = ((ev_base + 4.0) / 4.0).clamp(0.0, 1.0);
-            let w_shadows = (std::f32::consts::PI * u).sin();
+            let u = (-ev_base / 3.0).clamp(0.0, 1.0);
+            let w_shadows = u * u * (3.0 - 2.0 * u);
             delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
         }
         if highlights != 0.0 {
-            let u = (ev_base / 4.0).clamp(0.0, 1.0);
-            let w_highlights = (std::f32::consts::PI * u).sin();
+            let u = (ev_base / 3.0).clamp(0.0, 1.0);
+            let w_highlights = u * u * (3.0 - 2.0 * u);
             delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
         }
         if whites != 0.0 {

@@ -128,20 +128,9 @@ impl RawDecoder for RawlerDecoder {
                 let mut header = vec![0u8; 65536];
                 let n = f.read(&mut header).ok()?;
                 header.truncate(n);
-                firstproof_types::read_dng_baseline_exposure(&header)
+                Some(firstproof_types::resolve_baseline_exposure(&header, &camera_model))
             })
-            .unwrap_or_else(|| {
-                let m = camera_model.to_lowercase();
-                if m.contains("canon") || m.contains("eos") {
-                    0.886
-                } else if m.contains("sony") || m.contains("ilce") || m.contains("alpha") {
-                    0.50
-                } else if m.contains("nikon") {
-                    0.50
-                } else {
-                    0.0
-                }
-            });
+            .unwrap_or_else(|| firstproof_types::resolve_baseline_exposure(&[], &camera_model));
 
         let sensor_data = match raw.data {
             rawler::RawImageData::Integer(cfa) => cfa,

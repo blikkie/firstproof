@@ -154,7 +154,7 @@ fn decode_raw_sensor_frame(slice: &[u8]) -> Option<RawSensorFrame> {
             }
         }));
 
-    let baseline_exposure = firstproof_types::read_dng_baseline_exposure(slice).unwrap_or(0.0);
+    let baseline_exposure = firstproof_types::resolve_baseline_exposure(slice, &camera_model);
 
     Some(RawSensorFrame {
         full_width: raw.width,

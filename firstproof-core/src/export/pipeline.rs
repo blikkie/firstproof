@@ -286,17 +286,17 @@ pub fn apply_bilateral_tone_recovery_rgb(
         delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
     }
     
-    // 2. Shadows: Lift lower midtones and shadow textures (ev in [-4.0, 0.0])
+    // 2. Shadows: Lift lower midtones and shadow textures (ev <= 0.0)
     if shadows != 0.0 {
-        let u = ((ev_base + 4.0) / 4.0).clamp(0.0, 1.0);
-        let w_shadows = (std::f32::consts::PI * u).sin();
+        let u = (-ev_base / 3.0).clamp(0.0, 1.0);
+        let w_shadows = u * u * (3.0 - 2.0 * u);
         delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
     }
     
-    // 3. Highlights: Recover or boost bright areas and skies (ev in [0.0, 4.0])
+    // 3. Highlights: Recover or boost bright areas and skies (ev >= 0.0)
     if highlights != 0.0 {
-        let u = (ev_base / 4.0).clamp(0.0, 1.0);
-        let w_highlights = (std::f32::consts::PI * u).sin();
+        let u = (ev_base / 3.0).clamp(0.0, 1.0);
+        let w_highlights = u * u * (3.0 - 2.0 * u);
         delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
     }
     
@@ -363,16 +363,33 @@ pub fn apply_color_adjustments(
         let min_c = r.min(g).min(b);
         let chroma = max_c - min_c; // in [0, 1]
 
-        // Detect human skin tones in Linear Rec.2020 using normalized (r_n, g_n) chromaticity locus:
-        // Universal across the entire human melanin spectrum (Fitzpatrick I-VI / MST 01-10) from fair to deep dark.
+        // Detect human skin tones in Linear Rec.2020 using continuous 2D Gaussian melanin locus:
+        // Center: (r_n, g_n) = (0.44, 0.32) across Fitzpatrick I-VI / Monk Skin Tone 01-10.
         let sum = r + g + b;
-        let is_warm = (r > g) && (g > b);
-        let skin_metric = if is_warm && sum > 0.015 {
+        let skin_metric = if sum > 1e-5 {
             let r_n = r / sum;
             let g_n = g / sum;
-            let d_r = (r_n - 0.44).abs();
-            let d_g = (g_n - 0.32).abs();
-            (1.0 - (d_r * 4.5 + d_g * 9.0)).clamp(0.0, 1.0)
+            let d_r = (r_n - 0.44) / 0.12;
+            let d_g = (g_n - 0.32) / 0.06;
+            let d2 = d_r * d_r + d_g * d_g;
+            let gauss = (-0.5 * d2).exp();
+
+            // Smooth Hermite shadow fade between sum = 0.005 and sum = 0.030
+            // so deep shadow noise does not trigger erratic chromaticity protection,
+            // while ramping to 1.0 without hard thresholds.
+            let u_lum = ((sum - 0.005) / 0.025).clamp(0.0, 1.0);
+            let w_lum = u_lum * u_lum * (3.0 - 2.0 * u_lum);
+
+            // Smooth warm orientation weighting: in human skin, r > g and g > b.
+            // Continuous C1 Hermite transitions replace binary knife-edges:
+            let u_rg = ((r_n - g_n + 0.02) / 0.06).clamp(0.0, 1.0);
+            let w_rg = u_rg * u_rg * (3.0 - 2.0 * u_rg);
+
+            let b_n = 1.0 - r_n - g_n;
+            let u_gb = ((g_n - b_n + 0.02) / 0.06).clamp(0.0, 1.0);
+            let w_gb = u_gb * u_gb * (3.0 - 2.0 * u_gb);
+
+            gauss * w_lum * w_rg * w_gb
         } else {
             0.0
         };
@@ -391,21 +408,16 @@ pub fn apply_color_adjustments(
     }
 
     // 3. Deep Blue (Sky & Water) (-100..+100)
+    // Symmetric subtractive density manifold across positive and negative adjustments.
     if deep_blue != 0.0 {
         let max_warm = r.max(g);
         let sky_signal = (b - max_warm).max(0.0);
         if sky_signal > 0.0 {
             let x = deep_blue / 100.0;
             let factor = x.signum() * x.abs().powf(1.6);
-            if factor > 0.0 {
-                r -= factor * sky_signal * 0.30;
-                g -= factor * sky_signal * 0.15;
-                b -= factor * sky_signal * 0.20;
-            } else {
-                r -= factor * sky_signal * 0.25;
-                g -= factor * sky_signal * 0.20;
-                b -= factor * sky_signal * 0.10;
-            }
+            r -= factor * sky_signal * 0.28;
+            g -= factor * sky_signal * 0.18;
+            b -= factor * sky_signal * 0.15;
         }
     }
 

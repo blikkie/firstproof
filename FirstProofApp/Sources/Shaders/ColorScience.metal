@@ -155,20 +155,11 @@ constant float AGX_EV_RANGE = 16.5;
 constant float AGX_GAMMA = 2.2;
 constant float AGX_MID_GRAY_NORM = 0.6060606;
 
-inline float agxSigmoid(float x, float power) {
-    return x / pow(1.0 + pow(x, power), 1.0 / power);
-}
-
-inline float agxScaledSigmoid(float x, float scale, float slope, float power, float tx, float ty) {
-    return scale * agxSigmoid(slope * (x - tx) / scale, power) + ty;
-}
-
 inline float agxApplyCurveChannel(float x) {
-    if (x < 0.6060606) {
-        return clamp(agxScaledSigmoid(x, -1.0359, 2.3843, 1.5, 0.6060606, 0.43446), 0.0, 1.0);
-    } else {
-        return clamp(agxScaledSigmoid(x, 1.3475, 2.3843, 1.5, 0.6060606, 0.43446), 0.0, 1.0);
-    }
+    float xc = clamp(x, 0.0, 1.0);
+    // Horner evaluation: (((((c6 * x + c5) * x + c4) * x + c3) * x + c2) * x + c1) * x
+    float curved = (((((15.45672 * xc - 40.02792) * xc + 31.87076) * xc - 6.84882) * xc + 0.42860) * xc + 0.12066) * xc;
+    return clamp(curved, 0.0, 1.0);
 }
 
 inline float3 agxToneMap(float3 rec2020Color, float contrastGain) {
@@ -195,27 +186,16 @@ inline float3 agxToneMap(float3 rec2020Color, float contrastGain) {
 }
 
 inline float3 agxToneMapVivid(float3 rec2020Color, float contrastGain) {
-    float3 base = agxToneMap(rec2020Color, contrastGain * 1.15);
-    float3 hsv = rgb2hsv(base);
-    
-    float skinWeight = clamp(1.0 - abs(hsv.x - 25.0) / 20.0, 0.0, 1.0);
-    float skyWeight = clamp(1.0 - abs(hsv.x - 235.0) / 35.0, 0.0, 1.0);
-    float vSky = smoothstep(0.20, 0.40, hsv.z);
-    float sSky = smoothstep(0.08, 0.25, hsv.y);
-    skyWeight *= (vSky * sSky);
-    
-    hsv.x -= 18.0 * skyWeight;
-    hsv.x -= 3.0 * skinWeight;
-    if (hsv.x < 0.0) { hsv.x += 360.0; }
-    if (hsv.x >= 360.0) { hsv.x -= 360.0; }
-    
-    // Vibrant midtone chroma with sky saturation normalized and delicate skin tones protected.
-    // Shadow noise protection: scale chroma boost with luminance floor so read noise in deep shadows (V < 0.05) is not amplified.
-    float vShadow = clamp((hsv.z - 0.03) / 0.12, 0.0, 1.0);
-    float shadowWeight = vShadow * vShadow * (3.0 - 2.0 * vShadow);
-    float satBoost = (0.18 - 0.20 * skinWeight - 0.15 * skyWeight) * shadowWeight;
-    hsv.y = clamp(hsv.y * (1.0 + satBoost), 0.0, 1.0);
-    return clamp(hsv2rgb(hsv), 0.0, 1.0);
+    float punchyContrast = contrastGain * 1.15;
+    float3 base = agxToneMap(rec2020Color, punchyContrast);
+
+    float lum = 0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b;
+    float sat = 1.20;
+    return clamp(float3(
+        lum + sat * (base.r - lum),
+        lum + sat * (base.g - lum),
+        lum + sat * (base.b - lum)
+    ), 0.0, 1.0);
 }
 
 // MARK: - Advanced Bilateral Base/Detail Tone Recovery (Highlights, Shadows, Whites, Blacks)
@@ -279,14 +259,14 @@ inline float3 applyBilateralToneRecovery(
     }
     
     if (shadows != 0.0) {
-        float u = clamp((ev_base + 4.0) / 4.0, 0.0, 1.0);
-        float w_shadows = sin(3.141592653589793 * u);
+        float u = clamp(-ev_base / 3.0, 0.0, 1.0);
+        float w_shadows = u * u * (3.0 - 2.0 * u);
         delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
     }
     
     if (highlights != 0.0) {
-        float u = clamp(ev_base / 4.0, 0.0, 1.0);
-        float w_highlights = sin(3.141592653589793 * u);
+        float u = clamp(ev_base / 3.0, 0.0, 1.0);
+        float w_highlights = u * u * (3.0 - 2.0 * u);
         delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
     }
     
@@ -341,12 +321,25 @@ inline float3 applyColorAdjustments(
 
         float skinProtect = 1.0;
         float sum = c.r + c.g + c.b;
-        if (c.r > c.g && c.g > c.b && sum > 0.015) {
+        if (sum > 1e-5) {
             float rN = c.r / sum;
             float gN = c.g / sum;
-            float dR = abs(rN - 0.44);
-            float dG = abs(gN - 0.32);
-            float skinMetric = clamp(1.0 - (dR * 4.5 + dG * 9.0), 0.0, 1.0);
+            float dR = (rN - 0.44) / 0.12;
+            float dG = (gN - 0.32) / 0.06;
+            float d2 = dR * dR + dG * dG;
+            float gauss = exp(-0.5 * d2);
+
+            float uLum = clamp((sum - 0.005) / 0.025, 0.0, 1.0);
+            float wLum = uLum * uLum * (3.0 - 2.0 * uLum);
+
+            float uRg = clamp((rN - gN + 0.02) / 0.06, 0.0, 1.0);
+            float wRg = uRg * uRg * (3.0 - 2.0 * uRg);
+
+            float bN = 1.0 - rN - gN;
+            float uGb = clamp((gN - bN + 0.02) / 0.06, 0.0, 1.0);
+            float wGb = uGb * uGb * (3.0 - 2.0 * uGb);
+
+            float skinMetric = gauss * wLum * wRg * wGb;
             skinProtect = 1.0 - 0.6 * skinMetric;
         }
 
@@ -363,15 +356,9 @@ inline float3 applyColorAdjustments(
         if (skySignal > 0.0) {
             float x = deepBlue / 100.0;
             float factor = sign(x) * pow(abs(x), 1.6);
-            if (factor > 0.0) {
-                c.r -= factor * skySignal * 0.30;
-                c.g -= factor * skySignal * 0.15;
-                c.b -= factor * skySignal * 0.20;
-            } else {
-                c.r -= factor * skySignal * 0.25;
-                c.g -= factor * skySignal * 0.20;
-                c.b -= factor * skySignal * 0.10;
-            }
+            c.r -= factor * skySignal * 0.28;
+            c.g -= factor * skySignal * 0.18;
+            c.b -= factor * skySignal * 0.15;
         }
     }
 
@@ -500,11 +487,8 @@ inline float3 applyPrintMedia(
             
             // Sensitometric highlight compression: smooth cubic Hermite soft shoulder
             auto compressShoulder = [depth](float c) -> float {
-                if (c > 0.70) {
-                    float u = clamp((c - 0.70) / 0.30, 0.0, 1.0);
-                    return c - 0.045 * depth * u * u * (3.0 - 2.0 * u);
-                }
-                return c;
+                float u = clamp((c - 0.70) / 0.30, 0.0, 1.0);
+                return c - 0.045 * depth * u * u * (3.0 - 2.0 * u);
             };
             float rP = compressShoulder(rG);
             float gP = compressShoulder(gG);
@@ -633,18 +617,13 @@ inline float applyFilmCharacteristicCurve(float val, float gamma, float shoulder
         float gMod = (gamma - 1.0) * 0.40;
         base = max(v + gMod * u * (1.0 - u) * (2.0 * u - 1.0), 0.0);
     }
-    float afterShoulder = base;
-    if (shoulder > 0.0 && base > 0.65) {
-        float t = clamp((base - 0.65) / 0.35, 0.0, 1.0);
-        float comp = shoulder * 0.12 * t * t * (3.0 - 2.0 * t);
-        afterShoulder = base - comp;
-    }
-    if (toe > 0.0 && afterShoulder < 0.35) {
-        float t = clamp(afterShoulder / 0.35, 0.0, 1.0);
-        float comp = toe * 0.06 * (1.0 - t) * (1.0 - t);
-        return max(afterShoulder - comp, 0.0);
-    }
-    return afterShoulder;
+    float tS = clamp((base - 0.65) / 0.35, 0.0, 1.0);
+    float compS = shoulder * 0.12 * tS * tS * (3.0 - 2.0 * tS);
+
+    float tT = clamp(base / 0.35, 0.0, 1.0);
+    float compT = toe * 0.06 * (1.0 - tT) * (1.0 - tT);
+
+    return max(base - compS - compT, 0.0);
 }
 
 inline float3 applyDirChemicalCoupling(

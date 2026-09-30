@@ -379,6 +379,7 @@ public final class AppViewModel {
     public var defaultExifFlipH: Bool = false
     public var defaultExifFlipV: Bool = false
     public var isShowingOriginal: Bool = false
+    public var isShowingCameraJpeg: Bool = false
     
     // MARK: - Undo/Redo & Session History
     public var undoHistory = UndoHistoryManager()

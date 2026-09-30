@@ -79,6 +79,7 @@ class DarkroomApp {
   private edits: EditSettingsPayload = this.getDefaultEdits();
   private cardRotations: Map<number, { rotation: number; flipH: boolean; flipV: boolean }> = new Map();
   private isOriginalPeek: boolean = false;
+  private isCameraJpegPeek: boolean = false;
   private currentMetadata: any = {};
   private currentRating: number = 0;
   private currentStatus: string = 'Unflagged';
@@ -475,7 +476,7 @@ class DarkroomApp {
 
   private cacheElements() {
     const ids = [
-      'btn-open-folder', 'file-input-fallback', 'btn-original-peek', 'btn-export-proof', 'btn-parity-audit', 'btn-shortcuts',
+      'btn-open-folder', 'file-input-fallback', 'btn-original-peek', 'btn-camera-jpeg-peek', 'btn-export-proof', 'btn-parity-audit', 'btn-shortcuts',
       'empty-state', 'btn-empty-open', 'developing-spinner', 'filmstrip-count', 'filmstrip-scroll',
       'meta-filename', 'meta-dimensions', 'meta-camera', 'meta-iso', 'meta-aperture', 'meta-shutter',
       'meta-format-badge', 'meta-full-camera', 'meta-lens', 'meta-focal-length', 'meta-exposure-summary',
@@ -484,7 +485,7 @@ class DarkroomApp {
       'select-wb-preset', 'btn-wb-eyedropper', 'btn-white-point-picker', 'btn-black-point-picker',
       'select-emulsion', 'select-print-media', 'btn-reset-curve', 'btn-auto-tone',
       'meta-input-title', 'meta-input-caption', 'meta-input-creator', 'meta-input-keywords',
-      'btn-crop-tool', 'btn-rotate-ccw', 'btn-rotate-cw', 'zoom-badge'
+      'btn-crop-tool', 'btn-rotate-ccw', 'btn-rotate-cw', 'zoom-badge', 'peek-badge'
     ];
     for (const id of ids) {
       const el = document.getElementById(id);
@@ -554,6 +555,14 @@ class DarkroomApp {
     btnPeek.addEventListener('mousedown', () => { this.isOriginalPeek = true; this.renderCanvas(); });
     btnPeek.addEventListener('mouseup', () => { this.isOriginalPeek = false; this.renderCanvas(); });
     btnPeek.addEventListener('mouseleave', () => { this.isOriginalPeek = false; this.renderCanvas(); });
+
+    // Camera JPEG Peek J
+    const btnCameraJpeg = this.elements['btn-camera-jpeg-peek'];
+    if (btnCameraJpeg) {
+      btnCameraJpeg.addEventListener('mousedown', () => { this.isCameraJpegPeek = true; this.renderCanvas(); });
+      btnCameraJpeg.addEventListener('mouseup', () => { this.isCameraJpegPeek = false; this.renderCanvas(); });
+      btnCameraJpeg.addEventListener('mouseleave', () => { this.isCameraJpegPeek = false; this.renderCanvas(); });
+    }
 
     // Export Photo Modal (Cmd+E / Toolbar Button)
     this.elements['btn-export-proof'].addEventListener('click', () => this.openExportModal());
@@ -1101,6 +1110,13 @@ class DarkroomApp {
           this.isOriginalPeek = true;
           this.renderCanvas();
           break;
+        case 'j':
+        case 'J':
+          if (!e.repeat) {
+            this.isCameraJpegPeek = true;
+            this.renderCanvas();
+          }
+          break;
         case 'ArrowLeft':
         case 'ArrowUp':
           if (this.activeIdx > 0) {
@@ -1121,6 +1137,17 @@ class DarkroomApp {
     window.addEventListener('keyup', (e: KeyboardEvent) => {
       if (e.key === '\\') {
         this.isOriginalPeek = false;
+        this.renderCanvas();
+      } else if (e.key === 'j' || e.key === 'J') {
+        this.isCameraJpegPeek = false;
+        this.renderCanvas();
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      if (this.isOriginalPeek || this.isCameraJpegPeek) {
+        this.isOriginalPeek = false;
+        this.isCameraJpegPeek = false;
         this.renderCanvas();
       }
     });
@@ -1791,6 +1818,10 @@ class DarkroomApp {
           this.renderer.uploadImage(imgBitmap);
         }
 
+        if (imgBitmap) {
+          this.renderer.uploadCameraJpeg(imgBitmap);
+        }
+
         this.updateCanvasDimensions();
         this.onCurveChange(); // evaluate LUTs and render canvas
         const t4 = performance.now();
@@ -2080,8 +2111,24 @@ class DarkroomApp {
         this.isOriginalPeek,
         this.zoomScale,
         this.panOffset,
-        this.isCropActive
+        this.isCropActive,
+        this.isCameraJpegPeek
       );
+      this.updatePeekBadge();
+    }
+  }
+
+  private updatePeekBadge() {
+    const badge = this.elements['peek-badge'];
+    if (!badge) return;
+    if (this.isCameraJpegPeek) {
+      badge.textContent = 'Camera JPEG (J)';
+      badge.className = 'peek-badge camera-jpeg';
+    } else if (this.isOriginalPeek) {
+      badge.textContent = 'Original Negative (\\)';
+      badge.className = 'peek-badge original-negative';
+    } else {
+      badge.className = 'peek-badge hidden';
     }
   }
 

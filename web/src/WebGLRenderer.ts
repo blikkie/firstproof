@@ -47,6 +47,7 @@ export class WebGLRenderer {
   private texture: WebGLTexture | null = null;
   private masterLutTex: WebGLTexture | null = null;
   private rgbLutTex: WebGLTexture | null = null;
+  private cameraJpegTexture: WebGLTexture | null = null;
   private isLinearRec2020: boolean = false;
   private vbo: WebGLBuffer | null = null;
   private currentRotation: number = 0;
@@ -123,7 +124,7 @@ export class WebGLRenderer {
       'u_splitShadowHue', 'u_splitShadowSat', 'u_splitHighlightHue', 'u_splitHighlightSat', 'u_splitBalance',
       'u_sharpeningAmount', 'u_sharpeningRadius', 'u_sharpeningMasking', 'u_noiseReduction',
       'u_fitScale', 'u_zoomScale', 'u_panOffset', 'u_cropLeft', 'u_cropTop', 'u_cropRight', 'u_cropBottom', 'u_cropModeActive',
-      'u_isOriginal', 'u_isLinearRec2020', 'u_hasMasterCurve', 'u_hasRgbCurves'
+      'u_isOriginal', 'u_isCameraJpeg', 'u_cameraJpegTexture', 'u_isLinearRec2020', 'u_hasMasterCurve', 'u_hasRgbCurves'
     ];
     for (const u of uniforms) {
       this.uLocs[u] = this.gl.getUniformLocation(prog, u);
@@ -276,6 +277,26 @@ export class WebGLRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
 
+  public uploadCameraJpeg(image: HTMLImageElement | HTMLCanvasElement | ImageBitmap | ImageData) {
+    const gl = this.gl;
+    if (!this.cameraJpegTexture) {
+      this.cameraJpegTexture = gl.createTexture();
+    }
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, this.cameraJpegTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+
+    if (image instanceof ImageData) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, image.width, image.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, image.data);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    }
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  }
+
   public uploadLinearRec2020Texture(width: number, height: number, data: Uint16Array) {
     this.isLinearRec2020 = true;
     this.texWidth = width;
@@ -380,7 +401,8 @@ export class WebGLRenderer {
     isOriginal: boolean = false,
     zoomScale: number = 1.0,
     panOffset: { x: number; y: number } = { x: 0, y: 0 },
-    cropModeActive: boolean = false
+    cropModeActive: boolean = false,
+    isCameraJpeg: boolean = false
   ) {
     const gl = this.gl;
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
@@ -437,10 +459,15 @@ export class WebGLRenderer {
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, this.rgbLutTex);
     }
+    if (this.cameraJpegTexture) {
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, this.cameraJpegTexture);
+    }
 
     gl.uniform1i(this.uLocs['u_texture'], 0);
     gl.uniform1i(this.uLocs['u_curveMasterLut'], 1);
     gl.uniform1i(this.uLocs['u_curveRgbLut'], 2);
+    gl.uniform1i(this.uLocs['u_cameraJpegTexture'], 3);
 
     gl.uniform1f(this.uLocs['u_exposure'], edits.exposure);
     gl.uniform1f(this.uLocs['u_contrast'], edits.contrast);
@@ -483,6 +510,7 @@ export class WebGLRenderer {
     gl.uniform1f(this.uLocs['u_noiseReduction'], edits.noise_reduction ?? 0.0);
 
     gl.uniform1i(this.uLocs['u_isOriginal'], isOriginal ? 1 : 0);
+    gl.uniform1i(this.uLocs['u_isCameraJpeg'], (isCameraJpeg && this.cameraJpegTexture) ? 1 : 0);
     gl.uniform1i(this.uLocs['u_isLinearRec2020'], this.isLinearRec2020 ? 1 : 0);
     gl.uniform1i(this.uLocs['u_hasMasterCurve'], edits.curves.master.length > 2 ? 1 : 0);
     gl.uniform1i(this.uLocs['u_hasRgbCurves'], (edits.curves.red.length > 2 || edits.curves.green.length > 2 || edits.curves.blue.length > 2) ? 1 : 0);

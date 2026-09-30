@@ -303,20 +303,11 @@ export function evaluateDisplayLuma(
          0.0722 * Math.min(Math.max(srgbOut[2], 0.0), 1.0);
 }
 
-function agxSigmoid(x: number, power: number): number {
-  return x / Math.pow(1.0 + Math.pow(x, power), 1.0 / power);
-}
-
-function agxScaledSigmoid(x: number, scale: number, slope: number, power: number, tx: number, ty: number): number {
-  return scale * agxSigmoid((slope * (x - tx)) / scale, power) + ty;
-}
-
 export function agxApplyCurveChannel(x: number): number {
-  if (x < 0.6060606) {
-    return Math.min(Math.max(agxScaledSigmoid(x, -1.0359, 2.3843, 1.5, 0.6060606, 0.43446), 0.0), 1.0);
-  } else {
-    return Math.min(Math.max(agxScaledSigmoid(x, 1.3475, 2.3843, 1.5, 0.6060606, 0.43446), 0.0), 1.0);
-  }
+  const xc = Math.min(Math.max(x, 0.0), 1.0);
+  // Horner evaluation: (((((c6 * x + c5) * x + c4) * x + c3) * x + c2) * x + c1) * x
+  const curved = (((((15.45672 * xc - 40.02792) * xc + 31.87076) * xc - 6.84882) * xc + 0.42860) * xc + 0.12066) * xc;
+  return Math.min(Math.max(curved, 0.0), 1.0);
 }
 
 export function agxToneMap(rec2020: [number, number, number], contrastGain: number): [number, number, number] {
@@ -341,23 +332,16 @@ export function agxToneMap(rec2020: [number, number, number], contrastGain: numb
 }
 
 export function agxToneMapVivid(rec2020: [number, number, number], contrastGain: number): [number, number, number] {
-  const base = agxToneMap(rec2020, contrastGain * 1.15);
-  let [h, s, v] = rgb2hsv(base[0], base[1], base[2]);
+  const punchyContrast = contrastGain * 1.15;
+  const base = agxToneMap(rec2020, punchyContrast);
 
-  const skinWeight = Math.min(Math.max(1.0 - Math.abs(h - 25.0) / 20.0, 0.0), 1.0);
-  let skyWeight = Math.min(Math.max(1.0 - Math.abs(h - 235.0) / 35.0, 0.0), 1.0);
-  const vSky = smoothstep(0.20, 0.40, v);
-  const sSky = smoothstep(0.08, 0.25, s);
-  skyWeight *= (vSky * sSky);
-
-  h -= 18.0 * skyWeight;
-  h -= 3.0 * skinWeight;
-  if (h < 0.0) h += 360.0;
-  if (h >= 360.0) h -= 360.0;
-
-  s = Math.min(Math.max(s * (1.18 - 0.20 * skinWeight - 0.15 * skyWeight), 0.0), 1.0);
-  const rgb = hsv2rgb(h, s, v);
-  return [Math.min(Math.max(rgb[0], 0.0), 1.0), Math.min(Math.max(rgb[1], 0.0), 1.0), Math.min(Math.max(rgb[2], 0.0), 1.0)];
+  const lum = 0.2126 * base[0] + 0.7152 * base[1] + 0.0722 * base[2];
+  const sat = 1.20;
+  return [
+    Math.min(Math.max(lum + sat * (base[0] - lum), 0.0), 1.0),
+    Math.min(Math.max(lum + sat * (base[1] - lum), 0.0), 1.0),
+    Math.min(Math.max(lum + sat * (base[2] - lum), 0.0), 1.0),
+  ];
 }
 
 export function applyToneRecovery(
@@ -368,7 +352,7 @@ export function applyToneRecovery(
   blacks: number
 ): [number, number, number] {
   if (highlights === 0 && shadows === 0 && whites === 0 && blacks === 0) return color;
-  const y = 0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2];
+  const y = 0.2627 * color[0] + 0.6780 * color[1] + 0.0593 * color[2];
   if (y <= 1e-6) return color;
 
   const evBase = Math.log2(Math.max(y, 1e-5) / 0.18);
@@ -380,13 +364,13 @@ export function applyToneRecovery(
     deltaEv += (blacks / 100.0) * 0.90 * wBlacks;
   }
   if (shadows !== 0) {
-    const u = Math.min(Math.max((evBase + 4.0) / 4.0, 0.0), 1.0);
-    const wShadows = Math.sin(Math.PI * u);
+    const u = Math.min(Math.max(-evBase / 3.0, 0.0), 1.0);
+    const wShadows = u * u * (3.0 - 2.0 * u);
     deltaEv += (shadows / 100.0) * 1.20 * wShadows;
   }
   if (highlights !== 0) {
-    const u = Math.min(Math.max(evBase / 4.0, 0.0), 1.0);
-    const wHighlights = Math.sin(Math.PI * u);
+    const u = Math.min(Math.max(evBase / 3.0, 0.0), 1.0);
+    const wHighlights = u * u * (3.0 - 2.0 * u);
     deltaEv += (highlights / 100.0) * 1.30 * wHighlights;
   }
   if (whites !== 0) {
@@ -425,12 +409,25 @@ export function applyColorAdjustments(
 
     let skinProtect = 1.0;
     const sum = r + g + b;
-    if (r > g && g > b && sum > 0.015) {
+    if (sum > 1e-5) {
       const rN = r / sum;
       const gN = g / sum;
-      const dR = Math.abs(rN - 0.44);
-      const dG = Math.abs(gN - 0.32);
-      const skinMetric = Math.min(Math.max(1.0 - (dR * 4.5 + dG * 9.0), 0.0), 1.0);
+      const dR = (rN - 0.44) / 0.12;
+      const dG = (gN - 0.32) / 0.06;
+      const d2 = dR * dR + dG * dG;
+      const gauss = Math.exp(-0.5 * d2);
+
+      const uLum = Math.min(Math.max((sum - 0.005) / 0.025, 0.0), 1.0);
+      const wLum = uLum * uLum * (3.0 - 2.0 * uLum);
+
+      const uRg = Math.min(Math.max((rN - gN + 0.02) / 0.06, 0.0), 1.0);
+      const wRg = uRg * uRg * (3.0 - 2.0 * uRg);
+
+      const bN = 1.0 - rN - gN;
+      const uGb = Math.min(Math.max((gN - bN + 0.02) / 0.06, 0.0), 1.0);
+      const wGb = uGb * uGb * (3.0 - 2.0 * uGb);
+
+      const skinMetric = gauss * wLum * wRg * wGb;
       skinProtect = 1.0 - 0.6 * skinMetric;
     }
 
@@ -446,15 +443,9 @@ export function applyColorAdjustments(
     if (skySignal > 0.0) {
       const x = deepBlue / 100.0;
       const factor = Math.sign(x) * Math.pow(Math.abs(x), 1.6);
-      if (factor > 0) {
-        r -= factor * skySignal * 0.30;
-        g -= factor * skySignal * 0.15;
-        b -= factor * skySignal * 0.20;
-      } else {
-        r -= factor * skySignal * 0.25;
-        g -= factor * skySignal * 0.20;
-        b -= factor * skySignal * 0.10;
-      }
+      r -= factor * skySignal * 0.28;
+      g -= factor * skySignal * 0.18;
+      b -= factor * skySignal * 0.15;
     }
   }
 
@@ -546,18 +537,13 @@ export function applyFilmCharacteristicCurve(val: number, gamma: number, shoulde
     const gMod = (gamma - 1.0) * 0.40;
     base = Math.max(v + gMod * u * (1.0 - u) * (2.0 * u - 1.0), 0.0);
   }
-  let afterShoulder = base;
-  if (shoulder > 0.0 && base > 0.65) {
-    const t = Math.min(Math.max((base - 0.65) / 0.35, 0.0), 1.0);
-    const comp = shoulder * 0.12 * t * t * (3.0 - 2.0 * t);
-    afterShoulder = base - comp;
-  }
-  if (toe > 0.0 && afterShoulder < 0.35) {
-    const t = Math.min(Math.max(afterShoulder / 0.35, 0.0), 1.0);
-    const comp = toe * 0.06 * (1.0 - t) * (1.0 - t);
-    return Math.max(afterShoulder - comp, 0.0);
-  }
-  return afterShoulder;
+  const tS = Math.min(Math.max((base - 0.65) / 0.35, 0.0), 1.0);
+  const compS = shoulder * 0.12 * tS * tS * (3.0 - 2.0 * tS);
+
+  const tT = Math.min(Math.max(base / 0.35, 0.0), 1.0);
+  const compT = toe * 0.06 * (1.0 - tT) * (1.0 - tT);
+
+  return Math.max(base - compS - compT, 0.0);
 }
 
 export function applyDirChemicalCoupling(
@@ -706,11 +692,8 @@ export function applyPrintMedia(
     const bG = applyPaperGrade(rgb[2], grade);
 
     const compressShoulder = (c: number): number => {
-      if (c > 0.70) {
-        const u = Math.min(Math.max((c - 0.70) / 0.30, 0.0), 1.0);
-        return c - 0.045 * depth * u * u * (3.0 - 2.0 * u);
-      }
-      return c;
+      const u = Math.min(Math.max((c - 0.70) / 0.30, 0.0), 1.0);
+      return c - 0.045 * depth * u * u * (3.0 - 2.0 * u);
     };
     const rP = compressShoulder(rG);
     const gP = compressShoulder(gG);

@@ -170,22 +170,12 @@ float applyCameraToneCurve(float x, int mode) {
 }
 
 
-// AgX Filmic Tone Curve Sigmoids
-float agxSigmoid(float x, float p) {
-    float x_p = pow(abs(x), p);
-    return x / pow(1.0 + x_p, 1.0 / p);
-}
-
-float agxScaledSigmoid(float x, float scale, float slope, float power, float tx, float ty) {
-    return scale * agxSigmoid(slope * (x - tx) / scale, power) + ty;
-}
-
+// AgX Filmic Tone Curve Polynomial (derived from Troy Sobotka reference AgX OCIO LUT)
 float agxApplyCurveChannel(float x) {
-    if (x < 0.6060606) {
-        return clamp(agxScaledSigmoid(x, -1.0359, 2.3843, 1.5, 0.6060606, 0.43446), 0.0, 1.0);
-    } else {
-        return clamp(agxScaledSigmoid(x, 1.3475, 2.3843, 1.5, 0.6060606, 0.43446), 0.0, 1.0);
-    }
+    float xc = clamp(x, 0.0, 1.0);
+    // Horner evaluation: (((((c6 * x + c5) * x + c4) * x + c3) * x + c2) * x + c1) * x
+    float curved = (((((15.45672 * xc - 40.02792) * xc + 31.87076) * xc - 6.84882) * xc + 0.42860) * xc + 0.12066) * xc;
+    return clamp(curved, 0.0, 1.0);
 }
 
 vec3 agxToneMap(vec3 rec2020Color, float contrastGain) {
@@ -211,59 +201,56 @@ vec3 agxToneMap(vec3 rec2020Color, float contrastGain) {
 }
 
 vec3 agxToneMapVivid(vec3 rec2020Color, float contrastGain) {
-    vec3 base = agxToneMap(rec2020Color, contrastGain * 1.15);
-    vec3 hsv = rgb2hsv(base);
-    
-    float skinWeight = clamp(1.0 - abs(hsv.x - 25.0) / 20.0, 0.0, 1.0);
-    float skyWeight = clamp(1.0 - abs(hsv.x - 235.0) / 35.0, 0.0, 1.0);
-    float vSky = smoothstep(0.20, 0.40, hsv.z);
-    float sSky = smoothstep(0.08, 0.25, hsv.y);
-    skyWeight *= (vSky * sSky);
-    
-    hsv.x -= 18.0 * skyWeight;
-    hsv.x -= 3.0 * skinWeight;
-    if (hsv.x < 0.0) { hsv.x += 360.0; }
-    if (hsv.x >= 360.0) { hsv.x -= 360.0; }
-    
-    // Vibrant midtone chroma with sky saturation normalized and delicate skin tones protected.
-    // Shadow noise protection: scale chroma boost with luminance floor so read noise in deep shadows (V < 0.05) is not amplified.
-    float vShadow = clamp((hsv.z - 0.03) / 0.12, 0.0, 1.0);
-    float shadowWeight = vShadow * vShadow * (3.0 - 2.0 * vShadow);
-    float satBoost = (0.18 - 0.20 * skinWeight - 0.15 * skyWeight) * shadowWeight;
-    hsv.y = clamp(hsv.y * (1.0 + satBoost), 0.0, 1.0);
-    return clamp(hsv2rgb(hsv), 0.0, 1.0);
+    float punchyContrast = contrastGain * 1.15;
+    vec3 base = agxToneMap(rec2020Color, punchyContrast);
+
+    float lum = 0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b;
+    float sat = 1.20;
+    return clamp(vec3(
+        lum + sat * (base.r - lum),
+        lum + sat * (base.g - lum),
+        lum + sat * (base.b - lum)
+    ), 0.0, 1.0);
 }
 
-// Tone Recovery (Bilateral scene-referred highlights/shadows/whites/blacks)
+// Tone Recovery (Photographic scene-referred highlights/shadows/whites/blacks in EV stops)
 vec3 applyToneRecovery(vec3 rgb, float highlights, float shadows, float whites, float blacks) {
     if (highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0) {
         return rgb;
     }
     float lum = dot(rgb, vec3(0.2627, 0.6780, 0.0593));
-    float lumNorm = lum / (lum + 1.0);
-    float scale = 1.0;
+    if (lum <= 1e-6) {
+        return rgb;
+    }
+    float ev_base = log2(max(lum, 1e-5) / 0.18);
+    float delta_ev = 0.0;
 
-    if (highlights != 0.0) {
-        float hWeight = smoothstep(0.40, 0.95, lumNorm);
-        scale *= (highlights > 0.0)
-            ? (1.0 + (highlights / 100.0) * 0.45 * hWeight)
-            : (1.0 + (highlights / 100.0) * 0.60 * hWeight);
+    if (blacks != 0.0) {
+        float u = clamp((-ev_base - 1.0) / 3.0, 0.0, 1.0);
+        float w_blacks = u * u * (3.0 - 2.0 * u);
+        delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
     }
     if (shadows != 0.0) {
-        float sWeight = 1.0 - smoothstep(0.05, 0.45, lumNorm);
-        scale *= (shadows > 0.0)
-            ? (1.0 + (shadows / 100.0) * 0.70 * sWeight)
-            : (1.0 + (shadows / 100.0) * 0.50 * sWeight);
+        float u = clamp(-ev_base / 3.0, 0.0, 1.0);
+        float w_shadows = u * u * (3.0 - 2.0 * u);
+        delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
+    }
+    if (highlights != 0.0) {
+        float u = clamp(ev_base / 3.0, 0.0, 1.0);
+        float w_highlights = u * u * (3.0 - 2.0 * u);
+        delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
     }
     if (whites != 0.0) {
-        float wWeight = smoothstep(0.70, 1.0, lumNorm);
-        scale *= (1.0 + (whites / 100.0) * 0.35 * wWeight);
+        float u = clamp((ev_base - 1.0) / 3.0, 0.0, 1.0);
+        float w_whites = u * u * (3.0 - 2.0 * u);
+        delta_ev += (whites / 100.0) * 0.90 * w_whites;
     }
-    if (blacks != 0.0) {
-        float bWeight = 1.0 - smoothstep(0.0, 0.20, lumNorm);
-        scale *= (1.0 + (blacks / 100.0) * 0.40 * bWeight);
+
+    if (delta_ev == 0.0) {
+        return rgb;
     }
-    return max(rgb * scale, vec3(0.0));
+    float gain = exp2(delta_ev);
+    return rgb * gain;
 }
 
 // Color Adjustments: Vibrance, Saturation, Deep Blue, Foliage
@@ -286,12 +273,25 @@ vec3 applyColorAdjustments(vec3 rgb, float vibrance, float saturation, float dee
 
         float skinProtect = 1.0;
         float sum = c.r + c.g + c.b;
-        if (c.r > c.g && c.g > c.b && sum > 0.015) {
+        if (sum > 1e-5) {
             float rN = c.r / sum;
             float gN = c.g / sum;
-            float dR = abs(rN - 0.44);
-            float dG = abs(gN - 0.32);
-            float skinMetric = clamp(1.0 - (dR * 4.5 + dG * 9.0), 0.0, 1.0);
+            float dR = (rN - 0.44) / 0.12;
+            float dG = (gN - 0.32) / 0.06;
+            float d2 = dR * dR + dG * dG;
+            float gauss = exp(-0.5 * d2);
+
+            float uLum = clamp((sum - 0.005) / 0.025, 0.0, 1.0);
+            float wLum = uLum * uLum * (3.0 - 2.0 * uLum);
+
+            float uRg = clamp((rN - gN + 0.02) / 0.06, 0.0, 1.0);
+            float wRg = uRg * uRg * (3.0 - 2.0 * uRg);
+
+            float bN = 1.0 - rN - gN;
+            float uGb = clamp((gN - bN + 0.02) / 0.06, 0.0, 1.0);
+            float wGb = uGb * uGb * (3.0 - 2.0 * uGb);
+
+            float skinMetric = gauss * wLum * wRg * wGb;
             skinProtect = 1.0 - 0.6 * skinMetric;
         }
 
@@ -308,15 +308,9 @@ vec3 applyColorAdjustments(vec3 rgb, float vibrance, float saturation, float dee
         if (skySignal > 0.0) {
             float x = deepBlue / 100.0;
             float factor = sign(x) * pow(abs(x), 1.6);
-            if (factor > 0.0) {
-                c.r -= factor * skySignal * 0.30;
-                c.g -= factor * skySignal * 0.15;
-                c.b -= factor * skySignal * 0.20;
-            } else {
-                c.r -= factor * skySignal * 0.25;
-                c.g -= factor * skySignal * 0.20;
-                c.b -= factor * skySignal * 0.10;
-            }
+            c.r -= factor * skySignal * 0.28;
+            c.g -= factor * skySignal * 0.18;
+            c.b -= factor * skySignal * 0.15;
         }
     }
 
@@ -326,15 +320,9 @@ vec3 applyColorAdjustments(vec3 rgb, float vibrance, float saturation, float dee
         if (greenSignal > 0.0) {
             float x = foliage / 100.0;
             float factor = sign(x) * pow(abs(x), 1.6);
-            if (factor > 0.0) {
-                c.r -= factor * greenSignal * 0.15;
-                c.g += factor * greenSignal * 0.20;
-                c.b -= factor * greenSignal * 0.25;
-            } else {
-                c.r += factor * greenSignal * 0.10;
-                c.g -= factor * greenSignal * 0.20;
-                c.b += factor * greenSignal * 0.10;
-            }
+            c.r -= factor * greenSignal * 0.30;
+            c.b -= factor * greenSignal * 0.15;
+            c.g += factor * greenSignal * 0.10;
         }
     }
 
@@ -365,13 +353,21 @@ vec3 applySplitToning(vec3 rgb, float shadowHue, float shadowSat, float highligh
 }
 
 // Photochemical Recording Emulsion (Film Stocks)
-float applyFilmCharacteristicCurve(float exposure, float gamma, float toe, float shoulder) {
-    float x = max(exposure, 0.0);
-    float d_toe = toe * (1.0 - exp(-2.5 * x));
-    float d_straight = gamma * log10(max(x * 4.0 + 0.1, 0.1));
-    float d = max(d_toe + max(d_straight, 0.0), 0.0);
-    float d_max = 2.8 - shoulder * 0.6;
-    return d_max * (1.0 - exp(-d / max(d_max, 1e-4)));
+float applyFilmCharacteristicCurve(float val, float gamma, float shoulder, float toe) {
+    float v = clamp(val, 0.0, 2.0);
+    float base = v;
+    if (abs(gamma - 1.0) > 0.001) {
+        float u = clamp(v / (v + 0.35), 0.0, 1.0);
+        float gMod = (gamma - 1.0) * 0.40;
+        base = max(v + gMod * u * (1.0 - u) * (2.0 * u - 1.0), 0.0);
+    }
+    float tS = clamp((base - 0.65) / 0.35, 0.0, 1.0);
+    float compS = shoulder * 0.12 * tS * tS * (3.0 - 2.0 * tS);
+
+    float tT = clamp(base / 0.35, 0.0, 1.0);
+    float compT = toe * 0.06 * (1.0 - tT) * (1.0 - tT);
+
+    return max(base - compS - compT, 0.0);
 }
 
 vec3 applyDirChemicalCoupling(vec3 cur, float cr, float cg, float cb, float mr, float mg, float mb) {
@@ -481,21 +477,14 @@ vec3 applyPrintMedia(vec3 rgb, int mediaMode, int filterMode, float paperGrade, 
         float gG = applyPaperGrade(rgb.g, paperGrade);
         float bG = applyPaperGrade(rgb.b, paperGrade);
 
-        float rP = rG;
-        if (rG > 0.70) {
-            float u = clamp((rG - 0.70) / 0.30, 0.0, 1.0);
-            rP = rG - 0.045 * depth * u * u * (3.0 - 2.0 * u);
-        }
-        float gP = gG;
-        if (gG > 0.70) {
-            float u = clamp((gG - 0.70) / 0.30, 0.0, 1.0);
-            gP = gG - 0.045 * depth * u * u * (3.0 - 2.0 * u);
-        }
-        float bP = bG;
-        if (bG > 0.70) {
-            float u = clamp((bG - 0.70) / 0.30, 0.0, 1.0);
-            bP = bG - 0.045 * depth * u * u * (3.0 - 2.0 * u);
-        }
+        float uR = clamp((rG - 0.70) / 0.30, 0.0, 1.0);
+        float rP = rG - 0.045 * depth * uR * uR * (3.0 - 2.0 * uR);
+
+        float uG = clamp((gG - 0.70) / 0.30, 0.0, 1.0);
+        float gP = gG - 0.045 * depth * uG * uG * (3.0 - 2.0 * uG);
+
+        float uB = clamp((bG - 0.70) / 0.30, 0.0, 1.0);
+        float bP = bG - 0.045 * depth * uB * uB * (3.0 - 2.0 * uB);
 
         float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
         float satScale = 0.70 + 0.35 * depth;
