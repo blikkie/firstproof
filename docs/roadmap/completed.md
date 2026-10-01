@@ -207,6 +207,13 @@ This archive tracks completed stories and features moved from the active backlog
   - *Parity Harness Upgraded to Single Source of Truth*: Re-wired `ParityHarness.ts` and `web/parity.html` to audit WebGL shaders bit-for-bit against compiled Rust WebAssembly.
   - *Root-Cause Fixes*: Purged the artificial "fake neutral bypass" in the Rust reference engine that skipped tone mapping on default inputs, aligned print media stage placement post-tone-mapping in display linear space, and harmonized photopic luminance coefficients to Rec.2020 (`0.2627, 0.6780, 0.0593`).
   - *Verification*: 100% green pass across all 19 test scenarios in `web/parity.html` ($\text{maxChannelDelta} \le 1/255$ on adjustments, $\le 2/255$ overall, PSNR $> 57\,\text{dB}$), plus 100% pass across all native Rust test suites (`dual_engine_synthetic_parity`, `agx_shader_parity`, `camera_profiles_parity`).
+- **Story 3.8.6: Client-Side Export Clean-Up & Eliminating Fake 16-Bit Slop (`web/src/utils/tiffEncoder.ts`, `web/src/ExportModal.ts`, `web/src/main.ts`, `web/index.html`)**:
+  - *Eliminated Fake Bitshifted 16-Bit Slop*: Replaced the deceptive `(r << 8) | r` bitshifting in `tiffEncoder.ts` with an authentic, standards-compliant uncompressed 8-bit RGB TIFF 6.0 encoder (`BitsPerSample = [8, 8, 8]`). Halved disk file footprint with honest archival representations.
+  - *Purged Unimplemented UI Promises*: Removed the non-functional "Ultra HDR (ISO 21496-1)" checkbox (gain map synthesis belongs in native engines, not browser mockups) and the non-functional "Rendering Intent" select box.
+  - *Calibrated sRGB Working Scope*: Scoped web exports strictly to calibrated sRGB (Standard Web & Print Default), eliminating uncalibrated Display P3 canvas blitting.
+  - *Decoupled Off-Screen Export Pipeline*: Implemented a dedicated off-screen `WebGLRenderer` and canvas instance (`getExportRenderer()`). All export processing (texture decoding at full sensor CFA resolution, geometry transforms, curve LUTs, and rendering) occurs completely off-screen, ensuring the live `#darkroom-canvas` viewport is never resized, flashed, or clobbered during batch exports.
+  - *Verification*: Single and batch exports confirmed in-browser without viewport resizing; 8-bit TIFF and sRGB JPEG files verified to open and render cleanly across viewers.
+
 
 
 

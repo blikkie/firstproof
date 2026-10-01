@@ -630,7 +630,7 @@
           <label class="export-group-label">Export Format:</label>
           <div class="export-format-segmented">
             <button type="button" class="segmented-btn active" data-format="JPEG">JPEG (.jpg)</button>
-            <button type="button" class="segmented-btn" data-format="TIFF">16-Bit TIFF (.tiff)</button>
+            <button type="button" class="segmented-btn" data-format="TIFF">8-Bit TIFF (.tiff)</button>
           </div>
 
           <!-- JPEG Options -->
@@ -639,42 +639,18 @@
               <span id="export-quality-label" class="export-caption">Quality: 90%</span>
               <input type="range" id="export-quality-slider" min="50" max="100" step="1" value="90" class="slider" />
             </div>
-
-            <div class="export-hdr-row">
-              <label class="checkbox-label" for="export-toggle-ultra-hdr">
-                <input type="checkbox" id="export-toggle-ultra-hdr" />
-                <span class="checkbox-text">Ultra HDR (ISO 21496-1)</span>
-                <span class="badge-hdr">HDR</span>
-              </label>
-            </div>
-
-            <div id="export-ultra-hdr-desc" class="export-desc-text hidden">
-              Embeds a backward-compatible ISO 21496-1 gain map for Apple XDR displays, Android Ultra HDR, and Chrome/Safari.
-            </div>
           </div>
         </div>
 
-        <!-- Color Space & ICC Profile -->
+        <!-- Color Space -->
         <div class="export-form-group">
-          <label class="export-group-label">Color Space & ICC Profile:</label>
+          <label class="export-group-label">Color Space:</label>
           <div class="export-colorspace-row">
             <div class="radio-group-horizontal">
               <label class="radio-label">
-                <input type="radio" name="export-colorspace" value="sRGB" checked />
-                <span>sRGB</span>
+                <input type="radio" name="export-colorspace" value="sRGB" checked disabled />
+                <span>Calibrated sRGB (Standard Web & Print)</span>
               </label>
-              <label class="radio-label">
-                <input type="radio" name="export-colorspace" value="DisplayP3" />
-                <span>Display P3</span>
-              </label>
-            </div>
-
-            <div id="export-intent-container" class="export-intent-row hidden">
-              <span class="export-caption">Intent:</span>
-              <select id="export-intent-select" class="dropdown-select dropdown-sm">
-                <option value="RelativeColorimetric" selected>Relative Colorimetric</option>
-                <option value="Perceptual">Perceptual</option>
-              </select>
             </div>
           </div>
         </div>

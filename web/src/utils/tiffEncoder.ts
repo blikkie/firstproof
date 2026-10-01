@@ -1,18 +1,16 @@
 /**
  * First Proof — Client-Side TIFF Encoder
  *
- * Implements a standards-compliant uncompressed TIFF 6.0 encoder for 8-bit or 16-bit
- * RGB image export with bit-level parity to desktop libtiff output.
+ * Implements a standards-compliant uncompressed TIFF 6.0 encoder for authentic
+ * 8-bit RGB image export with bit-level parity to desktop libtiff output.
  */
 
 export function encodeTiff(
   width: number,
   height: number,
-  rgbaData: Uint8Array,
-  bitsPerSample: 8 | 16 = 16
+  rgbaData: Uint8Array
 ): Uint8Array {
-  const bytesPerSample = bitsPerSample / 8;
-  const bytesPerPixel = 3 * bytesPerSample;
+  const bytesPerPixel = 3; // 8-bit RGB (SamplesPerPixel = 3)
   const pixelBytes = width * height * bytesPerPixel;
   const totalBytes = 192 + pixelBytes;
   const buf = new ArrayBuffer(totalBytes);
@@ -55,10 +53,10 @@ export function encodeTiff(
   view.setUint32(offset, 0, true);
 
   // Auxiliary data values:
-  // Offset 170: BitsPerSample [bps, bps, bps]
-  view.setUint16(170, bitsPerSample, true);
-  view.setUint16(172, bitsPerSample, true);
-  view.setUint16(174, bitsPerSample, true);
+  // Offset 170: BitsPerSample [8, 8, 8]
+  view.setUint16(170, 8, true);
+  view.setUint16(172, 8, true);
+  view.setUint16(174, 8, true);
 
   // Offset 176: XResolution 72/1
   view.setUint32(176, 72, true);
@@ -74,28 +72,15 @@ export function encodeTiff(
   let dst = 192;
   for (let y = 0; y < height; y++) {
     const srcRow = height - 1 - y;
+    const rowOffset = srcRow * width * 4;
     for (let x = 0; x < width; x++) {
-      const srcIdx = (srcRow * width + x) * 4;
-      const r = rgbaData[srcIdx];
-      const g = rgbaData[srcIdx + 1];
-      const b = rgbaData[srcIdx + 2];
-
-      if (bitsPerSample === 16) {
-        // Map 8-bit (0..255) to 16-bit (0..65535) with exact bit repetition
-        const r16 = (r << 8) | r;
-        const g16 = (g << 8) | g;
-        const b16 = (b << 8) | b;
-        view.setUint16(dst, r16, true);
-        view.setUint16(dst + 2, g16, true);
-        view.setUint16(dst + 4, b16, true);
-        dst += 6;
-      } else {
-        u8[dst++] = r;
-        u8[dst++] = g;
-        u8[dst++] = b;
-      }
+      const srcIdx = rowOffset + (x * 4);
+      u8[dst++] = rgbaData[srcIdx];
+      u8[dst++] = rgbaData[srcIdx + 1];
+      u8[dst++] = rgbaData[srcIdx + 2];
     }
   }
 
   return u8;
 }
+

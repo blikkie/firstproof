@@ -15,9 +15,7 @@ import { PhotoFileEntry } from './FolderIntake';
 export interface ExportExecutionOptions {
   format: 'JPEG' | 'TIFF';
   quality: number; // 50..100
-  isUltraHdr: boolean;
-  colorSpace: 'sRGB' | 'DisplayP3';
-  renderingIntent: 'RelativeColorimetric' | 'Perceptual';
+  colorSpace: 'sRGB';
   sizeOption: 'Original' | '2048' | '3840' | 'Custom';
   customDimension: number;
   destinationDirHandle?: any;
@@ -40,9 +38,6 @@ export class ExportModal {
   private destinationName: string = '~/Downloads (Browser Default)';
   private exportFormat: 'JPEG' | 'TIFF' = 'JPEG';
   private quality: number = 90;
-  private isUltraHdrEnabled: boolean = false;
-  private colorSpaceChoice: 'sRGB' | 'DisplayP3' = 'sRGB';
-  private renderingIntentChoice: 'RelativeColorimetric' | 'Perceptual' = 'RelativeColorimetric';
   private sizeOption: 'Original' | '2048' | '3840' | 'Custom' = 'Original';
   private customDimension: number = 2048;
 
@@ -145,31 +140,7 @@ export class ExportModal {
       }
     });
 
-    // Ultra HDR Toggle
-    const ultraHdrCheckbox = this.dialogEl.querySelector('#export-toggle-ultra-hdr') as HTMLInputElement;
-    const ultraHdrDesc = this.dialogEl.querySelector('#export-ultra-hdr-desc');
-    ultraHdrCheckbox?.addEventListener('change', () => {
-      this.isUltraHdrEnabled = ultraHdrCheckbox.checked;
-      ultraHdrDesc?.classList.toggle('hidden', !this.isUltraHdrEnabled);
-    });
 
-    // Color Space Radios
-    const colorSpaceRadios = this.dialogEl.querySelectorAll<HTMLInputElement>('input[name="export-colorspace"]');
-    const intentContainer = this.dialogEl.querySelector('#export-intent-container');
-    colorSpaceRadios.forEach(radio => {
-      radio.addEventListener('change', () => {
-        if (radio.checked) {
-          this.colorSpaceChoice = radio.value as 'sRGB' | 'DisplayP3';
-          intentContainer?.classList.toggle('hidden', this.colorSpaceChoice !== 'DisplayP3');
-        }
-      });
-    });
-
-    // Rendering Intent Select
-    const intentSelect = this.dialogEl.querySelector('#export-intent-select') as HTMLSelectElement;
-    intentSelect?.addEventListener('change', () => {
-      this.renderingIntentChoice = intentSelect.value as 'RelativeColorimetric' | 'Perceptual';
-    });
 
     // Sizing Select
     const sizeSelect = this.dialogEl.querySelector('#export-size-select') as HTMLSelectElement;
@@ -238,14 +209,6 @@ export class ExportModal {
     if (qualitySlider) qualitySlider.value = `${this.quality}`;
     if (qualityLabel) qualityLabel.textContent = `Quality: ${this.quality}%`;
 
-    const ultraHdrCheckbox = this.dialogEl.querySelector('#export-toggle-ultra-hdr') as HTMLInputElement;
-    const ultraHdrDesc = this.dialogEl.querySelector('#export-ultra-hdr-desc');
-    if (ultraHdrCheckbox) ultraHdrCheckbox.checked = this.isUltraHdrEnabled;
-    ultraHdrDesc?.classList.toggle('hidden', !this.isUltraHdrEnabled);
-
-    const intentContainer = this.dialogEl.querySelector('#export-intent-container');
-    intentContainer?.classList.toggle('hidden', this.colorSpaceChoice !== 'DisplayP3');
-
     const customDimRow = this.dialogEl.querySelector('#export-custom-dim-row');
     customDimRow?.classList.toggle('hidden', this.sizeOption !== 'Custom');
   }
@@ -312,9 +275,7 @@ export class ExportModal {
     const options: ExportExecutionOptions = {
       format: this.exportFormat,
       quality: this.quality,
-      isUltraHdr: this.isUltraHdrEnabled,
-      colorSpace: this.colorSpaceChoice,
-      renderingIntent: this.renderingIntentChoice,
+      colorSpace: 'sRGB',
       sizeOption: this.sizeOption,
       customDimension: this.customDimension,
       destinationDirHandle: this.destinationDirHandle

@@ -69,6 +69,16 @@ class DarkroomApp {
   private parityModal: ParityModal = new ParityModal();
   private exportModal: ExportModal = new ExportModal();
   private cropController!: CropController;
+  private exportCanvas: HTMLCanvasElement | null = null;
+  private exportRenderer: WebGLRenderer | null = null;
+
+  private getExportRenderer(): { canvas: HTMLCanvasElement; renderer: WebGLRenderer } {
+    if (!this.exportCanvas || !this.exportRenderer) {
+      this.exportCanvas = document.createElement('canvas');
+      this.exportRenderer = new WebGLRenderer(this.exportCanvas);
+    }
+    return { canvas: this.exportCanvas, renderer: this.exportRenderer };
+  }
 
   private fileEntries: PhotoFileEntry[] = [];
   private activeIdx: number = -1;
@@ -2375,200 +2385,162 @@ class DarkroomApp {
       return { success: false, message: 'No photos selected for export.' };
     }
 
-    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
-    if (!canvas) {
-      return { success: false, message: 'Darkroom canvas not found.' };
-    }
-
-    const origW = canvas.width;
-    const origH = canvas.height;
+    const { canvas: expCanvas, renderer: expRenderer } = this.getExportRenderer();
     const savedActiveIdx = this.activeIdx;
     const savedEdits = JSON.parse(JSON.stringify(this.edits));
 
     let successCount = 0;
     let lastOutputPath = '';
 
-    try {
-      for (let i = 0; i < photos.length; i++) {
-        const entry = photos[i];
-        const entryIdx = this.fileEntries.indexOf(entry);
-        onProgress(`Exporting ${i + 1} of ${photos.length}...`, i + 1, photos.length);
+    for (let i = 0; i < photos.length; i++) {
+      const entry = photos[i];
+      const entryIdx = this.fileEntries.indexOf(entry);
+      onProgress(`Exporting ${i + 1} of ${photos.length}...`, i + 1, photos.length);
 
-        // Determine edits for this photo
-        let photoEdits: EditSettingsPayload;
-        if (entryIdx === savedActiveIdx) {
-          photoEdits = savedEdits;
-        } else {
-          // Read XMP sidecar if exists, otherwise default edits
-          const sidecarXml = (await FolderIntake.readSidecarFromDisk(entry)) || localStorage.getItem(`fp_xmp_${entry.name}`);
-          if (sidecarXml) {
-            try {
-              const xmp = this.bridge.parseXmp(sidecarXml);
-              photoEdits = xmp.edits || this.getDefaultEdits();
-            } catch (_) {
-              photoEdits = this.getDefaultEdits();
-            }
-          } else {
+      // Determine edits for this photo
+      let photoEdits: EditSettingsPayload;
+      if (entryIdx === savedActiveIdx) {
+        photoEdits = savedEdits;
+      } else {
+        // Read XMP sidecar if exists, otherwise default edits
+        const sidecarXml = (await FolderIntake.readSidecarFromDisk(entry)) || localStorage.getItem(`fp_xmp_${entry.name}`);
+        if (sidecarXml) {
+          try {
+            const xmp = this.bridge.parseXmp(sidecarXml);
+            photoEdits = xmp.edits || this.getDefaultEdits();
+          } catch (_) {
             photoEdits = this.getDefaultEdits();
           }
-        }
-
-        const fileExt = entry.name.split('.').pop()?.toLowerCase() || '';
-        const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(fileExt);
-
-        // Load texture for photo: for RAW files, always decode full sensor resolution (1:1 demosaiced CFA)
-        let texW = 0;
-        let texH = 0;
-        if (isRawFile) {
-          const arrayBuffer = await entry.file.arrayBuffer();
-          const res = await this.decodeInWorker(arrayBuffer, entry.name, true);
-          if (res.linearData && res.linearW && res.linearH) {
-            this.renderer.uploadLinearRec2020Texture(res.linearW, res.linearH, res.linearData);
-            texW = res.linearW;
-            texH = res.linearH;
-          } else {
-            const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
-            const imgBitmap = await createImageBitmap(blob);
-            this.renderer.uploadImage(imgBitmap);
-            texW = imgBitmap.width;
-            texH = imgBitmap.height;
-          }
-        } else if (entryIdx === savedActiveIdx) {
-          texW = this.renderer.textureWidth;
-          texH = this.renderer.textureHeight;
         } else {
-          const arrayBuffer = await entry.file.arrayBuffer();
-          const res = await this.decodeInWorker(arrayBuffer, entry.name, false);
+          photoEdits = this.getDefaultEdits();
+        }
+      }
+
+      const fileExt = entry.name.split('.').pop()?.toLowerCase() || '';
+      const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(fileExt);
+
+      // Load texture for photo: for RAW files, always decode full sensor resolution (1:1 demosaiced CFA)
+      let texW = 0;
+      let texH = 0;
+      if (isRawFile) {
+        const arrayBuffer = await entry.file.arrayBuffer();
+        const res = await this.decodeInWorker(arrayBuffer, entry.name, true);
+        if (res.linearData && res.linearW && res.linearH) {
+          expRenderer.uploadLinearRec2020Texture(res.linearW, res.linearH, res.linearData);
+          texW = res.linearW;
+          texH = res.linearH;
+        } else {
           const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
           const imgBitmap = await createImageBitmap(blob);
-          this.renderer.uploadImage(imgBitmap);
+          expRenderer.uploadImage(imgBitmap);
           texW = imgBitmap.width;
           texH = imgBitmap.height;
         }
+      } else {
+        const arrayBuffer = await entry.file.arrayBuffer();
+        const res = await this.decodeInWorker(arrayBuffer, entry.name, false);
+        const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
+        const imgBitmap = await createImageBitmap(blob);
+        expRenderer.uploadImage(imgBitmap);
+        texW = imgBitmap.width;
+        texH = imgBitmap.height;
+      }
 
-        if (texW <= 0) texW = origW;
-        if (texH <= 0) texH = origH;
+      if (texW <= 0) texW = 1920;
+      if (texH <= 0) texH = 1080;
 
-        // Calculate rotated and cropped dimensions
-        const rot = (photoEdits.rotation ?? 0) % 360;
-        const isOrthogonal = (rot === 90 || rot === 270);
-        const baseW = isOrthogonal ? texH : texW;
-        const baseH = isOrthogonal ? texW : texH;
-
-        const cropL = photoEdits.crop_left ?? 0.0;
-        const cropT = photoEdits.crop_top ?? 0.0;
-        const cropR = photoEdits.crop_right ?? 1.0;
-        const cropB = photoEdits.crop_bottom ?? 1.0;
-        const effectiveW = Math.max(1, Math.round(baseW * Math.max(0.01, cropR - cropL)));
-        const effectiveH = Math.max(1, Math.round(baseH * Math.max(0.01, cropB - cropT)));
-
-        // Sizing calculation
-        let targetW = effectiveW;
-        let targetH = effectiveH;
-        let maxDim: number | null = null;
-        if (options.sizeOption === '2048') maxDim = 2048;
-        else if (options.sizeOption === '3840') maxDim = 3840;
-        else if (options.sizeOption === 'Custom') maxDim = options.customDimension;
-
-        if (maxDim && (effectiveW > maxDim || effectiveH > maxDim)) {
-          if (effectiveW >= effectiveH) {
-            targetW = maxDim;
-            targetH = Math.max(1, Math.round((effectiveH * maxDim) / effectiveW));
-          } else {
-            targetH = maxDim;
-            targetW = Math.max(1, Math.round((effectiveW * maxDim) / effectiveH));
-          }
+      // Update tone curves LUT on export renderer if curves exist
+      if (photoEdits.curves && (photoEdits.curves.master?.length > 2 || photoEdits.curves.red?.length > 2 || photoEdits.curves.green?.length > 2 || photoEdits.curves.blue?.length > 2)) {
+        try {
+          const lut = this.bridge.evaluateCurves(photoEdits.curves);
+          expRenderer.updateToneCurvesLut(lut);
+        } catch (err) {
+          console.warn('[Export] Could not evaluate curve LUT:', err);
         }
+      }
 
-        // Clamp to WebGL viewport capability
-        const maxGl = this.renderer.glContext.getParameter(this.renderer.glContext.MAX_VIEWPORT_DIMS)?.[0] || 8192;
-        if (targetW > maxGl || targetH > maxGl) {
-          const scale = maxGl / Math.max(targetW, targetH);
-          targetW = Math.max(1, Math.round(targetW * scale));
-          targetH = Math.max(1, Math.round(targetH * scale));
-        }
+      // Calculate rotated and cropped dimensions
+      const rot = (photoEdits.rotation ?? 0) % 360;
+      const isOrthogonal = (rot === 90 || rot === 270);
+      const baseW = isOrthogonal ? texH : texW;
+      const baseH = isOrthogonal ? texW : texH;
 
-        // Render frame at target resolution
-        canvas.width = targetW;
-        canvas.height = targetH;
-        this.renderer.render(photoEdits, false, 1.0, { x: 0, y: 0 }, false);
+      const cropL = photoEdits.crop_left ?? 0.0;
+      const cropT = photoEdits.crop_top ?? 0.0;
+      const cropR = photoEdits.crop_right ?? 1.0;
+      const cropB = photoEdits.crop_bottom ?? 1.0;
+      const effectiveW = Math.max(1, Math.round(baseW * Math.max(0.01, cropR - cropL)));
+      const effectiveH = Math.max(1, Math.round(baseH * Math.max(0.01, cropB - cropT)));
 
-        // Encode image (macOS Parity: ${baseName}_FirstProof.${ext})
-        const stem = entry.name.substring(0, entry.name.lastIndexOf('.')) || entry.name;
-        const ext = (options.format === 'TIFF') ? 'tiff' : 'jpg';
-        const filename = `${stem}_FirstProof.${ext}`;
-        lastOutputPath = filename;
+      // Sizing calculation
+      let targetW = effectiveW;
+      let targetH = effectiveH;
+      let maxDim: number | null = null;
+      if (options.sizeOption === '2048') maxDim = 2048;
+      else if (options.sizeOption === '3840') maxDim = 3840;
+      else if (options.sizeOption === 'Custom') maxDim = options.customDimension;
 
-        let fileBlob: Blob;
-        if (options.format === 'TIFF') {
-          const pixels = this.renderer.readRgbaPixels(targetW, targetH);
-          const tiffBytes = encodeTiff(targetW, targetH, pixels, 16);
-          fileBlob = new Blob([tiffBytes.buffer as ArrayBuffer], { type: 'image/tiff' });
+      if (maxDim && (effectiveW > maxDim || effectiveH > maxDim)) {
+        if (effectiveW >= effectiveH) {
+          targetW = maxDim;
+          targetH = Math.max(1, Math.round((effectiveH * maxDim) / effectiveW));
         } else {
-          // JPEG format
-          if (options.colorSpace === 'DisplayP3') {
-            const exportCanvas = document.createElement('canvas');
-            exportCanvas.width = targetW;
-            exportCanvas.height = targetH;
-            const ctx = exportCanvas.getContext('2d', { colorSpace: 'display-p3' });
-            if (ctx) {
-              ctx.drawImage(canvas, 0, 0);
-              fileBlob = await new Promise<Blob>((resolve, reject) => {
-                exportCanvas.toBlob(
-                  (b) => b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
-                  'image/jpeg',
-                  options.quality / 100
-                );
-              });
-            } else {
-              fileBlob = await new Promise<Blob>((resolve, reject) => {
-                canvas.toBlob(
-                  (b) => b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
-                  'image/jpeg',
-                  options.quality / 100
-                );
-              });
-            }
-          } else {
-            fileBlob = await new Promise<Blob>((resolve, reject) => {
-              canvas.toBlob(
-                (b) => b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
-                'image/jpeg',
-                options.quality / 100
-              );
-            });
-          }
+          targetH = maxDim;
+          targetW = Math.max(1, Math.round((effectiveW * maxDim) / effectiveH));
         }
+      }
 
-        // Write to destination directory or trigger browser download
-        if (options.destinationDirHandle) {
-          try {
-            const fileHandle = await options.destinationDirHandle.getFileHandle(filename, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(fileBlob);
-            await writable.close();
-          } catch (writeErr) {
-            console.warn('[Export] File system write failed, falling back to download:', writeErr);
-            this.triggerDownload(fileBlob, filename);
-          }
-        } else {
+      // Clamp to WebGL viewport capability
+      const maxGl = expRenderer.glContext.getParameter(expRenderer.glContext.MAX_VIEWPORT_DIMS)?.[0] || 8192;
+      if (targetW > maxGl || targetH > maxGl) {
+        const scale = maxGl / Math.max(targetW, targetH);
+        targetW = Math.max(1, Math.round(targetW * scale));
+        targetH = Math.max(1, Math.round(targetH * scale));
+      }
+
+      // Render frame on dedicated off-screen export canvas
+      expCanvas.width = targetW;
+      expCanvas.height = targetH;
+      expRenderer.render(photoEdits, false, 1.0, { x: 0, y: 0 }, false);
+
+      // Encode image (macOS Parity: ${baseName}_FirstProof.${ext})
+      const stem = entry.name.substring(0, entry.name.lastIndexOf('.')) || entry.name;
+      const ext = (options.format === 'TIFF') ? 'tiff' : 'jpg';
+      const filename = `${stem}_FirstProof.${ext}`;
+      lastOutputPath = filename;
+
+      let fileBlob: Blob;
+      if (options.format === 'TIFF') {
+        const pixels = expRenderer.readRgbaPixels(targetW, targetH);
+        const tiffBytes = encodeTiff(targetW, targetH, pixels);
+        fileBlob = new Blob([tiffBytes.buffer as ArrayBuffer], { type: 'image/tiff' });
+      } else {
+        // Standard calibrated sRGB JPEG
+        fileBlob = await new Promise<Blob>((resolve, reject) => {
+          expCanvas.toBlob(
+            (b) => b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
+            'image/jpeg',
+            options.quality / 100
+          );
+        });
+      }
+
+      // Write to destination directory or trigger browser download
+      if (options.destinationDirHandle) {
+        try {
+          const fileHandle = await options.destinationDirHandle.getFileHandle(filename, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(fileBlob);
+          await writable.close();
+        } catch (writeErr) {
+          console.warn('[Export] File system write failed, falling back to download:', writeErr);
           this.triggerDownload(fileBlob, filename);
         }
-
-        successCount++;
+      } else {
+        this.triggerDownload(fileBlob, filename);
       }
-    } finally {
-      // Restore canvas viewport dimensions and state
-      canvas.width = origW;
-      canvas.height = origH;
 
-      // Restore active photo texture if batch modified it or if raw full-resolution was loaded
-      if (savedActiveIdx >= 0 && savedActiveIdx < this.fileEntries.length) {
-        await this.selectPhoto(savedActiveIdx, false, true);
-        this.edits = savedEdits;
-        this.syncSliderUI();
-        this.renderCanvas();
-      }
+      successCount++;
     }
 
     const isBatch = photos.length > 1;

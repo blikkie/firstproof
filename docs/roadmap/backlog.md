@@ -7,14 +7,13 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.8.6: Client-Side Export Clean-Up & Eliminating Fake 16-Bit Slop** (P0)
-2. **Story 3.8.2: Shader Geometry & Viewport Transformation Parity** (P0)
-3. **Story 3.8.3: Crop Controller & Desktop Interaction Parity** (P0)
-4. **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity** (P0)
-5. **Story 3.10: Architecture Clean-Up: Rename `firstproof-types` to `firstproof-engine` & Core De-Duplication** (P1)
-6. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
-7. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
-8. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
+1. **Story 3.8.2: Shader Geometry & Viewport Transformation Parity** (P0)
+2. **Story 3.8.3: Crop Controller & Desktop Interaction Parity** (P0)
+3. **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity** (P0)
+4. **Story 3.10: Architecture Clean-Up: Rename `firstproof-types` to `firstproof-engine` & Core De-Duplication** (P1)
+5. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
+6. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
+7. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -58,6 +57,9 @@ This document strictly tracks pending and deferred features calibrated against o
   - *Archival (Multi-pass AMaZE / RCD)*: Multi-pass iterative demosaicing for extreme fine fabric moiré.
 - **Control 2: Spatial Lateral Chemical Diffusion (Mackie Lines / Developer Exhaustion)**:
   - Extends vertical DIR coupling to 2D spatial inhibitor diffusion across contrasting borders, recreating authentic photochemical Mackie lines and developer exhaustion boundaries for organic edge acutance without digital unsharp masking.
+- **True 16-Bit Archival TIFF Export (Cross-Platform & Web)**:
+  - Generate authentic 16-bit uncompressed RGB TIFF 6.0 files with genuine 65,536 tonal levels per channel ($0\dots65,535$) for downstream Photoshop editing and fine-art print RIPs.
+  - *Web Darkroom Architecture*: Render via an `RGBA16F` half-float framebuffer attachment in WebGL 2 (or route full-resolution RAW frames directly through the compiled `f32` Rust WASM export pipeline), capturing true high-precision continuous gradients with zero comb-tooth histogram banding.
 - **Strict WYSIWYG Tonal & Color Parity Invariant**:
   - Viewport and archival export match bit-for-bit in global tone curve, AgX mapping, color separation, and White Balance.
 
@@ -129,12 +131,6 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
   - *Verification*: Burst culling test with RAW files showing zero manufacturer JPEG flashes and clean dark transitions.
 
 
-- **Story 3.8.6: Client-Side Export Clean-Up & Eliminating Fake 16-Bit Slop (P0)**:
-  - Replace the fake bitshifted 16-bit TIFF encoder (`tiffEncoder.ts`) with authentic 8-bit or real WASM-backed export.
-  - Fix Display P3 color transform (or cleanly scope to calibrated sRGB).
-  - Remove unimplemented "Ultra HDR" and "Rendering Intent" promises from `ExportModal.ts`.
-  - Decouple export execution from the live on-screen `<canvas>` so batch export does not resize the viewport during editing.
-  - *Verification*: Export single and batch photos to disk with verified color without viewport resizing.
 
 - **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines) (P1)**:
   - Extract dedicated modules from `main.ts`:
