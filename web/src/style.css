@@ -1479,6 +1479,9 @@ kbd {
 /* Interactive Crop Tool & Overlay (Mac App Parity) */
 .crop-overlay {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   z-index: 20;
   pointer-events: auto;
   user-select: none;
@@ -1531,6 +1534,34 @@ kbd {
   touch-action: none;
 }
 
+/* Live Straighten Rotation HUD Pill (Mac App Parity) */
+.straighten-hud {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(14, 16, 20, 0.90);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 8px 16px;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  z-index: 35;
+  color: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.straighten-hud.hidden {
+  display: none !important;
+}
+
 /* Floating Bottom Action HUD Bar (Mac App Parity) */
 .crop-toolbar {
   position: absolute;
@@ -1562,11 +1593,41 @@ kbd {
   padding: 4px 8px;
   font-size: 11px;
   height: 28px;
-  background-color: var(--surface);
-  border: 1px solid var(--border-color);
+  background-color: #1a1d24;
+  border: 1px solid var(--border-light);
   border-radius: 6px;
-  color: var(--text-primary);
+  color: var(--text-main);
   font-weight: 500;
+  cursor: pointer;
+  outline: none;
+}
+.crop-aspect-select:hover,
+.crop-aspect-select:focus {
+  border-color: var(--accent-blue);
+}
+.crop-aspect-select option {
+  background-color: #1a1d24 !important;
+  color: #f1f5f9 !important;
+}
+.crop-toolbar-straighten {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.crop-straighten-slider {
+  width: 90px;
+  height: 4px;
+  accent-color: var(--accent-blue);
+  cursor: pointer;
+}
+.crop-straighten-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  min-width: 38px;
+  color: var(--text-main);
+  text-align: right;
 }
 .btn-crop-action {
   background: transparent;

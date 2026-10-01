@@ -389,7 +389,21 @@ class DarkroomApp {
         this.edits.crop_bottom = crop.bottom;
         this.renderCanvas();
       },
+      onStraightenUpdate: (angle) => {
+        this.edits.crop_angle = angle;
+        const straightenSlider = document.getElementById('slider-straighten') as HTMLInputElement;
+        const straightenVal = document.getElementById('val-straighten');
+        if (straightenSlider) straightenSlider.value = `${angle}`;
+        if (straightenVal) straightenVal.textContent = `${angle > 0 ? '+' : ''}${angle.toFixed(1)}°`;
+        this.renderCanvas();
+      },
+      onStraightenEnd: () => {
+        this.autoSaveSidecar();
+      },
       onDone: () => {
+        this.toggleCropMode(false);
+      },
+      onCancel: () => {
         this.toggleCropMode(false);
       }
     });
@@ -1017,8 +1031,14 @@ class DarkroomApp {
 
     // Keyboard Shortcuts filter with FIRST-RESPONDER TEXT FIELD SHIELDING
     window.addEventListener('keydown', (e: KeyboardEvent) => {
-      // Escape key rolls back active scrubbing slider or exits active crop mode
+      // Escape key rolls back active scrubbing slider, active rotation, or exits active crop mode
       if (e.key === 'Escape') {
+        if (this.cropController?.isRotating) {
+          this.cropController.cancelRotation();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         if (this.activeScrub) {
           this.rollbackActiveScrub();
           e.preventDefault();
@@ -2082,7 +2102,7 @@ class DarkroomApp {
           top: this.edits.crop_top ?? 0.0,
           right: this.edits.crop_right ?? 1.0,
           bottom: this.edits.crop_bottom ?? 1.0,
-        }, aspect);
+        }, aspect, this.edits.crop_angle ?? 0.0);
       });
     } else {
       this.cropController.hide();
@@ -2120,7 +2140,7 @@ class DarkroomApp {
     const left = (viewW - renderW) / 2.0;
     const top = (viewH - renderH) / 2.0;
 
-    this.cropController.updatePosition({ left, top, width: renderW, height: renderH });
+    this.cropController.setImageRect({ x: left, y: top, width: renderW, height: renderH }, imgAspect);
   }
 
   private renderCanvas() {

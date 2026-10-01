@@ -7,12 +7,11 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.8.3: Crop Controller & Desktop Interaction Parity** (P0)
-2. **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity** (P0)
-3. **Story 3.10: Architecture Clean-Up: Rename `firstproof-types` to `firstproof-engine` & Core De-Duplication** (P1)
-4. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
-5. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
-6. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
+1. **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity** (P0)
+2. **Story 3.10: Architecture Clean-Up: Rename `firstproof-types` to `firstproof-engine` & Core De-Duplication** (P1)
+3. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
+4. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
+5. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -107,12 +106,6 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
 > **Authoritative Technical Mini Specs**:
 > - [Viewport Geometry, Gestures & Texture Lifecycle](../specs/viewport_geometry_and_gestures.md)
 > - [Pipeline Stages & Color Space Working Invariants](../specs/pipeline_stages_and_color_spaces.md)
-
-- **Story 3.8.3: Crop Controller & Desktop Interaction Parity**:
-  - Refactor `CropController.ts` into a stationary full-canvas gesture container covering the entire viewport, dimming outside the active crop box (fixing unscrimmed letterbox bars) matching [viewport_geometry_and_gestures.md](../specs/viewport_geometry_and_gestures.md#4-stationary-full-canvas-gesture-architecture).
-  - Change outside-crop drag behavior: dragging outside the crop box initiates **straighten rotation** with a floating readout HUD matching `CropOverlayView.swift` (replacing `'create'` mode).
-  - Fix aspect ratio inversion for portrait images and verify the <kbd>X</kbd> flip shortcut.
-  - *Verification*: Interactive crop adjustments, outside-drag rotation, HUD placement, and keyboard shortcut parity.
 
 - **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity**:
   - Implement texture staging and bypass lifecycle matching [viewport_geometry_and_gestures.md](../specs/viewport_geometry_and_gestures.md#5-intermediate-preview--texture-lifecycle).
