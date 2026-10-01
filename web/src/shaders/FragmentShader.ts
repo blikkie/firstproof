@@ -61,11 +61,9 @@ uniform float u_perspectiveVertical;
 uniform float u_perspectiveHorizontal;
 
 uniform int u_isOriginal;
-uniform int u_isCameraJpeg;
 uniform int u_isLinearRec2020;
 uniform int u_hasMasterCurve;
 uniform int u_hasRgbCurves;
-uniform sampler2D u_cameraJpegTexture;
 
 ${COLOR_SCIENCE_GLSL}
 ${DETAIL_GLSL}
@@ -225,18 +223,7 @@ void main() {
         return;
     }
 
-    // 1. Quick peek camera manufacturer JPEG (J key)
-    if (u_isCameraJpeg != 0) {
-        vec2 uv = transformGeometry(v_texCoord);
-        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-            fragColor = vec4(0.08, 0.08, 0.08, 1.0);
-            return;
-        }
-        fragColor = texture(u_cameraJpegTexture, uv);
-        return;
-    }
-
-    // 2. Viewport Geometry Transformation
+    // 1. Viewport Geometry Transformation
     vec2 uv = transformGeometry(v_texCoord);
 
     // Discard / letterbox pixels outside valid texture bounds

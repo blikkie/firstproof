@@ -47,7 +47,7 @@ export class WebGLRenderer {
   private texture: WebGLTexture | null = null;
   private masterLutTex: WebGLTexture | null = null;
   private rgbLutTex: WebGLTexture | null = null;
-  private cameraJpegTexture: WebGLTexture | null = null;
+  private isIntermediate: boolean = false;
   private isLinearRec2020: boolean = false;
   private vbo: WebGLBuffer | null = null;
   private texWidth: number = 1920;
@@ -123,7 +123,7 @@ export class WebGLRenderer {
       'u_straightenAngle', 'u_cropConstrain', 'u_aspectRatio',
       'u_rotation', 'u_flipH', 'u_flipV', 'u_isIntermediate',
       'u_perspectiveVertical', 'u_perspectiveHorizontal',
-      'u_isOriginal', 'u_isCameraJpeg', 'u_cameraJpegTexture', 'u_isLinearRec2020', 'u_hasMasterCurve', 'u_hasRgbCurves'
+      'u_isOriginal', 'u_isLinearRec2020', 'u_hasMasterCurve', 'u_hasRgbCurves'
     ];
     for (const u of uniforms) {
       this.uLocs[u] = this.gl.getUniformLocation(prog, u);
@@ -190,8 +190,16 @@ export class WebGLRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
 
+  public clearCanvas() {
+    const gl = this.gl;
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.clearColor(0.05, 0.06, 0.08, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+
   public uploadImage(image: HTMLImageElement | HTMLCanvasElement | ImageBitmap | ImageData) {
     this.isLinearRec2020 = false;
+    this.isIntermediate = false;
     this.texWidth = (image as any).width || 1920;
     this.texHeight = (image as any).height || 1080;
     const gl = this.gl;
@@ -213,13 +221,17 @@ export class WebGLRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
 
-  public uploadCameraJpeg(image: HTMLImageElement | HTMLCanvasElement | ImageBitmap | ImageData) {
+  public uploadIntermediate(image: HTMLImageElement | HTMLCanvasElement | ImageBitmap | ImageData) {
+    this.isLinearRec2020 = false;
+    this.isIntermediate = true;
+    this.texWidth = (image as any).width || 1920;
+    this.texHeight = (image as any).height || 1080;
     const gl = this.gl;
-    if (!this.cameraJpegTexture) {
-      this.cameraJpegTexture = gl.createTexture();
+    if (!this.texture) {
+      this.texture = gl.createTexture();
     }
-    gl.activeTexture(gl.TEXTURE3);
-    gl.bindTexture(gl.TEXTURE_2D, this.cameraJpegTexture);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
     if (image instanceof ImageData) {
@@ -235,6 +247,7 @@ export class WebGLRenderer {
 
   public uploadLinearRec2020Texture(width: number, height: number, data: Uint16Array) {
     this.isLinearRec2020 = true;
+    this.isIntermediate = false;
     this.texWidth = width;
     this.texHeight = height;
     const gl = this.gl;
@@ -335,21 +348,10 @@ export class WebGLRenderer {
     return { fitScaleX, fitScaleY };
   }
 
-  public render(
+  public getPhotoViewportBounds(
     edits: EditSettingsPayload,
-    isOriginal: boolean = false,
-    zoomScale: number = 1.0,
-    panOffset: { x: number; y: number } = { x: 0, y: 0 },
-    cropModeActive: boolean = false,
-    isCameraJpeg: boolean = false
-  ) {
-    const gl = this.gl;
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    gl.clearColor(0.05, 0.06, 0.08, 1.0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    gl.useProgram(this.program);
-
+    cropModeActive: boolean = false
+  ): { x: number; y: number; width: number; height: number } {
     const { fitScaleX, fitScaleY } = this.computeFitScale(
       edits.rotation ?? 0,
       {
@@ -360,6 +362,69 @@ export class WebGLRenderer {
       },
       cropModeActive
     );
+    const canvasW = this.gl.canvas.width;
+    const canvasH = this.gl.canvas.height;
+    const photoW = Math.max(1, Math.round(canvasW * fitScaleX));
+    const photoH = Math.max(1, Math.round(canvasH * fitScaleY));
+    const photoX = Math.max(0, Math.round((canvasW - photoW) / 2));
+    const photoY = Math.max(0, Math.round((canvasH - photoH) / 2));
+    return { x: photoX, y: photoY, width: photoW, height: photoH };
+  }
+
+  public async captureIntermediateSnapshot(
+    edits: EditSettingsPayload
+  ): Promise<ImageBitmap | null> {
+    if (this.isIntermediate) return null; // Don't snapshot an intermediate of an intermediate
+    const bounds = this.getPhotoViewportBounds(edits, false);
+    try {
+      return await createImageBitmap(this.gl.canvas, bounds.x, bounds.y, bounds.width, bounds.height);
+    } catch (err) {
+      console.warn('[WebGLRenderer] captureIntermediateSnapshot failed:', err);
+      return null;
+    }
+  }
+
+  public render(
+    edits: EditSettingsPayload,
+    isOriginal: boolean = false,
+    zoomScale: number = 1.0,
+    panOffset: { x: number; y: number } = { x: 0, y: 0 },
+    cropModeActive: boolean = false
+  ) {
+    const gl = this.gl;
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.clearColor(0.05, 0.06, 0.08, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.useProgram(this.program);
+
+    // Intermediate Bypass & Idempotence: intermediate textures already have geometry baked in.
+    // Use identity geometry when rendering an intermediate texture.
+    const effectiveEdits = this.isIntermediate
+      ? {
+          ...edits,
+          rotation: 0,
+          flip_horizontal: false,
+          flip_vertical: false,
+          crop_left: 0.0,
+          crop_top: 0.0,
+          crop_right: 1.0,
+          crop_bottom: 1.0,
+          crop_angle: 0.0,
+          crop_constrain: false,
+        }
+      : edits;
+
+    const { fitScaleX, fitScaleY } = this.computeFitScale(
+      effectiveEdits.rotation ?? 0,
+      {
+        left: effectiveEdits.crop_left ?? 0.0,
+        top: effectiveEdits.crop_top ?? 0.0,
+        right: effectiveEdits.crop_right ?? 1.0,
+        bottom: effectiveEdits.crop_bottom ?? 1.0,
+      },
+      cropModeActive
+    );
 
     // Zoom & Pan & Fit Scale
     gl.uniform2f(this.uLocs['u_fitScale'], fitScaleX, fitScaleY);
@@ -367,18 +432,18 @@ export class WebGLRenderer {
     gl.uniform2f(this.uLocs['u_panOffset'], panOffset.x, panOffset.y);
 
     // Viewport Geometry & Crop Uniforms
-    gl.uniform1f(this.uLocs['u_cropLeft'], edits.crop_left ?? 0.0);
-    gl.uniform1f(this.uLocs['u_cropTop'], edits.crop_top ?? 0.0);
-    gl.uniform1f(this.uLocs['u_cropRight'], edits.crop_right ?? 1.0);
-    gl.uniform1f(this.uLocs['u_cropBottom'], edits.crop_bottom ?? 1.0);
+    gl.uniform1f(this.uLocs['u_cropLeft'], effectiveEdits.crop_left ?? 0.0);
+    gl.uniform1f(this.uLocs['u_cropTop'], effectiveEdits.crop_top ?? 0.0);
+    gl.uniform1f(this.uLocs['u_cropRight'], effectiveEdits.crop_right ?? 1.0);
+    gl.uniform1f(this.uLocs['u_cropBottom'], effectiveEdits.crop_bottom ?? 1.0);
     gl.uniform1i(this.uLocs['u_cropModeActive'], cropModeActive ? 1 : 0);
-    gl.uniform1f(this.uLocs['u_straightenAngle'], ((edits.crop_angle ?? 0.0) * Math.PI) / 180.0);
-    gl.uniform1i(this.uLocs['u_cropConstrain'], edits.crop_constrain ? 1 : 0);
+    gl.uniform1f(this.uLocs['u_straightenAngle'], ((effectiveEdits.crop_angle ?? 0.0) * Math.PI) / 180.0);
+    gl.uniform1i(this.uLocs['u_cropConstrain'], effectiveEdits.crop_constrain ? 1 : 0);
     gl.uniform1f(this.uLocs['u_aspectRatio'], this.texWidth / Math.max(this.texHeight, 1));
-    gl.uniform1i(this.uLocs['u_rotation'], (((edits.rotation ?? 0) % 360) + 360) % 360);
-    gl.uniform1i(this.uLocs['u_flipH'], edits.flip_horizontal ? 1 : 0);
-    gl.uniform1i(this.uLocs['u_flipV'], edits.flip_vertical ? 1 : 0);
-    gl.uniform1i(this.uLocs['u_isIntermediate'], (edits as any).isIntermediate ? 1 : 0);
+    gl.uniform1i(this.uLocs['u_rotation'], (((effectiveEdits.rotation ?? 0) % 360) + 360) % 360);
+    gl.uniform1i(this.uLocs['u_flipH'], effectiveEdits.flip_horizontal ? 1 : 0);
+    gl.uniform1i(this.uLocs['u_flipV'], effectiveEdits.flip_vertical ? 1 : 0);
+    gl.uniform1i(this.uLocs['u_isIntermediate'], this.isIntermediate ? 1 : 0);
     gl.uniform1f(this.uLocs['u_perspectiveVertical'], (edits as any).perspective_vertical ?? 0.0);
     gl.uniform1f(this.uLocs['u_perspectiveHorizontal'], (edits as any).perspective_horizontal ?? 0.0);
 
@@ -394,15 +459,10 @@ export class WebGLRenderer {
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, this.rgbLutTex);
     }
-    if (this.cameraJpegTexture) {
-      gl.activeTexture(gl.TEXTURE3);
-      gl.bindTexture(gl.TEXTURE_2D, this.cameraJpegTexture);
-    }
 
     gl.uniform1i(this.uLocs['u_texture'], 0);
     gl.uniform1i(this.uLocs['u_curveMasterLut'], 1);
     gl.uniform1i(this.uLocs['u_curveRgbLut'], 2);
-    gl.uniform1i(this.uLocs['u_cameraJpegTexture'], 3);
 
     gl.uniform1f(this.uLocs['u_exposure'], edits.exposure);
     gl.uniform1f(this.uLocs['u_contrast'], edits.contrast);
@@ -445,7 +505,6 @@ export class WebGLRenderer {
     gl.uniform1f(this.uLocs['u_noiseReduction'], edits.noise_reduction ?? 0.0);
 
     gl.uniform1i(this.uLocs['u_isOriginal'], isOriginal ? 1 : 0);
-    gl.uniform1i(this.uLocs['u_isCameraJpeg'], (isCameraJpeg && this.cameraJpegTexture) ? 1 : 0);
     gl.uniform1i(this.uLocs['u_isLinearRec2020'], this.isLinearRec2020 ? 1 : 0);
     gl.uniform1i(this.uLocs['u_hasMasterCurve'], edits.curves.master.length > 2 ? 1 : 0);
     gl.uniform1i(this.uLocs['u_hasRgbCurves'], (edits.curves.red.length > 2 || edits.curves.green.length > 2 || edits.curves.blue.length > 2) ? 1 : 0);

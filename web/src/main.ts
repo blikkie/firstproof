@@ -24,6 +24,7 @@ import {
   formatDimensions
 } from './utils/formatters';
 import { readExifOrientationFromBlob } from './utils/exifReader';
+import { IntermediateTextureCache } from './IntermediateTextureCache';
 
 import { decode_exif_orientation } from 'firstproof-wasm';
 import type { ExifOrientationRecord } from 'firstproof-wasm';
@@ -88,8 +89,9 @@ class DarkroomApp {
 
   private edits: EditSettingsPayload = this.getDefaultEdits();
   private cardRotations: Map<number, { rotation: number; flipH: boolean; flipV: boolean }> = new Map();
+  private photoEditsCache: Map<string, EditSettingsPayload> = new Map();
+  private photoExifCache: Map<string, { rotation: number; flipH: boolean; flipV: boolean }> = new Map();
   private isOriginalPeek: boolean = false;
-  private isCameraJpegPeek: boolean = false;
   private currentMetadata: any = {};
   private currentRating: number = 0;
   private currentStatus: string = 'Unflagged';
@@ -500,7 +502,7 @@ class DarkroomApp {
 
   private cacheElements() {
     const ids = [
-      'btn-open-folder', 'file-input-fallback', 'btn-original-peek', 'btn-camera-jpeg-peek', 'btn-export-proof', 'btn-parity-audit', 'btn-shortcuts',
+      'btn-open-folder', 'file-input-fallback', 'btn-original-peek', 'btn-export-proof', 'btn-parity-audit', 'btn-shortcuts',
       'empty-state', 'btn-empty-open', 'developing-spinner', 'filmstrip-count', 'filmstrip-scroll',
       'meta-filename', 'meta-dimensions', 'meta-camera', 'meta-iso', 'meta-aperture', 'meta-shutter',
       'meta-format-badge', 'meta-full-camera', 'meta-lens', 'meta-focal-length', 'meta-exposure-summary',
@@ -579,14 +581,6 @@ class DarkroomApp {
     btnPeek.addEventListener('mousedown', () => { this.isOriginalPeek = true; this.renderCanvas(); });
     btnPeek.addEventListener('mouseup', () => { this.isOriginalPeek = false; this.renderCanvas(); });
     btnPeek.addEventListener('mouseleave', () => { this.isOriginalPeek = false; this.renderCanvas(); });
-
-    // Camera JPEG Peek J
-    const btnCameraJpeg = this.elements['btn-camera-jpeg-peek'];
-    if (btnCameraJpeg) {
-      btnCameraJpeg.addEventListener('mousedown', () => { this.isCameraJpegPeek = true; this.renderCanvas(); });
-      btnCameraJpeg.addEventListener('mouseup', () => { this.isCameraJpegPeek = false; this.renderCanvas(); });
-      btnCameraJpeg.addEventListener('mouseleave', () => { this.isCameraJpegPeek = false; this.renderCanvas(); });
-    }
 
     // Export Photo Modal (Cmd+E / Toolbar Button)
     this.elements['btn-export-proof'].addEventListener('click', () => this.openExportModal());
@@ -1149,13 +1143,6 @@ class DarkroomApp {
           this.isOriginalPeek = true;
           this.renderCanvas();
           break;
-        case 'j':
-        case 'J':
-          if (!e.repeat) {
-            this.isCameraJpegPeek = true;
-            this.renderCanvas();
-          }
-          break;
         case 'ArrowLeft':
         case 'ArrowUp':
           if (this.activeIdx > 0) {
@@ -1177,16 +1164,12 @@ class DarkroomApp {
       if (e.key === '\\') {
         this.isOriginalPeek = false;
         this.renderCanvas();
-      } else if (e.key === 'j' || e.key === 'J') {
-        this.isCameraJpegPeek = false;
-        this.renderCanvas();
       }
     });
 
     window.addEventListener('blur', () => {
-      if (this.isOriginalPeek || this.isCameraJpegPeek) {
+      if (this.isOriginalPeek) {
         this.isOriginalPeek = false;
-        this.isCameraJpegPeek = false;
         this.renderCanvas();
       }
     });
@@ -1554,6 +1537,13 @@ class DarkroomApp {
   private async selectPhoto(idx: number, centerFilmstrip: boolean = false, keepMultiSelection: boolean = false) {
     if (idx < 0 || idx >= this.fileEntries.length) return;
 
+    // Save previous active photo edits and auto-save sidecar if modified
+    const prevIdx = this.activeIdx;
+    if (prevIdx >= 0 && prevIdx < this.fileEntries.length && prevIdx !== idx) {
+      this.photoEditsCache.set(this.fileEntries[prevIdx].name, { ...this.edits });
+      this.autoSaveSidecar();
+    }
+
     const requestId = ++this.selectRequestId;
     this.activeIdx = idx;
     this.activeScrub = null;
@@ -1576,24 +1566,111 @@ class DarkroomApp {
       localStorage.setItem('fp_recent_photo_name', entry.name);
     } catch (_) {}
 
+    // Reset crop / zoom tool state immediately
+    if (this.isCropActive) {
+      this.cropController.hide();
+      this.isCropActive = false;
+      this.elements['btn-crop-tool']?.classList.remove('active');
+    }
+    this.zoomScale = 1.0;
+    this.panOffset = { x: 0, y: 0 };
+    this.updateZoomUI();
+
+    // Stage 0: Up-Front Edit Staging
+    // Resolve baseline orientation and XMP/cached edits immediately so stale edits never flash
+    const ext = entry.name.split('.').pop()?.toLowerCase() || '';
+    const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
+
+    let stage0Edits: EditSettingsPayload;
+    const cachedEdits = this.photoEditsCache.get(entry.name);
+    if (cachedEdits) {
+      stage0Edits = { ...cachedEdits };
+    } else {
+      let sidecarXml: string | null = null;
+      try {
+        sidecarXml = localStorage.getItem(`fp_xmp_${entry.name}`);
+      } catch (_) {}
+      if (sidecarXml) {
+        try {
+          const xmp = this.bridge.parseXmp(sidecarXml);
+          stage0Edits = { ...this.getDefaultEdits(isRawFile), ...xmp.edits };
+          this.currentRating = xmp.rating || 0;
+          this.currentStatus = xmp.status || 'Unflagged';
+          (this.elements['meta-input-title'] as HTMLInputElement).value = xmp.title || '';
+          (this.elements['meta-input-caption'] as HTMLTextAreaElement).value = xmp.description || '';
+          (this.elements['meta-input-creator'] as HTMLInputElement).value = xmp.creator || '';
+          (this.elements['meta-input-keywords'] as HTMLInputElement).value = (xmp.keywords || []).join(', ');
+        } catch (_) {
+          stage0Edits = this.getDefaultEdits(isRawFile);
+        }
+      } else {
+        stage0Edits = this.getDefaultEdits(isRawFile);
+        this.currentRating = 0;
+        this.currentStatus = 'Unflagged';
+        (this.elements['meta-input-title'] as HTMLInputElement).value = '';
+        (this.elements['meta-input-caption'] as HTMLTextAreaElement).value = '';
+        (this.elements['meta-input-creator'] as HTMLInputElement).value = '';
+        (this.elements['meta-input-keywords'] as HTMLInputElement).value = '';
+      }
+
+      // Check cached orientation
+      const knownRot = this.photoExifCache.get(entry.name) || this.cardRotations.get(idx);
+      if (knownRot && (stage0Edits.rotation === undefined || stage0Edits.rotation === null)) {
+        stage0Edits.rotation = knownRot.rotation;
+        stage0Edits.flip_horizontal = knownRot.flipH;
+        stage0Edits.flip_vertical = knownRot.flipV;
+      }
+    }
+
+    this.edits = stage0Edits;
+    this.syncSliderUI();
+    this.syncRatingFlagUI();
+    if (this.edits.rotation !== undefined) {
+      this.updateThumbnailCardOrientation(idx, this.edits.rotation, this.edits.flip_horizontal, this.edits.flip_vertical);
+    }
+
+    // Check High-Resolution Intermediate Texture Cache
+    const cachedIntermediate = IntermediateTextureCache.get(entry.name, this.edits);
+    if (cachedIntermediate) {
+      // Tier 1: Instant First Proof Intermediate render matching this.edits (0ms!)
+      this.elements['developing-spinner'].classList.add('hidden');
+      this.activeLinearData = null;
+      this.activeLinearW = 0;
+      this.activeLinearH = 0;
+      this.activeSourceImage = null;
+      this.activeSourceW = cachedIntermediate.width;
+      this.activeSourceH = cachedIntermediate.height;
+
+      this.renderer.uploadIntermediate(cachedIntermediate.bitmap);
+      this.updateCanvasDimensions();
+      this.renderer.render(this.edits, this.isOriginalPeek, this.zoomScale, this.panOffset, this.isCropActive);
+    } else {
+      // Tier 2: Atomic Dark Canvas Clearing & Developing Spinner!
+      // Immediately clear canvas so stale pixels from previous photo never linger!
+      this.renderer.clearCanvas();
+      this.elements['developing-spinner'].classList.remove('hidden');
+    }
+
     if (this.selectDebounceTimer) {
       clearTimeout(this.selectDebounceTimer);
       this.selectDebounceTimer = null;
     }
 
     const isPrewarmedHit = this.prewarmedCache.has(idx);
-    const delay = isPrewarmedHit ? 0 : 35; // 35ms debounce for un-cached heavy WASM extractions
+    const delay = (isPrewarmedHit || cachedIntermediate) ? 0 : 35; // Instant if prewarmed or intermediate hit
 
     this.selectDebounceTimer = setTimeout(async () => {
       if (requestId !== this.selectRequestId) return; // Dropped by newer selection!
 
-      this.elements['developing-spinner'].classList.remove('hidden');
+      if (!cachedIntermediate) {
+        this.elements['developing-spinner'].classList.remove('hidden');
+      }
 
       try {
         const t0 = performance.now();
         let preview: PreviewResult;
         let imageSlice: Uint8Array;
-        let imgBitmap: ImageBitmap;
+        let imgBitmap: ImageBitmap | null = null;
         let t1 = t0, t2 = t0, t3 = t0;
 
         let fileBytes: Uint8Array | null = null;
@@ -1632,24 +1709,26 @@ class DarkroomApp {
           workerLinearH = res.linearH || 0;
           t2 = performance.now();
 
-          // 3. Create ImageBitmap for WebGL upload
-          const blob = new Blob([new Uint8Array(imageSlice)], { type: 'image/jpeg' });
-          try {
-            imgBitmap = await createImageBitmap(blob, { resizeQuality: 'high' });
-          } catch (decodeErr) {
-            console.warn(`[App] createImageBitmap failed for ${entry.name}, creating fallback canvas:`, decodeErr);
-            const fallbackCanvas = document.createElement('canvas');
-            fallbackCanvas.width = (preview.width && preview.width > 0) ? preview.width : 1920;
-            fallbackCanvas.height = (preview.height && preview.height > 0) ? preview.height : 1080;
-            const ctx = fallbackCanvas.getContext('2d');
-            if (ctx) {
-              ctx.fillStyle = '#111318';
-              ctx.fillRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
-              ctx.fillStyle = '#f1f5f9';
-              ctx.font = 'bold 24px sans-serif';
-              ctx.fillText(entry.name, 40, 60);
+          // 3. Create ImageBitmap for WebGL upload only if not RAW with linear data
+          if (!isRawFile || !workerLinearData) {
+            const blob = new Blob([new Uint8Array(imageSlice)], { type: 'image/jpeg' });
+            try {
+              imgBitmap = await createImageBitmap(blob, { resizeQuality: 'high' });
+            } catch (decodeErr) {
+              console.warn(`[App] createImageBitmap failed for ${entry.name}, creating fallback canvas:`, decodeErr);
+              const fallbackCanvas = document.createElement('canvas');
+              fallbackCanvas.width = (preview.width && preview.width > 0) ? preview.width : 1920;
+              fallbackCanvas.height = (preview.height && preview.height > 0) ? preview.height : 1080;
+              const ctx = fallbackCanvas.getContext('2d');
+              if (ctx) {
+                ctx.fillStyle = '#111318';
+                ctx.fillRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
+                ctx.fillStyle = '#f1f5f9';
+                ctx.font = 'bold 24px sans-serif';
+                ctx.fillText(entry.name, 40, 60);
+              }
+              imgBitmap = await createImageBitmap(fallbackCanvas);
             }
-            imgBitmap = await createImageBitmap(fallbackCanvas);
           }
           if (requestId !== this.selectRequestId) return; // Dropped after bitmap creation!
           t3 = performance.now();
@@ -1723,6 +1802,7 @@ class DarkroomApp {
 
         const orientation = preview.metadata?.orientation ?? 1;
         const exifOri = decodeExifOrientation(orientation);
+        this.photoExifCache.set(entry.name, { rotation: exifOri.rotation, flipH: exifOri.flipH, flipV: exifOri.flipV });
 
         // Update filmstrip thumbnail
         const cardEl = document.getElementById(`thumb-card-${idx}`);
@@ -1768,9 +1848,6 @@ class DarkroomApp {
           this.elements['meta-sidecar-status'].style.color = sidecarXml ? '#4ade80' : 'var(--text-muted)';
         }
 
-        const ext = entry.name.split('.').pop()?.toLowerCase() || '';
-        const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
-
         if (sidecarXml) {
           const xmp = this.bridge.parseXmp(sidecarXml);
           this.edits = { ...this.getDefaultEdits(isRawFile), ...xmp.edits };
@@ -1785,32 +1862,20 @@ class DarkroomApp {
           (this.elements['meta-input-caption'] as HTMLTextAreaElement).value = xmp.description || '';
           (this.elements['meta-input-creator'] as HTMLInputElement).value = xmp.creator || '';
           (this.elements['meta-input-keywords'] as HTMLInputElement).value = (xmp.keywords || []).join(', ');
-        } else {
+        } else if (!cachedEdits) {
           this.edits = this.getDefaultEdits(isRawFile);
           this.edits.rotation = exifOri.rotation;
           this.edits.flip_horizontal = exifOri.flipH;
           this.edits.flip_vertical = exifOri.flipV;
-          this.currentRating = 0;
-          this.currentStatus = 'Unflagged';
         }
 
-        // Apply updated orientation to thumbnail card in filmstrip
+        this.photoEditsCache.set(entry.name, { ...this.edits });
         this.updateThumbnailCardOrientation(idx, this.edits.rotation, this.edits.flip_horizontal, this.edits.flip_vertical);
-
-        if (this.isCropActive) {
-          this.cropController.hide();
-          this.isCropActive = false;
-          this.elements['btn-crop-tool']?.classList.remove('active');
-        }
-        this.zoomScale = 1.0;
-        this.panOffset = { x: 0, y: 0 };
-        this.updateZoomUI();
 
         this.syncSliderUI();
         this.syncRatingFlagUI();
 
         // Check if raw negative and extract uncompressed 16-bit Linear Rec.2020 sensor frame
-
         let linear16Data: Uint16Array | null = workerLinearData;
         let linearW = workerLinearW;
         let linearH = workerLinearH;
@@ -1832,9 +1897,6 @@ class DarkroomApp {
         }
 
         // Upload to WebGL & render (preserving exact photographic aspect ratio up to 3840px for 4K displays)
-        const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
-        let imgW = 0;
-        let imgH = 0;
         if (linear16Data && linearW > 0 && linearH > 0) {
           this.activeLinearData = linear16Data;
           this.activeLinearW = linearW;
@@ -1842,28 +1904,25 @@ class DarkroomApp {
           this.activeSourceImage = null;
           this.activeSourceW = 0;
           this.activeSourceH = 0;
-          imgW = linearW;
-          imgH = linearH;
           this.renderer.uploadLinearRec2020Texture(linearW, linearH, linear16Data);
         } else {
           this.activeLinearData = null;
           this.activeLinearW = 0;
           this.activeLinearH = 0;
           this.activeSourceImage = imgBitmap;
-          this.activeSourceW = imgBitmap.width;
-          this.activeSourceH = imgBitmap.height;
-          imgW = imgBitmap.width;
-          imgH = imgBitmap.height;
-          this.renderer.uploadImage(imgBitmap);
-        }
-
-        if (imgBitmap) {
-          this.renderer.uploadCameraJpeg(imgBitmap);
+          this.activeSourceW = imgBitmap ? imgBitmap.width : 1920;
+          this.activeSourceH = imgBitmap ? imgBitmap.height : 1080;
+          if (imgBitmap) {
+            this.renderer.uploadImage(imgBitmap);
+          }
         }
 
         this.updateCanvasDimensions();
         this.onCurveChange(); // evaluate LUTs and render canvas
         const t4 = performance.now();
+
+        // Capture high-resolution intermediate snapshot for instant 0ms return navigation
+        this.scheduleIntermediateSnapshot(entry.name, this.edits);
 
         const mb = (entry.file.size / (1024 * 1024)).toFixed(1);
         if (isPrewarmedHit) {
@@ -2150,8 +2209,7 @@ class DarkroomApp {
         this.isOriginalPeek,
         this.zoomScale,
         this.panOffset,
-        this.isCropActive,
-        this.isCameraJpegPeek
+        this.isCropActive
       );
       this.updatePeekBadge();
     }
@@ -2160,10 +2218,7 @@ class DarkroomApp {
   private updatePeekBadge() {
     const badge = this.elements['peek-badge'];
     if (!badge) return;
-    if (this.isCameraJpegPeek) {
-      badge.textContent = 'Camera JPEG (J)';
-      badge.className = 'peek-badge camera-jpeg';
-    } else if (this.isOriginalPeek) {
+    if (this.isOriginalPeek) {
       badge.textContent = 'Original Negative (\\)';
       badge.className = 'peek-badge original-negative';
     } else {
@@ -2357,11 +2412,24 @@ class DarkroomApp {
     return false;
   }
 
+  private scheduleIntermediateSnapshot(fileName: string, edits: EditSettingsPayload) {
+    if (this.zoomScale !== 1.0 || this.isCropActive || this.isOriginalPeek) return;
+    this.renderer.captureIntermediateSnapshot(edits).then(bitmap => {
+      if (bitmap) {
+        IntermediateTextureCache.set(fileName, edits, bitmap);
+      }
+    }).catch(err => {
+      console.warn('[Intermediate] Failed to capture intermediate bitmap:', err);
+    });
+  }
+
   private async autoSaveSidecar() {
     if (this.activeIdx < 0 || this.activeIdx >= this.fileEntries.length) return;
-    if (!this.hasModifications()) return; // Touch-Free Ingestion: Never create or write XMP sidecars for untouched photos!
-
     const entry = this.fileEntries[this.activeIdx];
+    this.photoEditsCache.set(entry.name, { ...this.edits });
+    this.scheduleIntermediateSnapshot(entry.name, this.edits);
+
+    if (!this.hasModifications()) return; // Touch-Free Ingestion: Never create or write XMP sidecars for untouched photos!
 
     const title = (this.elements['meta-input-title'] as HTMLInputElement).value.trim();
     const description = (this.elements['meta-input-caption'] as HTMLTextAreaElement).value.trim();

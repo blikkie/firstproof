@@ -7,11 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity** (P0)
-2. **Story 3.10: Architecture Clean-Up: Rename `firstproof-types` to `firstproof-engine` & Core De-Duplication** (P1)
-3. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
-4. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
-5. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
+1. **Story 3.10: Architecture Clean-Up: Rename `firstproof-types` to `firstproof-engine` & Core De-Duplication** (P1)
+2. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
+3. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
+4. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -106,13 +105,6 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
 > **Authoritative Technical Mini Specs**:
 > - [Viewport Geometry, Gestures & Texture Lifecycle](../specs/viewport_geometry_and_gestures.md)
 > - [Pipeline Stages & Color Space Working Invariants](../specs/pipeline_stages_and_color_spaces.md)
-
-- **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity**:
-  - Implement texture staging and bypass lifecycle matching [viewport_geometry_and_gestures.md](../specs/viewport_geometry_and_gestures.md#5-intermediate-preview--texture-lifecycle).
-  - Update `RawDecodeWorker.ts` and `firstproof-wasm` to stream RAW files directly into 16-bit linear binned frames (`decode_raw_linear_from_scratchpad`) without extracting camera JPEGs first.
-  - Up-front edit staging: resolve baseline EXIF orientation and XMP edits *before* updating preview state.
-  - Immediately clear to the neutral dark canvas with the developing spinner during the 10–15ms photo switch to eliminate stale pixel flashing.
-  - *Verification*: Burst culling test with RAW files showing zero manufacturer JPEG flashes and clean dark transitions.
 
 
 
