@@ -50,11 +50,6 @@ export class WebGLRenderer {
   private cameraJpegTexture: WebGLTexture | null = null;
   private isLinearRec2020: boolean = false;
   private vbo: WebGLBuffer | null = null;
-  private currentRotation: number = 0;
-  private currentFlipH: boolean = false;
-  private currentFlipV: boolean = false;
-  private currentCrop: { left: number; top: number; right: number; bottom: number } = { left: 0, top: 0, right: 1, bottom: 1 };
-  private currentCropModeActive: boolean = false;
   private texWidth: number = 1920;
   private texHeight: number = 1080;
 
@@ -123,7 +118,11 @@ export class WebGLRenderer {
       'u_printMediaMode', 'u_printPaperGrade', 'u_printBaseWarmth', 'u_printProcessDepth', 'u_enlargerFilterMode',
       'u_splitShadowHue', 'u_splitShadowSat', 'u_splitHighlightHue', 'u_splitHighlightSat', 'u_splitBalance',
       'u_sharpeningAmount', 'u_sharpeningRadius', 'u_sharpeningMasking', 'u_noiseReduction',
-      'u_fitScale', 'u_zoomScale', 'u_panOffset', 'u_cropLeft', 'u_cropTop', 'u_cropRight', 'u_cropBottom', 'u_cropModeActive',
+      'u_fitScale', 'u_zoomScale', 'u_panOffset',
+      'u_cropLeft', 'u_cropTop', 'u_cropRight', 'u_cropBottom', 'u_cropModeActive',
+      'u_straightenAngle', 'u_cropConstrain', 'u_aspectRatio',
+      'u_rotation', 'u_flipH', 'u_flipV', 'u_isIntermediate',
+      'u_perspectiveVertical', 'u_perspectiveHorizontal',
       'u_isOriginal', 'u_isCameraJpeg', 'u_cameraJpegTexture', 'u_isLinearRec2020', 'u_hasMasterCurve', 'u_hasRgbCurves'
     ];
     for (const u of uniforms) {
@@ -138,7 +137,8 @@ export class WebGLRenderer {
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
 
-    // Quad geometry: pos(2), uv(2)
+    // Static immutable full-screen quad: pos(2), uv(2)
+    // TRIANGLE_STRIP order: (-1, -1), (1, -1), (-1, 1), (1, 1)
     const vertices = new Float32Array([
       -1, -1,  0, 1,
        1, -1,  1, 1,
@@ -149,7 +149,7 @@ export class WebGLRenderer {
     const vbo = gl.createBuffer();
     this.vbo = vbo;
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
 
     const aPos = gl.getAttribLocation(this.program, 'a_position');
     const aTex = gl.getAttribLocation(this.program, 'a_texCoord');
@@ -159,70 +159,6 @@ export class WebGLRenderer {
 
     gl.enableVertexAttribArray(aTex);
     gl.vertexAttribPointer(aTex, 2, gl.FLOAT, false, 16, 8);
-  }
-
-  public updateQuadGeometry(
-    rotation: number = 0,
-    flipH: boolean = false,
-    flipV: boolean = false,
-    crop: { left: number; top: number; right: number; bottom: number } = { left: 0, top: 0, right: 1, bottom: 1 },
-    cropModeActive: boolean = false
-  ) {
-    if (!this.vbo) return;
-    const effectiveCrop = cropModeActive ? { left: 0, top: 0, right: 1, bottom: 1 } : crop;
-    if (
-      this.currentRotation === rotation &&
-      this.currentFlipH === flipH &&
-      this.currentFlipV === flipV &&
-      this.currentCropModeActive === cropModeActive &&
-      this.currentCrop.left === effectiveCrop.left &&
-      this.currentCrop.top === effectiveCrop.top &&
-      this.currentCrop.right === effectiveCrop.right &&
-      this.currentCrop.bottom === effectiveCrop.bottom
-    ) {
-      return;
-    }
-    this.currentRotation = rotation;
-    this.currentFlipH = flipH;
-    this.currentFlipV = flipV;
-    this.currentCropModeActive = cropModeActive;
-    this.currentCrop = { ...effectiveCrop };
-
-    const rot = ((rotation % 360) + 360) % 360;
-    const mapScreenToTex = (xs: number, ys: number): [number, number] => {
-      switch (rot) {
-        case 90: return [ys, 1.0 - xs];
-        case 180: return [1.0 - xs, 1.0 - ys];
-        case 270: return [1.0 - ys, xs];
-        default: return [xs, ys];
-      }
-    };
-
-    let tl = mapScreenToTex(effectiveCrop.left, effectiveCrop.top);
-    let tr = mapScreenToTex(effectiveCrop.right, effectiveCrop.top);
-    let bl = mapScreenToTex(effectiveCrop.left, effectiveCrop.bottom);
-    let br = mapScreenToTex(effectiveCrop.right, effectiveCrop.bottom);
-
-    if (flipH) {
-      const tmpT = tl; tl = tr; tr = tmpT;
-      const tmpB = bl; bl = br; br = tmpB;
-    }
-    if (flipV) {
-      const tmpL = tl; tl = bl; bl = tmpL;
-      const tmpR = tr; tr = br; br = tmpR;
-    }
-
-    // Quad geometry matching TRIANGLE_STRIP: (-1, -1), (1, -1), (-1, 1), (1, 1)
-    const vertices = new Float32Array([
-      -1, -1,  bl[0], bl[1],
-       1, -1,  br[0], br[1],
-      -1,  1,  tl[0], tl[1],
-       1,  1,  tr[0], tr[1],
-    ]);
-
-    const gl = this.gl;
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
   }
 
   private initLutTextures() {
@@ -371,13 +307,16 @@ export class WebGLRenderer {
     crop: { left: number; top: number; right: number; bottom: number } = { left: 0, top: 0, right: 1, bottom: 1 },
     cropModeActive: boolean = false
   ): { fitScaleX: number; fitScaleY: number } {
+    const origW = this.texWidth;
+    const origH = this.texHeight;
+    const cropWFrac = cropModeActive ? 1.0 : Math.max(0.01, (crop.right ?? 1.0) - (crop.left ?? 0.0));
+    const cropHFrac = cropModeActive ? 1.0 : Math.max(0.01, (crop.bottom ?? 1.0) - (crop.top ?? 0.0));
+    const effectiveOrigW = origW * cropWFrac;
+    const effectiveOrigH = origH * cropHFrac;
+
     const isOrthogonal = (rotation === 90 || rotation === 270);
-    const origW = isOrthogonal ? this.texHeight : this.texWidth;
-    const origH = isOrthogonal ? this.texWidth : this.texHeight;
-    const cropW = cropModeActive ? 1.0 : Math.max(0.01, (crop.right ?? 1.0) - (crop.left ?? 0.0));
-    const cropH = cropModeActive ? 1.0 : Math.max(0.01, (crop.bottom ?? 1.0) - (crop.top ?? 0.0));
-    const dispW = Math.max(1, origW * cropW);
-    const dispH = Math.max(1, origH * cropH);
+    const dispW = Math.max(1, isOrthogonal ? effectiveOrigH : effectiveOrigW);
+    const dispH = Math.max(1, isOrthogonal ? effectiveOrigW : effectiveOrigH);
     const imgAspect = dispW / dispH;
 
     const viewW = this.gl.canvas.width;
@@ -411,19 +350,6 @@ export class WebGLRenderer {
 
     gl.useProgram(this.program);
 
-    this.updateQuadGeometry(
-      edits.rotation ?? 0,
-      edits.flip_horizontal ?? false,
-      edits.flip_vertical ?? false,
-      {
-        left: edits.crop_left ?? 0.0,
-        top: edits.crop_top ?? 0.0,
-        right: edits.crop_right ?? 1.0,
-        bottom: edits.crop_bottom ?? 1.0,
-      },
-      cropModeActive
-    );
-
     const { fitScaleX, fitScaleY } = this.computeFitScale(
       edits.rotation ?? 0,
       {
@@ -440,12 +366,21 @@ export class WebGLRenderer {
     gl.uniform1f(this.uLocs['u_zoomScale'], zoomScale);
     gl.uniform2f(this.uLocs['u_panOffset'], panOffset.x, panOffset.y);
 
-    // Crop Coordinates
+    // Viewport Geometry & Crop Uniforms
     gl.uniform1f(this.uLocs['u_cropLeft'], edits.crop_left ?? 0.0);
     gl.uniform1f(this.uLocs['u_cropTop'], edits.crop_top ?? 0.0);
     gl.uniform1f(this.uLocs['u_cropRight'], edits.crop_right ?? 1.0);
     gl.uniform1f(this.uLocs['u_cropBottom'], edits.crop_bottom ?? 1.0);
     gl.uniform1i(this.uLocs['u_cropModeActive'], cropModeActive ? 1 : 0);
+    gl.uniform1f(this.uLocs['u_straightenAngle'], ((edits.crop_angle ?? 0.0) * Math.PI) / 180.0);
+    gl.uniform1i(this.uLocs['u_cropConstrain'], edits.crop_constrain ? 1 : 0);
+    gl.uniform1f(this.uLocs['u_aspectRatio'], this.texWidth / Math.max(this.texHeight, 1));
+    gl.uniform1i(this.uLocs['u_rotation'], (((edits.rotation ?? 0) % 360) + 360) % 360);
+    gl.uniform1i(this.uLocs['u_flipH'], edits.flip_horizontal ? 1 : 0);
+    gl.uniform1i(this.uLocs['u_flipV'], edits.flip_vertical ? 1 : 0);
+    gl.uniform1i(this.uLocs['u_isIntermediate'], (edits as any).isIntermediate ? 1 : 0);
+    gl.uniform1f(this.uLocs['u_perspectiveVertical'], (edits as any).perspective_vertical ?? 0.0);
+    gl.uniform1f(this.uLocs['u_perspectiveHorizontal'], (edits as any).perspective_horizontal ?? 0.0);
 
     if (this.texture) {
       gl.activeTexture(gl.TEXTURE0);

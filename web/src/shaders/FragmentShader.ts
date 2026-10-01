@@ -45,6 +45,21 @@ uniform float u_sharpeningRadius;
 uniform float u_sharpeningMasking;
 uniform float u_noiseReduction;
 
+uniform float u_cropLeft;
+uniform float u_cropTop;
+uniform float u_cropRight;
+uniform float u_cropBottom;
+uniform int u_cropModeActive;
+uniform float u_straightenAngle;
+uniform int u_cropConstrain;
+uniform float u_aspectRatio;
+uniform int u_rotation;
+uniform int u_flipH;
+uniform int u_flipV;
+uniform int u_isIntermediate;
+uniform float u_perspectiveVertical;
+uniform float u_perspectiveHorizontal;
+
 uniform int u_isOriginal;
 uniform int u_isCameraJpeg;
 uniform int u_isLinearRec2020;
@@ -59,6 +74,24 @@ ${DETAIL_GLSL}
 vec2 sampleCurveCoord(float val) {
     float u = (clamp(val, 0.0, 1.0) * 255.0 + 0.5) / 256.0;
     return vec2(u, 0.5);
+}
+
+// Computes display-referred luminance for a linear Rec.2020 color through AgX or camera tone profile
+float computeDisplayLuma(vec3 c) {
+    float contrastGain = (u_contrast >= 0.0) ? (1.0 + u_contrast / 100.0) : (1.0 + (u_contrast / 100.0) * 0.60);
+    vec3 srgbOut;
+    if (u_toneProfileMode == 0) {
+        srgbOut = agxToneMapVivid(c, contrastGain);
+    } else if (u_toneProfileMode == 1) {
+        srgbOut = agxToneMap(c, contrastGain);
+    } else {
+        int camMode = u_toneProfileMode - 1;
+        vec3 c_srgb = max(REC2020_TO_LINEAR_SRGB * c, vec3(0.0));
+        float lum = dot(c_srgb, vec3(0.2627, 0.6780, 0.0593));
+        float lumCurved = applyCameraToneCurve(lum, camMode);
+        return clamp((lumCurved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
+    }
+    return dot(clamp(srgbOut, 0.0, 1.0), vec3(0.2627, 0.6780, 0.0593));
 }
 
 // Evaluates display-referred luminance for a given texture UV coordinate
@@ -89,32 +122,131 @@ float sampleDisplayLuma(vec2 uv) {
     if (u_emulsionArchetype != 0) {
         c = applyRecordingEmulsion(c, u_emulsionArchetype, u_emulsionExposure, u_enlargerFilterMode);
     }
-    float contrastGain = (u_contrast >= 0.0) ? (1.0 + u_contrast / 100.0) : (1.0 + (u_contrast / 100.0) * 0.60);
-    vec3 srgbOut;
-    if (u_toneProfileMode == 0) {
-        srgbOut = agxToneMapVivid(c, contrastGain);
-    } else if (u_toneProfileMode == 1) {
-        srgbOut = agxToneMap(c, contrastGain);
-    } else {
-        int camMode = u_toneProfileMode - 1;
-        vec3 c_srgb = max(REC2020_TO_LINEAR_SRGB * c, vec3(0.0));
-        vec3 rgbAdjusted = c_srgb;
-        float lum = dot(rgbAdjusted, vec3(0.2627, 0.6780, 0.0593));
-        float lumCurved = applyCameraToneCurve(lum, camMode);
-        return clamp((lumCurved - 0.18) * contrastGain + 0.18, 0.0, 1.0);
+    return computeDisplayLuma(c);
+}
+
+// Viewport Geometry, Perspective & Lens Distortion Transform
+// Ported 1:1 from FirstProofApp/Sources/Shaders/Geometry.metal
+vec2 transformGeometry(vec2 uv) {
+    if (u_isOriginal != 0 || u_isIntermediate != 0) {
+        return uv;
     }
-    return dot(clamp(srgbOut, 0.0, 1.0), vec3(0.2627, 0.6780, 0.0593));
+
+    if (u_rotation == 0 && u_flipH == 0 && u_flipV == 0 &&
+        u_cropModeActive == 0 && u_cropLeft <= 0.0001 && u_cropTop <= 0.0001 &&
+        u_cropRight >= 0.9999 && u_cropBottom >= 0.9999 &&
+        abs(u_straightenAngle) <= 0.0001 &&
+        abs(u_perspectiveVertical) <= 0.0001 && abs(u_perspectiveHorizontal) <= 0.0001) {
+        return uv;
+    }
+
+    // 1. Base Orientation (Flips and 90/180/270 Rotation)
+    vec2 inCoord = uv;
+    if (u_flipH != 0) {
+        inCoord.x = 1.0 - inCoord.x;
+    }
+    if (u_flipV != 0) {
+        inCoord.y = 1.0 - inCoord.y;
+    }
+
+    vec2 orientedUv = inCoord;
+    if (u_rotation == 90) {
+        orientedUv = vec2(inCoord.y, 1.0 - inCoord.x);
+    } else if (u_rotation == 180) {
+        orientedUv = vec2(1.0 - inCoord.x, 1.0 - inCoord.y);
+    } else if (u_rotation == 270) {
+        orientedUv = vec2(1.0 - inCoord.y, inCoord.x);
+    }
+
+    // 2. Crop Inscription (Normal Viewing vs Interactive Crop Tool)
+    float cropL = clamp(u_cropLeft, 0.0, 0.99);
+    float cropT = clamp(u_cropTop, 0.0, 0.99);
+    float cropR = clamp(u_cropRight, cropL + 0.01, 1.0);
+    float cropB = clamp(u_cropBottom, cropT + 0.01, 1.0);
+
+    vec2 uvc = orientedUv;
+    if (u_cropModeActive == 0) {
+        uvc.x = cropL + orientedUv.x * (cropR - cropL);
+        uvc.y = cropT + orientedUv.y * (cropB - cropT);
+    }
+
+    // 3. Aspect-Ratio Scaled Straighten & Auto-Crop Scaling
+    float A = max(u_aspectRatio, 0.01);
+    float angle = u_straightenAngle;
+    float cosA = cos(angle);
+    float sinA = sin(angle);
+    float cV = u_perspectiveVertical * 0.005;
+    float cH = u_perspectiveHorizontal * 0.005;
+
+    float autoCropScale = 1.0;
+    if (u_cropConstrain != 0) {
+        vec2 corners[4];
+        corners[0] = vec2( A,  1.0);
+        corners[1] = vec2( A, -1.0);
+        corners[2] = vec2(-A, -1.0);
+        corners[3] = vec2(-A,  1.0);
+        for (int i = 0; i < 4; i++) {
+            vec2 p = corners[i];
+            vec2 r = vec2(
+                p.x * cosA - p.y * sinA,
+                p.x * sinA + p.y * cosA
+            );
+            float req = max(abs(r.x) / A, abs(r.y)) - (cV * r.y + cH * r.x);
+            if (req > autoCropScale) {
+                autoCropScale = req;
+            }
+        }
+    }
+
+    // Centered coordinates scaled by aspect ratio
+    vec2 centered = (uvc - vec2(0.5, 0.5)) * 2.0;
+    centered.x *= A;
+    centered /= autoCropScale;
+
+    // Straighten rotation
+    vec2 rot = vec2(
+        centered.x * cosA - centered.y * sinA,
+        centered.x * sinA + centered.y * cosA
+    );
+
+    // Perspective keystone (backward projective homography)
+    float denom = max(1.0 + cV * rot.y + cH * rot.x, 0.1);
+    vec2 geom = rot / denom;
+
+    geom.x /= (2.0 * A);
+    geom.y /= 2.0;
+    return geom + vec2(0.5, 0.5);
 }
 
 void main() {
-    // Quick peek camera manufacturer JPEG (J key)
-    if (u_isCameraJpeg != 0) {
-        fragColor = texture(u_cameraJpegTexture, v_texCoord);
+    // 0. Fast-path intermediate pre-rendered snapshots (bypass all transforms)
+    if (u_isIntermediate != 0) {
+        fragColor = texture(u_texture, v_texCoord);
         return;
     }
 
-    vec4 sampled = texture(u_texture, v_texCoord);
-    
+    // 1. Quick peek camera manufacturer JPEG (J key)
+    if (u_isCameraJpeg != 0) {
+        vec2 uv = transformGeometry(v_texCoord);
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+            fragColor = vec4(0.08, 0.08, 0.08, 1.0);
+            return;
+        }
+        fragColor = texture(u_cameraJpegTexture, uv);
+        return;
+    }
+
+    // 2. Viewport Geometry Transformation
+    vec2 uv = transformGeometry(v_texCoord);
+
+    // Discard / letterbox pixels outside valid texture bounds
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        fragColor = vec4(0.08, 0.08, 0.08, 1.0); // Neutral dark canvas background
+        return;
+    }
+
+    vec4 sampled = texture(u_texture, uv);
+
     // Quick peek original as-shot frame
     if (u_isOriginal != 0) {
         if (u_isLinearRec2020 != 0) {
@@ -181,6 +313,8 @@ void main() {
         rec2020Color = applyRecordingEmulsion(rec2020Color, u_emulsionArchetype, u_emulsionExposure, u_enlargerFilterMode);
     }
 
+    vec3 rec2020PreCurve = rec2020Color;
+
     // 5. Tone Curves in Linear Rec.2020 Working Space
     if (u_hasMasterCurve != 0) {
         vec3 c = clamp(rec2020Color, 0.0, 1.0);
@@ -210,11 +344,11 @@ void main() {
         vec2 texSize = vec2(textureSize(u_texture, 0));
         vec2 offset = vec2(max(u_sharpeningRadius, 0.5)) / texSize;
 
-        float y_c = sampleDisplayLuma(v_texCoord);
-        float y_l = sampleDisplayLuma(v_texCoord - vec2(offset.x, 0.0));
-        float y_r = sampleDisplayLuma(v_texCoord + vec2(offset.x, 0.0));
-        float y_t = sampleDisplayLuma(v_texCoord - vec2(0.0, offset.y));
-        float y_b = sampleDisplayLuma(v_texCoord + vec2(0.0, offset.y));
+        float y_c = computeDisplayLuma(rec2020PreCurve);
+        float y_l = sampleDisplayLuma(uv - vec2(offset.x, 0.0));
+        float y_r = sampleDisplayLuma(uv + vec2(offset.x, 0.0));
+        float y_t = sampleDisplayLuma(uv - vec2(0.0, offset.y));
+        float y_b = sampleDisplayLuma(uv + vec2(0.0, offset.y));
 
         rec2020Color = applyDetailAndSharpening(
             rec2020Color,
