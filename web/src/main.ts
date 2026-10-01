@@ -483,7 +483,7 @@ class DarkroomApp {
       'meta-sensor-res', 'meta-date-taken', 'meta-sidecar-status', 'btn-reset-all',
       'btn-pick', 'btn-reject', 'modal-shortcuts', 'btn-close-modal', 'select-tone-profile',
       'select-wb-preset', 'btn-wb-eyedropper', 'btn-white-point-picker', 'btn-black-point-picker',
-      'select-emulsion', 'select-print-media', 'select-enlarger-filter', 'row-enlarger-filter', 'btn-reset-curve', 'btn-auto-tone',
+      'select-emulsion', 'select-print-media', 'select-enlarger-filter', 'row-enlarger-filter', 'row-emulsion-exp', 'section-print-media-sliders', 'btn-reset-curve', 'btn-auto-tone',
       'meta-input-title', 'meta-input-caption', 'meta-input-creator', 'meta-input-keywords',
       'btn-crop-tool', 'btn-rotate-ccw', 'btn-rotate-cw', 'zoom-badge', 'peek-badge'
     ];
@@ -933,7 +933,7 @@ class DarkroomApp {
     // Emulsion Select
     this.elements['select-emulsion']?.addEventListener('change', (e) => {
       this.edits.emulsion_archetype = (e.target as HTMLSelectElement).value as EmulsionArchetype;
-      this.updateEnlargerFilterVisibility();
+      this.updateEmulsionWorkspaceVisibility();
       this.renderCanvas();
       this.autoSaveSidecar();
     });
@@ -941,7 +941,7 @@ class DarkroomApp {
     // Print Media Select
     this.elements['select-print-media']?.addEventListener('change', (e) => {
       this.edits.print_media = (e.target as HTMLSelectElement).value as PrintMediaMode;
-      this.updateEnlargerFilterVisibility();
+      this.updateEmulsionWorkspaceVisibility();
       this.renderCanvas();
       this.autoSaveSidecar();
     });
@@ -2199,7 +2199,7 @@ class DarkroomApp {
       (this.elements['select-enlarger-filter'] as HTMLSelectElement).value = this.edits.enlarger_filter ?? 'NeutralPanchromatic';
     }
 
-    this.updateEnlargerFilterVisibility();
+    this.updateEmulsionWorkspaceVisibility();
 
     if (this.edits.curves) {
       this.curveWidget.setPoints(this.edits.curves);
@@ -2208,7 +2208,15 @@ class DarkroomApp {
     }
   }
 
-  private updateEnlargerFilterVisibility() {
+  private updateEmulsionWorkspaceVisibility() {
+    // 1. Push / Pull exposure slider only visible when an emulsion archetype is selected
+    const hasEmulsion = this.edits.emulsion_archetype !== 'None';
+    const rowEmulsionExp = this.elements['row-emulsion-exp'];
+    if (rowEmulsionExp) {
+      rowEmulsionExp.classList.toggle('hidden', !hasEmulsion);
+    }
+
+    // 2. Optical enlarger filter only visible when monochrome media/stock is selected
     const isMonochrome =
       this.edits.print_media === 'BarytaSilverGelatin' ||
       this.edits.print_media === 'WarmtoneChlorobromide' ||
@@ -2216,9 +2224,16 @@ class DarkroomApp {
       this.edits.print_media === 'Cyanotype' ||
       this.edits.emulsion_archetype === 'MobberleySilver400';
 
-    const row = this.elements['row-enlarger-filter'];
-    if (row) {
-      row.classList.toggle('hidden', !isMonochrome);
+    const rowFilter = this.elements['row-enlarger-filter'];
+    if (rowFilter) {
+      rowFilter.classList.toggle('hidden', !isMonochrome);
+    }
+
+    // 3. Print media sliders (Paper Grade, Base Warmth, Process Depth) only visible when print media is selected
+    const hasPrintMedia = this.edits.print_media !== 'None';
+    const sectionPrintSliders = this.elements['section-print-media-sliders'];
+    if (sectionPrintSliders) {
+      sectionPrintSliders.classList.toggle('hidden', !hasPrintMedia);
     }
   }
 

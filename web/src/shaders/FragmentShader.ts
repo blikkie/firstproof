@@ -225,11 +225,6 @@ void main() {
         );
     }
 
-    // 9. Fine-Art Print Media Chemistry in Linear Rec.2020
-    if (u_printMediaMode != 0) {
-        rec2020Color = applyPrintMedia(rec2020Color, u_printMediaMode, u_enlargerFilterMode, u_printPaperGrade, u_printBaseWarmth, u_printProcessDepth);
-    }
-
     // 10. TERMINAL STAGE: AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles -> Linear sRGB
     float contrastGain = (u_contrast >= 0.0) ? (1.0 + u_contrast / 100.0) : (1.0 + (u_contrast / 100.0) * 0.60);
     vec3 srgbLinearOut;
@@ -260,7 +255,12 @@ void main() {
         }
     }
 
-    // 11. Final Display Output: Display Gamma (The VERY LAST step!)
+    // 11. Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration in Linear Display Space
+    if (u_printMediaMode != 0) {
+        srgbLinearOut = applyPrintMedia(srgbLinearOut, u_printMediaMode, u_enlargerFilterMode, u_printPaperGrade, u_printBaseWarmth, u_printProcessDepth);
+    }
+
+    // 12. Final Display Output: Display Gamma (The VERY LAST step!)
     fragColor = vec4(linearToSrgbGamma3(clamp(srgbLinearOut, 0.0, 1.0)), 1.0);
 }
 `;

@@ -206,23 +206,6 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                 b_lin = b_sharp;
             }
 
-            // 3b.2 Fine-Art Print Media Archetypes & Chemical Darkroom Toning
-            if edits.print_media != crate::PrintMediaMode::None {
-                let (rp, gp, bp) = crate::color::apply_print_media(
-                    r_lin,
-                    g_lin,
-                    b_lin,
-                    edits.print_media,
-                    edits.enlarger_filter,
-                    edits.print_paper_grade,
-                    edits.print_base_warmth,
-                    edits.print_process_depth,
-                );
-                r_lin = rp;
-                g_lin = gp;
-                b_lin = bp;
-            }
-
             // TERMINAL STEP: Convert Linear to Display Gamma sRGB
             let r_disp = linear_to_srgb_gamma(r_lin).clamp(0.0, 1.0);
             let g_disp = linear_to_srgb_gamma(g_lin).clamp(0.0, 1.0);

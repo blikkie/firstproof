@@ -12,7 +12,7 @@
 
 use firstproof_core::color::emulsion::{
     apply_dir_chemical_coupling, apply_recording_emulsion,
-    EmulsionArchetype, EmulsionFormat,
+    EmulsionArchetype, EmulsionFormat, EnlargerFilterMode,
 };
 use firstproof_core::{edits_has_modifications, EditSettings};
 
@@ -23,6 +23,7 @@ fn metal_shader_emulsion_sim(
     b: f32,
     archetype_id: i32,
     push_pull_ev: f32,
+    filter_mode: i32,
 ) -> (f32, f32, f32) {
     if archetype_id == 0 {
         return (r, g, b);
@@ -124,7 +125,15 @@ fn metal_shader_emulsion_sim(
             )
         }
         6 => { // MobberleySilver400
-            let pan_lum = 0.28 * cur_r + 0.62 * cur_g + 0.10 * cur_b;
+            let filter_weights = match filter_mode {
+                1 => (0.35f32, 0.60f32, 0.05f32), // YellowK2
+                2 => (0.55f32, 0.42f32, 0.03f32), // Orange16
+                3 => (0.85f32, 0.15f32, 0.00f32), // Red25A
+                4 => (0.15f32, 0.80f32, 0.05f32), // GreenX1
+                5 => (0.00f32, 0.60f32, 0.40f32), // Orthochromatic
+                _ => (0.2627f32, 0.6780f32, 0.0593f32), // NeutralPanchromatic
+            };
+            let pan_lum = filter_weights.0 * cur_r + filter_weights.1 * cur_g + filter_weights.2 * cur_b;
             let mono = metal_film_curve(pan_lum, 1.08, 0.30, 0.25);
             (mono, mono, mono)
         }
@@ -153,7 +162,7 @@ fn test_clean_bypass_when_none() {
         (0.75, 0.25, 0.10),
     ];
     for &(r, g, b) in &test_pixels {
-        let out = apply_recording_emulsion(r, g, b, EmulsionArchetype::None, 0.0);
+        let out = apply_recording_emulsion(r, g, b, EmulsionArchetype::None, 0.0, EnlargerFilterMode::NeutralPanchromatic);
         assert_eq!(out, (r, g, b));
     }
 }
@@ -182,31 +191,59 @@ fn test_sensitometric_dmax_absorption() {
         0.0, 0.0, 0.0,
         EmulsionArchetype::RochesterPortrait400,
         0.0,
+        EnlargerFilterMode::NeutralPanchromatic,
     );
     assert_eq!((rb, gb, bb), (0.0, 0.0, 0.0));
 }
 
 #[test]
 fn test_push_pull_exposure_gain() {
-    let (r_base, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 0.0);
-    let (r_push, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 1.0);
-    let (r_pull, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, -1.0);
+    let (r_base, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 0.0, EnlargerFilterMode::NeutralPanchromatic);
+    let (r_push, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 1.0, EnlargerFilterMode::NeutralPanchromatic);
+    let (r_pull, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, -1.0, EnlargerFilterMode::NeutralPanchromatic);
 
     assert!(r_push > r_base, "Pushed exposure must produce higher transmission");
     assert!(r_pull < r_base, "Pulled exposure must produce lower transmission");
 }
 
 #[test]
-fn test_monochrome_mobberley_collapses_color() {
-    // Saturated colored input exposed onto Mobberley Silver 400
-    let (r, g, b) = apply_recording_emulsion(
-        0.8, 0.2, 0.1,
-        EmulsionArchetype::MobberleySilver400,
-        0.0,
-    );
-    // Silver halide panchromatic negative outputs pure monochrome
-    assert_eq!(r, g);
-    assert_eq!(g, b);
+fn test_monochrome_mobberley_collapses_color_and_filters() {
+    let filters = [
+        EnlargerFilterMode::NeutralPanchromatic,
+        EnlargerFilterMode::YellowK2,
+        EnlargerFilterMode::Orange16,
+        EnlargerFilterMode::Red25A,
+        EnlargerFilterMode::GreenX1,
+        EnlargerFilterMode::Orthochromatic,
+    ];
+
+    let mut previous_lum: Option<f32> = None;
+    for filter in filters {
+        // Red dominant scene: filters must shift monochrome response dramatically
+        let (r, g, b) = apply_recording_emulsion(
+            0.8, 0.2, 0.1,
+            EmulsionArchetype::MobberleySilver400,
+            0.0,
+            filter,
+        );
+        // Pure monochrome collapse
+        assert_eq!(r, g);
+        assert_eq!(g, b);
+
+        let metal_out = metal_shader_emulsion_sim(
+            0.8, 0.2, 0.1,
+            EmulsionArchetype::MobberleySilver400.id_number(),
+            0.0,
+            filter.id_number(),
+        );
+        assert!((r - metal_out.0).abs() < 1e-4, "Filter {:?} diverged from Metal sim", filter);
+
+        if let Some(prev) = previous_lum {
+            // Confirm optical filtration changes luminance response for color scenes
+            assert!((r - prev).abs() > 0.001, "Filter {:?} had no effect compared to previous", filter);
+        }
+        previous_lum = Some(r);
+    }
 }
 
 #[test]
@@ -229,14 +266,23 @@ fn test_dual_engine_parity_across_all_archetypes() {
         (0.85, 0.75, 0.65), // Warm highlight
     ];
 
-    for arch in archetypes {
-        for &(r, g, b) in &test_patches {
-            let rust_out = apply_recording_emulsion(r, g, b, arch, 0.3);
-            let metal_out = metal_shader_emulsion_sim(r, g, b, arch.id_number(), 0.3);
+    let filters = [
+        EnlargerFilterMode::NeutralPanchromatic,
+        EnlargerFilterMode::YellowK2,
+        EnlargerFilterMode::Red25A,
+        EnlargerFilterMode::GreenX1,
+    ];
 
-            assert!((rust_out.0 - metal_out.0).abs() < 1e-4, "Parity mismatch R in {:?}: Rust={:.5}, Metal={:.5}", arch, rust_out.0, metal_out.0);
-            assert!((rust_out.1 - metal_out.1).abs() < 1e-4, "Parity mismatch G in {:?}: Rust={:.5}, Metal={:.5}", arch, rust_out.1, metal_out.1);
-            assert!((rust_out.2 - metal_out.2).abs() < 1e-4, "Parity mismatch B in {:?}: Rust={:.5}, Metal={:.5}", arch, rust_out.2, metal_out.2);
+    for arch in archetypes {
+        for &filter in &filters {
+            for &(r, g, b) in &test_patches {
+                let rust_out = apply_recording_emulsion(r, g, b, arch, 0.3, filter);
+                let metal_out = metal_shader_emulsion_sim(r, g, b, arch.id_number(), 0.3, filter.id_number());
+
+                assert!((rust_out.0 - metal_out.0).abs() < 1e-4, "Parity mismatch R in {:?} (filter {:?}): Rust={:.5}, Metal={:.5}", arch, filter, rust_out.0, metal_out.0);
+                assert!((rust_out.1 - metal_out.1).abs() < 1e-4, "Parity mismatch G in {:?} (filter {:?}): Rust={:.5}, Metal={:.5}", arch, filter, rust_out.1, metal_out.1);
+                assert!((rust_out.2 - metal_out.2).abs() < 1e-4, "Parity mismatch B in {:?} (filter {:?}): Rust={:.5}, Metal={:.5}", arch, filter, rust_out.2, metal_out.2);
+            }
         }
     }
 }

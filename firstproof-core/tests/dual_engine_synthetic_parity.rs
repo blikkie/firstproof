@@ -5,11 +5,12 @@
 //! and geometric distortion grids WITHOUT requiring large RAW disk files.
 
 use firstproof_core::color::{
-    Color3, agx_tone_map, agx_tone_map_vivid, ciede2000::linear_srgb_to_lab, ciede2000::ciede2000,
+    Color3, agx_tone_map, agx_tone_map_vivid, apply_print_media, apply_recording_emulsion,
+    ciede2000::linear_srgb_to_lab, ciede2000::ciede2000,
 };
 use firstproof_core::export::{apply_edits, apply_tone_recovery, f16_to_f32};
 use firstproof_core::synthetic::SyntheticTestChart;
-use firstproof_core::{ColorProfileMode, EditSettings};
+use firstproof_core::{ColorProfileMode, EditSettings, EmulsionArchetype, EnlargerFilterMode, PrintMediaMode};
 
 #[test]
 fn test_synthetic_macbeth_and_neutral_ramp_dual_engine_parity() {
@@ -41,6 +42,32 @@ fn test_synthetic_macbeth_and_neutral_ramp_dual_engine_parity() {
         ("AgX Filmic Base Neutral", EditSettings {
             tone_profile: ColorProfileMode::AgxFilmic,
             contrast: 15.0,
+            ..Default::default()
+        }),
+        ("Mobberley Silver 400 + Red 25A Filter", EditSettings {
+            emulsion_archetype: EmulsionArchetype::MobberleySilver400,
+            enlarger_filter: EnlargerFilterMode::Red25A,
+            ..Default::default()
+        }),
+        ("Fine Art Cotton Rag Print Media", EditSettings {
+            print_media: PrintMediaMode::FineArtCottonRag,
+            print_paper_grade: 1.0,
+            print_base_warmth: 15.0,
+            print_process_depth: 80.0,
+            ..Default::default()
+        }),
+        ("Baryta Silver Gelatin Print Media", EditSettings {
+            print_media: PrintMediaMode::BarytaSilverGelatin,
+            enlarger_filter: EnlargerFilterMode::YellowK2,
+            print_paper_grade: 0.5,
+            print_process_depth: 90.0,
+            ..Default::default()
+        }),
+        ("Cyanotype Prussian Blue Chemistry", EditSettings {
+            print_media: PrintMediaMode::Cyanotype,
+            print_paper_grade: 0.0,
+            print_base_warmth: 5.0,
+            print_process_depth: 85.0,
             ..Default::default()
         }),
     ];
@@ -95,15 +122,42 @@ fn test_synthetic_macbeth_and_neutral_ramp_dual_engine_parity() {
                 edits.highlights, edits.shadows, edits.whites, edits.blacks,
             );
 
-            let tone_mapped = match edits.tone_profile {
-                ColorProfileMode::AgxVivid => agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), contrast_gain),
-                ColorProfileMode::AgxFilmic => agx_tone_map(Color3::new(r_rec, g_rec, b_rec), contrast_gain),
-                _ => agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), contrast_gain),
+            // Upstream Recording Emulsion
+            let (r_em, g_em, b_em) = if edits.emulsion_archetype != EmulsionArchetype::None {
+                apply_recording_emulsion(
+                    r_rec, g_rec, b_rec,
+                    edits.emulsion_archetype,
+                    edits.emulsion_exposure,
+                    edits.enlarger_filter,
+                )
+            } else {
+                (r_rec, g_rec, b_rec)
             };
 
-            let gpu_r = tone_mapped.r().clamp(0.0, 1.0);
-            let gpu_g = tone_mapped.g().clamp(0.0, 1.0);
-            let gpu_b = tone_mapped.b().clamp(0.0, 1.0);
+            let tone_mapped = match edits.tone_profile {
+                ColorProfileMode::AgxVivid => agx_tone_map_vivid(Color3::new(r_em, g_em, b_em), contrast_gain),
+                ColorProfileMode::AgxFilmic => agx_tone_map(Color3::new(r_em, g_em, b_em), contrast_gain),
+                _ => agx_tone_map_vivid(Color3::new(r_em, g_em, b_em), contrast_gain),
+            };
+
+            let mut gpu_r = tone_mapped.r().clamp(0.0, 1.0);
+            let mut gpu_g = tone_mapped.g().clamp(0.0, 1.0);
+            let mut gpu_b = tone_mapped.b().clamp(0.0, 1.0);
+
+            // Fine-Art Print Media in Linear Display Space
+            if edits.print_media != PrintMediaMode::None {
+                let (r_pm, g_pm, b_pm) = apply_print_media(
+                    gpu_r, gpu_g, gpu_b,
+                    edits.print_media,
+                    edits.enlarger_filter,
+                    edits.print_paper_grade,
+                    edits.print_base_warmth,
+                    edits.print_process_depth,
+                );
+                gpu_r = r_pm;
+                gpu_g = g_pm;
+                gpu_b = b_pm;
+            }
 
             // Sample Export Image:
             let ex = ((export_img.width as f32 * u).round() as usize).clamp(0, export_img.width - 1);

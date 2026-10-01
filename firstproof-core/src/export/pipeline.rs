@@ -111,6 +111,7 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
                 r, g, b,
                 edits.emulsion_archetype,
                 edits.emulsion_exposure,
+                edits.enlarger_filter,
             );
             r = r_em;
             g = g_em;
@@ -216,6 +217,21 @@ pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
             r = c_srgb.r().max(0.0);
             g = c_srgb.g().max(0.0);
             b = c_srgb.b().max(0.0);
+        }
+
+        // 4. Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration in Linear Display Space
+        if edits.print_media != crate::PrintMediaMode::None {
+            let (r_p, g_p, b_p) = crate::color::apply_print_media(
+                r, g, b,
+                edits.print_media,
+                edits.enlarger_filter,
+                edits.print_paper_grade,
+                edits.print_base_warmth,
+                edits.print_process_depth,
+            );
+            r = r_p;
+            g = g_p;
+            b = b_p;
         }
         
         // Store linear sRGB color values

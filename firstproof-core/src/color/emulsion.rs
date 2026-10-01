@@ -15,7 +15,7 @@
 //! Bit-level dual-engine parity with Metal shaders is strictly enforced.
 
 
-pub use firstproof_types::modes::{EmulsionArchetype, EmulsionFormat};
+pub use firstproof_types::modes::{EmulsionArchetype, EmulsionFormat, EnlargerFilterMode};
 
 
 /// Sensitometric $C^1$ continuous D-log H characteristic curve with soft shoulder and toe compression.
@@ -88,6 +88,7 @@ pub fn apply_recording_emulsion(
     b: f32,
     archetype: EmulsionArchetype,
     push_pull_ev: f32,
+    filter_mode: EnlargerFilterMode,
 ) -> (f32, f32, f32) {
     if archetype == EmulsionArchetype::None {
         return (r, g, b);
@@ -206,11 +207,11 @@ pub fn apply_recording_emulsion(
 
         // 6. Mobberley Silver 400 (Panchromatic B&W, Mobberley, Cheshire, UK)
         // Technical Reference: Ilford Technical Information Sheet ("ILFORD HP5 PLUS Professional Black and White Film"), ID-11/D-76 Developer (1+1).
-        // Characteristics: Daylight-balanced panchromatic spectral sensitivity (0.28 R + 0.62 G + 0.10 B),
+        // Characteristics: Spectral sensitivity modulated by optical enlarger filtration (or neutral Rec.2020 luma),
         // classic G-bar 0.62 / gamma 1.08 across Zone III to Zone VIII, with clean collapse to monochromatic metallic silver.
         EmulsionArchetype::MobberleySilver400 => {
-            // Panchromatic spectral sensitivity: 0.28 R + 0.62 G + 0.10 B
-            let pan_lum = 0.28 * cur_r + 0.62 * cur_g + 0.10 * cur_b;
+            let (wr, wg, wb) = filter_mode.spectral_weights();
+            let pan_lum = wr * cur_r + wg * cur_g + wb * cur_b;
             let mono = apply_film_characteristic_curve(pan_lum, 1.08, 0.30, 0.25);
 
             (mono, mono, mono)

@@ -663,19 +663,19 @@ mod tests {
 
     #[test]
     fn test_recording_emulsion_and_subtractive_grain_math() {
-        use crate::color::emulsion::{apply_recording_emulsion, EmulsionArchetype};
+        use crate::color::emulsion::{apply_recording_emulsion, EmulsionArchetype, EnlargerFilterMode};
 
         // 1. Clean bypass when None
-        let (r0, g0, b0) = apply_recording_emulsion(0.5, 0.5, 0.5, EmulsionArchetype::None, 0.0);
+        let (r0, g0, b0) = apply_recording_emulsion(0.5, 0.5, 0.5, EmulsionArchetype::None, 0.0, EnlargerFilterMode::NeutralPanchromatic);
         assert_eq!((r0, g0, b0), (0.5, 0.5, 0.5));
 
         // 2. Sensitometric toe absorption: pure black stays 0.0
-        let (rb, gb, bb) = apply_recording_emulsion(0.0, 0.0, 0.0, EmulsionArchetype::RochesterPortrait400, 0.0);
+        let (rb, gb, bb) = apply_recording_emulsion(0.0, 0.0, 0.0, EmulsionArchetype::RochesterPortrait400, 0.0, EnlargerFilterMode::NeutralPanchromatic);
         assert_eq!((rb, gb, bb), (0.0, 0.0, 0.0));
 
         // 3. Push/Pull photographic exposure trim (2^EV)
-        let (r_base, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 0.0);
-        let (r_push, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 1.0);
+        let (r_base, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 0.0, EnlargerFilterMode::NeutralPanchromatic);
+        let (r_push, _, _) = apply_recording_emulsion(0.3, 0.3, 0.3, EmulsionArchetype::RochesterPortrait400, 1.0, EnlargerFilterMode::NeutralPanchromatic);
         assert!(r_push > r_base, "Pushed exposure must produce higher density than normal");
     }
 

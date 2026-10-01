@@ -7,13 +7,15 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1)**: 6 remaining stories establishing shader geometry/crop parity, desktop gesture interaction parity, zero-flashing preview staging, and eliminating the duplicate TypeScript oracle and fake 16-bit export slop.
-2. **Unified RAW Container Intake & Camera Calibration Registry Engine (P1)**: Consolidate ad-hoc TIFF, EXIF, and DNG parsers into a strongly-typed container manifest and authoritative camera calibration registry.
-3. **Cross-Platform Linux Toolchain & Headless Development Engine (P1)**: Kubuntu/Linux compilation, headless `firstproof-cli` developer testbed, and cross-platform CI gate.
-4. **Archival Open DNG Converter & Lossless Compression Engine (P2)**: Lossless Bayer CFA transcoding and Deflate tile compression.
-5. **Multi-Camera Color Calibration & Sensor Matching Engine (P2)**: Target chart profiling and spectral sensitivity matching.
-6. **Print Proofing & Gamut Warning Engine (P2)**: Soft proofing against ICC profiles and out-of-gamut clipping alerts.
-7. **Archival High-Precision Multi-Pass Export Engine (P2)**: Multi-pass AMaZE/RCD demosaicing and 2D spatial developer exhaustion diffusion.
+1. **Story 3.8.5: De-Slopping Parity Harness & Deleting the TypeScript Oracle (1,020 Lines)** (P0)
+2. **Story 3.8.6: Client-Side Export Clean-Up & Eliminating Fake 16-Bit Slop** (P0)
+3. **Story 3.8.2: Shader Geometry & Viewport Transformation Parity** (P0)
+4. **Story 3.8.3: Crop Controller & Desktop Interaction Parity** (P0)
+5. **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity** (P0)
+6. **Story 3.10: Core Crate De-Duplication & Single Source of Truth in `firstproof-types`** (P1)
+7. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
+8. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
+9. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
 
@@ -121,27 +123,27 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
   - Immediately clear to the neutral dark canvas with the developing spinner during the 10–15ms photo switch to eliminate stale pixel flashing.
   - *Verification*: Burst culling test with RAW files showing zero manufacturer JPEG flashes and clean dark transitions.
 
-- **Story 3.8.5: De-Slopping Parity Harness & Deleting the TypeScript Oracle**:
+- **Story 3.8.5: De-Slopping Parity Harness & Deleting the TypeScript Oracle (P0)**:
   - Expose reference pixel and frame evaluation directly from Rust WASM in `firstproof-wasm`.
-  - Delete the 1,073-line pure TypeScript twin (`web/src/parity/ReferenceExport.ts`).
+  - Delete the 1,020-line pure TypeScript twin (`web/src/parity/ReferenceExport.ts`).
   - Re-point `ParityHarness.ts` and `web/parity.html` directly to compiled Rust WASM as the sole ground truth.
   - *Verification*: Automated parity test battery running in `parity.html` comparing WebGL shaders against compiled Rust WASM.
 
-- **Story 3.8.6: Client-Side Export Clean-Up & De-Slopping**:
+- **Story 3.8.6: Client-Side Export Clean-Up & Eliminating Fake 16-Bit Slop (P0)**:
   - Replace the fake bitshifted 16-bit TIFF encoder (`tiffEncoder.ts`) with authentic 8-bit or real WASM-backed export.
   - Fix Display P3 color transform (or cleanly scope to calibrated sRGB).
   - Remove unimplemented "Ultra HDR" and "Rendering Intent" promises from `ExportModal.ts`.
   - Decouple export execution from the live on-screen `<canvas>` so batch export does not resize the viewport during editing.
   - *Verification*: Export single and batch photos to disk with verified color without viewport resizing.
 
-- **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,495 Lines)**:
+- **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines) (P1)**:
   - Extract dedicated modules from `main.ts`:
     - `KeyboardShortcutController.ts` (first-responder shielded desktop shortcuts)
     - `InspectorSyncController.ts` (slider bindings, curve listeners, tab navigation)
-    - `FilmstripController.ts` (thumbnail card rendering, DOM recycling, selection)
+    - `FilmstripController.ts` (thumbnail card rendering, DOM recycling, selection, and viewport-driven lazy loading via `IntersectionObserver` / scroll listeners with concurrency throttling so thumbnails continuously load as the user scrolls)
     - `PhotoLoaderService.ts` (worker dispatch, debounce staging, cache coordinator)
-  - Reduce `main.ts` to a lean application coordinator (~200 lines).
-  - *Verification*: Full end-to-end regression check across all tools, keyboard shortcuts, and inspector tabs.
+  - Reduce `main.ts` to a lean application coordinator (< 250 lines).
+  - *Verification*: Full end-to-end regression check across all tools, keyboard shortcuts, filmstrip smooth scrolling with lazy thumbnail hydration, and inspector tabs.
 
 ### 3.9 Unified RAW Container Intake & Camera Calibration Registry Engine (P1)
 - **Eliminate Ad-Hoc Tag Scanning (`firstproof-types::container`)**:
@@ -155,6 +157,50 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
 - **Dual-Format RAW vs DNG Regression Suite**:
   - Integration test `test_raw_vs_dng_intake_parity` auditing paired proprietary RAWs and their Adobe DNG converted counterparts (e.g. `_MG_2332.CR2` vs `_MG_2332.dng`).
   - Guarantees bit-level agreement: baseline exposure delta $\Delta \text{EV} < 0.01$, identical active sensor crop, and photometric wedge continuity across both native and web darkroom targets.
+
+### 3.10 Core Crate De-Duplication & Single Source of Truth in `firstproof-types` (P1)
+- **Deduplicate RAW Sensor Decoding**:
+  - Move `decode_raw_sensor_frame` into `firstproof-types/src/raw.rs` as a shared method on `RawSensorFrame`.
+  - Both `firstproof-core/src/raw_decoder.rs` and `firstproof-wasm/src/lib.rs` consume the exact same decoder, eliminating 100 lines of copy-pasted Rawler decoding logic.
+- **Deduplicate XMP Engine**:
+  - Make `firstproof-types/src/xmp.rs` the single canonical implementation of `XmpData`, `format_gps_xmp`, `parse_gps_xmp`, and XML read/write.
+  - Re-export from `firstproof-core::xmp`, eliminating duplicate files (`data.rs`, `reader.rs`, `writer.rs`).
+- **Deduplicate Metadata Structs**:
+  - Unify `ImageMetadata` (`firstproof-core/src/raw.rs`) and `ImageMetadataRecord` (`firstproof-types/src/lib.rs`).
+- **Verification**:
+  - `cargo test --all-targets` across `firstproof-types`, `firstproof-core`, and `firstproof-wasm`.
+
+### 3.11 Sensitometric Emulsion Balancing & Physical Optical Grain Engine (P2)
+- **Global Chemical & Sensitometric Roster Balancing**:
+  - Rationalize North American stocks: merge `RochesterDaylight200` into `RochesterPortrait400` (eliminating redundant C-41 variants in favor of pure exposure/saturation modulation).
+  - Add **`LeverkusenPortrait160`** (*Agfa Agfacolor / Vista* - Leverkusen, Germany): European substantive dye couplers, earthy ochre midtones, soft pastel greens, and gentle shadow saturation.
+  - Add **`AshigaraPortrait400`** (*Fujicolor Pro 400H* - Minamiashigara, Japan): Patented 4th color layer (cyan-sensitive inter-layer) delivering airy Japanese portrait pastels and fluorescent green suppression.
+  - Add **`LiguriaCinema80`** (*Ferrania P30* - Cairo Montenotte, Italy): Legendary 1960s Italian Neorealist high-silver cinema emulsion (Fellini, Pasolini), featuring deep velvety blacks, ultra-sharp acutance, and punchy microcontrast.
+  - Add **`BaodingSilver100`** (*Lucky SHD 100* - Baoding, China): Iconic domestic Chinese cubic silver halide featuring authentic optical halation bloom around specular highlights due to minimal anti-halation backing.
+- **Physical Grain Synthesis in Wide-Gamut Linear Rec.2020**:
+  - **Sensitometric Domain Placement Invariant**: Grain is simulated in the optical scene domain *before* AgX tone mapping and print transfer, avoiding shadow noise floor amplification and non-linear gamma clipping.
+  - **Stock-Specific Crystal Morphology**:
+    1. *Metallic Silver Crystals* (`MobberleySilver400`, `LiguriaCinema80`, `BaodingSilver100`): Sharp, irregular crystalline silver grains with stock-calibrated acutance and density distribution.
+    2. *Organic Dye Clouds* (`RochesterPortrait400`, `AshigaraPortrait400`, `LeverkusenPortrait160`): Soft, overlapping microscopic dye clouds left behind after silver bleaching in C-41/E-6 processes.
+    3. *Optical Halation Scattering* (`BaodingSilver100`): Internal reflection and lateral light dispersion across the film base producing natural specular glow without digital bloom filters.
+  - **Dual-Engine Mathematical Parity**:
+    - Procedural SIMD/hash-based grain synthesis matching bit-for-bit across Rust CPU export (`color/grain.rs`), Metal GPU shaders (`Shaders.metal`), and WebGL fragment shaders (`FragmentShader.ts`).
+  - **Verification**:
+    - Parity test suite verifying identical grain density across wedges $(-10\text{ EV}$ to $+6.5\text{ EV})$ in Rust, Metal, and WebGL.
+
+### 3.12 West African Studio Darkroom Chemistry & Deep-Tone Sensitometry (P2)
+- **Honoring West African Studio Print Culture (`BamakoSilverContact`)**:
+  - Add **`BamakoSilverContact`** to `PrintMediaMode`, formalizing the darkroom printmaking tradition of Bamako, Mali (Seydou Keïta, Malick Sidibé) and Bobo-Dioulasso (Sanlé Sory).
+  - Modeled on large-format 1:1 contact printing onto high-silver bromide paper with high-concentration hydroquinone/metol developers and ferrotype gloss finishing.
+- **Sensitometric Characteristics**:
+  - **Zone III–V Microcontrast & Luminosity**: Expands tonal separation across rich dark skin tones and shadow textures, eliminating the muddy compression typical of Caucasian-biased historical paper curves.
+  - **High-Key Textile Acutance**: Retains brilliant, non-blooming edge contrast in Zone VII–VIII highlights for intricate patterned fabrics (Ankara wax prints, woven mudcloth, lace) and jewelry.
+  - **Ferrotype Mirror Dmax**: Deep, inky maximum black density ($D_{\max} \ge 2.25$) with neutral-to-cool specular silver reflectance.
+- **Deep-Tone Sensitometric Test Suite**:
+  - Implement a specialized synthetic reflectance wedge in `tests/print_media_parity.rs` auditing Zones II through VI across diverse skin reflectance models.
+  - Guarantees strictly monotonic derivative separation ($df/dx > 0$) without clipping, solarization, or plastic color flattening.
+- **Parity Across Engines**:
+  - Implement identical mathematical transfer functions across `firstproof-core/src/color/print_media.rs`, `Shaders.metal`, and `FragmentShader.ts`.
 
 ---
 
@@ -177,6 +223,8 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
 ### 4.2 Active Codebase Path Sanitization & History Scrubbing
 - **Active Codebase Path Sanitization**:
   - Purge hardcoded `/Users/<username>/...` paths from `FirstProofApp.swift`, `calibrate.rs`, and test files (`camera_profiles_parity.rs`). Replace with dynamic `Bundle` lookups and `TEST_FIXTURES_DIR` / environment variables.
+- **Committed Test Scratch Cleanup**:
+  - Delete committed scratch debugging blocks in `camera_profiles_parity.rs` (lines 408–480) referencing local desktop paths and IDE attachment folders (`.user_uploaded/media_...`).
 - **Git History Rewrite & Scrubbing Pass (`git-filter-repo` / BFG)**:
   - Perform an automated history rewrite prior to public release to scrub local paths, developer usernames, private emails, and transient binary blobs from git commit history.
   - Followed by aggressive reflog expiration and garbage collection (`git reflog expire --expire=now --all && git gc --prune=now --aggressive`).

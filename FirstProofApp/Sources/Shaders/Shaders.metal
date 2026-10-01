@@ -266,18 +266,6 @@ fragment float4 fragmentShader(
         );
     }
 
-    // 8.2 Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration in Linear Rec.2020
-    if (uniforms.isOriginal < 0.5 && uniforms.printMediaMode != 0) {
-        rec2020Color = applyPrintMedia(
-            rec2020Color,
-            uniforms.printMediaMode,
-            uniforms.enlargerFilterMode,
-            uniforms.printPaperGrade,
-            uniforms.printBaseWarmth,
-            uniforms.printProcessDepth
-        );
-    }
-
     // 9. TERMINAL STAGE: AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles -> Linear sRGB
     // Calibrated contrast: Ceiling 2.0x (+100), Floor 0.40x (-100) preventing flat gray collapse
     float contrastGain = (editContrast >= 0.0)
@@ -313,6 +301,18 @@ fragment float4 fragmentShader(
         } else {
             srgbLinearOut = clamp(curved, 0.0, 1.0);
         }
+    }
+
+    // 9.1 Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration in Linear Display Space
+    if (uniforms.isOriginal < 0.5 && uniforms.printMediaMode != 0) {
+        srgbLinearOut = applyPrintMedia(
+            srgbLinearOut,
+            uniforms.printMediaMode,
+            uniforms.enlargerFilterMode,
+            uniforms.printPaperGrade,
+            uniforms.printBaseWarmth,
+            uniforms.printProcessDepth
+        );
     }
 
     float3 finalColor = srgbLinearOut;
