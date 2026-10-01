@@ -1,0 +1,184 @@
+//! Camera tone curves and HSV/RGB color utilities.
+//!
+//! Monotonic cubic Hermite spline interpolation (Fritsch-Carlson algorithm)
+//! and standard built-in camera matching tone curves.
+
+/// Converts RGB to HSV (H in degrees [0, 360), S in [0, 1], V in [0, 1]).
+#[inline]
+pub fn rgb_to_hsv(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let delta = max - min;
+
+    let v = max;
+    let s = if max > 1e-6 { delta / max } else { 0.0 };
+
+    let h = if delta < 1e-6 {
+        0.0
+    } else if (max - r).abs() < 1e-6 {
+        60.0 * (((g - b) / delta).rem_euclid(6.0))
+    } else if (max - g).abs() < 1e-6 {
+        60.0 * (((b - r) / delta) + 2.0)
+    } else {
+        60.0 * (((r - g) / delta) + 4.0)
+    };
+
+    (h, s, v)
+}
+
+/// Converts HSV (H in degrees [0, 360), S in [0, 1], V in [0, 1]) back to RGB.
+#[inline]
+pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
+    let c = v * s;
+    let h_prime = (h.rem_euclid(360.0)) / 60.0;
+    let x = c * (1.0 - ((h_prime.rem_euclid(2.0)) - 1.0).abs());
+    let m = v - c;
+
+    let (r1, g1, b1) = if h_prime < 1.0 {
+        (c, x, 0.0)
+    } else if h_prime < 2.0 {
+        (x, c, 0.0)
+    } else if h_prime < 3.0 {
+        (0.0, c, x)
+    } else if h_prime < 4.0 {
+        (0.0, x, c)
+    } else if h_prime < 5.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+
+    (r1 + m, g1 + m, b1 + m)
+}
+
+/// Evaluates a tone curve defined by (x, y) control knots using a C^1 continuous
+/// monotonic cubic Hermite spline (Fritsch-Carlson algorithm).
+#[inline]
+pub fn evaluate_tone_curve(x: f32, curve: &[(f32, f32)]) -> f32 {
+    let n = curve.len();
+    if n == 0 {
+        return x;
+    }
+    if n == 1 {
+        return curve[0].1;
+    }
+    let x_clamped = x.clamp(0.0, 1.0);
+    if x_clamped <= curve[0].0 {
+        return curve[0].1;
+    }
+    if x_clamped >= curve[n - 1].0 {
+        return curve[n - 1].1;
+    }
+
+    // 1. Calculate secant slopes d_k = (y_{k+1} - y_k) / (x_{k+1} - x_k)
+    let mut d = [0.0f32; 32];
+    let n_segs = (n - 1).min(32);
+    for k in 0..n_segs {
+        let dx = curve[k + 1].0 - curve[k].0;
+        let dy = curve[k + 1].1 - curve[k].1;
+        d[k] = if dx.abs() > 1e-6 { dy / dx } else { 0.0 };
+    }
+
+    // 2. Initialize tangents as averages of adjacent secants
+    let mut m = [0.0f32; 33];
+    m[0] = d[0];
+    for k in 1..n_segs {
+        m[k] = 0.5 * (d[k - 1] + d[k]);
+    }
+    m[n_segs] = d[n_segs - 1];
+
+    // 3. Fritsch & Carlson monotonicity constraints
+    for k in 0..n_segs {
+        if d[k].abs() < 1e-6 {
+            m[k] = 0.0;
+            m[k + 1] = 0.0;
+        } else {
+            let alpha = m[k] / d[k];
+            let beta = m[k + 1] / d[k];
+            let s = alpha * alpha + beta * beta;
+            if s > 9.0 {
+                let tau = 3.0 / s.sqrt();
+                m[k] = tau * alpha * d[k];
+                m[k + 1] = tau * beta * d[k];
+            }
+        }
+    }
+
+    // 4. Find the active segment
+    let mut seg = 0;
+    for k in 0..n_segs {
+        if x_clamped >= curve[k].0 && x_clamped <= curve[k + 1].0 {
+            seg = k;
+            break;
+        }
+    }
+
+    // 5. Evaluate Hermite cubic polynomial
+    let h = curve[seg + 1].0 - curve[seg].0;
+    if h.abs() < 1e-6 {
+        return curve[seg].1;
+    }
+    let t = (x_clamped - curve[seg].0) / h;
+    let t2 = t * t;
+    let t3 = t2 * t;
+
+    let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
+    let h10 = t3 - 2.0 * t2 + t;
+    let h01 = -2.0 * t3 + 3.0 * t2;
+    let h11 = t3 - t2;
+
+    let y = h00 * curve[seg].1
+        + h10 * h * m[seg]
+        + h01 * curve[seg + 1].1
+        + h11 * h * m[seg + 1];
+
+    y.clamp(0.0, 1.0)
+}
+
+pub fn built_in_standard_tone_curve() -> Vec<(f32, f32)> {
+    vec![
+        (0.00, 0.000),
+        (0.02, 0.008),
+        (0.05, 0.028),
+        (0.18, 0.190),
+        (0.50, 0.540),
+        (0.80, 0.840),
+        (1.00, 1.000),
+    ]
+}
+
+pub fn built_in_portrait_tone_curve() -> Vec<(f32, f32)> {
+    vec![
+        (0.00, 0.000),
+        (0.02, 0.010),
+        (0.05, 0.035),
+        (0.18, 0.185),
+        (0.50, 0.510),
+        (0.80, 0.820),
+        (1.00, 1.000),
+    ]
+}
+
+pub fn built_in_landscape_tone_curve() -> Vec<(f32, f32)> {
+    vec![
+        (0.00, 0.000),
+        (0.02, 0.006),
+        (0.05, 0.022),
+        (0.18, 0.200),
+        (0.50, 0.560),
+        (0.80, 0.860),
+        (1.00, 1.000),
+    ]
+}
+
+pub fn built_in_vivid_tone_curve() -> Vec<(f32, f32)> {
+    vec![
+        (0.00, 0.000),
+        (0.02, 0.004),
+        (0.05, 0.018),
+        (0.18, 0.210),
+        (0.50, 0.580),
+        (0.80, 0.880),
+        (1.00, 1.000),
+    ]
+}

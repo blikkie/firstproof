@@ -8,7 +8,7 @@
 //!
 //! Bit-level dual-engine parity with Shaders.metal is strictly enforced.
 
-pub use firstproof_types::modes::{EnlargerFilterMode, PrintMediaMode};
+pub use crate::modes::{EnlargerFilterMode, PrintMediaMode};
 
 
 /// Applies paper grade (hardness) curve to a normalized luminance value [0.0, 1.0].

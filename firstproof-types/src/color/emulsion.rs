@@ -15,7 +15,7 @@
 //! Bit-level dual-engine parity with Metal shaders is strictly enforced.
 
 
-pub use firstproof_types::modes::{EmulsionArchetype, EmulsionFormat, EnlargerFilterMode};
+pub use crate::modes::{EmulsionArchetype, EmulsionFormat, EnlargerFilterMode};
 
 
 /// Sensitometric $C^1$ continuous D-log H characteristic curve with soft shoulder and toe compression.

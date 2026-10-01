@@ -224,5 +224,57 @@ export class WasmBridge {
   public extractMetadata(bytes: Uint8Array): ImageMetadataRecord {
     return wasm.extract_metadata_from_bytes(bytes) as ImageMetadataRecord;
   }
+
+  public evaluateReferenceFrame(
+    inputData: Uint8Array,
+    isLinearRec2020: boolean,
+    width: number,
+    height: number,
+    edits: EditSettingsPayload,
+    curvesLut?: EvaluatedLut | null
+  ): Uint8Array {
+    const editsJson = JSON.stringify(edits);
+    const curvesJson = curvesLut ? JSON.stringify(curvesLut) : null;
+    return wasm.evaluate_reference_frame(
+      inputData,
+      isLinearRec2020,
+      width,
+      height,
+      editsJson,
+      curvesJson
+    );
+  }
+
+  public evaluateReferencePixel(
+    r: number,
+    g: number,
+    b: number,
+    isLinearRec2020: boolean,
+    edits: EditSettingsPayload,
+    curvesLut?: EvaluatedLut | null
+  ): [number, number, number] {
+    const editsJson = JSON.stringify(edits);
+    const curvesJson = curvesLut ? JSON.stringify(curvesLut) : null;
+    const res = wasm.evaluate_reference_pixel(
+      r,
+      g,
+      b,
+      isLinearRec2020,
+      editsJson,
+      curvesJson
+    );
+    return [res[0], res[1], res[2]];
+  }
+
+  public evaluateDisplayLuma(
+    r: number,
+    g: number,
+    b: number,
+    isLinearRec2020: boolean,
+    edits: EditSettingsPayload
+  ): number {
+    const editsJson = JSON.stringify(edits);
+    return wasm.evaluate_display_luma(r, g, b, isLinearRec2020, editsJson);
+  }
 }
 

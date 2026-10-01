@@ -2,6 +2,7 @@
 uniffi::setup_scaffolding!("firstproof_types");
 
 pub mod auto;
+pub mod color;
 pub mod curve;
 pub mod modes;
 pub mod preview;
@@ -40,6 +41,11 @@ pub use settings::{EditSettings, WhiteBalanceResult};
 pub use xmp::{
     format_gps_xmp, generate_xmp_sidecar, parse_curve_points, parse_gps_xmp, parse_xmp_sidecar,
     serialize_curve_points, XmpData,
+};
+pub use color::{
+    develop_frame_pipeline, develop_pixel_pipeline, evaluate_display_luma, is_neutral_edits,
+    linear_rgb_to_srgb8, linear_to_srgb_gamma, srgb_gamma_to_linear, Color3, ColorSpacePrimaries,
+    Matrix3x3,
 };
 
 #[cfg(test)]

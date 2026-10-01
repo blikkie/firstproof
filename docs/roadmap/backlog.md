@@ -7,15 +7,15 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.8.5: De-Slopping Parity Harness & Deleting the TypeScript Oracle (1,020 Lines)** (P0)
-2. **Story 3.8.6: Client-Side Export Clean-Up & Eliminating Fake 16-Bit Slop** (P0)
-3. **Story 3.8.2: Shader Geometry & Viewport Transformation Parity** (P0)
-4. **Story 3.8.3: Crop Controller & Desktop Interaction Parity** (P0)
-5. **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity** (P0)
-6. **Story 3.10: Core Crate De-Duplication & Single Source of Truth in `firstproof-types`** (P1)
-7. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
-8. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
-9. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
+1. **Story 3.8.6: Client-Side Export Clean-Up & Eliminating Fake 16-Bit Slop** (P0)
+2. **Story 3.8.2: Shader Geometry & Viewport Transformation Parity** (P0)
+3. **Story 3.8.3: Crop Controller & Desktop Interaction Parity** (P0)
+4. **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity** (P0)
+5. **Story 3.10: Architecture Clean-Up: Rename `firstproof-types` to `firstproof-engine` & Core De-Duplication** (P1)
+6. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
+7. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
+8. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
+
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
 
@@ -128,11 +128,6 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
   - Immediately clear to the neutral dark canvas with the developing spinner during the 10–15ms photo switch to eliminate stale pixel flashing.
   - *Verification*: Burst culling test with RAW files showing zero manufacturer JPEG flashes and clean dark transitions.
 
-- **Story 3.8.5: De-Slopping Parity Harness & Deleting the TypeScript Oracle (P0)**:
-  - Expose reference pixel and frame evaluation directly from Rust WASM in `firstproof-wasm`.
-  - Delete the 1,020-line pure TypeScript twin (`web/src/parity/ReferenceExport.ts`).
-  - Re-point `ParityHarness.ts` and `web/parity.html` directly to compiled Rust WASM as the sole ground truth.
-  - *Verification*: Automated parity test battery running in `parity.html` comparing WebGL shaders against compiled Rust WASM.
 
 - **Story 3.8.6: Client-Side Export Clean-Up & Eliminating Fake 16-Bit Slop (P0)**:
   - Replace the fake bitshifted 16-bit TIFF encoder (`tiffEncoder.ts`) with authentic 8-bit or real WASM-backed export.
@@ -163,17 +158,24 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
   - Integration test `test_raw_vs_dng_intake_parity` auditing paired proprietary RAWs and their Adobe DNG converted counterparts (e.g. `_MG_2332.CR2` vs `_MG_2332.dng`).
   - Guarantees bit-level agreement: baseline exposure delta $\Delta \text{EV} < 0.01$, identical active sensor crop, and photometric wedge continuity across both native and web darkroom targets.
 
-### 3.10 Core Crate De-Duplication & Single Source of Truth in `firstproof-types` (P1)
+### 3.10 Architecture Clean-Up: Rename `firstproof-types` to `firstproof-engine` & Core De-Duplication (P1)
+- **Architectural Crate Reclassification & Rename**:
+  - Rename crate `firstproof-types` to **`firstproof-engine`** (or `firstproof-kernel`), correcting the historical misnomer.
+  - Formally establish the 3-tier workspace architecture:
+    1. **`firstproof-engine`**: Pure, cross-platform algorithmic kernel (color science, sensitometry, AgX, demosaicing, auto-algorithms, tone curves, XMP). Zero native OS or C dependencies (`glam`, `serde`); compiles anywhere (macOS, Linux, WASM, embedded).
+    2. **`firstproof-core`**: Native desktop host adapter (SQLite catalog, LibRaw/Rawler disk I/O, LCMS2 ICC profiles, Rayon multithreaded batch export, UniFFI bridge).
+    3. **`firstproof-wasm`**: WebAssembly host adapter (memory scratchpad, `wasm-bindgen`, JS array buffer marshalling).
+  - Update all `Cargo.toml` workspace definitions, crate references, internal imports, and documentation.
 - **Deduplicate RAW Sensor Decoding**:
-  - Move `decode_raw_sensor_frame` into `firstproof-types/src/raw.rs` as a shared method on `RawSensorFrame`.
+  - Move `decode_raw_sensor_frame` into `firstproof-engine/src/raw.rs` as a shared method on `RawSensorFrame`.
   - Both `firstproof-core/src/raw_decoder.rs` and `firstproof-wasm/src/lib.rs` consume the exact same decoder, eliminating 100 lines of copy-pasted Rawler decoding logic.
 - **Deduplicate XMP Engine**:
-  - Make `firstproof-types/src/xmp.rs` the single canonical implementation of `XmpData`, `format_gps_xmp`, `parse_gps_xmp`, and XML read/write.
+  - Make `firstproof-engine/src/xmp.rs` the single canonical implementation of `XmpData`, `format_gps_xmp`, `parse_gps_xmp`, and XML read/write.
   - Re-export from `firstproof-core::xmp`, eliminating duplicate files (`data.rs`, `reader.rs`, `writer.rs`).
 - **Deduplicate Metadata Structs**:
-  - Unify `ImageMetadata` (`firstproof-core/src/raw.rs`) and `ImageMetadataRecord` (`firstproof-types/src/lib.rs`).
+  - Unify `ImageMetadata` (`firstproof-core/src/raw.rs`) and `ImageMetadataRecord` (`firstproof-engine/src/lib.rs`).
 - **Verification**:
-  - `cargo test --all-targets` across `firstproof-types`, `firstproof-core`, and `firstproof-wasm`.
+  - `cargo test --all-targets` across `firstproof-engine`, `firstproof-core`, and `firstproof-wasm`.
 
 ### 3.11 Sensitometric Emulsion Balancing & Physical Optical Grain Engine (P2)
 > **Technical Mini Specs**:

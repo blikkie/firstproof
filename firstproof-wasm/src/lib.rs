@@ -411,6 +411,99 @@ pub fn generate_xmp(xmp_json: &str) -> Result<String, JsValue> {
     Ok(generate_xmp_sidecar(&xmp))
 }
 
+fn is_curve_active(pts: &[CurvePointRecord]) -> bool {
+    pts.len() > 2
+        || (pts.len() == 2
+            && ((pts[0].x - pts[0].y).abs() > 1e-4 || (pts[1].x - pts[1].y).abs() > 1e-4))
+}
+
+fn resolve_curves_lut(
+    edits: &EditSettings,
+    curves_lut_json: Option<String>,
+) -> Result<Option<AllCurvesLutRecord>, JsValue> {
+    if let Some(s) = curves_lut_json {
+        if !s.is_empty() {
+            let lut: AllCurvesLutRecord = serde_json::from_str(&s)
+                .map_err(|e| JsValue::from_str(&format!("Invalid curves LUT JSON: {}", e)))?;
+            return Ok(Some(lut));
+        }
+    }
+    if is_curve_active(&edits.curves.master)
+        || is_curve_active(&edits.curves.red)
+        || is_curve_active(&edits.curves.green)
+        || is_curve_active(&edits.curves.blue)
+    {
+        Ok(Some(evaluate_all_curves_lut(&edits.curves)))
+    } else {
+        Ok(None)
+    }
+}
+
+#[wasm_bindgen]
+pub fn evaluate_reference_frame(
+    input_data: &[u8],
+    is_linear_rec2020: bool,
+    width: u32,
+    height: u32,
+    edits_json: &str,
+    curves_lut_json: Option<String>,
+) -> Result<Vec<u8>, JsValue> {
+    let edits: EditSettings = serde_json::from_str(edits_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid edits JSON: {}", e)))?;
+    let curves_lut = resolve_curves_lut(&edits, curves_lut_json)?;
+    Ok(firstproof_types::develop_frame_pipeline(
+        input_data,
+        is_linear_rec2020,
+        width,
+        height,
+        &edits,
+        curves_lut.as_ref(),
+    ))
+}
+
+#[wasm_bindgen]
+pub fn evaluate_reference_pixel(
+    r: f32,
+    g: f32,
+    b: f32,
+    is_linear_rec2020: bool,
+    edits_json: &str,
+    curves_lut_json: Option<String>,
+) -> Result<Vec<u8>, JsValue> {
+    let edits: EditSettings = serde_json::from_str(edits_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid edits JSON: {}", e)))?;
+    let curves_lut = resolve_curves_lut(&edits, curves_lut_json)?;
+    let rgb = firstproof_types::develop_pixel_pipeline(
+        r,
+        g,
+        b,
+        is_linear_rec2020,
+        &edits,
+        curves_lut.as_ref(),
+        None,
+    );
+    Ok(rgb.to_vec())
+}
+
+#[wasm_bindgen]
+pub fn evaluate_display_luma(
+    r: f32,
+    g: f32,
+    b: f32,
+    is_linear_rec2020: bool,
+    edits_json: &str,
+) -> Result<f32, JsValue> {
+    let edits: EditSettings = serde_json::from_str(edits_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid edits JSON: {}", e)))?;
+    Ok(firstproof_types::evaluate_display_luma(
+        r,
+        g,
+        b,
+        is_linear_rec2020,
+        &edits,
+    ))
+}
+
 #[wasm_bindgen]
 pub fn compute_auto_adjustments_from_u16(data: &js_sys::Uint16Array, width: u32, height: u32) -> JsValue {
     let u16_len = (width * height * 4) as usize;
@@ -737,5 +830,36 @@ mod tests {
 
         let meta = firstproof_types::extract_metadata_from_bytes(&bytes);
         assert_eq!(meta.orientation, Some(8));
+    }
+
+    #[test]
+    fn test_wasm_reference_pipeline_evaluation() {
+        let edits = EditSettings::default();
+        let edits_json = serde_json::to_string(&edits).unwrap();
+
+        // sRGB through default AgX Vivid:
+        let rgb_neutral = evaluate_reference_pixel(0.5, 0.5, 0.5, false, &edits_json, None).unwrap();
+        assert_eq!(rgb_neutral[0], rgb_neutral[1]);
+        assert_eq!(rgb_neutral[1], rgb_neutral[2]);
+
+        // Linear Rec.2020 AgX Vivid evaluation:
+        let rgb_agx = evaluate_reference_pixel(0.18, 0.18, 0.18, true, &edits_json, None).unwrap();
+        // 0.18 mid gray through AgX Vivid should be around 125-135 display sRGB
+        assert!(rgb_agx[0] >= 120 && rgb_agx[0] <= 140);
+        assert_eq!(rgb_agx[0], rgb_agx[1]);
+        assert_eq!(rgb_agx[1], rgb_agx[2]);
+
+        // Display luma evaluation:
+        let luma = evaluate_display_luma(0.18, 0.18, 0.18, true, &edits_json).unwrap();
+        assert!(luma > 0.15 && luma < 0.35);
+
+        // Frame evaluation:
+        let input_rgba = vec![128u8, 128u8, 128u8, 255u8];
+        let frame_out = evaluate_reference_frame(&input_rgba, false, 1, 1, &edits_json, None).unwrap();
+        assert_eq!(frame_out.len(), 4);
+        assert_eq!(frame_out[0], rgb_neutral[0]);
+        assert_eq!(frame_out[1], rgb_neutral[1]);
+        assert_eq!(frame_out[2], rgb_neutral[2]);
+        assert_eq!(frame_out[3], 255);
     }
 }

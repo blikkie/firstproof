@@ -34,7 +34,7 @@
 </head>
 <body>
   <h1>First Proof — Mechanical Parity Test Runner</h1>
-  <div class="subtitle">Dual-Engine Bit-Level Verification: WebGL GPU Preview vs. Reference CPU Export</div>
+  <div class="subtitle">Multi-Engine Bit-Level Verification: WebGL GPU Preview vs. Reference Rust WASM Core</div>
 
   <div id="summary-banner">Running automated parity test battery...</div>
 
@@ -54,8 +54,10 @@
 
   <script type="module">
     import { ParityHarness } from '/src/parity/ParityHarness';
+    import { WasmBridge } from '/src/WasmBridge';
 
     async function run() {
+      await WasmBridge.init();
       const harness = new ParityHarness(256, 256);
       const results = harness.runFullAudit();
       window.parityResults = results;
