@@ -176,10 +176,10 @@ export class CropController {
     const opt43 = this.aspectSelect.querySelector('option[value="4:3"]');
     const opt169 = this.aspectSelect.querySelector('option[value="16:9"]');
 
-    if (optOriginal) optOriginal.textContent = portrait ? 'Original (Portrait)' : 'Original Aspect';
+    if (optOriginal) optOriginal.textContent = portrait ? 'Original (Vertical)' : 'Original';
     if (opt32) opt32.textContent = portrait ? '2:3 (35mm)' : '3:2 (35mm)';
-    if (opt43) opt43.textContent = portrait ? '3:4 (Medium Format)' : '4:3 (Medium Format)';
-    if (opt169) opt169.textContent = portrait ? '9:16 (Vertical)' : '16:9 Widescreen';
+    if (opt43) opt43.textContent = portrait ? '3:4' : '4:3';
+    if (opt169) opt169.textContent = portrait ? '9:16' : '16:9';
   }
 
   public show(crop: CropRect, imageAspect: number, straightenAngle: number = 0.0) {

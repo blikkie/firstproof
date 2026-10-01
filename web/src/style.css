@@ -1593,6 +1593,7 @@ kbd {
   padding: 4px 8px;
   font-size: 11px;
   height: 28px;
+  width: 125px;
   background-color: #1a1d24;
   border: 1px solid var(--border-light);
   border-radius: 6px;
@@ -1600,6 +1601,7 @@ kbd {
   font-weight: 500;
   cursor: pointer;
   outline: none;
+  box-sizing: border-box;
 }
 .crop-aspect-select:hover,
 .crop-aspect-select:focus {
@@ -1617,7 +1619,7 @@ kbd {
   font-size: 11px;
 }
 .crop-straighten-slider {
-  width: 90px;
+  width: 170px;
   height: 4px;
   accent-color: var(--accent-blue);
   cursor: pointer;
@@ -1625,7 +1627,7 @@ kbd {
 .crop-straighten-val {
   font-family: var(--font-mono);
   font-size: 11px;
-  min-width: 38px;
+  min-width: 42px;
   color: var(--text-main);
   text-align: right;
 }
