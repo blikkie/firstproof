@@ -68,7 +68,7 @@ This archive tracks completed stories and features moved from the active backlog
   - *Sensitometric D-log H Curves*: Continuous $C^1$ cubic Hermite characteristic curves derived from published manufacturer data sheets with photographic push/pull processing ($2^{\text{EV}}$ trim).
   - *Curated Geographic Archetypes*: 7 deeply researched chemical archetypes across major historical processes (*Rochester Portrait 400*, *Ashigara Chrome 50*, *Rochester K-14 Chrome 64*, *Rochester Cinema 500*, *Rochester Daylight 200*, *Mobberley Silver 400*, *Cambridge Diffusion 100*).
   - *Dual-Engine Bit-Level Parity*: Closed-form SIMD transform verified across Rust CPU (`emulsion.rs`, `pipeline.rs`) and Metal GPU shader (`ColorScience.metal`, `Shaders.metal`) with automated integration tests (`firstproof-core/tests/emulsion_parity.rs`).
-  - *Literature Grounding*: Characteristic curves systematically verified against published manufacturer technical data sheets (Kodak E-4050, Fuji AF3-960E, Kodak E-88, Kodak H-1-5219, Kodak E-7022, Ilford HP5 Plus, and Polaroid Land PNAS); documented in [sensitometric_emulsion_references.md](file:///Users/blikkie/src/LumenBox/docs/architecture/sensitometric_emulsion_references.md).
+  - *Literature Grounding*: Characteristic curves systematically verified against published manufacturer technical data sheets (Kodak E-4050, Fuji AF3-960E, Kodak E-88, Kodak H-1-5219, Kodak E-7022, Ilford HP5 Plus, and Polaroid Land PNAS); documented in [sensitometric_emulsion_references.md](../architecture/sensitometric_emulsion_references.md).
 
 
 ---

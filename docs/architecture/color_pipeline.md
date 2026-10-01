@@ -66,7 +66,7 @@ To prevent tone-curve collisions (double tone-mapping), out-of-gamut clipping, a
 
 2. **Linear Rec.2020 Working Space**:
    - Internal image adjustments strictly execute in **Linear Rec.2020 wide-gamut** color space with a D65 white point ($Y = 0.2627 R + 0.6780 G + 0.0593 B$), NOT gamma-encoded sRGB or display P3.
-   - Dual-engine math parity is enforced: `Shaders.metal` (Metal GPU), `FragmentShader.ts` (WebGL GPU), and `pipeline.rs`/`encoders.rs` (Rust CPU) evaluate mathematical transforms identically.
+   - Multi-engine math parity is enforced: `Shaders.metal` (Metal GPU), `FragmentShader.ts` (WebGL GPU), and `pipeline.rs`/`encoders.rs` (Rust CPU) evaluate mathematical transforms identically.
 
 3. **Physical Sensitometric Grain & Emulsion Placement**:
    - Real film grain simulates the physical distribution of silver halide crystals reacting to incident scene photons before optical tonality and print transfer.
@@ -86,4 +86,4 @@ To prevent tone-curve collisions (double tone-mapping), out-of-gamut clipping, a
 7. **Capture & Print Decoupling (Strict Neutral Default)**:
    - Emulsion profiles and darkroom print toners are strictly opt-in creative tools. The pipeline default is always pure optical sensor capture (Camera DCP + AgX).
    - Upstream in-camera recording chemistry (DIR couplers) and downstream darkroom printmaking (enlarger filtration, silver paper D-log H, archival toning) are orthogonal stages. Neither replaces or overrides the other.
-   - For detailed manufacturer publication codes and sensitometric characteristic curve derivations, see [sensitometric_emulsion_references.md](file:///Users/blikkie/src/LumenBox/docs/architecture/sensitometric_emulsion_references.md).
+   - For detailed manufacturer publication codes and sensitometric characteristic curve derivations, see [sensitometric_emulsion_references.md](sensitometric_emulsion_references.md).

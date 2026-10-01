@@ -2,7 +2,7 @@
 
 This document strictly tracks pending and deferred features calibrated against our core philosophy: **"Pure capture. Honest color. Zero digital plastic. Print & web first."**
 
-> **Note**: For completed stories, see [completed.md](file:///home/remco/src/firstproof/docs/roadmap/completed.md). For color pipeline specifications, see [color_pipeline.md](file:///home/remco/src/firstproof/docs/architecture/color_pipeline.md). For web architecture, see [web_architecture.md](file:///home/remco/src/firstproof/docs/architecture/web_architecture.md).
+> **Note**: For completed stories, see [completed.md](completed.md). For color pipeline specifications, see [color_pipeline.md](../architecture/color_pipeline.md). For web architecture, see [web_architecture.md](../architecture/web_architecture.md).
 
 ---
 
@@ -101,10 +101,14 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1)
 
-A systematic initiative executed strictly under the [Subsystem Parity & Reference Deconstruction Protocol](file:///home/remco/src/firstproof/.agents/skills/firstproof-subsystem-parity/SKILL.md) to eliminate duplicated logic, establish single sources of truth in `firstproof-types`, achieve 1:1 mathematical and behavioral parity with native macOS Metal, and purge AI slop and fake parity.
+A systematic initiative executed strictly under the [Subsystem Parity & Reference Deconstruction Protocol](../../.agents/skills/firstproof-subsystem-parity/SKILL.md) to eliminate duplicated logic, establish single sources of truth in `firstproof-types`, achieve 1:1 mathematical and behavioral parity with native macOS Metal, and purge AI slop and fake parity.
+
+> **Authoritative Technical Mini Specs**:
+> - [Viewport Geometry, Gestures & Texture Lifecycle](../specs/viewport_geometry_and_gestures.md)
+> - [Pipeline Stages & Color Space Working Invariants](../specs/pipeline_stages_and_color_spaces.md)
 
 - **Story 3.8.2: Shader Geometry & Viewport Transformation Parity**:
-  - Port `transformGeometry()` from `Geometry.metal` to GLSL in `WebGLRenderer.ts`.
+  - Port `transformGeometry()` from `Geometry.metal` to GLSL in `WebGLRenderer.ts` matching [viewport_geometry_and_gestures.md](../specs/viewport_geometry_and_gestures.md#3-shader-geometry-transformation-transformgeometry).
   - Wire uniforms for `u_cropLeft`, `u_cropTop`, `u_cropRight`, `u_cropBottom`, `u_cropModeActive`, `u_straightenAngle`, and `u_cropConstrain`.
   - Delete dead CPU-side vertex buffer mutation (`updateQuadGeometry`) in favor of GPU vertex/fragment coordinate transforms.
   - Implement `isIntermediate` bypass invariant (pass through sampled color directly without re-applying tone curves or geometry).
@@ -112,12 +116,13 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
   - *Verification*: Viewport inspection confirming cropped image fills canvas when exiting crop mode, straighten angle rotates cleanly, and intermediate textures bypass transforms.
 
 - **Story 3.8.3: Crop Controller & Desktop Interaction Parity**:
-  - Refactor `CropController.ts` into a stationary full-canvas gesture container covering the entire viewport, dimming outside the active crop box (fixing unscrimmed letterbox bars).
+  - Refactor `CropController.ts` into a stationary full-canvas gesture container covering the entire viewport, dimming outside the active crop box (fixing unscrimmed letterbox bars) matching [viewport_geometry_and_gestures.md](../specs/viewport_geometry_and_gestures.md#4-stationary-full-canvas-gesture-architecture).
   - Change outside-crop drag behavior: dragging outside the crop box initiates **straighten rotation** with a floating readout HUD matching `CropOverlayView.swift` (replacing `'create'` mode).
   - Fix aspect ratio inversion for portrait images and verify the <kbd>X</kbd> flip shortcut.
   - *Verification*: Interactive crop adjustments, outside-drag rotation, HUD placement, and keyboard shortcut parity.
 
 - **Story 3.8.4: Zero-Flashing Preview & Transitional Staging Parity**:
+  - Implement texture staging and bypass lifecycle matching [viewport_geometry_and_gestures.md](../specs/viewport_geometry_and_gestures.md#5-intermediate-preview--texture-lifecycle).
   - Update `RawDecodeWorker.ts` and `firstproof-wasm` to stream RAW files directly into 16-bit linear binned frames (`decode_raw_linear_from_scratchpad`) without extracting camera JPEGs first.
   - Up-front edit staging: resolve baseline EXIF orientation and XMP edits *before* updating preview state.
   - Immediately clear to the neutral dark canvas with the developing spinner during the 10–15ms photo switch to eliminate stale pixel flashing.
@@ -171,24 +176,31 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
   - `cargo test --all-targets` across `firstproof-types`, `firstproof-core`, and `firstproof-wasm`.
 
 ### 3.11 Sensitometric Emulsion Balancing & Physical Optical Grain Engine (P2)
+> **Technical Mini Specs**:
+> - [Stochastic Emulsion Resynthesis Mini Spec](../specs/stochastic_emulsion_resynthesis.md)
+> - [Global Emulsion & Darkroom Print Roster Mini Spec](../specs/global_emulsion_and_darkroom_roster.md)
 - **Global Chemical & Sensitometric Roster Balancing**:
   - Rationalize North American stocks: merge `RochesterDaylight200` into `RochesterPortrait400` (eliminating redundant C-41 variants in favor of pure exposure/saturation modulation).
   - Add **`LeverkusenPortrait160`** (*Agfa Agfacolor / Vista* - Leverkusen, Germany): European substantive dye couplers, earthy ochre midtones, soft pastel greens, and gentle shadow saturation.
   - Add **`AshigaraPortrait400`** (*Fujicolor Pro 400H* - Minamiashigara, Japan): Patented 4th color layer (cyan-sensitive inter-layer) delivering airy Japanese portrait pastels and fluorescent green suppression.
   - Add **`LiguriaCinema80`** (*Ferrania P30* - Cairo Montenotte, Italy): Legendary 1960s Italian Neorealist high-silver cinema emulsion (Fellini, Pasolini), featuring deep velvety blacks, ultra-sharp acutance, and punchy microcontrast.
   - Add **`BaodingSilver100`** (*Lucky SHD 100* - Baoding, China): Iconic domestic Chinese cubic silver halide featuring authentic optical halation bloom around specular highlights due to minimal anti-halation backing.
-- **Physical Grain Synthesis in Wide-Gamut Linear Rec.2020**:
+- **Physical Grain Synthesis via Stochastic Emulsion Resynthesis**:
   - **Sensitometric Domain Placement Invariant**: Grain is simulated in the optical scene domain *before* AgX tone mapping and print transfer, avoiding shadow noise floor amplification and non-linear gamma clipping.
+  - **Noise Transmutation (Zero Plastic Denoising)**: Repurpose high-ISO sensor noise as the latent nucleation seed for silver crystals or subtractive dye clouds via Chrominance Phase Consolidation and Nutting midtone density modulation ($4y(1-y)$).
   - **Stock-Specific Crystal Morphology**:
     1. *Metallic Silver Crystals* (`MobberleySilver400`, `LiguriaCinema80`, `BaodingSilver100`): Sharp, irregular crystalline silver grains with stock-calibrated acutance and density distribution.
     2. *Organic Dye Clouds* (`RochesterPortrait400`, `AshigaraPortrait400`, `LeverkusenPortrait160`): Soft, overlapping microscopic dye clouds left behind after silver bleaching in C-41/E-6 processes.
     3. *Optical Halation Scattering* (`BaodingSilver100`): Internal reflection and lateral light dispersion across the film base producing natural specular glow without digital bloom filters.
-  - **Dual-Engine Mathematical Parity**:
+  - **Real-Time GPU Performance Budget (< 0.1ms at 4K)**:
+    - Fold into existing 4-tap detail unsharp masking shader pass, requiring zero extra texture lookups and zero additional memory bandwidth.
+  - **Multi-Engine Mathematical Parity**:
     - Procedural SIMD/hash-based grain synthesis matching bit-for-bit across Rust CPU export (`color/grain.rs`), Metal GPU shaders (`Shaders.metal`), and WebGL fragment shaders (`FragmentShader.ts`).
   - **Verification**:
     - Parity test suite verifying identical grain density across wedges $(-10\text{ EV}$ to $+6.5\text{ EV})$ in Rust, Metal, and WebGL.
 
 ### 3.12 West African Studio Darkroom Chemistry & Deep-Tone Sensitometry (P2)
+> **Technical Mini Spec**: [Global Emulsion & Darkroom Print Roster Mini Spec](../specs/global_emulsion_and_darkroom_roster.md#3-darkroom-print-media-west-african-studio-chemistry)
 - **Honoring West African Studio Print Culture (`BamakoSilverContact`)**:
   - Add **`BamakoSilverContact`** to `PrintMediaMode`, formalizing the darkroom printmaking tradition of Bamako, Mali (Seydou Keïta, Malick Sidibé) and Bobo-Dioulasso (Sanlé Sory).
   - Modeled on large-format 1:1 contact printing onto high-silver bromide paper with high-concentration hydroquinone/metol developers and ferrotype gloss finishing.
@@ -259,7 +271,7 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
 - **Swift View & Model Schema Consumption**:
   - Refactor `SliderRow.swift`, `DevelopInspectorView.swift`, and `AppViewModel.swift` to derive slider ranges, steps, defaults, and formatters directly from the canonical Rust descriptors rather than hardcoding values in Swift views.
 - **Unified Interaction Behavioral Contracts**:
-  - Implement the identical interaction state machine in native AppKit / SwiftUI matching [ui_architecture.md](file:///home/remco/src/firstproof/docs/architecture/ui_architecture.md):
+  - Implement the identical interaction state machine in native AppKit / SwiftUI matching [ui_architecture.md](../architecture/ui_architecture.md):
     - Record initial value on drag gesture start.
     - <kbd>Shift</kbd>+drag fine-scrubbing ($0.1\times$ precision damper).
     - <kbd>Escape</kbd> key drag rollback (cancels pending scrub and reverts value without pushing undo).
@@ -322,7 +334,7 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
   - 100% offline, on-device portrait face detection and embedding clustering in Rust (e.g. lightweight UltraFace / YuNet ONNX or pure Rust).
   - Optional macOS opt-in: Apple `Vision` face observation can be enabled as an alternative hardware accelerator.
   - Unidentified sitter triage deck: *"Found X photos of this person. Who is this sitter?"*
-  - Serializes coordinates directly into open-standard [MWG (Metadata Working Group) / IPTC XMP Face Regions](file:///Users/blikkie/src/LumenBox/docs/values.md#L43) (`mwg-rs:Regions`), avoiding proprietary database lock-in across all platforms.
+  - Serializes coordinates directly into open-standard [MWG (Metadata Working Group) / IPTC XMP Face Regions](../values.md#L43) (`mwg-rs:Regions`), avoiding proprietary database lock-in across all platforms.
 
 ### 5.5 Optical Notch & Spectral Illuminant Modeling (Deep Backlog / Exploratory R&D)
 - **Physical Context & The Multi-Source Problem**:

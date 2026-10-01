@@ -103,7 +103,7 @@ In standard WebAssembly, dynamic heap allocations (`Vec::with_capacity` for 20â€
 
 ## 4. WebGL 2 Shader Pipeline (Parity with Metal)
 
-The web canvas runs a GLSL 3.00 ES fragment shader that ports the exact mathematical transforms from [`ColorScience.metal`](file:///home/remco/src/firstproof/FirstProofApp/Sources/Shaders/ColorScience.metal) and [`Shaders.metal`](file:///home/remco/src/firstproof/FirstProofApp/Sources/Shaders/Shaders.metal):
+The web canvas runs a GLSL 3.00 ES fragment shader that ports the exact mathematical transforms from [`ColorScience.metal`](../../FirstProofApp/Sources/Shaders/ColorScience.metal) and [`Shaders.metal`](../../FirstProofApp/Sources/Shaders/Shaders.metal):
 
 ```
 +-----------------------------------------------------------------------------------+

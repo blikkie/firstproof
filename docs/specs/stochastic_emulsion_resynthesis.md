@@ -1,0 +1,134 @@
+# Mini Spec: Stochastic Emulsion Resynthesis (Digital Noise as Film Seed)
+
+## Status: Approved for Phase 3 (Story 3.11)
+**Author**: Remco van Bree  
+**Scope**: `firstproof-core` (Rust CPU), `FirstProofApp` (Metal GPU), `web` (WebGL 2 GLSL)
+
+---
+
+## 1. Executive Summary & Anti-Plastic Invariant
+
+Traditional photo editing tools handle high-ISO digital noise by applying aggressive spatial denoising (bilateral filtering, non-local means, or neural network hallucination). This strips optical acutance, smears skin texture and fabric weave, and leaves behind artificial "digital plastic." When these tools later add "film grain," they generate a procedural noise pattern (Perlin/Simplex) and overlay it onto the blurred image—double-processing the pixels and producing synthetic slop.
+
+In accordance with First Proof's core philosophy—*"Pure capture. Honest color. Zero digital plastic"*—**Stochastic Emulsion Resynthesis (Noise Transmutation)** works *with* the sensor rather than against it. The high-frequency photon arrival variations already present in the raw sensor frame serve as the **physical nucleation seed** for film emulsion synthesis.
+
+```
+Conventional Plastic Workflow:
+[High-ISO RAW] ──► [Spatial Blur / Denoise] ──► [Plastic Smear] ──► [Uniform Perlin Grain] ──► [Digital Slop]
+
+First Proof Stochastic Emulsion Resynthesis:
+[High-ISO RAW] ──► [Chroma Phase Consolidation] ──► [Stochastic Latent Seed] ──► [Physical Emulsion Density]
+                     (Zero spatial smearing)        (Photon variance seeds      (Silver crystals or
+                                                     emulsion nucleation)        subtractive dye clouds)
+```
+
+---
+
+## 2. Sensitometric Foundations: Sensor Physics vs. Photochemistry
+
+### Digital Sensor Noise
+- **Photon Shot Noise**: Natural quantum fluctuation of photon arrival at each photodiode, strictly obeying a Poisson distribution $\mathcal{P}(\lambda)$ where variance equals mean ($\sigma^2 = \mu$).
+- **Read Noise**: Gaussian thermal and ADC quantization variance $\mathcal{N}(0, \sigma_{\text{read}}^2)$ from sensor circuitry.
+- **Bayer Chrominance Noise**: High-frequency uncorrelated color speckle caused by demosaicing independent Red, Green, and Blue channels under low signal-to-noise ratios.
+
+### Photochemical Film Grain
+- **Silver Halide (Monochrome)**: Metallic silver grains that developed from exposed silver halide crystals. Each crystal requires a minimum quantum threshold of absorbed photons (typically 4 or more) to form a developable latent image center. Grain is strictly **achromatic optical density**.
+- **Dye Clouds (Color C-41 / E-6)**: In chromogenic film, metallic silver is **completely bleached away** during the bleach/fix bath. "Grain" is actually microscopic **organic dye clouds** (Cyan, Magenta, Yellow) formed when oxidized developer reacts with dye couplers around the silver sites.
+- **Nutting's Law of Granularity**: Film granularity is not uniform across all tones; it peaks in the midtones (optical density $D \approx 0.8 - 1.2$) where the spatial variance between exposed and unexposed clusters is highest, tapering smoothly into deep shadows ($D_{\max}$) and specular highlights ($D_{\min}$).
+
+---
+
+## 3. The 4-Stage Transmutation Pipeline
+
+The entire pipeline executes in **Wide-Gamut Linear Rec.2020** ($Y = 0.2627 R + 0.6780 G + 0.0593 B$) strictly before terminal display tone mapping and color space encoding.
+
+### Stage 1: Chrominance Phase Consolidation (Zero Spatial Blur)
+Digital noise looks "electronic" primarily because of high-frequency chrominance confetti (random red/green/blue speckles). In physical film, color noise cannot exist as isolated RGB spikes because dye clouds diffuse in 3D gelatin layers and interact via inter-image DIR couplers.
+
+1. Decompose the Linear Rec.2020 signal into **Photopic Luminance** ($Y$) and **Opponent Chrominance** ($C_b, C_r$):
+   $$C_b = \frac{B - Y}{1.8814}, \quad C_r = \frac{R - Y}{1.4746}$$
+2. Compute the local high-frequency chrominance variance:
+   $$\sigma_{\text{chroma}}^2 = (C_b - C_{b,\text{lowpass}})^2 + (C_r - C_{r,\text{lowpass}})^2$$
+3. Consolidate high-frequency chroma variance into the luminance density channel:
+   $$Y_{\text{consolidated}} = Y + k_{\text{transmute}} \cdot \sqrt{\sigma_{\text{chroma}}^2}$$
+   $$C_b' = \text{mix}(C_b, C_{b,\text{lowpass}}, w_{\text{grain}}), \quad C_r' = \text{mix}(C_r, C_{r,\text{lowpass}}, w_{\text{grain}})$$
+4. **Invariant**: Spatial edge sharpness and fine optical details are 100% preserved because high-frequency chrominance energy is transferred to luminance density rather than blurred out.
+
+### Stage 2: Stochastic Latent Seeding
+Instead of evaluating an external pseudo-random hash (e.g. `hash(uv)`) or static Perlin texture, the local high-frequency residual is extracted directly from the sensor signal:
+$$\delta_{\text{sensor}}(x, y) = Y(x, y) - Y_{\text{lowpass}}(x, y)$$
+
+Because $\delta_{\text{sensor}}$ is generated by real physical photon arrivals at that exact coordinate, it carries genuine spatial coherence from the camera's optical path. We normalize $\delta_{\text{sensor}}$ by the sensor's Poisson standard deviation $\sqrt{Y(x, y)}$ to obtain an unbiased, physical latent nucleation field:
+$$\eta(x, y) = \frac{\delta_{\text{sensor}}(x, y)}{\max(\sqrt{Y(x, y)}, 0.05)} \in [-1, 1]$$
+
+### Stage 3: Stock-Specific Chemical Remapping
+
+#### For Monochrome (Black & White) Processes:
+The latent nucleation field $\eta$ is transformed into silver halide crystal clusters according to the selected archetype:
+- **`MobberleySilver400` (Ilford HP5+)**: Classic cubic silver halide crystal response. The noise residual is shaped using a cubic density transfer function with smooth toe response.
+- **`LiguriaCinema80` (Ferrania P30)**: Ultra-dense silver crystal packing with high optical acutance. Amplifies microcontrast and compresses mid-tone gradient slopes.
+- **`BaodingSilver100` (Lucky SHD 100)**: Simulates light scattering into the film base (absence of anti-halation undercoat), adding organic specular halation around high-energy noise clusters.
+
+#### For Color (C-41 / E-6) Processes:
+Instead of treating color noise as an error, $\eta$ seeds the local spatial deposition of **subtractive dye clouds**:
+1. Dye cloud radii are modulated by local exposure: high-exposure areas generate denser, overlapping clouds; low-exposure areas generate sparse, discrete dye packets.
+2. Dye density is evaluated subtractively via the Beer-Lambert law:
+   $$T_c = e^{-\alpha_c \cdot D_c}, \quad T_m = e^{-\alpha_m \cdot D_m}, \quad T_y = e^{-\alpha_y \cdot D_y}$$
+3. Inter-layer DIR coupling suppresses cross-channel contamination, rendering smooth, organic dye clumping (mimicking pushed high-ISO film like *Portra 800* or *Fujicolor Natura 1600*) rather than digital noise.
+
+### Stage 4: Sensitometric Density Modulation (Nutting Curve)
+Grain amplitude is modulated by the sensitometric derivative of the film's D-log E characteristic curve:
+$$G(Y) = 4.0 \cdot Y \cdot (1.0 - Y)$$
+- **Deep Shadows ($Y \to 0$)**: Grain naturally settles into deep optical density Dmax, eliminating noisy sensor lift in the shadows.
+- **Midtones ($Y \approx 0.5$)**: Grain reaches peak visibility, providing rich tactile texture across skin tones and mid-grey surfaces.
+- **Specular Highlights ($Y \to 1.0$)**: Grain dissolves smoothly into clear film base Dmin.
+
+---
+
+## 4. Performance & Hardware Budget
+
+### GPU Real-Time Execution (Metal & WebGL 2)
+In modern GPU architectures, fragment shaders are **memory-bandwidth bound**. In both `Shaders.metal` and `FragmentShader.ts`, the unsharp detail pass already fetches the 4 orthogonal neighbor texels:
+```metal
+float4 leftSample   = texture.sample(textureSampler, uv - float2(offset.x, 0.0));
+float4 rightSample  = texture.sample(textureSampler, uv + float2(offset.x, 0.0));
+float4 topSample    = texture.sample(textureSampler, uv - float2(0.0, offset.y));
+float4 bottomSample = texture.sample(textureSampler, uv + float2(0.0, offset.y));
+```
+By performing grain resynthesis within this exact same pass:
+- **Additional texture lookups**: **0**
+- **Additional render passes / framebuffers**: **0**
+- **Additional GPU VRAM**: **0 MB**
+- **Extra ALU Instructions**: ~6–8 cycles (`fsub`, `fma`, `fmul`, `fadd`)
+- **Execution Time at 4K ($3840 \times 2160$)**: **0.03 to 0.10 ms** on Apple Silicon (M1+) and modern WebGL GPUs.
+- **Frame Rate**: Unrestricted 60 FPS / 120 FPS ProMotion interactive slider scrubbing.
+
+### CPU Export & Headless Linux Pipeline (`firstproof-core`)
+- Parallelized across rows with `rayon` in `firstproof-core/src/export/pipeline.rs`.
+- Total CPU overhead on a 24MP full-resolution RAW export: **8–12 ms** across an 8-core CPU.
+
+---
+
+## 5. Parameter Schema & State Integration
+
+```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EmulsionGrainMode {
+    Off,                // Pure capture bypass (default)
+    SeedFromSensor,     // Resynthesizes existing sensor noise into emulsion crystals/dye clouds
+    SynthesizePhysical, // Procedural physical seed when shooting at low ISO but film grain is desired
+}
+
+pub struct EditSettings {
+    // ... existing fields ...
+    pub emulsion_grain_mode: EmulsionGrainMode,
+    pub grain_scale: f32, // Crystal cluster radius: 0.5 to 2.0 (default: 1.0)
+}
+```
+
+---
+
+## 6. Verification Criteria
+1. **Mathematical Invariant**: In monochrome mode, neutral axis must be strictly preserved ($R = G = B \implies R' = G' = B'$).
+2. **Boundary Anchoring**: On a synthetic 21-step wedge $(-10\text{ EV}$ to $+6.5\text{ EV})$, grain amplitude must be identically $0.0$ at bounds and peak smoothly at midtone ($0\text{ EV}$).
+3. **Multi-Engine Parity**: Bit-for-bit mathematical parity across Rust CPU export, Metal GPU shader, and WebGL 2 fragment shader verified by `tests/grain_parity.rs`.
