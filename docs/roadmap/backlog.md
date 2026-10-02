@@ -7,9 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
-2. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
-3. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+1. **Story 4.6.1: Harness Engineering — Unified Pre-Flight Sensor & Linter Suite** (P1)
+2. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
+3. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
+4. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -238,6 +239,38 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
   - Adopt the web darkroom's fixed 4-badge EXIF summary element (`CAM`, `ISO`, `APERTURE`, `SHUTTER`) directly in macOS `PermanentHeaderCard` (`InspectorHeaderView.swift`) positioned above the segmented tabs, so essential capture parameters remain visible at a glance across every workspace tab.
 - **Cross-Platform Verification Gate**:
   - Verify 1:1 parameter boundaries, visual feedback, and keyboard/mouse interaction parity between native macOS and WebAssembly darkroom targets.
+
+### 4.6 Harness Engineering & Computational Verification Suite (P1)
+*Translating Martin Fowler & Birgitta Böckeler's Harness Engineering mental model into automated, computational feedback sensors across First Proof.*
+
+#### 4.6.1 Unified Pre-Flight Sensor & Linter Suite (P1)
+- **Single Deterministic Verification Command (`scripts/check.sh` / `make check`)**:
+  - Unify multi-target builds and tests into a single deterministic script running in under 45 seconds:
+    - Pure Rust unit tests (`cargo test --manifest-path firstproof-engine/Cargo.toml`).
+    - Core FFI, integration, and parity test battery (`cargo test --manifest-path firstproof-core/Cargo.toml`).
+    - WebAssembly package build (`wasm-pack build firstproof-wasm --target web`).
+    - Web TypeScript compilation and Vite asset build (`npm --prefix web run build`).
+  - Clear terminal color-coded summaries, exact error propagation, and benchmark timing.
+- **Automated Workspace Clippy & TypeScript Typecheck Sensors**:
+  - Integrate `cargo clippy --workspace -- -D warnings` into the pre-flight suite to catch dead code, redundant allocations, and type mismatches.
+  - Add explicit `npm --prefix web run typecheck` (`tsc --noEmit`) to catch DOM/controller signature mismatches before runtime.
+- **Pre-Commit Hook Integration**:
+  - Provide an opt-in `.git/hooks/pre-commit` wrapper invoking `./scripts/check.sh --quick` to block broken commits at the gate.
+
+#### 4.6.2 Automated Architecture Fitness Functions (P2)
+- **Dependency Purity Fitness Test**:
+  - Write an automated fitness test (`tests/architecture_fitness.rs`) verifying that `firstproof-engine` maintains zero platform OS, windowing, or C library dependencies (`rusqlite`, `kamadak-exif`, `lcms2`).
+- **Terminal Display Transform Invariant Sensor**:
+  - Computational validation verifying that output color transforms (sRGB/Display P3 gamma transfer, AgX 3D LUT) execute strictly as the final operation in both shader sources (`Shaders.metal`, `FragmentShader.ts`) and export pipeline stages (`pipeline.rs`).
+- **Sensitometric Anti-Magic Number Scanner**:
+  - Static AST or regex scanner ensuring develop adjustment functions do not introduce arbitrary unanchored piecewise if/else multipliers without references to standard sensitometric specifications.
+
+#### 4.6.3 Headless Web Behaviour Harness (P2)
+- **Headless Web Integration Battery (Vitest / Playwright)**:
+  - Add automated headless browser testing to `web/` to eliminate reliance on purely manual human verification for basic DOM wiring.
+  - Loads a test RAW/DNG file in headless Chromium.
+  - Simulates single-key shortcuts (`1`..`5` ratings, `P`/`X`/`U` flags, `C` crop, `Z` zoom, `\` original peek) and asserts first-responder text field shielding.
+  - Verifies that WebGL canvas renders non-zero pixel data and handles resize/zoom events without crashes.
 
 ---
 
