@@ -105,6 +105,7 @@ pub struct RawSensorFrame {
     pub forward_matrix_daylight: Option<[[f32; 3]; 3]>,
     pub camera_model: String,
     pub baseline_exposure: f32,
+    pub noise_profile: Option<[f64; 2]>,
     pub sensor_data: Vec<u16>,
 }
 
@@ -267,6 +268,17 @@ impl RawSensorFrame {
             .and_then(|m| m.forward_matrix_2)
             .or(cal.forward_matrix_daylight);
 
+        let noise_profile = manifest
+            .as_ref()
+            .and_then(|m| m.noise_profile.as_ref())
+            .and_then(|np| {
+                if np.len() >= 2 {
+                    Some([np[0], np[1]])
+                } else {
+                    None
+                }
+            });
+
         let sensor_data = match raw.data {
             rawler::RawImageData::Integer(cfa) => cfa,
             _ => return None,
@@ -289,6 +301,7 @@ impl RawSensorFrame {
             forward_matrix_daylight,
             camera_model,
             baseline_exposure,
+            noise_profile,
             sensor_data,
         })
 
@@ -571,14 +584,13 @@ impl RawSensorFrame {
 
         let a16 = f32_to_f16(1.0);
 
-        let mut u16_pixels = vec![0u16; (bin_w * bin_h * 4) as usize];
+        let mut binned_rgb = Vec::with_capacity((bin_w * bin_h) as usize);
         let sensor = &self.sensor_data;
         let full_w = self.full_width;
         let row_len = (bin_w as usize) * 2;
 
         for by in 0..(bin_h as usize) {
             let sy = self.active_y + by * 2;
-            let dst_row_off = by * (bin_w as usize) * 4;
 
             let row0_start = sy * full_w + self.active_x;
             let row1_start = (sy + 1) * full_w + self.active_x;
@@ -606,22 +618,34 @@ impl RawSensorFrame {
                         _ => (norm_00, (norm_01 + norm_10) * 0.5, norm_11),
                     };
 
-
                     let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
-
-                    let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
-                    let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
-                    let b_lin = (m20 * r_wb + m21 * g_wb + m22 * b_wb).max(0.0);
-
-                    let dst_idx = dst_row_off + bx * 4;
-                    u16_pixels[dst_idx] = f32_to_f16(r_lin);
-                    u16_pixels[dst_idx + 1] = f32_to_f16(g_lin);
-                    u16_pixels[dst_idx + 2] = f32_to_f16(b_lin);
-                    u16_pixels[dst_idx + 3] = a16;
+                    binned_rgb.push([r_wb, g_wb, b_wb]);
+                }
+            } else {
+                for _ in 0..(bin_w as usize) {
+                    binned_rgb.push([0.0, 0.0, 0.0]);
                 }
             }
         }
 
+        // Apply 2 passes of chromatic difference median filtering on the binned frame.
+        // Matches the 2-pass chromatic median filtering in full demosaic export (Story 5.8).
+        // Replaces isolated single-pixel chroma speckles with the local chromatic median
+        // while leaving optical luminance G (high-frequency scene sharpness) 100% untouched.
+        apply_chromatic_median_filter_rgb(&mut binned_rgb, bin_w as usize, bin_h as usize, 2);
+
+        let mut u16_pixels = vec![0u16; (bin_w * bin_h * 4) as usize];
+        for (i, &[r_wb, g_wb, b_wb]) in binned_rgb.iter().enumerate() {
+            let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
+            let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
+            let b_lin = (m20 * r_wb + m21 * g_wb + m22 * b_wb).max(0.0);
+
+            let dst_idx = i * 4;
+            u16_pixels[dst_idx] = f32_to_f16(r_lin);
+            u16_pixels[dst_idx + 1] = f32_to_f16(g_lin);
+            u16_pixels[dst_idx + 2] = f32_to_f16(b_lin);
+            u16_pixels[dst_idx + 3] = a16;
+        }
 
         (u16_pixels, bin_w, bin_h)
     }
@@ -663,6 +687,16 @@ impl RawSensorFrame {
             }
         }
 
+        // Physical Pre-WB Sensor Outlier Suppression:
+        // Clamps isolated single-photosite readout noise spikes and hot-pixels on the raw CFA grid
+        // BEFORE white balance multipliers and spatial interpolation kernels are evaluated.
+        suppress_sensor_read_noise_outliers(
+            &mut norm_pixels,
+            full_w,
+            full_h,
+            self.cfa_pattern,
+            self.noise_profile,
+        );
 
         // Pre-demosaicing White Balance (standard in dcraw / LibRaw):
         // Applying white balance multipliers directly to CFA photosites before demosaicing
@@ -947,3 +981,89 @@ pub fn apply_chromatic_median_filter_rgb(
         pixels.copy_from_slice(&buf);
     }
 }
+
+/// Suppresses isolated single-photosite read-noise spikes and hot-pixels on the normalized CFA grid
+/// before white balance multipliers and spatial demosaicing interpolation are evaluated.
+///
+/// Uses the DNG specification noise variance model:
+///     sigma^2(x) = S * x + O
+/// Where S is shot noise slope, and O is readout noise offset variance.
+///
+/// Compares each photosite x to its like-colored nearest neighbors on the Bayer mosaic:
+/// - Green sites: 4 diagonal neighbors (dx = +/-1, dy = +/-1) are guaranteed to be Green.
+/// - Red / Blue sites: 4 cardinal neighbors (dx = +/-2, dy = 0 and dx = 0, dy = +/-2) are like-colored.
+///
+/// If a photosite exceeds the neighborhood maximum by more than k * sigma(x) (where k = 3.5),
+/// it is clamped to v_max + k * sigma(x).
+pub fn suppress_sensor_read_noise_outliers(
+    pixels: &mut [f32],
+    width: usize,
+    height: usize,
+    cfa_pattern: CfaPattern,
+    noise_profile: Option<[f64; 2]>,
+) {
+    if width < 5 || height < 5 || pixels.len() < width * height {
+        return;
+    }
+
+    // Default noise profile fallback if not specified:
+    // Typical 14-bit digital camera sensor at ISO 1600 (read noise ~16 counts, full well ~15000)
+    let (shot_slope, read_var) = match noise_profile {
+        Some([s, o]) => (s.max(1e-7) as f32, o.max(1e-8) as f32),
+        None => (0.0005f32, 1.5e-6f32),
+    };
+
+    let k = 3.5f32; // 3.5-sigma confidence interval (~99.95% single-tail)
+    let orig = pixels.to_vec();
+
+    // Determine CFA offset for site mapping
+    let site_map = match cfa_pattern {
+        CfaPattern::Rggb => [[0, 2], [3, 1]],
+        CfaPattern::Bggr => [[1, 2], [3, 0]],
+        CfaPattern::Gbrg => [[2, 1], [0, 3]],
+        CfaPattern::Grbg => [[2, 0], [1, 3]],
+        _ => [[0, 2], [3, 1]],
+    };
+
+    for y in 2..height.saturating_sub(2) {
+        let row_off = y * width;
+        let y_mod = y % 2;
+
+        for x in 2..width.saturating_sub(2) {
+            let site = site_map[y_mod][x % 2];
+            let v = orig[row_off + x];
+
+            // Only check deep shadows and midtones (v < 0.25). Highlights are photon-shot noise limited.
+            if v > 0.25 {
+                continue;
+            }
+
+            let (n0, n1, n2, n3) = if site == 2 || site == 3 {
+                // Green site: 4 diagonal neighbors (dx = +/-1, dy = +/-1) are also Green
+                (
+                    orig[(y - 1) * width + (x - 1)],
+                    orig[(y - 1) * width + (x + 1)],
+                    orig[(y + 1) * width + (x - 1)],
+                    orig[(y + 1) * width + (x + 1)],
+                )
+            } else {
+                // Red (0) or Blue (1) site: 4 cardinal neighbors 2 pixels away (dx = +/-2, dy = 0 and dx = 0, dy = +/-2)
+                (
+                    orig[(y - 2) * width + x],
+                    orig[(y + 2) * width + x],
+                    orig[row_off + (x - 2)],
+                    orig[row_off + (x + 2)],
+                )
+            };
+
+            let n_max = n0.max(n1).max(n2).max(n3);
+            let sigma = (shot_slope * n_max + read_var).sqrt();
+            let threshold = n_max + k * sigma;
+
+            if v > threshold {
+                pixels[row_off + x] = threshold;
+            }
+        }
+    }
+}
+

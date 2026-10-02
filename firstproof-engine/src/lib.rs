@@ -256,6 +256,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Canon EOS 60D".to_string(),
             baseline_exposure: 0.0,
+            noise_profile: None,
             sensor_data: vec![2046; 100],
         };
 
@@ -284,6 +285,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Canon EOS 60D".to_string(),
             baseline_exposure: 0.0,
+            noise_profile: None,
             sensor_data: vec![2046; 100],
         };
 
@@ -326,5 +328,52 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_suppress_sensor_read_noise_outliers() {
+        use crate::raw::{suppress_sensor_read_noise_outliers, CfaPattern};
+
+        let w = 12;
+        let h = 12;
+        // Flat shadow patch with intensity 0.005
+        let mut cfa = vec![0.005f32; w * h];
+
+        // Inject isolated readout spike at (4, 4) [Red site on RGGB]
+        cfa[4 * w + 4] = 0.050; // 10x noise spike
+
+        // Inject isolated readout spike at (5, 5) [Blue site on RGGB]
+        cfa[5 * w + 5] = 0.050; // 10x noise spike
+
+        // Inject isolated readout spike at (4, 5) [Green site on RGGB]
+        cfa[4 * w + 5] = 0.050; // 10x noise spike
+
+        // Inject a real optical step edge along column 8 and 9 (all channels high)
+        for y in 0..h {
+            cfa[y * w + 8] = 0.050;
+            cfa[y * w + 9] = 0.050;
+        }
+
+        // Noise profile: S = 0.0005, O = 1.5e-6 -> sigma(0.005) ~ 0.00199 -> 3.5*sigma ~ 0.007
+        let noise_profile = Some([0.0005, 1.5e-6]);
+        suppress_sensor_read_noise_outliers(&mut cfa, w, h, CfaPattern::Rggb, noise_profile);
+
+        // 1. Isolated spikes must be clamped to neighborhood max + 3.5*sigma (< 0.015)
+        assert!(cfa[4 * w + 4] < 0.015, "Isolated Red spike was not suppressed: got {}", cfa[4 * w + 4]);
+        assert!(cfa[5 * w + 5] < 0.015, "Isolated Blue spike was not suppressed: got {}", cfa[5 * w + 5]);
+        assert!(cfa[4 * w + 5] < 0.015, "Isolated Green spike was not suppressed: got {}", cfa[4 * w + 5]);
+
+        // 2. Optical step edge at column 8 and 9 must be 100% preserved (not clamped)
+        for y in 2..(h - 2) {
+            assert!(
+                (cfa[y * w + 8] - 0.050).abs() < 1e-4,
+                "Optical edge at column 8 was softened at y={}: got {}",
+                y, cfa[y * w + 8]
+            );
+            assert!(
+                (cfa[y * w + 9] - 0.050).abs() < 1e-4,
+                "Optical edge at column 9 was softened at y={}: got {}",
+                y, cfa[y * w + 9]
+            );
+        }
+    }
 }
 

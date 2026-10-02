@@ -39,7 +39,7 @@ impl RawDecoder for RawlerDecoder {
             .ok()
             .and_then(|mut f| {
                 use std::io::Read;
-                let mut buf = vec![0u8; 65536];
+                let mut buf = vec![0u8; 262144]; // 256KB to capture all DNG IFD0 tables and NoiseProfile
                 let n = f.read(&mut buf).ok()?;
                 buf.truncate(n);
                 Some(buf)
