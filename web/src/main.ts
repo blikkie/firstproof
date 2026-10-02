@@ -28,6 +28,7 @@ import { IntermediateTextureCache } from './IntermediateTextureCache';
 import { isDebugMode } from './utils/debug';
 import { KeyboardShortcutController } from './controllers/KeyboardShortcutController';
 import { CanvasViewportController } from './controllers/CanvasViewportController';
+import { InspectorSyncController } from './controllers/InspectorSyncController';
 
 import { decode_exif_orientation } from 'firstproof-wasm';
 import type { ExifOrientationRecord } from 'firstproof-wasm';
@@ -49,21 +50,6 @@ export function decodeExifOrientation(orientation?: number): {
     flip_horizontal: rec.flip_horizontal,
     flip_vertical: rec.flip_vertical,
   };
-}
-
-interface ActiveSliderScrub {
-  id: string;
-  prop?: keyof EditSettingsPayload;
-  input: HTMLInputElement;
-  label: HTMLElement;
-  format: (v: number) => string;
-  isTemp?: boolean;
-  initialValue: number;
-  initialInputValue: string;
-  startClientX: number;
-  startInputVal: number;
-  min: number;
-  max: number;
 }
 
 class DarkroomApp {
@@ -88,7 +74,6 @@ class DarkroomApp {
   private activeIdx: number = -1;
   private selectedIndices: Set<number> = new Set();
   private dirHandle: any = null;
-  private activeScrub: ActiveSliderScrub | null = null;
 
   private edits: EditSettingsPayload = this.getDefaultEdits();
   private cardRotations: Map<number, { rotation: number; flipH: boolean; flipV: boolean }> = new Map();
@@ -107,6 +92,8 @@ class DarkroomApp {
   // Modular Controllers
   private viewportController!: CanvasViewportController;
   private keyboardController!: KeyboardShortcutController;
+  private inspectorController!: InspectorSyncController;
+
 
   private get zoomScale(): number {
     return this.viewportController ? this.viewportController.getZoom() : 1.0;
@@ -177,25 +164,6 @@ class DarkroomApp {
       hintEl.innerText = hasSplitToning ? 'Active' : 'Off';
       hintEl.classList.toggle('active', hasSplitToning);
     }
-  }
-
-  private rollbackActiveScrub() {
-    if (!this.activeScrub) return;
-    const scrub = this.activeScrub;
-    scrub.input.value = scrub.initialInputValue;
-    if (scrub.isTemp) {
-      this.edits.temperature = scrub.initialValue;
-      scrub.label.innerText = `${Math.round(scrub.initialValue)} K`;
-    } else if (scrub.prop) {
-      (this.edits[scrub.prop] as number) = scrub.initialValue;
-      scrub.label.innerText = scrub.format(scrub.initialValue);
-      if ((scrub.prop as string).startsWith('split_toning_')) {
-        this.updateSplitToningHint();
-      }
-    }
-    this.renderCanvas();
-    scrub.input.blur();
-    this.activeScrub = null;
   }
 
   private getSceneLuminances(): Float32Array {
@@ -469,8 +437,8 @@ class DarkroomApp {
           this.cropController.cancelRotation();
           return;
         }
-        if (this.activeScrub) {
-          this.rollbackActiveScrub();
+        if (this.inspectorController?.hasActiveScrub()) {
+          this.inspectorController.rollbackActiveScrub();
           return;
         }
         if (this.isCropActive) {
@@ -528,6 +496,20 @@ class DarkroomApp {
       isCropActive: () => this.isCropActive,
     });
     this.keyboardController.bind();
+
+    this.inspectorController = new InspectorSyncController({
+      getEdits: () => this.edits,
+      renderCanvas: () => this.renderCanvas(),
+      autoSaveSidecar: () => this.autoSaveSidecar(),
+      isCurrentPhotoRaw: () => this.isCurrentPhotoRaw(),
+      getDefaultEdits: () => this.getDefaultEdits(this.isCurrentPhotoRaw()),
+      getCurveWidget: () => this.curveWidget,
+      getRating: () => this.currentRating,
+      getStatus: () => this.currentStatus,
+      getActiveIndex: () => this.activeIdx,
+      onResetAllEdits: () => this.resetAllEdits(),
+    });
+    this.inspectorController.bind();
 
     // 6. Bind UI Controls & Sliders
     this.bindEvents();
@@ -802,261 +784,6 @@ class DarkroomApp {
       this.syncSliderUI();
       this.renderCanvas();
       this.autoSaveSidecar();
-    });
-
-    // Sliders & Selects plumbing with double-click reset, Escape rollback, and Shift fine-scrubbing
-    const bindSlider = (id: string, prop: keyof EditSettingsPayload, format: (val: number) => string, defaultVal: number | (() => number) = 0) => {
-      const input = document.getElementById(`slider-${id}`) as HTMLInputElement;
-      const label = document.getElementById(`val-${id}`) as HTMLElement;
-      const rowLabel = input?.closest('.slider-row')?.querySelector('label');
-      if (input && label) {
-        input.addEventListener('pointerdown', (e: PointerEvent) => {
-          this.activeScrub = {
-            id,
-            prop,
-            input,
-            label,
-            format,
-            isTemp: false,
-            initialValue: this.edits[prop] as number,
-            initialInputValue: input.value,
-            startClientX: e.clientX,
-            startInputVal: parseFloat(input.value),
-            min: parseFloat(input.min || '-100'),
-            max: parseFloat(input.max || '100'),
-          };
-        });
-
-        input.addEventListener('pointermove', (e: PointerEvent) => {
-          if (this.activeScrub && this.activeScrub.input === input && e.buttons === 1 && e.shiftKey) {
-            const rect = input.getBoundingClientRect();
-            const width = rect.width || 150;
-            const deltaX = e.clientX - this.activeScrub.startClientX;
-            const range = this.activeScrub.max - this.activeScrub.min;
-            const fineVal = Math.min(
-              this.activeScrub.max,
-              Math.max(
-                this.activeScrub.min,
-                this.activeScrub.startInputVal + (deltaX / width) * range * 0.1
-              )
-            );
-            input.value = fineVal.toString();
-            (this.edits[prop] as number) = fineVal;
-            label.innerText = format(fineVal);
-            if ((prop as string).startsWith('split_toning_')) {
-              this.updateSplitToningHint();
-            }
-            this.renderCanvas();
-          }
-        });
-
-        input.addEventListener('input', (e: Event) => {
-          if ((e as any).shiftKey) return;
-          const val = parseFloat(input.value);
-          (this.edits[prop] as number) = val;
-          label.innerText = format(val);
-          if ((prop as string).startsWith('split_toning_')) {
-            this.updateSplitToningHint();
-          }
-          this.renderCanvas();
-        });
-        input.addEventListener('change', () => this.autoSaveSidecar());
-
-        const resetFn = () => {
-          const resolvedDefault = typeof defaultVal === 'function' ? defaultVal() : defaultVal;
-          input.value = `${resolvedDefault}`;
-          (this.edits[prop] as number) = resolvedDefault;
-          label.innerText = format(resolvedDefault);
-          if ((prop as string).startsWith('split_toning_')) {
-            this.updateSplitToningHint();
-          }
-          this.renderCanvas();
-          this.autoSaveSidecar();
-        };
-
-        input.addEventListener('dblclick', resetFn);
-        rowLabel?.addEventListener('dblclick', resetFn);
-      }
-    };
-
-    bindSlider('exposure', 'exposure', v => formatExposure(v), 0.0);
-    bindSlider('contrast', 'contrast', v => `${Math.round(v)}`, 0.0);
-    bindSlider('highlights', 'highlights', v => `${Math.round(v)}`, 0.0);
-    bindSlider('shadows', 'shadows', v => `${Math.round(v)}`, 0.0);
-    bindSlider('whites', 'whites', v => `${Math.round(v)}`, 0.0);
-    bindSlider('blacks', 'blacks', v => `${Math.round(v)}`, 0.0);
-
-    // Temperature Slider with Perceptual Mired Non-Linear Mapping
-    const tempInput = document.getElementById('slider-temp') as HTMLInputElement;
-    const tempLabel = document.getElementById('val-temp') as HTMLElement;
-    const tempRowLabel = tempInput?.closest('.slider-row')?.querySelector('label');
-    if (tempInput && tempLabel) {
-      tempInput.addEventListener('pointerdown', (e: PointerEvent) => {
-        this.activeScrub = {
-          id: 'temp',
-          input: tempInput,
-          label: tempLabel,
-          format: v => `${Math.round(v)} K`,
-          isTemp: true,
-          initialValue: this.edits.temperature,
-          initialInputValue: tempInput.value,
-          startClientX: e.clientX,
-          startInputVal: parseFloat(tempInput.value),
-          min: 0.0,
-          max: 1.0,
-        };
-      });
-
-      tempInput.addEventListener('pointermove', (e: PointerEvent) => {
-        if (this.activeScrub && this.activeScrub.input === tempInput && e.buttons === 1 && e.shiftKey) {
-          const rect = tempInput.getBoundingClientRect();
-          const width = rect.width || 150;
-          const deltaX = e.clientX - this.activeScrub.startClientX;
-          const finePos = Math.min(
-            1.0,
-            Math.max(
-              0.0,
-              this.activeScrub.startInputVal + (deltaX / width) * 0.1
-            )
-          );
-          tempInput.value = finePos.toFixed(4);
-          const kelvin = this.miredPosToKelvin(finePos);
-          this.edits.temperature = kelvin;
-          tempLabel.innerText = `${Math.round(kelvin)} K`;
-          if (this.elements['select-wb-preset']) {
-            (this.elements['select-wb-preset'] as HTMLSelectElement).value = 'Custom';
-          }
-          this.renderCanvas();
-        }
-      });
-
-      tempInput.addEventListener('input', (e: Event) => {
-        if ((e as any).shiftKey) return;
-        const pos = parseFloat(tempInput.value);
-        const kelvin = this.miredPosToKelvin(pos);
-        this.edits.temperature = kelvin;
-        tempLabel.innerText = `${Math.round(kelvin)} K`;
-        if (this.elements['select-wb-preset']) {
-          (this.elements['select-wb-preset'] as HTMLSelectElement).value = 'Custom';
-        }
-        this.renderCanvas();
-      });
-      tempInput.addEventListener('change', () => this.autoSaveSidecar());
-
-      const resetTemp = () => {
-        this.edits.temperature = 5500.0;
-        tempInput.value = this.kelvinToMiredPos(5500.0).toFixed(4);
-        tempLabel.innerText = '5500 K';
-        if (this.elements['select-wb-preset']) {
-          (this.elements['select-wb-preset'] as HTMLSelectElement).value = 'Daylight';
-        }
-        this.renderCanvas();
-        this.autoSaveSidecar();
-      };
-
-      tempInput.addEventListener('dblclick', resetTemp);
-      tempRowLabel?.addEventListener('dblclick', resetTemp);
-    }
-
-    bindSlider('tint', 'tint', v => `${Math.round(v)}`, 0.0);
-    bindSlider('vibrance', 'vibrance', v => `${Math.round(v)}`, 0.0);
-    bindSlider('saturation', 'saturation', v => `${Math.round(v)}`, 0.0);
-    bindSlider('deep-blue', 'deep_blue', v => `${Math.round(v)}`, 0.0);
-    bindSlider('foliage', 'foliage', v => `${Math.round(v)}`, 0.0);
-    bindSlider('emulsion-exp', 'emulsion_exposure', v => formatExposure(v), 0.0);
-    bindSlider('paper-grade', 'print_paper_grade', v => `${v.toFixed(1)}`, 0.0);
-    bindSlider('base-warmth', 'print_base_warmth', v => `${Math.round(v)}`, 0.0);
-    bindSlider('process-depth', 'print_process_depth', v => `${Math.round(v)}%`, 100.0);
-    bindSlider('sharpen-amount', 'sharpening_amount', v => `${Math.round(v)}`, () => this.isCurrentPhotoRaw() ? 20.0 : 0.0);
-    bindSlider('sharpen-radius', 'sharpening_radius', v => `${v.toFixed(1)} px`, 1.0);
-    bindSlider('sharpen-masking', 'sharpening_masking', v => `${Math.round(v)}`, () => this.isCurrentPhotoRaw() ? 15.0 : 0.0);
-    bindSlider('noise-reduction', 'noise_reduction', v => `${Math.round(v)}`, 0.0);
-    bindSlider('shadow-hue', 'split_toning_shadow_hue', v => `${Math.round(v)}°`, 215.0);
-    bindSlider('shadow-sat', 'split_toning_shadow_sat', v => `${Math.round(v)}`, 0.0);
-    bindSlider('highlight-hue', 'split_toning_highlight_hue', v => `${Math.round(v)}°`, 45.0);
-    bindSlider('highlight-sat', 'split_toning_highlight_sat', v => `${Math.round(v)}`, 0.0);
-    bindSlider('split-balance', 'split_toning_balance', v => `${Math.round(v)}`, 0.0);
-
-    // Tone Profile Select
-    this.elements['select-tone-profile']?.addEventListener('change', (e) => {
-      this.edits.tone_profile = (e.target as HTMLSelectElement).value as ColorProfileMode;
-      this.renderCanvas();
-      this.autoSaveSidecar();
-    });
-
-    // Emulsion Select
-    this.elements['select-emulsion']?.addEventListener('change', (e) => {
-      this.edits.emulsion_archetype = (e.target as HTMLSelectElement).value as EmulsionArchetype;
-      this.updateEmulsionWorkspaceVisibility();
-      this.renderCanvas();
-      this.autoSaveSidecar();
-    });
-
-    // Print Media Select
-    this.elements['select-print-media']?.addEventListener('change', (e) => {
-      this.edits.print_media = (e.target as HTMLSelectElement).value as PrintMediaMode;
-      this.updateEmulsionWorkspaceVisibility();
-      this.renderCanvas();
-      this.autoSaveSidecar();
-    });
-
-    // Enlarger Filter Select
-    this.elements['select-enlarger-filter']?.addEventListener('change', (e) => {
-      this.edits.enlarger_filter = (e.target as HTMLSelectElement).value as any;
-      this.renderCanvas();
-      this.autoSaveSidecar();
-    });
-
-    // Curve Channel Buttons
-    const channelBtns = document.querySelectorAll('.channel-btn');
-    channelBtns.forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        channelBtns.forEach(b => b.classList.remove('active'));
-        const target = e.target as HTMLElement;
-        target.classList.add('active');
-        const channel = target.getAttribute('data-channel') as any;
-        this.curveWidget.setChannel(channel);
-      });
-    });
-
-    this.elements['btn-reset-curve'].addEventListener('click', () => {
-      this.curveWidget.resetCurrentChannel();
-    });
-
-    // Segmented Workspace Tab Bar
-    const tabBtns = document.querySelectorAll('.seg-btn');
-    tabBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.getAttribute('data-tab');
-        if (tab) this.selectInspectorTab(tab);
-      });
-    });
-
-    // Reset All Edits Button
-    this.elements['btn-reset-all']?.addEventListener('click', () => {
-      this.resetAllEdits();
-    });
-
-    // Metadata text inputs auto-save
-    const metaInputs = ['meta-input-title', 'meta-input-caption', 'meta-input-creator', 'meta-input-keywords'];
-    for (const id of metaInputs) {
-      if (this.elements[id]) {
-        this.elements[id].addEventListener('change', () => this.autoSaveSidecar());
-      }
-    }
-
-    // Global pointer release & cancellation for slider scrubbing
-    window.addEventListener('pointerup', () => {
-      if (this.activeScrub) {
-        this.autoSaveSidecar();
-        this.activeScrub = null;
-      }
-    });
-
-    window.addEventListener('pointercancel', () => {
-      if (this.activeScrub) {
-        this.rollbackActiveScrub();
-      }
     });
   }
 
@@ -1431,7 +1158,7 @@ class DarkroomApp {
 
     const requestId = ++this.selectRequestId;
     this.activeIdx = idx;
-    this.activeScrub = null;
+    this.inspectorController?.rollbackActiveScrub();
 
     if (!keepMultiSelection) {
       this.selectedIndices.clear();
@@ -1839,17 +1566,7 @@ class DarkroomApp {
   }
 
   public selectInspectorTab(tab: string) {
-    const tabBtns = document.querySelectorAll('.seg-btn');
-    tabBtns.forEach(b => {
-      const isMatch = b.getAttribute('data-tab') === tab;
-      b.classList.toggle('active', isMatch);
-      b.setAttribute('aria-selected', isMatch ? 'true' : 'false');
-    });
-
-    const panels = document.querySelectorAll('.workspace-panel');
-    panels.forEach(p => {
-      p.classList.toggle('hidden', p.id !== `tab-${tab}`);
-    });
+    this.inspectorController.selectInspectorTab(tab);
   }
 
   public resetAllEdits() {
@@ -2112,142 +1829,15 @@ class DarkroomApp {
   }
 
   private syncSliderUI() {
-    const setVal = (id: string, val: number, format: (v: number) => string) => {
-      const input = document.getElementById(`slider-${id}`) as HTMLInputElement;
-      const label = document.getElementById(`val-${id}`) as HTMLElement;
-      if (input && label) {
-        input.value = `${val}`;
-        label.innerText = format(val);
-      }
-    };
-
-    setVal('exposure', this.edits.exposure, v => `${v > 0 ? '+' : ''}${v.toFixed(2)} EV`);
-    setVal('contrast', this.edits.contrast, v => `${Math.round(v)}`);
-    setVal('highlights', this.edits.highlights, v => `${Math.round(v)}`);
-    setVal('shadows', this.edits.shadows, v => `${Math.round(v)}`);
-    setVal('whites', this.edits.whites, v => `${Math.round(v)}`);
-    setVal('blacks', this.edits.blacks, v => `${Math.round(v)}`);
-    const tempInput = document.getElementById('slider-temp') as HTMLInputElement;
-    const tempLabel = document.getElementById('val-temp') as HTMLElement;
-    if (tempInput && tempLabel) {
-      tempInput.value = this.kelvinToMiredPos(this.edits.temperature).toFixed(4);
-      tempLabel.innerText = `${Math.round(this.edits.temperature)} K`;
-    }
-
-    setVal('tint', this.edits.tint, v => `${Math.round(v)}`);
-    setVal('vibrance', this.edits.vibrance, v => `${Math.round(v)}`);
-    setVal('saturation', this.edits.saturation, v => `${Math.round(v)}`);
-    setVal('deep-blue', this.edits.deep_blue, v => `${Math.round(v)}`);
-    setVal('foliage', this.edits.foliage, v => `${Math.round(v)}`);
-    setVal('emulsion-exp', this.edits.emulsion_exposure, v => `${v > 0 ? '+' : ''}${v.toFixed(2)} EV`);
-    setVal('paper-grade', this.edits.print_paper_grade, v => `${v.toFixed(1)}`);
-    setVal('base-warmth', this.edits.print_base_warmth, v => `${Math.round(v)}`);
-    setVal('process-depth', this.edits.print_process_depth, v => `${Math.round(v)}%`);
-    setVal('sharpen-amount', this.edits.sharpening_amount, v => `${Math.round(v)}`);
-    setVal('sharpen-radius', this.edits.sharpening_radius, v => `${v.toFixed(1)} px`);
-    setVal('sharpen-masking', this.edits.sharpening_masking, v => `${Math.round(v)}`);
-    setVal('noise-reduction', this.edits.noise_reduction, v => `${Math.round(v)}`);
-
-    setVal('shadow-hue', this.edits.split_toning_shadow_hue, v => `${Math.round(v)}°`);
-    setVal('shadow-sat', this.edits.split_toning_shadow_sat, v => `${Math.round(v)}`);
-    setVal('highlight-hue', this.edits.split_toning_highlight_hue, v => `${Math.round(v)}°`);
-    setVal('highlight-sat', this.edits.split_toning_highlight_sat, v => `${Math.round(v)}`);
-    setVal('split-balance', this.edits.split_toning_balance, v => `${Math.round(v)}`);
-
-    this.updateSplitToningHint();
-
-    if (this.elements['select-tone-profile']) {
-      (this.elements['select-tone-profile'] as HTMLSelectElement).value = this.edits.tone_profile;
-    }
-    if (this.elements['select-emulsion']) {
-      (this.elements['select-emulsion'] as HTMLSelectElement).value = this.edits.emulsion_archetype;
-    }
-    if (this.elements['select-print-media']) {
-      (this.elements['select-print-media'] as HTMLSelectElement).value = this.edits.print_media;
-    }
-    if (this.elements['select-enlarger-filter']) {
-      (this.elements['select-enlarger-filter'] as HTMLSelectElement).value = this.edits.enlarger_filter ?? 'NeutralPanchromatic';
-    }
-
-    this.updateEmulsionWorkspaceVisibility();
-
-    if (this.edits.curves) {
-      this.curveWidget.setPoints(this.edits.curves);
-      const lut = this.bridge.evaluateCurves(this.edits.curves);
-      this.renderer.updateToneCurvesLut(lut);
-    }
+    this.inspectorController?.syncSliderUI();
   }
 
   private updateEmulsionWorkspaceVisibility() {
-    // 1. Push / Pull exposure slider only visible when an emulsion archetype is selected
-    const hasEmulsion = this.edits.emulsion_archetype !== 'None';
-    const rowEmulsionExp = this.elements['row-emulsion-exp'];
-    if (rowEmulsionExp) {
-      rowEmulsionExp.classList.toggle('hidden', !hasEmulsion);
-    }
-
-    // 2. Optical enlarger filter only visible when monochrome media/stock is selected
-    const isMonochrome =
-      this.edits.print_media === 'BarytaSilverGelatin' ||
-      this.edits.print_media === 'WarmtoneChlorobromide' ||
-      this.edits.print_media === 'PlatinumPalladium' ||
-      this.edits.print_media === 'Cyanotype' ||
-      this.edits.emulsion_archetype === 'MobberleySilver400';
-
-    const rowFilter = this.elements['row-enlarger-filter'];
-    if (rowFilter) {
-      rowFilter.classList.toggle('hidden', !isMonochrome);
-    }
-
-    // 3. Print media sliders (Paper Grade, Base Warmth, Process Depth) only visible when print media is selected
-    const hasPrintMedia = this.edits.print_media !== 'None';
-    const sectionPrintSliders = this.elements['section-print-media-sliders'];
-    if (sectionPrintSliders) {
-      sectionPrintSliders.classList.toggle('hidden', !hasPrintMedia);
-    }
+    this.inspectorController?.updateEmulsionWorkspaceVisibility();
   }
 
   private syncRatingFlagUI() {
-    const starBtns = document.querySelectorAll('.star-btn');
-    starBtns.forEach((btn, idx) => {
-      btn.classList.toggle('active', idx < this.currentRating);
-    });
-
-    const btnPick = this.elements['btn-pick'];
-    const btnReject = this.elements['btn-reject'];
-
-    btnPick.classList.toggle('active', this.currentStatus === 'Pick');
-    btnReject.classList.toggle('active', this.currentStatus === 'Reject');
-
-    if (this.activeIdx >= 0) {
-      const cardEl = document.getElementById(`thumb-card-${this.activeIdx}`);
-      if (cardEl) {
-        let ratingBadge = cardEl.querySelector('.thumb-badge-rating') as HTMLElement;
-        if (this.currentRating > 0) {
-          if (!ratingBadge) {
-            ratingBadge = document.createElement('div');
-            ratingBadge.className = 'thumb-badge-rating';
-            cardEl.appendChild(ratingBadge);
-          }
-          ratingBadge.innerText = '★'.repeat(this.currentRating);
-        } else if (ratingBadge) {
-          ratingBadge.remove();
-        }
-
-        let flagBadge = cardEl.querySelector('.thumb-badge-flag') as HTMLElement;
-        if (this.currentStatus === 'Pick' || this.currentStatus === 'Reject') {
-          if (!flagBadge) {
-            flagBadge = document.createElement('div');
-            flagBadge.className = 'thumb-badge-flag';
-            cardEl.appendChild(flagBadge);
-          }
-          flagBadge.className = `thumb-badge-flag ${this.currentStatus.toLowerCase()}`;
-          flagBadge.innerText = this.currentStatus.toUpperCase();
-        } else if (flagBadge) {
-          flagBadge.remove();
-        }
-      }
-    }
+    this.inspectorController?.syncRatingFlagUI(this.currentRating, this.currentStatus, this.activeIdx);
   }
 
   private hasModifications(): boolean {
