@@ -153,7 +153,20 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 - **Parity Across Engines**:
   - Implement identical mathematical transfer functions across `firstproof-core/src/color/print_media.rs`, `Shaders.metal`, and `FragmentShader.ts`.
 
+### 3.13 Sensor Read-Noise Mitigation & Viewport Chroma Parity (P2)
+- **Problem Statement**:
+  - In high-ISO RAW images (e.g. ISO 1600+ on older sensors like Canon 60D), deep shadows hover just dozens of counts above sensor black level.
+  - Applying extreme color temperatures (e.g. 9450K) introduces high digital gain ($\sim 2.5\times$ on Red) that magnifies single-photosite read noise into prominent red chroma speckling.
+  - The darkroom viewport currently exaggerates this effect because 2×2 box binning averages 2 Green photosites (cutting green noise by 50%) while leaving Red and Blue unaveraged with zero chromatic median filtering.
+- **Viewport 2×2 Binning Chroma Parity**:
+  - Implement a fast, lightweight chromatic difference median or neighbor-clamping pass on the binned frame in `to_binned_linear_f16`, eliminating the artificial divergence where darkroom previews show $3.5\times$ more red noise than full exports.
+- **Physical Pre-WB Sensor Hot-Pixel & Read-Noise Suppression**:
+  - Implement a principled outlier filter on the raw CFA grid *before* white balance multipliers are evaluated, clipping isolated statistical read-noise spikes based on sensor ISO read-noise variance rather than applying synthetic plastic chroma blur downstream.
+- **Emulsion Grain Masking & Integration (Synergy with Story 3.11)**:
+  - When stochastic physical film grain (Story 3.11) is active in Linear Rec.2020, leverage physical silver halide crystal and dye cloud distribution to naturally integrate and homogenize underlying sensor read noise into organic photographic emulsion texture, avoiding digital speckling without loss of optical acutance.
+
 ---
+
 
 ## Phase 4: Pre-Release IP Audit, Code Cleanliness & Distribution (P2)
 
