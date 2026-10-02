@@ -1,323 +1,58 @@
 import {
   WasmBridge,
   EditSettingsPayload,
-  XmpPayload,
   PreviewResult,
-  ColorProfileMode,
-  EmulsionArchetype,
-  PrintMediaMode,
 } from './WasmBridge';
 import { WebGLRenderer } from './WebGLRenderer';
 import { FolderIntake, PhotoFileEntry } from './FolderIntake';
 import { ToneCurveWidget } from './ToneCurveWidget';
-import { ThumbnailCacheStore } from './ThumbnailCacheStore';
 import { ParityModal } from './parity/ParityModal';
-import { CropController, CropRect } from './CropController';
+import { CropController } from './CropController';
 import { ExportModal, ExportExecutionOptions } from './ExportModal';
-import { encodeTiff } from './utils/tiffEncoder';
-import {
-  formatAperture,
-  formatShutterSpeed,
-  formatFocalLength,
-  formatISO,
-  formatExposure,
-  formatDimensions
-} from './utils/formatters';
-import { readExifOrientationFromBlob } from './utils/exifReader';
-import { IntermediateTextureCache } from './IntermediateTextureCache';
+import { decodeExifOrientation } from './utils/exifReader';
 import { isDebugMode } from './utils/debug';
+import { getDefaultEdits, hasModifications } from './utils/edits';
+import { updateMetadataHeaderElements } from './utils/metadataHeader';
 import { KeyboardShortcutController } from './controllers/KeyboardShortcutController';
 import { CanvasViewportController } from './controllers/CanvasViewportController';
 import { InspectorSyncController } from './controllers/InspectorSyncController';
-
-import { decode_exif_orientation } from 'firstproof-wasm';
-import type { ExifOrientationRecord } from 'firstproof-wasm';
-
-export function decodeExifOrientation(orientation?: number): {
-  rotation: number;
-  flipH: boolean;
-  flipV: boolean;
-  flip_horizontal: boolean;
-  flip_vertical: boolean;
-} {
-  const rec: ExifOrientationRecord = orientation
-    ? decode_exif_orientation(orientation)
-    : { rotation: 0, flip_horizontal: false, flip_vertical: false };
-  return {
-    rotation: rec.rotation,
-    flipH: rec.flip_horizontal,
-    flipV: rec.flip_vertical,
-    flip_horizontal: rec.flip_horizontal,
-    flip_vertical: rec.flip_vertical,
-  };
-}
+import { FilmstripController } from './controllers/FilmstripController';
+import { PhotoLoaderService, PhotoRecord } from './services/PhotoLoaderService';
 
 class DarkroomApp {
   private bridge!: WasmBridge;
   private renderer!: WebGLRenderer;
+  private loaderService!: PhotoLoaderService;
   private curveWidget!: ToneCurveWidget;
   private parityModal: ParityModal = new ParityModal();
   private exportModal: ExportModal = new ExportModal();
   private cropController!: CropController;
-  private exportCanvas: HTMLCanvasElement | null = null;
-  private exportRenderer: WebGLRenderer | null = null;
 
-  private getExportRenderer(): { canvas: HTMLCanvasElement; renderer: WebGLRenderer } {
-    if (!this.exportCanvas || !this.exportRenderer) {
-      this.exportCanvas = document.createElement('canvas');
-      this.exportRenderer = new WebGLRenderer(this.exportCanvas);
-    }
-    return { canvas: this.exportCanvas, renderer: this.exportRenderer };
-  }
-
-  private fileEntries: PhotoFileEntry[] = [];
-  private activeIdx: number = -1;
-  private selectedIndices: Set<number> = new Set();
-  private dirHandle: any = null;
-
-  private edits: EditSettingsPayload = this.getDefaultEdits();
-  private cardRotations: Map<number, { rotation: number; flipH: boolean; flipV: boolean }> = new Map();
-  private photoEditsCache: Map<string, EditSettingsPayload> = new Map();
-  private photoExifCache: Map<string, { rotation: number; flipH: boolean; flipV: boolean }> = new Map();
-  private isOriginalPeek: boolean = false;
-  private currentMetadata: any = {};
-  private currentRating: number = 0;
-  private currentStatus: string = 'Unflagged';
-  private selectRequestId: number = 0;
-  private selectDebounceTimer: any = null;
-  private preloadDebounceTimer: any = null;
-  private thumbLoadingSet: Set<number> = new Set();
-  private prewarmLoadingSet: Set<number> = new Set();
-
-  // Modular Controllers
+  // Controllers
   private viewportController!: CanvasViewportController;
   private keyboardController!: KeyboardShortcutController;
   private inspectorController!: InspectorSyncController;
+  private filmstripController!: FilmstripController;
 
-
-  private get zoomScale(): number {
-    return this.viewportController ? this.viewportController.getZoom() : 1.0;
-  }
-  private set zoomScale(val: number) {
-    if (this.viewportController) {
-      this.viewportController.setZoom(val);
-    }
-  }
-
-  private get panOffset(): { x: number; y: number } {
-    return this.viewportController ? this.viewportController.getPan() : { x: 0, y: 0 };
-  }
-  private set panOffset(val: { x: number; y: number }) {
-    if (this.viewportController) {
-      this.viewportController.setZoom(this.viewportController.getZoom(), val);
-    }
-  }
-
-  private get activeEyedropper(): 'wb' | 'white' | 'black' | null {
-    return this.viewportController ? this.viewportController.getActiveEyedropper() : null;
-  }
-
-  // Crop & Straighten tool state
+  // Active Photo State
+  private edits: EditSettingsPayload = getDefaultEdits();
+  private isOriginalPeek: boolean = false;
   private isCropActive: boolean = false;
+  private currentMetadata: any = {};
+  private currentRating: number = 0;
+  private currentStatus: string = 'Unflagged';
 
+  // Selection Pipeline & Active Frame Buffers
+  private selectRequestId: number = 0;
+  private selectDebounceTimer: any = null;
   private activeLinearData: Uint16Array | null = null;
   private activeLinearW: number = 0;
   private activeLinearH: number = 0;
-
   private activeSourceImage: CanvasImageSource | null = null;
   private activeSourceW: number = 0;
   private activeSourceH: number = 0;
 
-  private rawWorker: Worker | null = null;
-  private workerMsgId: number = 0;
-  private workerPendingMap: Map<number, (res: any) => void> = new Map();
-
   private elements: Record<string, HTMLElement> = {};
-
-  // Perceptual Mired mapping matching macOS TemperatureSliderRow
-  // Human color perception of blackbody temperature is linear in Mireds (10^6 / K), not linear Kelvin.
-  // 2000 K  -> 500 Mireds (pos = 0.0)
-  // 5500 K  -> 181.8 Mireds (pos = 0.707)
-  // 20000 K -> 50 Mireds (pos = 1.0)
-  private kelvinToMiredPos(kelvin: number): number {
-    const k = Math.min(Math.max(kelvin, 2000.0), 20000.0);
-    const mired = 1_000_000.0 / k;
-    const pos = (500.0 - mired) / 450.0;
-    return Math.min(Math.max(pos, 0.0), 1.0);
-  }
-
-  private miredPosToKelvin(pos: number): number {
-    const p = Math.min(Math.max(pos, 0.0), 1.0);
-    const mired = 500.0 - p * 450.0;
-    const rawK = 1_000_000.0 / mired;
-    // Stepped in 50K increments below 10,000K, 200K increments above
-    const steppedK = (rawK < 10000.0)
-      ? Math.round(rawK / 50.0) * 50.0
-      : Math.round(rawK / 200.0) * 200.0;
-    return Math.min(Math.max(steppedK, 2000.0), 20000.0);
-  }
-
-  private updateSplitToningHint() {
-    const hasSplitToning = (this.edits.split_toning_shadow_sat > 0) || (this.edits.split_toning_highlight_sat > 0);
-    const hintEl = document.getElementById('hint-split-toning');
-    if (hintEl) {
-      hintEl.innerText = hasSplitToning ? 'Active' : 'Off';
-      hintEl.classList.toggle('active', hasSplitToning);
-    }
-  }
-
-  private getSceneLuminances(): Float32Array {
-    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
-    const gl = canvas?.getContext('webgl2') as WebGL2RenderingContext;
-    if (!gl) return new Float32Array(0);
-
-    const sampleW = Math.min(100, canvas.width);
-    const sampleH = Math.min(100, canvas.height);
-    const startX = Math.max(0, Math.floor((canvas.width - sampleW) / 2));
-    const startY = Math.max(0, Math.floor((canvas.height - sampleH) / 2));
-    const pixels = new Uint8Array(sampleW * sampleH * 4);
-    gl.readPixels(startX, startY, sampleW, sampleH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-    const lums = new Float32Array(sampleW * sampleH);
-    for (let i = 0; i < sampleW * sampleH; i++) {
-      const r = pixels[i * 4] / 255.0;
-      const g = pixels[i * 4 + 1] / 255.0;
-      const b = pixels[i * 4 + 2] / 255.0;
-      lums[i] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    }
-    return lums;
-  }
-
-  public applyAutoTone() {
-    if (this.activeIdx < 0) return;
-
-    let adj: { exposure: number; contrast: number } | null = null;
-    if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
-      adj = this.bridge.computeAutoAdjustments(this.activeLinearData, this.activeLinearW, this.activeLinearH);
-    }
-
-    if (!adj) {
-      const lums = this.getSceneLuminances();
-      if (lums.length > 0) {
-        adj = this.bridge.computeAutoAdjustmentsFromLuminances(lums);
-      }
-    }
-
-    if (adj) {
-      this.edits.exposure = adj.exposure;
-      this.edits.contrast = adj.contrast;
-      this.syncSliderUI();
-      this.renderCanvas();
-      this.autoSaveSidecar();
-      console.log(`⚡ [Auto Tone] Conservative Auto Tone applied: Exposure = ${adj.exposure > 0 ? '+' : ''}${adj.exposure.toFixed(2)} EV, Contrast = ${adj.contrast}`);
-    }
-  }
-
-  public applyAutoWhiteBalance() {
-    if (this.activeIdx < 0) return;
-
-    let wb: { temperature: number; tint: number } | null = null;
-    if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
-      wb = this.bridge.computeAutoWhiteBalance(this.activeLinearData, this.activeLinearW, this.activeLinearH);
-    }
-
-    if (!wb) {
-      const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
-      const gl = canvas?.getContext('webgl2') as WebGL2RenderingContext;
-      if (gl) {
-        const readW = Math.min(100, canvas.width);
-        const readH = Math.min(100, canvas.height);
-        const pixels = new Uint8Array(readW * readH * 4);
-        gl.readPixels(0, 0, readW, readH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        let rSum = 0, gSum = 0, bSum = 0, count = 0;
-        for (let i = 0; i < readW * readH; i++) {
-          const r = pixels[i * 4] / 255.0;
-          const g = pixels[i * 4 + 1] / 255.0;
-          const b = pixels[i * 4 + 2] / 255.0;
-          const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          if (y >= 0.05 && y <= 0.85) {
-            rSum += r; gSum += g; bSum += b; count++;
-          }
-        }
-        if (count > 20) {
-          wb = this.bridge.calculateWhiteBalanceFromSample(rSum / count, gSum / count, bSum / count);
-        }
-      }
-    }
-
-    if (wb) {
-      this.edits.temperature = wb.temperature;
-      this.edits.tint = wb.tint;
-      this.syncSliderUI();
-      this.renderCanvas();
-      this.autoSaveSidecar();
-      console.log(`⚡ [Auto WB] Applied: Temp = ${wb.temperature} K, Tint = ${wb.tint}`);
-    }
-  }
-
-  private initWorker() {
-    try {
-      this.rawWorker = new Worker(new URL('./RawDecodeWorker.ts', import.meta.url), { type: 'module' });
-      this.rawWorker.onmessage = (e: MessageEvent) => {
-        const { id } = e.data;
-        const resolve = this.workerPendingMap.get(id);
-        if (resolve) {
-          this.workerPendingMap.delete(id);
-          resolve(e.data);
-        }
-      };
-      console.log('⚡ [App] Off-main-thread RawDecodeWorker active');
-    } catch (err) {
-      console.warn('[App] WebWorker pool initialization fallback:', err);
-    }
-  }
-
-  private async decodeInWorker(arrayBuffer: ArrayBuffer, fileName: string, fullResolution: boolean = false): Promise<{ preview: PreviewResult; imageSlice: Uint8Array; linearData?: Uint16Array; linearW?: number; linearH?: number }> {
-    if (!this.rawWorker) {
-      const bytes = new Uint8Array(arrayBuffer);
-      const res = this.bridge.decodeImageBytes(bytes);
-      const ext = fileName.split('.').pop()?.toLowerCase() || '';
-      const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
-      let linearData: Uint16Array | undefined;
-      let linearW: number | undefined;
-      let linearH: number | undefined;
-      if (isRawFile) {
-        try {
-          const rawLin = fullResolution ? this.bridge.decodeRawFullLinear(bytes) : this.bridge.decodeRawLinear(bytes);
-          linearData = rawLin.linearData;
-          linearW = rawLin.res.width;
-          linearH = rawLin.res.height;
-        } catch (e) {
-          console.warn('[main] Fallback decodeRawLinear failed:', e);
-        }
-      }
-      return { preview: res.preview, imageSlice: res.imageSlice, linearData, linearW, linearH };
-    }
-
-    const id = ++this.workerMsgId;
-    return new Promise((resolve, reject) => {
-      this.workerPendingMap.set(id, (res) => {
-        if (res.success && res.preview && res.imageSlice) {
-          resolve({
-            preview: res.preview,
-            imageSlice: res.imageSlice,
-            linearData: res.linearData,
-            linearW: res.linearW,
-            linearH: res.linearH,
-          });
-        } else {
-          try {
-            const bytes = new Uint8Array(arrayBuffer);
-            resolve(this.bridge.decodeImageBytes(bytes));
-          } catch (e) {
-            reject(new Error(res.error || 'Worker decode failed'));
-          }
-        }
-      });
-      const workerBuffer = arrayBuffer.slice(0);
-      this.rawWorker!.postMessage({ id, arrayBuffer: workerBuffer, fileName, fullResolution }, [workerBuffer]);
-    });
-  }
 
   public async init() {
     console.log('[App] Starting First Proof Web Darkroom Engine...');
@@ -326,7 +61,7 @@ class DarkroomApp {
     // 1. Init WASM (256MB scratchpad capacity for 50MP+ 16-bit linear RAW frames)
     try {
       this.bridge = await WasmBridge.init(256);
-      this.initWorker();
+      this.loaderService = new PhotoLoaderService(this.bridge);
     } catch (err) {
       console.error('[App] Failed to initialize WASM scratchpad:', err);
       alert('Failed to initialize WebAssembly core engine. Check browser console.');
@@ -338,11 +73,13 @@ class DarkroomApp {
     canvas.width = 1920;
     canvas.height = 1080;
     this.renderer = new WebGLRenderer(canvas);
+
+    // Parity Modal (Mechanical Parity Audit)
     this.parityModal.init(
       this.renderer,
       () => this.edits,
       () => {
-        if (this.activeIdx < 0) return null;
+        if (this.filmstripController.getActiveIndex() < 0) return null;
         if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
           return {
             isLinearRec2020: true,
@@ -362,7 +99,7 @@ class DarkroomApp {
       }
     );
 
-    // 3. Init Export Modal (macOS ExportSheetView Parity)
+    // 3. Init Export Modal
     this.exportModal.init((photos, options, onProgress) => this.handleExport(photos, options, onProgress));
 
     // 4. Init Tone Curve Widget
@@ -371,7 +108,7 @@ class DarkroomApp {
     const initialLut = this.bridge.evaluateCurves(this.edits.curves);
     this.renderer.updateToneCurvesLut(initialLut);
 
-    // 4. Init Interactive Crop Controller
+    // 5. Init Interactive Crop Controller
     this.cropController = new CropController('crop-overlay', {
       onCropUpdate: (crop) => {
         this.edits.crop_left = crop.left;
@@ -396,42 +133,70 @@ class DarkroomApp {
       },
       onCancel: () => {
         this.toggleCropMode(false);
-      }
+      },
     });
 
-    // 5. Init Viewport & Navigation Controllers
+    // 6. Init Viewport & Navigation Controllers
     if (!isDebugMode()) {
       const btnParity = document.getElementById('btn-parity-audit');
-      if (btnParity) {
-        btnParity.style.display = 'none';
-      }
+      if (btnParity) btnParity.style.display = 'none';
     }
 
     const canvasWrapper = document.getElementById('canvas-wrapper') as HTMLElement;
     const zoomBadge = document.getElementById('zoom-badge');
-    this.viewportController = new CanvasViewportController(
-      canvas,
-      canvasWrapper,
-      zoomBadge,
-      {
-        onRender: () => this.renderCanvas(),
-        onUpdateCropOverlay: () => {
-          if (this.isCropActive) this.updateCropOverlayPosition();
-        },
-        onSampleEyedropper: (mode, r, g, b) => this.handleSampleEyedropper(mode, r, g, b),
-        isCropActive: () => this.isCropActive,
-        getEdits: () => this.edits,
-        getImageDimensions: () => ({
-          width: this.activeLinearW || this.activeSourceW || 1920,
-          height: this.activeLinearH || this.activeSourceH || 1080,
-          rawWidth: this.currentMetadata?.raw_width,
-          rawHeight: this.currentMetadata?.raw_height,
-        }),
-      }
-    );
+    this.viewportController = new CanvasViewportController(canvas, canvasWrapper, zoomBadge, {
+      onRender: () => this.renderCanvas(),
+      onUpdateCropOverlay: () => {
+        if (this.isCropActive) this.updateCropOverlayPosition();
+      },
+      onSampleEyedropper: (mode, r, g, b) => this.handleSampleEyedropper(mode, r, g, b),
+      isCropActive: () => this.isCropActive,
+      getEdits: () => this.edits,
+      getImageDimensions: () => ({
+        width: this.activeLinearW || this.activeSourceW || 1920,
+        height: this.activeLinearH || this.activeSourceH || 1080,
+        rawWidth: this.currentMetadata?.raw_width,
+        rawHeight: this.currentMetadata?.raw_height,
+      }),
+    });
     this.viewportController.bind();
 
+    // 7. Init Filmstrip Controller
+    const filmstripScroll = document.getElementById('filmstrip-scroll') as HTMLElement;
+    const filmstripCount = document.getElementById('filmstrip-count');
+    const emptyState = document.getElementById('empty-state');
+
+    this.filmstripController = new FilmstripController(
+      filmstripScroll,
+      filmstripCount,
+      emptyState,
+      this.bridge,
+      this.loaderService,
+      {
+        onSelectPhoto: (idx, centerFilmstrip, keepMultiSelection) => {
+          this.selectPhoto(idx, centerFilmstrip, keepMultiSelection);
+        },
+      }
+    );
+
+    // 8. Init Keyboard Shortcut Controller
     this.keyboardController = new KeyboardShortcutController({
+      onNavigate: (dir) => {
+        if (dir === 1) this.filmstripController.selectNext();
+        else this.filmstripController.selectPrevious();
+      },
+      onRotate: (deltaDeg) => this.rotateImage(deltaDeg),
+      onToggleCrop: () => this.toggleCropMode(),
+      onPeekOriginal: (active: boolean) => {
+        this.isOriginalPeek = active;
+        this.renderCanvas();
+      },
+      onTogglePixelPeep: () => this.viewportController.togglePixelPeep(),
+      onToggleEyedropper: (mode) => this.viewportController.toggleEyedropper(mode),
+      onEnter: () => {
+        if (this.isCropActive) this.toggleCropMode(false);
+      },
+      isCropActive: () => this.isCropActive,
       onEscape: () => {
         if (this.cropController?.isRotating) {
           this.cropController.cancelRotation();
@@ -474,48 +239,29 @@ class DarkroomApp {
         this.syncRatingFlagUI();
         this.autoSaveSidecar();
       },
-      onEnter: () => {
-        if (this.isCropActive) this.toggleCropMode(false);
-      },
-      onToggleCrop: () => this.toggleCropMode(),
-      onCropFlipOrientation: () => this.cropController?.flipCropOrientation(),
-      onTogglePixelPeep: () => this.viewportController.togglePixelPeep(),
-      onRotate: (delta) => this.rotateImage(delta),
-      onToggleEyedropper: (mode) => this.viewportController.toggleEyedropper(mode),
-      onPeekOriginal: (active) => {
-        this.isOriginalPeek = active;
-        this.renderCanvas();
-      },
-      onNavigate: (dir) => {
-        if (dir === -1 && this.activeIdx > 0) {
-          this.selectPhoto(this.activeIdx - 1, true);
-        } else if (dir === 1 && this.activeIdx < this.fileEntries.length - 1) {
-          this.selectPhoto(this.activeIdx + 1, true);
-        }
-      },
-      isCropActive: () => this.isCropActive,
     });
     this.keyboardController.bind();
 
+    // 9. Init Inspector Sync Controller
     this.inspectorController = new InspectorSyncController({
       getEdits: () => this.edits,
       renderCanvas: () => this.renderCanvas(),
       autoSaveSidecar: () => this.autoSaveSidecar(),
       isCurrentPhotoRaw: () => this.isCurrentPhotoRaw(),
-      getDefaultEdits: () => this.getDefaultEdits(this.isCurrentPhotoRaw()),
+      getDefaultEdits: () => getDefaultEdits(this.isCurrentPhotoRaw()),
       getCurveWidget: () => this.curveWidget,
       getRating: () => this.currentRating,
       getStatus: () => this.currentStatus,
-      getActiveIndex: () => this.activeIdx,
+      getActiveIndex: () => this.filmstripController.getActiveIndex(),
       onResetAllEdits: () => this.resetAllEdits(),
     });
     this.inspectorController.bind();
 
-    // 6. Bind UI Controls & Sliders
+    // 10. Bind UI Controls
     this.bindEvents();
-    this.updateUI();
+    this.syncRatingFlagUI();
 
-    // 5. Restore recent photo shoot folder memory from IndexedDB across browser restarts
+    // 11. Restore recent shoot folder memory from IndexedDB across browser restarts
     FolderIntake.getRecentDirHandle().then((recent) => {
       if (recent) {
         const emptyActions = document.querySelector('.empty-actions');
@@ -528,9 +274,12 @@ class DarkroomApp {
           btnRecent.addEventListener('click', async () => {
             const entries = await FolderIntake.processDirectoryHandle(recent.dirHandle);
             if (entries.length > 0) {
-              this.fileEntries = entries;
-              this.dirHandle = recent.dirHandle;
-              this.onPhotosLoaded();
+              FolderIntake.saveRecentDirHandle(recent.dirHandle);
+              let initialName: string | null = null;
+              try {
+                initialName = localStorage.getItem('fp_recent_photo_name');
+              } catch (_) {}
+              this.filmstripController.loadPhotos(entries, initialName);
             }
           });
           emptyActions.appendChild(btnRecent);
@@ -542,64 +291,12 @@ class DarkroomApp {
   }
 
   public isCurrentPhotoRaw(): boolean {
-    if (this.activeIdx < 0 || this.activeIdx >= this.fileEntries.length) return false;
-    const name = this.fileEntries[this.activeIdx].name;
-    const ext = name.split('.').pop()?.toLowerCase() || '';
+    const entry = this.filmstripController.getActiveEntry();
+    if (!entry) return false;
+    const ext = entry.name.split('.').pop()?.toLowerCase() || '';
     return ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
   }
 
-  private getDefaultEdits(isRaw: boolean = false): EditSettingsPayload {
-    return {
-      exposure: 0.0,
-      contrast: 0.0,
-      highlights: 0.0,
-      shadows: 0.0,
-      whites: 0.0,
-      blacks: 0.0,
-      vibrance: 0.0,
-      saturation: 0.0,
-      deep_blue: 0.0,
-      foliage: 0.0,
-      temperature: 5500.0,
-      tint: 0.0,
-      crop_left: 0.0,
-      crop_top: 0.0,
-      crop_right: 1.0,
-      crop_bottom: 1.0,
-      crop_angle: 0.0,
-      perspective_vertical: 0.0,
-      perspective_horizontal: 0.0,
-      crop_constrain: true,
-      rotation: 0,
-      flip_horizontal: false,
-      flip_vertical: false,
-      tone_profile: 'AgxVivid',
-      lut_intensity: 1.0,
-      sharpening_amount: isRaw ? 20.0 : 0.0,
-      sharpening_radius: 1.0,
-      sharpening_masking: isRaw ? 15.0 : 0.0,
-      noise_reduction: 0.0,
-      emulsion_archetype: 'None',
-      emulsion_format: 'Format35mm',
-      emulsion_exposure: 0.0,
-      curves: {
-        master: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-        red: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-        green: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-        blue: [{ x: 0, y: 0 }, { x: 1, y: 1 }]
-      },
-      split_toning_shadow_hue: 215.0,
-      split_toning_shadow_sat: 0.0,
-      split_toning_highlight_hue: 45.0,
-      split_toning_highlight_sat: 0.0,
-      split_toning_balance: 0.0,
-      print_media: 'None',
-      enlarger_filter: 'NeutralPanchromatic',
-      print_paper_grade: 0.0,
-      print_base_warmth: 0.0,
-      print_process_depth: 100.0
-    };
-  }
 
   private cacheElements() {
     const ids = [
@@ -612,16 +309,12 @@ class DarkroomApp {
       'select-wb-preset', 'btn-wb-eyedropper', 'btn-white-point-picker', 'btn-black-point-picker',
       'select-emulsion', 'select-print-media', 'select-enlarger-filter', 'row-enlarger-filter', 'row-emulsion-exp', 'section-print-media-sliders', 'btn-reset-curve', 'btn-auto-tone',
       'meta-input-title', 'meta-input-caption', 'meta-input-creator', 'meta-input-keywords',
-      'btn-crop-tool', 'btn-rotate-ccw', 'btn-rotate-cw', 'zoom-badge', 'peek-badge'
+      'btn-crop-tool', 'btn-rotate-ccw', 'btn-rotate-cw', 'zoom-badge', 'peek-badge',
     ];
     for (const id of ids) {
       const el = document.getElementById(id);
       if (el) this.elements[id] = el;
     }
-  }
-
-  private toggleEyedropper(mode: 'wb' | 'white' | 'black') {
-    this.viewportController.toggleEyedropper(mode);
   }
 
   private handleSampleEyedropper(mode: 'wb' | 'white' | 'black', r: number, g: number, b: number) {
@@ -648,33 +341,27 @@ class DarkroomApp {
       this.edits.blacks = shift;
     }
 
-    this.syncSliderUI();
+    this.inspectorController.syncSliderUI();
     this.renderCanvas();
     this.autoSaveSidecar();
   }
 
   private bindEvents() {
-    // Open Folder Intake Buttons
     const handleOpenFolder = async () => {
       if ('showDirectoryPicker' in window) {
         try {
           const res = await FolderIntake.openDirectoryPicker();
           if (res.entries.length > 0) {
-            this.fileEntries = res.entries;
-            this.dirHandle = res.dirHandle;
-            this.onPhotosLoaded();
+            FolderIntake.saveRecentDirHandle(res.dirHandle);
+            this.filmstripController.loadPhotos(res.entries);
             return;
           }
-          // Do not show secondary fallback picker if user explicitly cancelled Chrome dialog
-          if (res.cancelled) {
-            return;
-          }
+          if (res.cancelled) return;
         } catch (err) {
           console.warn('[FolderIntake] openDirectoryPicker error:', err);
         }
       }
 
-      // Fallback for Firefox/Safari or if showDirectoryPicker yields 0 files without cancellation
       const fallbackEl = this.elements['file-input-fallback'] as HTMLInputElement;
       if (fallbackEl) {
         fallbackEl.value = '';
@@ -688,8 +375,8 @@ class DarkroomApp {
     (this.elements['file-input-fallback'] as HTMLInputElement).addEventListener('change', (e: Event) => {
       const target = e.target as HTMLInputElement;
       if (target.files && target.files.length > 0) {
-        this.fileEntries = FolderIntake.processFileList(target.files);
-        this.onPhotosLoaded();
+        const entries = FolderIntake.processFileList(target.files);
+        this.filmstripController.loadPhotos(entries);
       }
     });
 
@@ -699,7 +386,7 @@ class DarkroomApp {
     btnPeek.addEventListener('mouseup', () => { this.isOriginalPeek = false; this.renderCanvas(); });
     btnPeek.addEventListener('mouseleave', () => { this.isOriginalPeek = false; this.renderCanvas(); });
 
-    // Export Photo Modal (Cmd+E / Toolbar Button)
+    // Export Photo Modal
     this.elements['btn-export-proof'].addEventListener('click', () => this.openExportModal());
 
     // Mechanical Parity Audit Modal
@@ -712,7 +399,7 @@ class DarkroomApp {
 
     // Rating & Flag Toolbar
     const starBtns = document.querySelectorAll('.star-btn');
-    starBtns.forEach(btn => {
+    starBtns.forEach((btn) => {
       btn.addEventListener('click', (e) => {
         const star = parseInt((e.target as HTMLElement).getAttribute('data-star') || '0', 10);
         this.currentRating = (this.currentRating === star) ? 0 : star;
@@ -738,10 +425,10 @@ class DarkroomApp {
     this.elements['btn-rotate-ccw']?.addEventListener('click', () => this.rotateImage(-90));
     this.elements['btn-rotate-cw']?.addEventListener('click', () => this.rotateImage(90));
 
-    // Auto Tone Button (Light & Exposure section)
+    // Auto Tone Button
     this.elements['btn-auto-tone']?.addEventListener('click', () => this.applyAutoTone());
 
-    // Light Source Presets (Identical parity with Swift AppViewModel+Editor.swift)
+    // Light Source Presets
     this.elements['select-wb-preset']?.addEventListener('change', (e) => {
       const preset = (e.target as HTMLSelectElement).value;
       switch (preset) {
@@ -781,399 +468,31 @@ class DarkroomApp {
           this.edits.tint = 0.0;
           break;
       }
-      this.syncSliderUI();
+      this.inspectorController.syncSliderUI();
       this.renderCanvas();
       this.autoSaveSidecar();
     });
   }
 
-  private onPhotosLoaded() {
-    this.elements['empty-state'].classList.add('hidden');
-    this.elements['filmstrip-count'].innerText = `${this.fileEntries.length} Photos Loaded`;
-
-    if (this.dirHandle) {
-      FolderIntake.saveRecentDirHandle(this.dirHandle);
-    }
-
-    // Revoke previous session Blob URLs to avoid memory leaks across folder intake
-    for (const [, oldUrl] of this.thumbCache) {
-      URL.revokeObjectURL(oldUrl);
-    }
-    this.thumbCache.clear();
-    this.cardRotations.clear();
-
-    // Render Filmstrip Cards
-    const filmstripScroll = this.elements['filmstrip-scroll'];
-    filmstripScroll.innerHTML = '';
-
-    this.fileEntries.forEach((entry, idx) => {
-      const card = document.createElement('div');
-      card.className = `thumb-card ${idx === 0 ? 'active' : ''}`;
-      card.setAttribute('data-idx', `${idx}`);
-      card.id = `thumb-card-${idx}`;
-
-      const iconContainer = document.createElement('div');
-      iconContainer.className = 'thumb-icon-placeholder';
-      iconContainer.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
-
-      const title = document.createElement('div');
-      title.className = 'thumb-title';
-      title.innerText = entry.name;
-
-      card.appendChild(iconContainer);
-      card.appendChild(title);
-
-      card.addEventListener('click', (e: MouseEvent) => {
-        if (e.metaKey || e.ctrlKey) {
-          if (this.selectedIndices.has(idx)) {
-            if (this.selectedIndices.size > 1) {
-              this.selectedIndices.delete(idx);
-            }
-          } else {
-            this.selectedIndices.add(idx);
-          }
-          this.updateCardSelectionClasses();
-          this.selectPhoto(idx, false, true);
-        } else if (e.shiftKey && this.activeIdx >= 0) {
-          const start = Math.min(this.activeIdx, idx);
-          const end = Math.max(this.activeIdx, idx);
-          this.selectedIndices.clear();
-          for (let i = start; i <= end; i++) {
-            this.selectedIndices.add(i);
-          }
-          this.updateCardSelectionClasses();
-          this.selectPhoto(idx, false, true);
-        } else {
-          this.selectedIndices.clear();
-          this.selectedIndices.add(idx);
-          this.updateCardSelectionClasses();
-          this.selectPhoto(idx, false, false);
-        }
-      });
-      filmstripScroll.appendChild(card);
-
-      // Fast background EXIF orientation scan from raw byte slice (sub-0.1ms per image)
-      readExifOrientationFromBlob(entry.file).then(async (orientation) => {
-        if (this.fileEntries[idx] !== entry) return;
-        const exifOri = decodeExifOrientation(orientation);
-        let rot = exifOri.rotation;
-        let flipH = exifOri.flipH;
-        let flipV = exifOri.flipV;
-
-        const sidecarXml = await FolderIntake.readSidecarFromDisk(entry);
-        if (this.fileEntries[idx] !== entry) return;
-        if (sidecarXml) {
-          try {
-            const xmp = this.bridge.parseXmp(sidecarXml);
-            if (xmp.edits?.rotation !== undefined && xmp.edits?.rotation !== null) {
-              rot = xmp.edits.rotation;
-              flipH = xmp.edits.flip_horizontal ?? false;
-              flipV = xmp.edits.flip_vertical ?? false;
-            }
-          } catch (_) {}
-        }
-        this.updateThumbnailCardOrientation(idx, rot, flipH, flipV);
-      });
-    });
-
-    // Eagerly begin loading thumbnails for the initial visible batch of cards
-    const initialBatch = Math.min(this.fileEntries.length, 12);
-    for (let i = 0; i < initialBatch; i++) {
-      this.loadThumbnailForCard(i);
-    }
-
-    if (this.fileEntries.length > 0) {
-      let initialIdx = 0;
-      try {
-        const savedName = localStorage.getItem('fp_recent_photo_name');
-        if (savedName) {
-          const foundIdx = this.fileEntries.findIndex(e => e.name === savedName);
-          if (foundIdx >= 0) {
-            initialIdx = foundIdx;
-          }
-        }
-      } catch (_) {}
-      this.selectPhoto(initialIdx, true);
-    }
-  }
-
-  private centerActiveThumb(smooth: boolean = true) {
-    const cardEl = document.getElementById(`thumb-card-${this.activeIdx}`);
-    const container = this.elements['filmstrip-scroll'] as HTMLElement;
-    if (cardEl && container) {
-      const containerWidth = container.clientWidth;
-      const cardOffsetLeft = cardEl.offsetLeft;
-      const cardWidth = cardEl.offsetWidth;
-      const targetScrollLeft = cardOffsetLeft - (containerWidth / 2) + (cardWidth / 2);
-
-      container.scrollTo({
-        left: Math.max(0, targetScrollLeft),
-        behavior: smooth ? 'smooth' : 'auto'
-      });
-    }
-  }
-
-  private thumbCache: Map<number, string> = new Map(); // idx -> Blob URL
-  private prewarmedCache: Map<number, {
-    preview: PreviewResult;
-    imageSlice: Uint8Array;
-    imgBitmap: ImageBitmap;
-    linearData?: Uint16Array;
-    linearW?: number;
-    linearH?: number;
-  }> = new Map();
-
-  private cacheThumbnail(idx: number, blobUrl: string) {
-    this.thumbCache.set(idx, blobUrl);
-  }
-
-  private async prewarmPhoto(idx: number) {
-    if (idx < 0 || idx >= this.fileEntries.length || this.prewarmedCache.has(idx) || this.prewarmLoadingSet.has(idx)) return;
-    this.prewarmLoadingSet.add(idx);
-    try {
-      const entry = this.fileEntries[idx];
-      const arrayBuffer = await entry.file.arrayBuffer();
-      const res = await this.decodeInWorker(arrayBuffer, entry.name);
-      const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
-      let imgBitmap: ImageBitmap;
-      try {
-        imgBitmap = await createImageBitmap(blob, { resizeWidth: 2560 });
-      } catch (_) {
-        imgBitmap = await createImageBitmap(blob);
-      }
-
-      if (this.prewarmedCache.size >= 4) {
-        const firstKey = this.prewarmedCache.keys().next().value;
-        if (firstKey !== undefined) {
-          const old = this.prewarmedCache.get(firstKey);
-          old?.imgBitmap.close();
-          this.prewarmedCache.delete(firstKey);
-        }
-      }
-      this.prewarmedCache.set(idx, {
-        preview: res.preview,
-        imageSlice: res.imageSlice,
-        imgBitmap,
-        linearData: res.linearData,
-        linearW: res.linearW,
-        linearH: res.linearH,
-      });
-    } catch (_) {
-      // Ignore background pre-warming errors
-    } finally {
-      this.prewarmLoadingSet.delete(idx);
-    }
-  }
-
-  private updateThumbnailCardOrientation(idx: number, rotation: number = 0, flipH: boolean = false, flipV: boolean = false) {
-    this.cardRotations.set(idx, { rotation, flipH, flipV });
-    const cardEl = document.getElementById(`thumb-card-${idx}`);
-    if (!cardEl) return;
-    const img = cardEl.querySelector('.thumb-img') as HTMLImageElement | null;
-    if (!img) return;
-
-    const rot = ((rotation % 360) + 360) % 360;
-    const transforms: string[] = [];
-    if (rot !== 0) transforms.push(`rotate(${rot}deg)`);
-    if (rot === 90 || rot === 270) transforms.push('scale(0.6667)');
-    if (flipH) transforms.push('scaleX(-1)');
-    if (flipV) transforms.push('scaleY(-1)');
-
-    img.style.transform = transforms.length > 0 ? transforms.join(' ') : 'none';
-  }
-
-  private async loadThumbnailForCard(idx: number) {
-    if (idx < 0 || idx >= this.fileEntries.length) return;
-    if (this.thumbCache.has(idx) || this.thumbLoadingSet.has(idx)) return;
-    const cardEl = document.getElementById(`thumb-card-${idx}`);
-    if (!cardEl || cardEl.querySelector('img')) return;
-
-    this.thumbLoadingSet.add(idx);
-    try {
-      let previewUrl = this.thumbCache.get(idx);
-      let cardRot = 0;
-      let cardFlipH = false;
-      let cardFlipV = false;
-
-      const entry = this.fileEntries[idx];
-      const cacheKey = `${entry.name}_${entry.file.size}_${entry.file.lastModified}`;
-
-      if (!previewUrl) {
-        const cached = await ThumbnailCacheStore.get(cacheKey);
-        if (cached) {
-          if (cached instanceof Blob) {
-            previewUrl = URL.createObjectURL(cached);
-          } else if ((cached as any).blob) {
-            previewUrl = URL.createObjectURL((cached as any).blob);
-            cardRot = (cached as any).rotation ?? 0;
-            cardFlipH = (cached as any).flipH ?? false;
-            cardFlipV = (cached as any).flipV ?? false;
-          }
-          if (previewUrl) {
-            this.cacheThumbnail(idx, previewUrl);
-          }
-        }
-      }
-
-      if (!previewUrl) {
-        const arrayBuffer = await entry.file.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        const { imageSlice, preview } = this.bridge.decodeImageBytes(bytes);
-        const previewBlob = new Blob([new Uint8Array(imageSlice)], { type: 'image/jpeg' });
-        previewUrl = URL.createObjectURL(previewBlob);
-        this.cacheThumbnail(idx, previewUrl);
-
-        const orientation = preview.metadata?.orientation ?? 1;
-        const exifOri = decodeExifOrientation(orientation);
-        cardRot = exifOri.rotation;
-        cardFlipH = exifOri.flipH;
-        cardFlipV = exifOri.flipV;
-
-        // Check if adjacent XMP sidecar has custom rotation
-        const sidecarXml = await FolderIntake.readSidecarFromDisk(entry);
-        if (sidecarXml) {
-          try {
-            const xmp = this.bridge.parseXmp(sidecarXml);
-            if (xmp.edits?.rotation !== undefined && xmp.edits?.rotation !== null) {
-              cardRot = xmp.edits.rotation;
-              cardFlipH = xmp.edits.flip_horizontal ?? false;
-              cardFlipV = xmp.edits.flip_vertical ?? false;
-            }
-          } catch (_) {}
-        }
-
-        await ThumbnailCacheStore.set(cacheKey, {
-          blob: previewBlob,
-          rotation: cardRot,
-          flipH: cardFlipH,
-          flipV: cardFlipV,
-        });
-      } else if (!this.cardRotations.has(idx)) {
-        // If we only had a cached Blob without rotation, read fast EXIF orientation and sidecar
-        try {
-          const orientation = await readExifOrientationFromBlob(entry.file);
-          const exifOri = decodeExifOrientation(orientation);
-          cardRot = exifOri.rotation;
-          cardFlipH = exifOri.flipH;
-          cardFlipV = exifOri.flipV;
-        } catch (_) {}
-
-        const sidecarXml = await FolderIntake.readSidecarFromDisk(entry);
-        if (sidecarXml) {
-          try {
-            const xmp = this.bridge.parseXmp(sidecarXml);
-            if (xmp.edits?.rotation !== undefined && xmp.edits?.rotation !== null) {
-              cardRot = xmp.edits.rotation;
-              cardFlipH = xmp.edits.flip_horizontal ?? false;
-              cardFlipV = xmp.edits.flip_vertical ?? false;
-            }
-          } catch (_) {}
-        }
-      }
-
-      const existingImg = cardEl.querySelector('img') as HTMLImageElement | null;
-      if (existingImg) {
-        if (existingImg.src !== previewUrl) existingImg.src = previewUrl;
-      } else {
-        const img = document.createElement('img');
-        img.className = 'thumb-img';
-        img.src = previewUrl;
-        const placeholder = cardEl.querySelector('.thumb-icon-placeholder');
-        if (placeholder) placeholder.remove();
-        cardEl.insertBefore(img, cardEl.firstChild);
-      }
-
-      const knownRot = this.cardRotations.get(idx);
-      if (knownRot) {
-        this.updateThumbnailCardOrientation(idx, knownRot.rotation, knownRot.flipH, knownRot.flipV);
-      } else {
-        this.updateThumbnailCardOrientation(idx, cardRot, cardFlipH, cardFlipV);
-      }
-    } catch (err) {
-      console.warn(`[Thumbnail] Could not extract preview thumbnail for ${this.fileEntries[idx].name}:`, err);
-    } finally {
-      this.thumbLoadingSet.delete(idx);
-    }
-  }
-
-  private preloadAdjacentThumbnails(centerIdx: number, requestId: number) {
-    if (this.preloadDebounceTimer) {
-      clearTimeout(this.preloadDebounceTimer);
-    }
-    // Schedule background outward loading after user stays on a frame for 100ms
-    this.preloadDebounceTimer = setTimeout(async () => {
-      if (requestId !== this.selectRequestId) return;
-
-      // Radially load thumbnail cards outward up to 12 frames in both directions (covers 4K/Ultrawide viewports)
-      for (let dist = 0; dist <= 12; dist++) {
-        const offsets = dist === 0 ? [0] : [dist, -dist];
-        for (const offset of offsets) {
-          if (requestId !== this.selectRequestId) return;
-          const idx = centerIdx + offset;
-          if (idx >= 0 && idx < this.fileEntries.length) {
-            await this.loadThumbnailForCard(idx);
-          }
-        }
-      }
-
-      // Prewarm high-res WebGL bitmaps for immediate neighbor frames
-      for (const offset of [1, -1, 2, -2]) {
-        if (requestId !== this.selectRequestId) return;
-        const idx = centerIdx + offset;
-        if (idx >= 0 && idx < this.fileEntries.length) {
-          await this.prewarmPhoto(idx);
-        }
-      }
-    }, 100);
-  }
-
-  private updateCardSelectionClasses() {
-    const cards = document.querySelectorAll('.thumb-card');
-    cards.forEach((c, i) => {
-      c.classList.toggle('active', i === this.activeIdx);
-      c.classList.toggle('selected', this.selectedIndices.has(i));
-    });
-  }
-
-  public getSelectedPhotos(): PhotoFileEntry[] {
-    if (this.selectedIndices.size > 1) {
-      const sorted = Array.from(this.selectedIndices).sort((a, b) => a - b);
-      return sorted.map(i => this.fileEntries[i]).filter(Boolean);
-    }
-    if (this.activeIdx >= 0 && this.activeIdx < this.fileEntries.length) {
-      return [this.fileEntries[this.activeIdx]];
-    }
-    return [];
-  }
-
   private async selectPhoto(idx: number, centerFilmstrip: boolean = false, keepMultiSelection: boolean = false) {
-    if (idx < 0 || idx >= this.fileEntries.length) return;
+    const entries = this.filmstripController.getEntries();
+    if (idx < 0 || idx >= entries.length) return;
 
-    // Save previous active photo edits and auto-save sidecar if modified
-    const prevIdx = this.activeIdx;
-    if (prevIdx >= 0 && prevIdx < this.fileEntries.length && prevIdx !== idx) {
-      this.photoEditsCache.set(this.fileEntries[prevIdx].name, { ...this.edits });
-      this.autoSaveSidecar();
+    // Save previous active photo edits and auto-save sidecar
+    const prevIdx = this.filmstripController.getActiveIndex();
+    if (prevIdx >= 0 && prevIdx < entries.length && prevIdx !== idx) {
+      const prevEntry = entries[prevIdx];
+      await this.saveActivePhotoState(prevEntry);
     }
 
     const requestId = ++this.selectRequestId;
-    this.activeIdx = idx;
-    this.inspectorController?.rollbackActiveScrub();
+    this.filmstripController.selectIndex(idx, centerFilmstrip, keepMultiSelection);
+    this.inspectorController.rollbackActiveScrub();
 
-    if (!keepMultiSelection) {
-      this.selectedIndices.clear();
-      this.selectedIndices.add(idx);
+    const entry = entries[idx];
+    if (this.elements['meta-filename']) {
+      this.elements['meta-filename'].innerText = entry.name;
     }
-
-    // 1. INSTANT UI updates (0ms delay!)
-    this.updateCardSelectionClasses();
-
-    if (centerFilmstrip) {
-      this.centerActiveThumb(true);
-    }
-
-    const entry = this.fileEntries[idx];
-    this.elements['meta-filename'].innerText = entry.name;
     try {
       localStorage.setItem('fp_recent_photo_name', entry.name);
     } catch (_) {}
@@ -1184,68 +503,48 @@ class DarkroomApp {
       this.isCropActive = false;
       this.elements['btn-crop-tool']?.classList.remove('active');
     }
-    this.zoomScale = 1.0;
-    this.panOffset = { x: 0, y: 0 };
-    this.updateZoomUI();
+    this.viewportController.resetZoom();
 
-    // Stage 0: Up-Front Edit Staging
-    // Resolve baseline orientation and XMP/cached edits immediately so stale edits never flash
+    // Stage 0: Up-Front Edit & Metadata Staging
     const ext = entry.name.split('.').pop()?.toLowerCase() || '';
     const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
 
-    let stage0Edits: EditSettingsPayload;
-    const cachedEdits = this.photoEditsCache.get(entry.name);
-    if (cachedEdits) {
-      stage0Edits = { ...cachedEdits };
-    } else {
-      let sidecarXml: string | null = null;
-      try {
-        sidecarXml = localStorage.getItem(`fp_xmp_${entry.name}`);
-      } catch (_) {}
-      if (sidecarXml) {
-        try {
-          const xmp = this.bridge.parseXmp(sidecarXml);
-          stage0Edits = { ...this.getDefaultEdits(isRawFile), ...xmp.edits };
-          this.currentRating = xmp.rating || 0;
-          this.currentStatus = xmp.status || 'Unflagged';
-          (this.elements['meta-input-title'] as HTMLInputElement).value = xmp.title || '';
-          (this.elements['meta-input-caption'] as HTMLTextAreaElement).value = xmp.description || '';
-          (this.elements['meta-input-creator'] as HTMLInputElement).value = xmp.creator || '';
-          (this.elements['meta-input-keywords'] as HTMLInputElement).value = (xmp.keywords || []).join(', ');
-        } catch (_) {
-          stage0Edits = this.getDefaultEdits(isRawFile);
-        }
-      } else {
-        stage0Edits = this.getDefaultEdits(isRawFile);
-        this.currentRating = 0;
-        this.currentStatus = 'Unflagged';
-        (this.elements['meta-input-title'] as HTMLInputElement).value = '';
-        (this.elements['meta-input-caption'] as HTMLTextAreaElement).value = '';
-        (this.elements['meta-input-creator'] as HTMLInputElement).value = '';
-        (this.elements['meta-input-keywords'] as HTMLInputElement).value = '';
-      }
+    const knownRot = this.loaderService.getCachedExif(entry.name);
+    const defaultRot = knownRot?.rotation ?? 0;
+    const defaultFlipH = knownRot?.flipH ?? false;
+    const defaultFlipV = knownRot?.flipV ?? false;
 
-      // Check cached orientation
-      const knownRot = this.photoExifCache.get(entry.name) || this.cardRotations.get(idx);
-      if (knownRot && (stage0Edits.rotation === undefined || stage0Edits.rotation === null)) {
-        stage0Edits.rotation = knownRot.rotation;
-        stage0Edits.flip_horizontal = knownRot.flipH;
-        stage0Edits.flip_vertical = knownRot.flipV;
-      }
-    }
+    const record = await this.loaderService.loadPhotoRecord(
+      entry,
+      isRawFile,
+      defaultRot,
+      defaultFlipH,
+      defaultFlipV
+    );
 
-    this.edits = stage0Edits;
-    this.syncSliderUI();
+    if (requestId !== this.selectRequestId) return;
+
+    this.edits = { ...record.edits };
+    this.currentRating = record.rating;
+    this.currentStatus = record.status;
+    this.setMetadataFormFields(record);
+
+    this.inspectorController.syncSliderUI();
     this.syncRatingFlagUI();
     if (this.edits.rotation !== undefined) {
-      this.updateThumbnailCardOrientation(idx, this.edits.rotation, this.edits.flip_horizontal, this.edits.flip_vertical);
+      this.filmstripController.updateThumbnailCardOrientation(
+        idx,
+        this.edits.rotation,
+        this.edits.flip_horizontal,
+        this.edits.flip_vertical
+      );
     }
+    this.updateSidecarStatusBadge(record.hasSidecarOnDisk);
 
     // Check High-Resolution Intermediate Texture Cache
-    const cachedIntermediate = IntermediateTextureCache.get(entry.name, this.edits);
+    const cachedIntermediate = this.loaderService.getIntermediate(entry.name, this.edits);
     if (cachedIntermediate) {
-      // Tier 1: Instant First Proof Intermediate render matching this.edits (0ms!)
-      this.elements['developing-spinner'].classList.add('hidden');
+      this.elements['developing-spinner']?.classList.add('hidden');
       this.activeLinearData = null;
       this.activeLinearW = 0;
       this.activeLinearH = 0;
@@ -1254,13 +553,11 @@ class DarkroomApp {
       this.activeSourceH = cachedIntermediate.height;
 
       this.renderer.uploadIntermediate(cachedIntermediate.bitmap);
-      this.updateCanvasDimensions();
-      this.renderer.render(this.edits, this.isOriginalPeek, this.zoomScale, this.panOffset, this.isCropActive);
+      this.viewportController.updateCanvasDimensions();
+      this.renderCanvas();
     } else {
-      // Tier 2: Atomic Dark Canvas Clearing & Developing Spinner!
-      // Immediately clear canvas so stale pixels from previous photo never linger!
       this.renderer.clearCanvas();
-      this.elements['developing-spinner'].classList.remove('hidden');
+      this.elements['developing-spinner']?.classList.remove('hidden');
     }
 
     if (this.selectDebounceTimer) {
@@ -1268,283 +565,63 @@ class DarkroomApp {
       this.selectDebounceTimer = null;
     }
 
-    const isPrewarmedHit = this.prewarmedCache.has(idx);
-    const delay = (isPrewarmedHit || cachedIntermediate) ? 0 : 35; // Instant if prewarmed or intermediate hit
+    const isPrewarmedHit = this.loaderService.hasPrewarmed(idx);
+    const delay = (isPrewarmedHit || cachedIntermediate) ? 0 : 35;
 
     this.selectDebounceTimer = setTimeout(async () => {
-      if (requestId !== this.selectRequestId) return; // Dropped by newer selection!
-
+      if (requestId !== this.selectRequestId) return;
       if (!cachedIntermediate) {
-        this.elements['developing-spinner'].classList.remove('hidden');
+        this.elements['developing-spinner']?.classList.remove('hidden');
       }
 
       try {
-        const t0 = performance.now();
-        let preview: PreviewResult;
-        let imageSlice: Uint8Array;
-        let imgBitmap: ImageBitmap | null = null;
-        let t1 = t0, t2 = t0, t3 = t0;
-
-        let fileBytes: Uint8Array | null = null;
-        let workerLinearData: Uint16Array | null = null;
-        let workerLinearW = 0;
-        let workerLinearH = 0;
-
-        const prewarmed = this.prewarmedCache.get(idx);
-        if (prewarmed) {
-          if (requestId !== this.selectRequestId) return;
-          preview = prewarmed.preview;
-          imageSlice = prewarmed.imageSlice;
-          imgBitmap = prewarmed.imgBitmap;
-          workerLinearData = prewarmed.linearData || null;
-          workerLinearW = prewarmed.linearW || 0;
-          workerLinearH = prewarmed.linearH || 0;
-          t1 = performance.now();
-          t2 = t1;
-          t3 = t1;
-        } else {
-          // 1. Read single selected photo file bytes into memory
-          const arrayBuffer = await entry.file.arrayBuffer();
-          if (requestId !== this.selectRequestId) return; // Dropped while reading file!
-          fileBytes = new Uint8Array(arrayBuffer);
-
-          t1 = performance.now();
-
-          // 2. WASM preview extraction & metadata off-main-thread via RawDecodeWorker pool
-          const res = await this.decodeInWorker(arrayBuffer, entry.name);
-          if (requestId !== this.selectRequestId) return; // Dropped after WASM extraction!
-
-          preview = res.preview;
-          imageSlice = res.imageSlice;
-          workerLinearData = res.linearData || null;
-          workerLinearW = res.linearW || 0;
-          workerLinearH = res.linearH || 0;
-          t2 = performance.now();
-
-          // 3. Create ImageBitmap for WebGL upload only if not RAW with linear data
-          if (!isRawFile || !workerLinearData) {
-            const blob = new Blob([new Uint8Array(imageSlice)], { type: 'image/jpeg' });
-            try {
-              imgBitmap = await createImageBitmap(blob, { resizeQuality: 'high' });
-            } catch (decodeErr) {
-              console.warn(`[App] createImageBitmap failed for ${entry.name}, creating fallback canvas:`, decodeErr);
-              const fallbackCanvas = document.createElement('canvas');
-              fallbackCanvas.width = (preview.width && preview.width > 0) ? preview.width : 1920;
-              fallbackCanvas.height = (preview.height && preview.height > 0) ? preview.height : 1080;
-              const ctx = fallbackCanvas.getContext('2d');
-              if (ctx) {
-                ctx.fillStyle = '#111318';
-                ctx.fillRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
-                ctx.fillStyle = '#f1f5f9';
-                ctx.font = 'bold 24px sans-serif';
-                ctx.fillText(entry.name, 40, 60);
-              }
-              imgBitmap = await createImageBitmap(fallbackCanvas);
-            }
-          }
-          if (requestId !== this.selectRequestId) return; // Dropped after bitmap creation!
-          t3 = performance.now();
-        }
-
-        console.log(`[DNG Analysis] ${entry.name}: Extracted embedded preview dimensions ${preview.width}×${preview.height} (offset 0x${preview.preview_offset.toString(16)}, ${(preview.preview_len / 1024).toFixed(1)} KB)`);
-        if (preview.width <= 640 || preview.height <= 480) {
-          console.warn(`⚠️ [DNG Warning] ${entry.name} contains only a ${preview.width}×${preview.height} thumbnail (Minimum Preview mode). No full-size JPEG was embedded when converting/saving this DNG.`);
-        }
-
+        const frame = await this.loaderService.loadPhotoFrame(entry, isRawFile, idx);
         if (requestId !== this.selectRequestId) return;
 
-        this.currentMetadata = preview.metadata;
+        this.currentMetadata = frame.preview.metadata;
+        updateMetadataHeaderElements(this.elements, frame.preview, entry.name);
 
-        // Update EXIF metadata header (permanent across all tabs)
-        this.elements['meta-dimensions'].innerText = formatDimensions(
-          preview.width,
-          preview.height,
-          preview.metadata.raw_width,
-          preview.metadata.raw_height
-        );
-        this.elements['meta-camera'].innerText = `${preview.metadata.camera_model || 'Bayer Raw'}`;
-        this.elements['meta-iso'].innerText = formatISO(preview.metadata.iso);
-        this.elements['meta-aperture'].innerText = formatAperture(preview.metadata.aperture);
-        this.elements['meta-shutter'].innerText = formatShutterSpeed(preview.metadata.shutter_speed);
-
-        // Update format badge & rich hardware metadata for Info tab
-        const extBadge = entry.name.split('.').pop()?.toUpperCase() || 'RAW';
-        if (this.elements['meta-format-badge']) {
-          this.elements['meta-format-badge'].innerText = extBadge;
-        }
-
-        const make = preview.metadata.camera_make || '';
-        const model = preview.metadata.camera_model || '';
-        const fullCamera = `${make} ${model}`.trim() || preview.metadata.camera_model || 'Bayer Sensor';
-        if (this.elements['meta-full-camera']) {
-          this.elements['meta-full-camera'].innerText = fullCamera;
-        }
-
-        if (this.elements['meta-lens']) {
-          this.elements['meta-lens'].innerText = preview.metadata.lens_model || '—';
-        }
-
-        if (this.elements['meta-focal-length']) {
-          this.elements['meta-focal-length'].innerText = formatFocalLength(preview.metadata.focal_length);
-        }
-
-        if (this.elements['meta-exposure-summary']) {
-          this.elements['meta-exposure-summary'].innerText = `${formatShutterSpeed(preview.metadata.shutter_speed)} • ${formatAperture(preview.metadata.aperture)} • ISO ${formatISO(preview.metadata.iso)}`;
-        }
-
-        if (this.elements['meta-sensor-res']) {
-          this.elements['meta-sensor-res'].innerText = formatDimensions(
-            preview.width,
-            preview.height,
-            preview.metadata.raw_width,
-            preview.metadata.raw_height
-          );
-        }
-
-        if (this.elements['meta-date-taken']) {
-          let dateStr = '—';
-          if (preview.metadata.taken_time && preview.metadata.taken_time > 0) {
-            dateStr = new Date(preview.metadata.taken_time * 1000).toLocaleString(undefined, {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-            });
-          }
-          this.elements['meta-date-taken'].innerText = dateStr;
-        }
-
-        const orientation = preview.metadata?.orientation ?? 1;
+        const orientation = frame.preview.metadata?.orientation ?? 1;
         const exifOri = decodeExifOrientation(orientation);
-        this.photoExifCache.set(entry.name, { rotation: exifOri.rotation, flipH: exifOri.flipH, flipV: exifOri.flipV });
+        this.loaderService.setCachedExif(entry.name, {
+          rotation: exifOri.rotation,
+          flipH: exifOri.flipH,
+          flipV: exifOri.flipV,
+        });
 
-        // Update filmstrip thumbnail
-        const cardEl = document.getElementById(`thumb-card-${idx}`);
-        if (cardEl) {
-          let previewUrl = this.thumbCache.get(idx);
-          if (!previewUrl) {
-            const previewBlob = new Blob([new Uint8Array(imageSlice)], { type: 'image/jpeg' });
-            previewUrl = URL.createObjectURL(previewBlob);
-            this.cacheThumbnail(idx, previewUrl);
-            const cacheKey = `${entry.name}_${entry.file.size}_${entry.file.lastModified}`;
-            ThumbnailCacheStore.set(cacheKey, {
-              blob: previewBlob,
-              rotation: exifOri.rotation,
-              flipH: exifOri.flipH,
-              flipV: exifOri.flipV,
-            });
-          }
-
-          const existingImg = cardEl.querySelector('img') as HTMLImageElement | null;
-          if (existingImg) {
-            if (existingImg.src !== previewUrl) existingImg.src = previewUrl;
-          } else {
-            const img = document.createElement('img');
-            img.className = 'thumb-img';
-            img.src = previewUrl;
-            const placeholder = cardEl.querySelector('.thumb-icon-placeholder');
-            if (placeholder) placeholder.remove();
-            cardEl.insertBefore(img, cardEl.firstChild);
-          }
-        }
-
-        // Check for adjacent .xmp sidecar on disk, or restore from localStorage session backup
-        let sidecarXml = await FolderIntake.readSidecarFromDisk(entry);
-        if (!sidecarXml) {
-          try {
-            sidecarXml = localStorage.getItem(`fp_xmp_${entry.name}`);
-          } catch (_) {}
-        }
-        if (requestId !== this.selectRequestId) return; // Dropped after sidecar read!
-
-        if (this.elements['meta-sidecar-status']) {
-          this.elements['meta-sidecar-status'].innerText = sidecarXml ? '.xmp Synced' : 'Session RAM';
-          this.elements['meta-sidecar-status'].style.color = sidecarXml ? '#4ade80' : 'var(--text-muted)';
-        }
-
-        if (sidecarXml) {
-          const xmp = this.bridge.parseXmp(sidecarXml);
-          this.edits = { ...this.getDefaultEdits(isRawFile), ...xmp.edits };
-          if (this.edits.rotation === undefined || this.edits.rotation === null) {
-            this.edits.rotation = exifOri.rotation;
-            this.edits.flip_horizontal = exifOri.flipH;
-            this.edits.flip_vertical = exifOri.flipV;
-          }
-          this.currentRating = xmp.rating || 0;
-          this.currentStatus = xmp.status || 'Unflagged';
-          (this.elements['meta-input-title'] as HTMLInputElement).value = xmp.title || '';
-          (this.elements['meta-input-caption'] as HTMLTextAreaElement).value = xmp.description || '';
-          (this.elements['meta-input-creator'] as HTMLInputElement).value = xmp.creator || '';
-          (this.elements['meta-input-keywords'] as HTMLInputElement).value = (xmp.keywords || []).join(', ');
-        } else if (!cachedEdits) {
-          this.edits = this.getDefaultEdits(isRawFile);
-          this.edits.rotation = exifOri.rotation;
-          this.edits.flip_horizontal = exifOri.flipH;
-          this.edits.flip_vertical = exifOri.flipV;
-        }
-
-        this.photoEditsCache.set(entry.name, { ...this.edits });
-        this.updateThumbnailCardOrientation(idx, this.edits.rotation, this.edits.flip_horizontal, this.edits.flip_vertical);
-
-        this.syncSliderUI();
-        this.syncRatingFlagUI();
-
-        // Check if raw negative and extract uncompressed 16-bit Linear Rec.2020 sensor frame
-        let linear16Data: Uint16Array | null = workerLinearData;
-        let linearW = workerLinearW;
-        let linearH = workerLinearH;
-
-        if (isRawFile && (!linear16Data || linearW === 0 || linearH === 0)) {
-          try {
-            const isDetached = fileBytes ? ((fileBytes.buffer as any).detached === true || fileBytes.byteLength === 0) : true;
-            const rawBytes = (!isDetached && fileBytes) ? fileBytes : new Uint8Array(await entry.file.arrayBuffer());
-            const rawLin = this.bridge.decodeRawLinear(rawBytes);
-            linear16Data = rawLin.linearData;
-            linearW = rawLin.res.width;
-            linearH = rawLin.res.height;
-            console.log(`⚡ [RAW Success (Main Fallback)] Decoded uncompressed 16-bit linear RAW frame for ${entry.name}: ${linearW}×${linearH} (${(linear16Data.byteLength / 1024 / 1024).toFixed(1)} MB)`);
-          } catch (linErr) {
-            console.error(`[App] Linear Rec.2020 RAW decode failed for ${entry.name}:`, linErr);
-          }
-        } else if (linear16Data && linearW > 0 && linearH > 0) {
-          console.log(`⚡ [RAW Worker Success] Received 16-bit linear RAW frame off-thread for ${entry.name}: ${linearW}×${linearH} (${(linear16Data.byteLength / 1024 / 1024).toFixed(1)} MB)`);
-        }
-
-        // Upload to WebGL & render (preserving exact photographic aspect ratio up to 3840px for 4K displays)
-        if (linear16Data && linearW > 0 && linearH > 0) {
-          this.activeLinearData = linear16Data;
-          this.activeLinearW = linearW;
-          this.activeLinearH = linearH;
+        if (frame.linearData && frame.linearW > 0 && frame.linearH > 0) {
+          this.activeLinearData = frame.linearData;
+          this.activeLinearW = frame.linearW;
+          this.activeLinearH = frame.linearH;
           this.activeSourceImage = null;
           this.activeSourceW = 0;
           this.activeSourceH = 0;
-          this.renderer.uploadLinearRec2020Texture(linearW, linearH, linear16Data);
+          this.renderer.uploadLinearRec2020Texture(frame.linearW, frame.linearH, frame.linearData);
         } else {
           this.activeLinearData = null;
           this.activeLinearW = 0;
           this.activeLinearH = 0;
-          this.activeSourceImage = imgBitmap;
-          this.activeSourceW = imgBitmap ? imgBitmap.width : 1920;
-          this.activeSourceH = imgBitmap ? imgBitmap.height : 1080;
-          if (imgBitmap) {
-            this.renderer.uploadImage(imgBitmap);
+          this.activeSourceImage = frame.imgBitmap;
+          this.activeSourceW = frame.imgBitmap ? frame.imgBitmap.width : 1920;
+          this.activeSourceH = frame.imgBitmap ? frame.imgBitmap.height : 1080;
+          if (frame.imgBitmap) {
+            this.renderer.uploadImage(frame.imgBitmap);
           }
         }
 
-        this.updateCanvasDimensions();
-        this.onCurveChange(); // evaluate LUTs and render canvas
-        const t4 = performance.now();
+        this.viewportController.updateCanvasDimensions();
+        this.onCurveChange();
 
-        // Capture high-resolution intermediate snapshot for instant 0ms return navigation
-        this.scheduleIntermediateSnapshot(entry.name, this.edits);
+        this.loaderService.scheduleIntermediateSnapshot(
+          entry.name,
+          this.edits,
+          this.renderer,
+          this.viewportController.getZoom() === 1.0 && !this.isCropActive && !this.isOriginalPeek
+        );
 
-        const mb = (entry.file.size / (1024 * 1024)).toFixed(1);
-        if (isPrewarmedHit) {
-          console.log(`⚡ [Prewarm Hit] ${entry.name} (${mb} MB): served instantly from background lookahead cache in ${(t4-t0).toFixed(1)}ms!`);
-        } else {
-          console.log(`⚡ [Perf] ${entry.name} (${mb} MB): readDisk=${(t1-t0).toFixed(1)}ms | wasmExtract=${(t2-t1).toFixed(1)}ms | bitmapDecode=${(t3-t2).toFixed(1)}ms | webglRender=${(t4-t3).toFixed(1)}ms | TOTAL=${(t4-t0).toFixed(1)}ms`);
-        }
-
-        // 6. Schedule background lookahead pre-warming for adjacent frames ONLY after settling on the active photo
-        this.preloadAdjacentThumbnails(idx, requestId);
+        // Prewarm adjacent frames
+        if (idx > 0) this.loaderService.prewarmPhoto(idx - 1, entries[idx - 1]);
+        if (idx < entries.length - 1) this.loaderService.prewarmPhoto(idx + 1, entries[idx + 1]);
 
       } catch (err) {
         if (requestId === this.selectRequestId) {
@@ -1552,10 +629,34 @@ class DarkroomApp {
         }
       } finally {
         if (requestId === this.selectRequestId) {
-          this.elements['developing-spinner'].classList.add('hidden');
+          this.elements['developing-spinner']?.classList.add('hidden');
         }
       }
     }, delay);
+  }
+
+  private setMetadataFormFields(xmp: any) {
+    if (this.elements['meta-input-title']) {
+      (this.elements['meta-input-title'] as HTMLInputElement).value = xmp.title || '';
+    }
+    if (this.elements['meta-input-caption']) {
+      (this.elements['meta-input-caption'] as HTMLTextAreaElement).value = xmp.description || '';
+    }
+    if (this.elements['meta-input-creator']) {
+      (this.elements['meta-input-creator'] as HTMLInputElement).value = xmp.creator || '';
+    }
+    if (this.elements['meta-input-keywords']) {
+      (this.elements['meta-input-keywords'] as HTMLInputElement).value = (xmp.keywords || []).join(', ');
+    }
+  }
+
+
+  private updateSidecarStatusBadge(synced: boolean) {
+    const el = this.elements['meta-sidecar-status'];
+    if (el) {
+      el.innerText = synced ? '.xmp Synced' : 'Session RAM';
+      el.style.color = synced ? '#4ade80' : 'var(--text-muted)';
+    }
   }
 
   private onCurveChange() {
@@ -1573,169 +674,51 @@ class DarkroomApp {
     const orientation = this.currentMetadata?.orientation ?? 1;
     const exifOri = decodeExifOrientation(orientation);
     const isRaw = this.isCurrentPhotoRaw();
-    this.edits = this.getDefaultEdits(isRaw);
+    this.edits = getDefaultEdits(isRaw);
     this.edits.rotation = exifOri.rotation;
     this.edits.flip_horizontal = exifOri.flipH;
     this.edits.flip_vertical = exifOri.flipV;
-    if (this.activeIdx >= 0) {
-      this.updateThumbnailCardOrientation(this.activeIdx, exifOri.rotation, exifOri.flipH, exifOri.flipV);
+
+    const idx = this.filmstripController.getActiveIndex();
+    if (idx >= 0) {
+      this.filmstripController.updateThumbnailCardOrientation(idx, exifOri.rotation, exifOri.flipH, exifOri.flipV);
     }
     if (this.isCropActive) {
       this.cropController.resetCrop();
     }
-    this.zoomScale = 1.0;
-    this.panOffset = { x: 0, y: 0 };
-    this.updateZoomUI();
+    this.viewportController.resetZoom();
     this.curveWidget.resetAllChannels();
-    this.syncSliderUI();
-    this.updateCanvasDimensions();
+    this.inspectorController.syncSliderUI();
+    this.viewportController.updateCanvasDimensions();
     this.renderCanvas();
     this.autoSaveSidecar();
-    console.log(`⚡ [App] Reset all edits to as-shot defaults (isRaw: ${isRaw}, sharpening: ${this.edits.sharpening_amount})`);
-  }
-
-  private updateCanvasDimensions() {
-    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
-    const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
-    if (!canvas || !wrapper) return;
-    const dpr = window.devicePixelRatio || 1;
-    const w = Math.max(1, Math.round(wrapper.clientWidth * dpr));
-    const h = Math.max(1, Math.round(wrapper.clientHeight * dpr));
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w;
-      canvas.height = h;
-    }
+    console.log(`⚡ [App] Reset all edits to as-shot defaults (isRaw: ${isRaw})`);
   }
 
   public rotateImage(deltaDeg: number) {
-    if (this.activeIdx < 0) return;
+    const idx = this.filmstripController.getActiveIndex();
+    if (idx < 0) return;
     const curRot = this.edits.rotation ?? 0;
     let newRot = (curRot + deltaDeg) % 360;
     if (newRot < 0) newRot += 360;
     this.edits.rotation = newRot;
-    this.updateThumbnailCardOrientation(this.activeIdx, newRot, this.edits.flip_horizontal, this.edits.flip_vertical);
-    this.updateCanvasDimensions();
+    this.filmstripController.updateThumbnailCardOrientation(
+      idx,
+      newRot,
+      this.edits.flip_horizontal,
+      this.edits.flip_vertical
+    );
+    this.viewportController.updateCanvasDimensions();
     this.renderCanvas();
     this.autoSaveSidecar();
     if (this.isCropActive) {
       this.updateCropOverlayPosition();
     }
-    console.log(`⚡ [App] Rotated photo to ${newRot}°`);
-  }
-
-  private getZoomScale100(): number {
-    const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
-    const isOrthogonal = (this.edits.rotation === 90 || this.edits.rotation === 270);
-    const sensorW = isOrthogonal
-      ? (this.currentMetadata?.raw_height || this.activeLinearH || this.activeSourceH || 1920)
-      : (this.currentMetadata?.raw_width || this.activeLinearW || this.activeSourceW || 1920);
-    const sensorH = isOrthogonal
-      ? (this.currentMetadata?.raw_width || this.activeLinearW || this.activeSourceW || 1920)
-      : (this.currentMetadata?.raw_height || this.activeLinearH || this.activeSourceH || 1080);
-    const imgAspect = sensorW / Math.max(sensorH, 1);
-
-    const viewW = wrapper?.clientWidth || 800;
-    const viewH = wrapper?.clientHeight || 600;
-    const viewAspect = viewW / Math.max(viewH, 1);
-
-    let baseQuadW: number;
-    if (viewAspect > imgAspect) {
-      baseQuadW = viewH * imgAspect;
-    } else {
-      baseQuadW = viewW;
-    }
-
-    const scale = sensorW / Math.max(baseQuadW, 1);
-    return Math.max(1.5, Math.min(10.0, scale));
-  }
-
-  public togglePixelPeep(clientX?: number, clientY?: number) {
-    if (this.activeIdx < 0 || this.isCropActive) return;
-    const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
-    if (!wrapper) return;
-
-    if (this.zoomScale > 1.05) {
-      // Return to fit
-      this.zoomScale = 1.0;
-      this.panOffset = { x: 0, y: 0 };
-    } else {
-      // Zoom 100% 1:1 sensor view
-      const targetScale = this.getZoomScale100();
-      this.zoomScale = targetScale;
-
-      if (clientX !== undefined && clientY !== undefined) {
-        const rect = wrapper.getBoundingClientRect();
-        const ndcX = ((clientX - rect.left) / rect.width) * 2.0 - 1.0;
-        const ndcY = -(((clientY - rect.top) / rect.height) * 2.0 - 1.0);
-        this.panOffset = {
-          x: ndcX * (1.0 - targetScale),
-          y: ndcY * (1.0 - targetScale)
-        };
-        this.clampPanOffset();
-      } else {
-        this.panOffset = { x: 0, y: 0 };
-      }
-    }
-
-    this.updateZoomUI();
-    this.renderCanvas();
-  }
-
-  private clampPanOffset() {
-    const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
-    const isOrthogonal = (this.edits.rotation === 90 || this.edits.rotation === 270);
-    const origW = isOrthogonal ? (this.activeLinearH || this.activeSourceH || 1920) : (this.activeLinearW || this.activeSourceW || 1920);
-    const origH = isOrthogonal ? (this.activeLinearW || this.activeSourceW || 1920) : (this.activeLinearH || this.activeSourceH || 1080);
-    const cL = this.isCropActive ? 0.0 : (this.edits.crop_left ?? 0.0);
-    const cT = this.isCropActive ? 0.0 : (this.edits.crop_top ?? 0.0);
-    const cR = this.isCropActive ? 1.0 : (this.edits.crop_right ?? 1.0);
-    const cB = this.isCropActive ? 1.0 : (this.edits.crop_bottom ?? 1.0);
-    const dispW = Math.max(1, origW * (cR - cL));
-    const dispH = Math.max(1, origH * (cB - cT));
-    const imgAspect = dispW / dispH;
-
-    const viewW = wrapper?.clientWidth || 800;
-    const viewH = wrapper?.clientHeight || 600;
-    const viewAspect = viewW / Math.max(viewH, 1);
-
-    let fitScaleX = 1.0;
-    let fitScaleY = 1.0;
-    if (viewAspect > imgAspect) {
-      fitScaleY = 1.0;
-      fitScaleX = (viewH * imgAspect) / Math.max(viewW, 1);
-    } else {
-      fitScaleX = 1.0;
-      fitScaleY = (viewW / imgAspect) / Math.max(viewH, 1);
-    }
-
-    const effW = fitScaleX * this.zoomScale;
-    const effH = fitScaleY * this.zoomScale;
-    const maxPanX = Math.max(0, effW - 1.0);
-    const maxPanY = Math.max(0, effH - 1.0);
-
-    this.panOffset.x = Math.max(-maxPanX, Math.min(maxPanX, this.panOffset.x));
-    this.panOffset.y = Math.max(-maxPanY, Math.min(maxPanY, this.panOffset.y));
-  }
-
-  private updateZoomUI() {
-    const badge = this.elements['zoom-badge'];
-    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
-    if (badge) {
-      if (this.zoomScale <= 1.05) {
-        badge.innerText = 'Fit';
-        badge.classList.remove('zoomed');
-      } else {
-        badge.innerText = `${Math.round(this.zoomScale * 100)}%`;
-        badge.classList.add('zoomed');
-      }
-    }
-    if (canvas) {
-      canvas.style.cursor = this.zoomScale > 1.05 ? 'grab' : 'default';
-    }
   }
 
   public toggleCropMode(force?: boolean) {
-    if (this.activeIdx < 0) return;
+    const idx = this.filmstripController.getActiveIndex();
+    if (idx < 0) return;
     const nextState = force !== undefined ? force : !this.isCropActive;
     if (this.isCropActive === nextState) return;
     this.isCropActive = nextState;
@@ -1744,12 +727,8 @@ class DarkroomApp {
     btnCrop?.classList.toggle('active', this.isCropActive);
 
     if (this.isCropActive) {
-      // Reset zoom to fit during crop mode
-      this.zoomScale = 1.0;
-      this.panOffset = { x: 0, y: 0 };
-      this.updateZoomUI();
-
-      this.updateCanvasDimensions();
+      this.viewportController.resetZoom();
+      this.viewportController.updateCanvasDimensions();
       this.renderCanvas();
 
       requestAnimationFrame(() => {
@@ -1758,16 +737,20 @@ class DarkroomApp {
         const w = isOrthogonal ? (this.activeLinearH || this.activeSourceH || 1) : (this.activeLinearW || this.activeSourceW || 1);
         const h = isOrthogonal ? (this.activeLinearW || this.activeSourceW || 1) : (this.activeLinearH || this.activeSourceH || 1);
         const aspect = w / h;
-        this.cropController.show({
-          left: this.edits.crop_left ?? 0.0,
-          top: this.edits.crop_top ?? 0.0,
-          right: this.edits.crop_right ?? 1.0,
-          bottom: this.edits.crop_bottom ?? 1.0,
-        }, aspect, this.edits.crop_angle ?? 0.0);
+        this.cropController.show(
+          {
+            left: this.edits.crop_left ?? 0.0,
+            top: this.edits.crop_top ?? 0.0,
+            right: this.edits.crop_right ?? 1.0,
+            bottom: this.edits.crop_bottom ?? 1.0,
+          },
+          aspect,
+          this.edits.crop_angle ?? 0.0
+        );
       });
     } else {
       this.cropController.hide();
-      this.updateCanvasDimensions();
+      this.viewportController.updateCanvasDimensions();
       this.renderCanvas();
       this.autoSaveSidecar();
     }
@@ -1777,8 +760,8 @@ class DarkroomApp {
     const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
     if (!wrapper) return;
 
-    let imgW = this.activeLinearW || this.activeSourceW || 1920;
-    let imgH = this.activeLinearH || this.activeSourceH || 1080;
+    const imgW = this.activeLinearW || this.activeSourceW || 1920;
+    const imgH = this.activeLinearH || this.activeSourceH || 1080;
     const isOrthogonal = (this.edits.rotation === 90 || this.edits.rotation === 270);
     const dispW = isOrthogonal ? imgH : imgW;
     const dispH = isOrthogonal ? imgW : imgH;
@@ -1805,12 +788,12 @@ class DarkroomApp {
   }
 
   private renderCanvas() {
-    if (this.activeIdx >= 0) {
+    if (this.filmstripController.getActiveIndex() >= 0) {
       this.renderer.render(
         this.edits,
         this.isOriginalPeek,
-        this.zoomScale,
-        this.panOffset,
+        this.viewportController.getZoom(),
+        this.viewportController.getPan(),
         this.isCropActive
       );
       this.updatePeekBadge();
@@ -1819,122 +802,68 @@ class DarkroomApp {
 
   private updatePeekBadge() {
     const badge = this.elements['peek-badge'];
-    if (!badge) return;
-    if (this.isOriginalPeek) {
-      badge.textContent = 'Original Negative (\\)';
-      badge.className = 'peek-badge original-negative';
-    } else {
-      badge.className = 'peek-badge hidden';
+    if (badge) {
+      badge.classList.toggle('visible', this.isOriginalPeek);
     }
   }
 
-  private syncSliderUI() {
-    this.inspectorController?.syncSliderUI();
-  }
-
   private updateEmulsionWorkspaceVisibility() {
-    this.inspectorController?.updateEmulsionWorkspaceVisibility();
+    this.inspectorController.updateEmulsionWorkspaceVisibility();
   }
 
   private syncRatingFlagUI() {
-    this.inspectorController?.syncRatingFlagUI(this.currentRating, this.currentStatus, this.activeIdx);
+    const idx = this.filmstripController.getActiveIndex();
+    this.inspectorController.syncRatingFlagUI(this.currentRating, this.currentStatus, idx);
+    this.filmstripController.updateRatingFlagBadge(idx, this.currentRating, this.currentStatus);
   }
 
-  private hasModifications(): boolean {
-    if (this.currentRating > 0) return true;
-    if (this.currentStatus !== 'Unflagged') return true;
+  private getActivePhotoRecord(): PhotoRecord {
+    const title = (this.elements['meta-input-title'] as HTMLInputElement)?.value.trim() || '';
+    const description = (this.elements['meta-input-caption'] as HTMLTextAreaElement)?.value.trim() || '';
+    const creator = (this.elements['meta-input-creator'] as HTMLInputElement)?.value.trim() || '';
+    const kwStr = (this.elements['meta-input-keywords'] as HTMLInputElement)?.value;
+    const keywords = kwStr ? kwStr.split(',').map((s) => s.trim()).filter(Boolean) : [];
 
-    const title = (this.elements['meta-input-title'] as HTMLInputElement)?.value.trim();
-    const description = (this.elements['meta-input-caption'] as HTMLTextAreaElement)?.value.trim();
-    const creator = (this.elements['meta-input-creator'] as HTMLInputElement)?.value.trim();
-    const kwStr = (this.elements['meta-input-keywords'] as HTMLInputElement)?.value.trim();
-    if (title || description || creator || kwStr) return true;
+    const activeEntry = this.filmstripController.getActiveEntry();
+    const existing = activeEntry ? this.loaderService.getPhotoRecord(activeEntry.name) : undefined;
 
-    const d = this.getDefaultEdits(this.isCurrentPhotoRaw());
-    const e = this.edits;
-    if (Math.abs(e.exposure - d.exposure) > 1e-4) return true;
-    if (Math.abs(e.contrast - d.contrast) > 1e-4) return true;
-    if (Math.abs(e.highlights - d.highlights) > 1e-4) return true;
-    if (Math.abs(e.shadows - d.shadows) > 1e-4) return true;
-    if (Math.abs(e.whites - d.whites) > 1e-4) return true;
-    if (Math.abs(e.blacks - d.blacks) > 1e-4) return true;
-    if (Math.abs(e.temperature - d.temperature) > 1.0) return true;
-    if (Math.abs(e.tint - d.tint) > 0.5) return true;
-    if (Math.abs(e.vibrance - d.vibrance) > 1e-4) return true;
-    if (Math.abs(e.saturation - d.saturation) > 1e-4) return true;
-    if (Math.abs(e.deep_blue - d.deep_blue) > 1e-4) return true;
-    if (Math.abs(e.foliage - d.foliage) > 1e-4) return true;
-    if (Math.abs(e.emulsion_exposure - d.emulsion_exposure) > 1e-4) return true;
-    if (Math.abs(e.print_paper_grade - d.print_paper_grade) > 1e-4) return true;
-    if (Math.abs(e.print_base_warmth - d.print_base_warmth) > 1e-4) return true;
-    if (Math.abs(e.sharpening_amount - d.sharpening_amount) > 1e-4) return true;
-    if (Math.abs(e.sharpening_radius - d.sharpening_radius) > 1e-4) return true;
-    if (Math.abs(e.sharpening_masking - d.sharpening_masking) > 1e-4) return true;
-    if (Math.abs(e.noise_reduction - d.noise_reduction) > 1e-4) return true;
-    if (e.tone_profile !== d.tone_profile) return true;
-    if (e.emulsion_archetype !== d.emulsion_archetype) return true;
-    if (e.print_media !== d.print_media) return true;
-    if (e.enlarger_filter !== d.enlarger_filter) return true;
-    if (Math.abs((e.print_process_depth ?? 100.0) - (d.print_process_depth ?? 100.0)) > 1e-4) return true;
-    if (Math.abs((e.crop_left ?? 0.0) - 0.0) > 1e-4) return true;
-    if (Math.abs((e.crop_top ?? 0.0) - 0.0) > 1e-4) return true;
-    if (Math.abs((e.crop_right ?? 1.0) - 1.0) > 1e-4) return true;
-    if (Math.abs((e.crop_bottom ?? 1.0) - 1.0) > 1e-4) return true;
+    return {
+      edits: { ...this.edits },
+      rating: this.currentRating,
+      status: this.currentStatus,
+      title,
+      description,
+      creator,
+      keywords,
+      hasSidecarOnDisk: existing?.hasSidecarOnDisk ?? false,
+    };
+  }
+
+  private async saveActivePhotoState(entry: PhotoFileEntry) {
+    const record = this.getActivePhotoRecord();
     const orientation = this.currentMetadata?.orientation ?? 1;
-    const exifOri = decodeExifOrientation(orientation);
-    if ((e.rotation ?? 0) !== exifOri.rotation) return true;
-
-    return false;
-  }
-
-  private scheduleIntermediateSnapshot(fileName: string, edits: EditSettingsPayload) {
-    if (this.zoomScale !== 1.0 || this.isCropActive || this.isOriginalPeek) return;
-    this.renderer.captureIntermediateSnapshot(edits).then(bitmap => {
-      if (bitmap) {
-        IntermediateTextureCache.set(fileName, edits, bitmap);
-      }
-    }).catch(err => {
-      console.warn('[Intermediate] Failed to capture intermediate bitmap:', err);
-    });
+    const saved = await this.loaderService.autoSaveSidecar(entry, record, orientation);
+    if (saved) {
+      this.updateSidecarStatusBadge(true);
+    }
   }
 
   private async autoSaveSidecar() {
-    if (this.activeIdx < 0 || this.activeIdx >= this.fileEntries.length) return;
-    const entry = this.fileEntries[this.activeIdx];
-    this.photoEditsCache.set(entry.name, { ...this.edits });
-    this.scheduleIntermediateSnapshot(entry.name, this.edits);
+    const entry = this.filmstripController.getActiveEntry();
+    if (!entry) return;
 
-    if (!this.hasModifications()) return; // Touch-Free Ingestion: Never create or write XMP sidecars for untouched photos!
+    this.loaderService.scheduleIntermediateSnapshot(
+      entry.name,
+      this.edits,
+      this.renderer,
+      this.viewportController.getZoom() === 1.0 && !this.isCropActive && !this.isOriginalPeek
+    );
 
-    const title = (this.elements['meta-input-title'] as HTMLInputElement).value.trim();
-    const description = (this.elements['meta-input-caption'] as HTMLTextAreaElement).value.trim();
-    const creator = (this.elements['meta-input-creator'] as HTMLInputElement).value.trim();
-    const kwStr = (this.elements['meta-input-keywords'] as HTMLInputElement).value;
-    const keywords = kwStr ? kwStr.split(',').map(s => s.trim()).filter(Boolean) : [];
-
-    const xmpPayload: XmpPayload = {
-      rating: this.currentRating > 0 ? this.currentRating : undefined,
-      status: this.currentStatus,
-      title: title || undefined,
-      description: description || undefined,
-      creator: creator || undefined,
-      keywords: keywords.length > 0 ? keywords : undefined,
-      edits: this.edits
-    };
-
-    const xml = this.bridge.generateXmp(xmpPayload);
-
-    // Save to localStorage as instant session backup
-    try {
-      localStorage.setItem(`fp_xmp_${entry.name}`, xml);
-    } catch (_) {}
-
-    // Direct write to disk via File System Access API
-    await FolderIntake.writeSidecarToDisk(entry, xml);
+    await this.saveActivePhotoState(entry);
   }
 
   private openExportModal() {
-    const photos = this.getSelectedPhotos();
+    const photos = this.filmstripController.getSelectedPhotos();
     if (photos.length === 0) return;
     this.exportModal.open(photos);
   }
@@ -1944,187 +873,102 @@ class DarkroomApp {
     options: ExportExecutionOptions,
     onProgress: (status: string, current: number, total: number) => void
   ): Promise<{ success: boolean; message: string }> {
-    if (photos.length === 0) {
-      return { success: false, message: 'No photos selected for export.' };
+    const activeEntry = this.filmstripController.getActiveEntry();
+    return this.loaderService.handleExport(
+      photos,
+      activeEntry?.name ?? null,
+      this.edits,
+      (isRaw) => getDefaultEdits(isRaw),
+      options,
+      onProgress
+    );
+  }
+
+  private getSceneLuminances(): Float32Array {
+    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
+    const gl = canvas?.getContext('webgl2') as WebGL2RenderingContext;
+    if (!gl) return new Float32Array(0);
+
+    const sampleW = Math.min(100, canvas.width);
+    const sampleH = Math.min(100, canvas.height);
+    const startX = Math.max(0, Math.floor((canvas.width - sampleW) / 2));
+    const startY = Math.max(0, Math.floor((canvas.height - sampleH) / 2));
+    const pixels = new Uint8Array(sampleW * sampleH * 4);
+    gl.readPixels(startX, startY, sampleW, sampleH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+    const lums = new Float32Array(sampleW * sampleH);
+    for (let i = 0; i < lums.length; i++) {
+      const r = pixels[i * 4] / 255.0;
+      const g = pixels[i * 4 + 1] / 255.0;
+      const b = pixels[i * 4 + 2] / 255.0;
+      lums[i] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+    return lums;
+  }
+
+  public applyAutoTone() {
+    if (this.filmstripController.getActiveIndex() < 0) return;
+
+    let adj: { exposure: number; contrast: number } | null = null;
+    if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
+      adj = this.bridge.computeAutoAdjustments(this.activeLinearData, this.activeLinearW, this.activeLinearH);
     }
 
-    const { canvas: expCanvas, renderer: expRenderer } = this.getExportRenderer();
-    const savedActiveIdx = this.activeIdx;
-    const savedEdits = JSON.parse(JSON.stringify(this.edits));
+    if (!adj) {
+      const lums = this.getSceneLuminances();
+      if (lums.length > 0) {
+        adj = this.bridge.computeAutoAdjustmentsFromLuminances(lums);
+      }
+    }
 
-    let successCount = 0;
-    let lastOutputPath = '';
+    if (adj) {
+      this.edits.exposure = adj.exposure;
+      this.edits.contrast = adj.contrast;
+      this.inspectorController.syncSliderUI();
+      this.renderCanvas();
+      this.autoSaveSidecar();
+    }
+  }
 
-    for (let i = 0; i < photos.length; i++) {
-      const entry = photos[i];
-      const entryIdx = this.fileEntries.indexOf(entry);
-      onProgress(`Exporting ${i + 1} of ${photos.length}...`, i + 1, photos.length);
+  public applyAutoWhiteBalance() {
+    if (this.filmstripController.getActiveIndex() < 0) return;
 
-      // Determine edits for this photo
-      let photoEdits: EditSettingsPayload;
-      if (entryIdx === savedActiveIdx) {
-        photoEdits = savedEdits;
-      } else {
-        // Read XMP sidecar if exists, otherwise default edits
-        const sidecarXml = (await FolderIntake.readSidecarFromDisk(entry)) || localStorage.getItem(`fp_xmp_${entry.name}`);
-        if (sidecarXml) {
-          try {
-            const xmp = this.bridge.parseXmp(sidecarXml);
-            photoEdits = xmp.edits || this.getDefaultEdits();
-          } catch (_) {
-            photoEdits = this.getDefaultEdits();
+    let wb: { temperature: number; tint: number } | null = null;
+    if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
+      wb = this.bridge.computeAutoWhiteBalance(this.activeLinearData, this.activeLinearW, this.activeLinearH);
+    }
+
+    if (!wb) {
+      const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
+      const gl = canvas?.getContext('webgl2') as WebGL2RenderingContext;
+      if (gl) {
+        const readW = Math.min(100, canvas.width);
+        const readH = Math.min(100, canvas.height);
+        const pixels = new Uint8Array(readW * readH * 4);
+        gl.readPixels(0, 0, readW, readH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        let rSum = 0, gSum = 0, bSum = 0, count = 0;
+        for (let i = 0; i < readW * readH; i++) {
+          const r = pixels[i * 4] / 255.0;
+          const g = pixels[i * 4 + 1] / 255.0;
+          const b = pixels[i * 4 + 2] / 255.0;
+          const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          if (y >= 0.05 && y <= 0.85) {
+            rSum += r; gSum += g; bSum += b; count++;
           }
-        } else {
-          photoEdits = this.getDefaultEdits();
+        }
+        if (count > 20) {
+          wb = this.bridge.calculateWhiteBalanceFromSample(rSum / count, gSum / count, bSum / count);
         }
       }
-
-      const fileExt = entry.name.split('.').pop()?.toLowerCase() || '';
-      const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(fileExt);
-
-      // Load texture for photo: for RAW files, always decode full sensor resolution (1:1 demosaiced CFA)
-      let texW = 0;
-      let texH = 0;
-      if (isRawFile) {
-        const arrayBuffer = await entry.file.arrayBuffer();
-        const res = await this.decodeInWorker(arrayBuffer, entry.name, true);
-        if (res.linearData && res.linearW && res.linearH) {
-          expRenderer.uploadLinearRec2020Texture(res.linearW, res.linearH, res.linearData);
-          texW = res.linearW;
-          texH = res.linearH;
-        } else {
-          const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
-          const imgBitmap = await createImageBitmap(blob);
-          expRenderer.uploadImage(imgBitmap);
-          texW = imgBitmap.width;
-          texH = imgBitmap.height;
-        }
-      } else {
-        const arrayBuffer = await entry.file.arrayBuffer();
-        const res = await this.decodeInWorker(arrayBuffer, entry.name, false);
-        const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
-        const imgBitmap = await createImageBitmap(blob);
-        expRenderer.uploadImage(imgBitmap);
-        texW = imgBitmap.width;
-        texH = imgBitmap.height;
-      }
-
-      if (texW <= 0) texW = 1920;
-      if (texH <= 0) texH = 1080;
-
-      // Update tone curves LUT on export renderer if curves exist
-      if (photoEdits.curves && (photoEdits.curves.master?.length > 2 || photoEdits.curves.red?.length > 2 || photoEdits.curves.green?.length > 2 || photoEdits.curves.blue?.length > 2)) {
-        try {
-          const lut = this.bridge.evaluateCurves(photoEdits.curves);
-          expRenderer.updateToneCurvesLut(lut);
-        } catch (err) {
-          console.warn('[Export] Could not evaluate curve LUT:', err);
-        }
-      }
-
-      // Calculate rotated and cropped dimensions
-      const rot = (photoEdits.rotation ?? 0) % 360;
-      const isOrthogonal = (rot === 90 || rot === 270);
-      const baseW = isOrthogonal ? texH : texW;
-      const baseH = isOrthogonal ? texW : texH;
-
-      const cropL = photoEdits.crop_left ?? 0.0;
-      const cropT = photoEdits.crop_top ?? 0.0;
-      const cropR = photoEdits.crop_right ?? 1.0;
-      const cropB = photoEdits.crop_bottom ?? 1.0;
-      const effectiveW = Math.max(1, Math.round(baseW * Math.max(0.01, cropR - cropL)));
-      const effectiveH = Math.max(1, Math.round(baseH * Math.max(0.01, cropB - cropT)));
-
-      // Sizing calculation
-      let targetW = effectiveW;
-      let targetH = effectiveH;
-      let maxDim: number | null = null;
-      if (options.sizeOption === '2048') maxDim = 2048;
-      else if (options.sizeOption === '3840') maxDim = 3840;
-      else if (options.sizeOption === 'Custom') maxDim = options.customDimension;
-
-      if (maxDim && (effectiveW > maxDim || effectiveH > maxDim)) {
-        if (effectiveW >= effectiveH) {
-          targetW = maxDim;
-          targetH = Math.max(1, Math.round((effectiveH * maxDim) / effectiveW));
-        } else {
-          targetH = maxDim;
-          targetW = Math.max(1, Math.round((effectiveW * maxDim) / effectiveH));
-        }
-      }
-
-      // Clamp to WebGL viewport capability
-      const maxGl = expRenderer.glContext.getParameter(expRenderer.glContext.MAX_VIEWPORT_DIMS)?.[0] || 8192;
-      if (targetW > maxGl || targetH > maxGl) {
-        const scale = maxGl / Math.max(targetW, targetH);
-        targetW = Math.max(1, Math.round(targetW * scale));
-        targetH = Math.max(1, Math.round(targetH * scale));
-      }
-
-      // Render frame on dedicated off-screen export canvas
-      expCanvas.width = targetW;
-      expCanvas.height = targetH;
-      expRenderer.render(photoEdits, false, 1.0, { x: 0, y: 0 }, false);
-
-      // Encode image (macOS Parity: ${baseName}_FirstProof.${ext})
-      const stem = entry.name.substring(0, entry.name.lastIndexOf('.')) || entry.name;
-      const ext = (options.format === 'TIFF') ? 'tiff' : 'jpg';
-      const filename = `${stem}_FirstProof.${ext}`;
-      lastOutputPath = filename;
-
-      let fileBlob: Blob;
-      if (options.format === 'TIFF') {
-        const pixels = expRenderer.readRgbaPixels(targetW, targetH);
-        const tiffBytes = encodeTiff(targetW, targetH, pixels);
-        fileBlob = new Blob([tiffBytes.buffer as ArrayBuffer], { type: 'image/tiff' });
-      } else {
-        // Standard calibrated sRGB JPEG
-        fileBlob = await new Promise<Blob>((resolve, reject) => {
-          expCanvas.toBlob(
-            (b) => b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
-            'image/jpeg',
-            options.quality / 100
-          );
-        });
-      }
-
-      // Write to destination directory or trigger browser download
-      if (options.destinationDirHandle) {
-        try {
-          const fileHandle = await options.destinationDirHandle.getFileHandle(filename, { create: true });
-          const writable = await fileHandle.createWritable();
-          await writable.write(fileBlob);
-          await writable.close();
-        } catch (writeErr) {
-          console.warn('[Export] File system write failed, falling back to download:', writeErr);
-          this.triggerDownload(fileBlob, filename);
-        }
-      } else {
-        this.triggerDownload(fileBlob, filename);
-      }
-
-      successCount++;
     }
 
-    const isBatch = photos.length > 1;
-    const message = isBatch
-      ? `Finished exporting ${successCount} of ${photos.length} photos`
-      : `Successfully exported to ${lastOutputPath}`;
-
-    return { success: successCount > 0, message };
-  }
-
-  private triggerDownload(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-  }
-
-  private updateUI() {
-    this.syncRatingFlagUI();
+    if (wb) {
+      this.edits.temperature = wb.temperature;
+      this.edits.tint = wb.tint;
+      this.inspectorController.syncSliderUI();
+      this.renderCanvas();
+      this.autoSaveSidecar();
+    }
   }
 }
 
