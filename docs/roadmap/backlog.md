@@ -158,6 +158,9 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
   - In high-ISO RAW images (e.g. ISO 1600+ on older sensors like Canon 60D), deep shadows hover just dozens of counts above sensor black level.
   - Applying extreme color temperatures (e.g. 9450K) introduces high digital gain ($\sim 2.5\times$ on Red) that magnifies single-photosite read noise into prominent red chroma speckling.
   - The darkroom viewport currently exaggerates this effect because 2×2 box binning averages 2 Green photosites (cutting green noise by 50%) while leaving Red and Blue unaveraged with zero chromatic median filtering.
+- **Consumption of `NoiseProfile` (Tag 51041) & `BaselineNoise` (Tag 50730)**:
+  - Ingest the DNG specification 2-parameter noise model ($\sigma^2(x) = S \cdot x + O$) extracted by Story 3.9's `RawContainerManifest`.
+  - Distinguish true high-frequency optical subject detail from statistical $3\sigma$ readout noise spikes before white balance multipliers are evaluated.
 - **Viewport 2×2 Binning Chroma Parity**:
   - Implement a fast, lightweight chromatic difference median or neighbor-clamping pass on the binned frame in `to_binned_linear_f16`, eliminating the artificial divergence where darkroom previews show $3.5\times$ more red noise than full exports.
 - **Physical Pre-WB Sensor Hot-Pixel & Read-Noise Suppression**:
@@ -165,7 +168,37 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 - **Emulsion Grain Masking & Integration (Synergy with Story 3.11)**:
   - When stochastic physical film grain (Story 3.11) is active in Linear Rec.2020, leverage physical silver halide crystal and dye cloud distribution to naturally integrate and homogenize underlying sensor read noise into organic photographic emulsion texture, avoiding digital speckling without loss of optical acutance.
 
+### 3.14 DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair (P2)
+- **DNG OpcodeList Bytecode Specification**:
+  - Parse and execute `OpcodeList1` (pre-demosaic), `OpcodeList2` (post-demosaic), and `OpcodeList3` (post-crop/geometry) embedded in modern DNG containers (Tags 51008, 51009, 51022).
+- **Factory Bad-Pixel In-Painting (`FixBadPixelsConstant` / `FixBadPixelsList`)**:
+  - In-paint factory-mapped defective, dead, or hot photosites on the raw CFA sensor grid using directional Laplacian interpolation before demosaicing, permanently curing persistent sensor speckles without softening adjacent image pixels.
+- **Lens Flat-Field & Peripheral Vignetting Correction (`GainMap`)**:
+  - Evaluate 2D bilinear mesh radial illumination gain maps calibrated by camera and lens firmware, correcting optical falloff and chromatic vignetting across corners without manual slider adjustments.
+- **Geometric Rectification (`WarpRectilinear`)**:
+  - Execute manufacturer-provided radial distortion polynomials directly within `firstproof-engine`, complementing Lensfun for mirrorless lens systems.
+
+### 3.15 Sensor Non-Linearity & Anti-Blooming Knee Engine (`LinearResponseLimit`) (P2)
+- **Photosite Charge Saturation Modeling**:
+  - Consume DNG Tag 50734 (`LinearResponseLimit`) extracted by `RawContainerManifest`, specifying the physical ceiling (typically $0.95\dots0.98$ of white level) where photosite anti-blooming drain begins non-linear charge compression.
+- **Continuous $C^1$ Highlight Rolloff Knee**:
+  - Formulate a smooth Hermite spline transition that smoothly blends sensor highlight reconstruction beginning at `LinearResponseLimit` rather than abruptly clipping at 1.0.
+  - Permanently eliminates harsh plastic highlight clipping knees and false-color fringing along specular transitions (e.g. chrome reflections, cloud edges, tungsten lamp filaments).
+- **Parity & Verification**:
+  - Verified across 21-step synthetic photometric grey wedge ($-10\text{ EV}$ to $+6.5\text{ EV}$) ensuring strict monotonicity ($df/dx > 0$) across Metal, WebGL, and Rust CPU export pipelines.
+
+### 3.16 Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`) (P2)
+- **Optical Low-Pass Filter Calibration**:
+  - Ingest DNG Tag 50731 (`BaselineSharpness`) via `RawContainerManifest`, encoding the physical presence and relative spatial MTF attenuation of the camera body's Optical Low-Pass Filter (OLPF / anti-aliasing filter).
+- **Auto-Tuned Detail Kernel Radius**:
+  - Dynamically scale the default unsharp masking and micro-contrast deconvolution radius based on `BaselineSharpness`:
+    - Heavy OLPF sensors (e.g. Canon EOS 5D Mark III, 60D): Scales radius appropriately to reverse physical birefringent crystal blur and recover crisp optical MTF.
+    - Zero-OLPF sensors (e.g. Sony A7R IV, Nikon D850, Leica M10): Constrains radius to prevent digital over-sharpening, ringing halos, and edge brittle-ness.
+- **Multi-Engine Parity**:
+  - Harmonize adaptive kernel scaling identically across `Detail.metal`, `FragmentShader.ts`, and `pipeline.rs`.
+
 ---
+
 
 
 ## Phase 4: Pre-Release IP Audit, Code Cleanliness & Distribution (P2)
