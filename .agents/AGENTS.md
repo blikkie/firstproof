@@ -10,6 +10,11 @@
 
 - **Toolchain Sandbox Permissions**: Commands involving the Darwin linker or Swift compiler (`swift build`, `make bundle`) require `BypassSandbox: true`. Pure Rust tests (`cargo test --manifest-path firstproof-core/Cargo.toml`) and git inspection can run in standard sandboxed mode.
 
+- **Harness Engineering & The Computational Steering Loop**:
+  - **Agent = Model + Harness**: Never rely solely on inferential prompt text or model self-critique to guarantee quality. System integrity must be enforced by automated, deterministic computational feedback sensors (tests, typecheckers, linters, parity assertions).
+  - **Keep Quality Left**: Catch regressions in the agent's fast inner loop before handing off to the user.
+  - **The Steering Loop**: Whenever an error, edge-case failure, or architectural regression is encountered, do not just patch the code or add verbal instructions to a prompt. Feed it back into the harness: add a permanent computational sensor (a unit test, parity assertion, or fitness function) so that class of failure is structurally impossible in the future.
+
 - **Adversarial Code Reviews & Anti-Magic Number Audit**: Before every commit and check-in, perform an adversarial review:
   - Probe diffs for race conditions, memory leaks/retain cycles, WebGL/Metal texture clobbering, error boundary misses, out-of-order async responses, and main-thread bottlenecks.
   - **Audit for Arbitrary Constants & Heuristics**: Rigorously inspect every camera processing, color science, and exposure adjustment in the diff for arbitrary magic numbers, localized scalar multipliers, or piecewise if/else heuristics. Any new numerical parameter must trace directly to published sensitometric standards (e.g. DNG specification, Troy Sobotka's AgX specification, CIE photopic luminance) rather than trial-and-error curve fitting.
