@@ -2,7 +2,9 @@
 uniffi::setup_scaffolding!("firstproof_engine");
 
 pub mod auto;
+pub mod calibration;
 pub mod color;
+pub mod container;
 pub mod curve;
 pub mod modes;
 pub mod preview;
@@ -10,6 +12,10 @@ pub mod raw;
 pub mod schema;
 pub mod settings;
 pub mod xmp;
+
+pub use calibration::{CameraCalibration, CameraCalibrationRegistry};
+pub use container::RawContainerManifest;
+
 
 pub use schema::{
     all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,
@@ -246,6 +252,8 @@ mod tests {
             wb_coeffs: [1.2031, 1.0, 3.1699, 1.0],
             color_matrix: Some(cm_daylight),
             color_matrix_tungsten: Some(cm_tungsten),
+            forward_matrix_tungsten: None,
+            forward_matrix_daylight: None,
             camera_model: "Canon EOS 60D".to_string(),
             baseline_exposure: 0.0,
             sensor_data: vec![2046; 100],
@@ -272,10 +280,13 @@ mod tests {
             wb_coeffs: [2.0, 1.0, 1.5, 1.0],
             color_matrix: Some(cm_daylight),
             color_matrix_tungsten: Some(cm_tungsten),
+            forward_matrix_tungsten: None,
+            forward_matrix_daylight: None,
             camera_model: "Canon EOS 60D".to_string(),
             baseline_exposure: 0.0,
             sensor_data: vec![2046; 100],
         };
+
 
         let temp_daylight = frame_daylight.as_shot_temperature();
         assert!(
@@ -302,8 +313,16 @@ mod tests {
         let test_path = std::path::Path::new("/home/remco/Pictures/Lightroom/from laptop/2015/2015-03-14/_MG_2332.dng");
         if test_path.exists() {
             let bytes = std::fs::read(test_path).expect("Read DNG file");
-            let exp = read_dng_baseline_exposure(&bytes).expect("BaselineExposure tag 50728 not found");
-            assert!((exp - 0.831169).abs() < 1e-4, "Expected +0.831169 EV, got {}", exp);
+            let exp = read_dng_baseline_exposure(&bytes).expect("BaselineExposure tag 50730 not found");
+            assert_eq!(exp, 0.0, "Tag 50730 BaselineExposure in _MG_2332.dng should be 0.0 EV");
+
+            let manifest = crate::container::RawContainerManifest::parse(&bytes).expect("Parse DNG manifest");
+            assert!(manifest.is_dng);
+            assert_eq!(manifest.baseline_exposure, Some(0.0));
+            let neutral = manifest.as_shot_neutral.expect("AsShotNeutral tag 50728");
+            assert!((neutral[0] - 0.831169).abs() < 1e-4);
+            assert!((neutral[1] - 1.0).abs() < 1e-4);
+            assert!((neutral[2] - 0.315465).abs() < 1e-4);
         }
     }
 

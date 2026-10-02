@@ -7,8 +7,8 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
-2. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
+1. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
+2. **Story 3.13: Sensor Read-Noise Mitigation & Viewport Chroma Parity** (P2)
 3. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
 4. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
 
@@ -101,18 +101,6 @@ This document strictly tracks pending and deferred features calibrated against o
 ### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1) - COMPLETED
 All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](completed.md).
 
-### 3.9 Unified RAW Container Intake & Camera Calibration Registry Engine (P1)
-- **Eliminate Ad-Hoc Tag Scanning (`firstproof-engine::container`)**:
-  - Replace fragmented, hand-rolled binary scanners (`preview.rs`, `raw.rs`, `dcp.rs`) with a single, strongly-typed `RawContainerManifest` parser.
-  - Parse TIFF/DNG IFD hierarchies (IFD0, SubIFDs, ExifIFD) in a single pass, strongly typing all DNG specification tags: `BaselineExposure` (Tag 50728), `BaselineNoise` (Tag 50730), `BaselineSharpness` (Tag 50731), `LinearResponseLimit` (Tag 50734), `ColorMatrix1/2`, `ForwardMatrix1/2`, `AnalogBalance`, `AsShotNeutral`, and `ActiveArea`.
-- **Structured Camera Calibration Database (`CameraCalibrationRegistry`)**:
-  - Build an in-memory, zero-allocation calibration database mapping camera make and model to authoritative physical sensor properties.
-  - Harness `rawler`'s built-in 700+ camera calibration dataset (MIT / Apache-2.0) for sensor CFA patterns, active crop areas, and dual-illuminant color matrices.
-  - Augment with Adobe DNG Converter baseline exposure offsets and ForwardMatrices across major camera families (Canon EOS, Sony Alpha, Nikon Z/D, Fujifilm X, Panasonic Lumix, OM System/Olympus, Leica, Hasselblad).
-  - Eliminate all fragile ad-hoc string heuristics (`if m.contains("canon")`) in favor of exact model indexing with principled manufacturer-family fallbacks.
-- **Dual-Format RAW vs DNG Regression Suite**:
-   - Integration test `test_raw_vs_dng_intake_parity` auditing paired proprietary RAWs and their Adobe DNG converted counterparts (e.g. `_MG_2332.CR2` vs `_MG_2332.dng`).
-   - Guarantees bit-level agreement: baseline exposure delta $\Delta \text{EV} < 0.01$, identical active sensor crop, and photometric wedge continuity across both native and web darkroom targets.
 
 ### 3.11 Sensitometric Emulsion Balancing & Physical Optical Grain Engine (P2)
 > **Technical Mini Specs**:

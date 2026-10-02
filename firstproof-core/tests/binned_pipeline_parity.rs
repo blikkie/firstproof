@@ -33,6 +33,8 @@ fn test_binned_quad_patterns_math() {
             wb_coeffs: [1.0, 1.0, 1.0, 1.0],
             color_matrix: Some([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
             color_matrix_tungsten: None,
+            forward_matrix_tungsten: None,
+            forward_matrix_daylight: None,
             camera_model: "Synthetic Test".to_string(),
             baseline_exposure: 0.0,
             sensor_data,

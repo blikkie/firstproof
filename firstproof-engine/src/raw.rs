@@ -101,94 +101,31 @@ pub struct RawSensorFrame {
     pub wb_coeffs: [f32; 4],
     pub color_matrix: Option<[[f32; 3]; 3]>,
     pub color_matrix_tungsten: Option<[[f32; 3]; 3]>,
+    pub forward_matrix_tungsten: Option<[[f32; 3]; 3]>,
+    pub forward_matrix_daylight: Option<[[f32; 3]; 3]>,
     pub camera_model: String,
     pub baseline_exposure: f32,
     pub sensor_data: Vec<u16>,
 }
 
-/// Extracts Tag 50728 (BaselineExposure) from a DNG / TIFF byte buffer (IFD0).
+/// Extracts Tag 50728 / 50730 (BaselineExposure) from a DNG / TIFF byte buffer (IFD0).
 /// Returns linear exposure offset in EV (e.g. +0.831169).
 pub fn read_dng_baseline_exposure(bytes: &[u8]) -> Option<f32> {
-    if bytes.len() < 8 {
-        return None;
-    }
-    let is_le = match &bytes[0..2] {
-        b"II" => true,
-        b"MM" => false,
-        _ => return None,
-    };
-    let read_u16 = |buf: &[u8]| -> u16 {
-        if is_le { u16::from_le_bytes([buf[0], buf[1]]) }
-        else { u16::from_be_bytes([buf[0], buf[1]]) }
-    };
-    let read_u32 = |buf: &[u8]| -> u32 {
-        if is_le { u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]) }
-        else { u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]) }
-    };
-    let read_i32 = |buf: &[u8]| -> i32 {
-        if is_le { i32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]) }
-        else { i32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]) }
-    };
-
-    let magic = read_u16(&bytes[2..4]);
-    if magic != 42 && magic != 0x55 {
-        return None;
-    }
-    let ifd_offset = read_u32(&bytes[4..8]) as usize;
-    if ifd_offset + 2 > bytes.len() {
-        return None;
-    }
-    let num_entries = read_u16(&bytes[ifd_offset..ifd_offset + 2]) as usize;
-    let mut curr = ifd_offset + 2;
-
-    for _ in 0..num_entries {
-        if curr + 12 > bytes.len() {
-            break;
-        }
-        let tag = read_u16(&bytes[curr..curr + 2]);
-        let typ = read_u16(&bytes[curr + 2..curr + 4]);
-        if tag == 50728 {
-            let offset = read_u32(&bytes[curr + 8..curr + 12]) as usize;
-            if offset + 8 <= bytes.len() {
-                if typ == 10 { // SRATIONAL (2 x i32)
-                    let num = read_i32(&bytes[offset..offset + 4]);
-                    let den = read_i32(&bytes[offset + 4..offset + 8]);
-                    if den != 0 {
-                        return Some(num as f32 / den as f32);
-                    }
-                } else if typ == 5 { // RATIONAL (2 x u32)
-                    let num = read_u32(&bytes[offset..offset + 4]);
-                    let den = read_u32(&bytes[offset + 4..offset + 8]);
-                    if den != 0 {
-                        return Some(num as f32 / den as f32);
-                    }
-                }
-            }
-        }
-        curr += 12;
-    }
-    None
+    crate::container::RawContainerManifest::parse(bytes).and_then(|m| m.baseline_exposure)
 }
 
 /// Resolves calibrated camera baseline exposure compensation (in EV).
-/// First attempts to read embedded DNG Tag 50728 (BaselineExposure).
+/// First attempts to read embedded DNG BaselineExposure.
 /// If not present (e.g. proprietary Canon CR2/CR3, Sony ARW, Nikon NEF),
-/// falls back to the camera family's calibrated baseline exposure standard.
+/// falls back to the authoritative CameraCalibrationRegistry.
 pub fn resolve_baseline_exposure(bytes: &[u8], camera_model: &str) -> f32 {
     if let Some(exp) = read_dng_baseline_exposure(bytes) {
         return exp;
     }
-    let m = camera_model.to_lowercase();
-    if m.contains("canon") || m.contains("eos") {
-        0.831
-    } else if m.contains("sony") || m.contains("ilce") || m.contains("alpha") {
-        0.50
-    } else if m.contains("nikon") {
-        0.50
-    } else {
-        0.0
-    }
+    let cal = crate::calibration::CameraCalibrationRegistry::lookup_or_fallback("", camera_model);
+    cal.baseline_exposure
 }
+
 
 impl RawSensorFrame {
     /// Decodes a `RawSensorFrame` from a decoded `rawler::RawImage` structure and an optional header/full-file byte slice.
@@ -233,8 +170,24 @@ impl RawSensorFrame {
                 })
         };
 
-        let color_matrix_tungsten = find_matrix("a");
-        let color_matrix = find_matrix("d65")
+        let manifest = crate::container::RawContainerManifest::parse(header_or_full_slice);
+        let camera_make = raw.clean_make.clone();
+        let camera_model = format!("{} {}", raw.clean_make, raw.clean_model)
+            .trim()
+            .to_string();
+
+        let cal = crate::calibration::CameraCalibrationRegistry::lookup_or_fallback(&camera_make, &camera_model);
+
+        let color_matrix_tungsten = manifest
+            .as_ref()
+            .and_then(|m| m.color_matrix_1)
+            .or_else(|| find_matrix("a"))
+            .or(cal.color_matrix_tungsten);
+
+        let color_matrix = manifest
+            .as_ref()
+            .and_then(|m| m.color_matrix_2)
+            .or_else(|| find_matrix("d65"))
             .or_else(|| find_matrix("d50"))
             .or_else(|| {
                 raw.color_matrix.iter().next().and_then(|(_, v)| {
@@ -248,49 +201,71 @@ impl RawSensorFrame {
                         None
                     }
                 })
+            })
+            .or(cal.color_matrix_daylight);
+
+        let black_levels = manifest
+            .as_ref()
+            .and_then(|m| m.black_levels)
+            .unwrap_or_else(|| {
+                if raw.blacklevel.levels.is_empty() {
+                    cal.black_levels
+                } else if raw.blacklevel.levels.len() == 1 {
+                    let r = &raw.blacklevel.levels[0];
+                    let val = if r.d != 0 {
+                        r.n as f32 / r.d as f32
+                    } else {
+                        r.n as f32
+                    };
+                    [val; 4]
+                } else {
+                    let mut b = cal.black_levels;
+                    for i in 0..4.min(raw.blacklevel.levels.len()) {
+                        let r = &raw.blacklevel.levels[i];
+                        b[i] = if r.d != 0 {
+                            r.n as f32 / r.d as f32
+                        } else {
+                            r.n as f32
+                        };
+                    }
+                    b
+                }
             });
 
-        let camera_model = format!("{} {}", raw.clean_make, raw.clean_model)
-            .trim()
-            .to_string();
-
-        let mut black_levels = [0.0f32; 4];
-        if raw.blacklevel.levels.is_empty() {
-            // default 0.0
-        } else if raw.blacklevel.levels.len() == 1 {
-            let r = &raw.blacklevel.levels[0];
-            let val = if r.d != 0 {
-                r.n as f32 / r.d as f32
-            } else {
-                r.n as f32
-            };
-            black_levels = [val; 4];
-        } else {
-            for i in 0..4.min(raw.blacklevel.levels.len()) {
-                let r = &raw.blacklevel.levels[i];
-                black_levels[i] = if r.d != 0 {
-                    r.n as f32 / r.d as f32
+        let white_levels = manifest
+            .as_ref()
+            .and_then(|m| m.white_levels)
+            .unwrap_or_else(|| {
+                if raw.whitelevel.0.is_empty() {
+                    cal.white_levels
+                } else if raw.whitelevel.0.len() == 1 {
+                    [raw.whitelevel.0[0] as f32; 4]
                 } else {
-                    r.n as f32
-                };
-            }
-        }
-
-        let mut white_levels = [65535.0f32; 4];
-        if raw.whitelevel.0.is_empty() {
-            // default 65535.0
-        } else if raw.whitelevel.0.len() == 1 {
-            white_levels = [raw.whitelevel.0[0] as f32; 4];
-        } else {
-            for i in 0..4.min(raw.whitelevel.0.len()) {
-                white_levels[i] = raw.whitelevel.0[i] as f32;
-            }
-        }
+                    let mut w = cal.white_levels;
+                    for i in 0..4.min(raw.whitelevel.0.len()) {
+                        w[i] = raw.whitelevel.0[i] as f32;
+                    }
+                    w
+                }
+            });
 
         let wb = raw.wb_coeffs;
         let wb_coeffs = [wb[0], wb[1], wb[2], wb[3]];
 
-        let baseline_exposure = resolve_baseline_exposure(header_or_full_slice, &camera_model);
+        let baseline_exposure = manifest
+            .as_ref()
+            .and_then(|m| m.baseline_exposure)
+            .unwrap_or(cal.baseline_exposure);
+
+        let forward_matrix_tungsten = manifest
+            .as_ref()
+            .and_then(|m| m.forward_matrix_1)
+            .or(cal.forward_matrix_tungsten);
+
+        let forward_matrix_daylight = manifest
+            .as_ref()
+            .and_then(|m| m.forward_matrix_2)
+            .or(cal.forward_matrix_daylight);
 
         let sensor_data = match raw.data {
             rawler::RawImageData::Integer(cfa) => cfa,
@@ -310,10 +285,13 @@ impl RawSensorFrame {
             wb_coeffs,
             color_matrix,
             color_matrix_tungsten,
+            forward_matrix_tungsten,
+            forward_matrix_daylight,
             camera_model,
             baseline_exposure,
             sensor_data,
         })
+
     }
 
     /// Decodes a `RawSensorFrame` directly from an in-memory RAW file byte slice using rawler.
@@ -369,11 +347,13 @@ impl RawSensorFrame {
             return 0.0;
         }
         let raw_val = self.sensor_data[idx] as f32;
-        let black = self.black_levels[0].max(0.0);
-        let white = self.white_levels[0].max(black + 1.0);
+        let cfa_idx = (y % 2) * 2 + (x % 2);
+        let black = self.black_levels[cfa_idx].max(0.0);
+        let white = self.white_levels[cfa_idx].max(black + 1.0);
         let scale = 1.0 / (white - black);
         ((raw_val - black) * scale).clamp(0.0, 1.0)
     }
+
 
     /// Camera As-Shot White Balance Red & Blue multipliers normalized to Green
     #[inline]
@@ -442,23 +422,16 @@ impl RawSensorFrame {
     /// for the specified Kelvin temperature along the Planckian reciprocal temperature locus.
     /// Preserves neutral axis [1, 1, 1] per Adobe DNG / First Proof color science.
     pub fn sensor_to_rec2020_at(&self, temp_kelvin: f32) -> [[f32; 3]; 3] {
-        let m = self.camera_model.to_lowercase();
-        let fwd_matrices = if m.contains("canon") || m.contains("eos") {
-            Some((
-                [
-                    [ 0.7550,  0.0645,  0.1448],
-                    [ 0.2138,  0.8936, -0.1075],
-                    [-0.0005, -0.4306,  1.2562],
-                ],
-                [
-                    [ 0.7286,  0.1385,  0.0972],
-                    [ 0.2600,  0.9468, -0.2068],
-                    [ 0.0093, -0.2268,  1.0426],
-                ],
-            ))
+        let cal = crate::calibration::CameraCalibrationRegistry::lookup_or_fallback("", &self.camera_model);
+        let fwd_matrices = if let (Some(fm1), Some(fm2)) = (self.forward_matrix_tungsten, self.forward_matrix_daylight) {
+            Some((fm1, fm2))
+        } else if let (Some(fm1), Some(fm2)) = (cal.forward_matrix_tungsten, cal.forward_matrix_daylight) {
+            Some((fm1, fm2))
         } else {
             None
         };
+
+
 
         if let Some((fm1, fm2)) = fwd_matrices {
             let t1 = 2856.0f32;
@@ -499,62 +472,12 @@ impl RawSensorFrame {
         } else if let Some(m_daylight) = self.color_matrix {
             (m_daylight, m_daylight)
         } else {
-            // Built-in calibrated fallback ColorMatrix (XYZ D50 -> Sensor RGB)
-            let m = self.camera_model.to_lowercase();
-            if m.contains("canon") || m.contains("eos") {
-                (
-                    [
-                        [ 0.7428, -0.1897, -0.0491],
-                        [-0.3505,  1.0963,  0.2929],
-                        [-0.0337,  0.1242,  0.6413],
-                    ],
-                    [
-                        [ 0.6719, -0.0994, -0.0925],
-                        [-0.4408,  1.2426,  0.2211],
-                        [-0.0887,  0.2129,  0.6051],
-                    ],
-                )
-            } else if m.contains("sony") || m.contains("ilce") || m.contains("alpha") {
-                (
-                    [
-                        [ 0.7483, -0.0851, -0.0534],
-                        [-0.4109,  1.2392,  0.1971],
-                        [-0.0701,  0.1884,  0.7071],
-                    ],
-                    [
-                        [ 0.6722,  0.0821,  0.1793],
-                        [ 0.2514,  0.6542,  0.0944],
-                        [-0.0084, -0.0782,  0.9118],
-                    ],
-                )
-            } else if m.contains("nikon") {
-                (
-                    [
-                        [ 0.7712, -0.0984, -0.0512],
-                        [-0.4011,  1.2281,  0.1974],
-                        [-0.0742,  0.2014,  0.7182],
-                    ],
-                    [
-                        [ 0.6881,  0.0714,  0.1892],
-                        [ 0.2612,  0.6481,  0.0907],
-                        [-0.0091, -0.0811,  0.9152],
-                    ],
-                )
-            } else {
-                (
-                    [
-                        [ 0.7428, -0.1897, -0.0491],
-                        [-0.3505,  1.0963,  0.2929],
-                        [-0.0337,  0.1242,  0.6413],
-                    ],
-                    [
-                        [ 0.6719, -0.0994, -0.0925],
-                        [-0.4408,  1.2426,  0.2211],
-                        [-0.0887,  0.2129,  0.6051],
-                    ],
-                )
-            }
+            (
+                cal.color_matrix_tungsten.unwrap_or(crate::calibration::registry::CANON_COLOR_MATRIX_TUNGSTEN),
+                cal.color_matrix_daylight.unwrap_or(crate::calibration::registry::CANON_COLOR_MATRIX_DAYLIGHT),
+            )
         };
+
 
         let t1 = 2856.0f32;
         let t2 = 6504.0f32;
@@ -637,9 +560,15 @@ impl RawSensorFrame {
         let m21 = sensor_to_rec2020[2][1] * baseline_gain;
         let m22 = sensor_to_rec2020[2][2] * baseline_gain;
 
-        let black = self.black_levels[0].max(0.0);
-        let white = self.white_levels[0].max(black + 1.0);
-        let scale = 1.0 / (white - black);
+        let mut scales = [1.0f32; 4];
+        let mut blacks = [0.0f32; 4];
+        for i in 0..4 {
+            let b = self.black_levels[i].max(0.0);
+            let w = self.white_levels[i].max(b + 1.0);
+            blacks[i] = b;
+            scales[i] = 1.0 / (w - b);
+        }
+
         let a16 = f32_to_f16(1.0);
 
         let mut u16_pixels = vec![0u16; (bin_w * bin_h * 4) as usize];
@@ -658,107 +587,41 @@ impl RawSensorFrame {
                 let row0 = &sensor[row0_start..row0_start + row_len];
                 let row1 = &sensor[row1_start..row1_start + row_len];
 
-                match self.cfa_pattern {
-                    CfaPattern::Rggb => {
-                        for bx in 0..(bin_w as usize) {
-                            let p00 = row0[bx * 2] as f32;
-                            let p01 = row0[bx * 2 + 1] as f32;
-                            let p10 = row1[bx * 2] as f32;
-                            let p11 = row1[bx * 2 + 1] as f32;
+                for bx in 0..(bin_w as usize) {
+                    let p00 = row0[bx * 2] as f32;
+                    let p01 = row0[bx * 2 + 1] as f32;
+                    let p10 = row1[bx * 2] as f32;
+                    let p11 = row1[bx * 2 + 1] as f32;
 
-                            let r_norm = ((p00 - black) * scale).clamp(0.0, 1.0);
-                            let g_norm = (((p01 + p10) * 0.5 - black) * scale).clamp(0.0, 1.0);
-                            let b_norm = ((p11 - black) * scale).clamp(0.0, 1.0);
+                    let norm_00 = ((p00 - blacks[0]) * scales[0]).clamp(0.0, 1.0);
+                    let norm_01 = ((p01 - blacks[1]) * scales[1]).clamp(0.0, 1.0);
+                    let norm_10 = ((p10 - blacks[2]) * scales[2]).clamp(0.0, 1.0);
+                    let norm_11 = ((p11 - blacks[3]) * scales[3]).clamp(0.0, 1.0);
 
-                            let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
+                    let (r_norm, g_norm, b_norm) = match self.cfa_pattern {
+                        CfaPattern::Rggb => (norm_00, (norm_01 + norm_10) * 0.5, norm_11),
+                        CfaPattern::Bggr => (norm_11, (norm_01 + norm_10) * 0.5, norm_00),
+                        CfaPattern::Gbrg => (norm_10, (norm_00 + norm_11) * 0.5, norm_01),
+                        CfaPattern::Grbg => (norm_01, (norm_00 + norm_11) * 0.5, norm_10),
+                        _ => (norm_00, (norm_01 + norm_10) * 0.5, norm_11),
+                    };
 
-                            let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
-                            let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
-                            let b_lin = (m20 * r_wb + m21 * g_wb + m22 * b_wb).max(0.0);
 
-                            let dst_idx = dst_row_off + bx * 4;
-                            u16_pixels[dst_idx] = f32_to_f16(r_lin);
-                            u16_pixels[dst_idx + 1] = f32_to_f16(g_lin);
-                            u16_pixels[dst_idx + 2] = f32_to_f16(b_lin);
-                            u16_pixels[dst_idx + 3] = a16;
-                        }
-                    }
-                    CfaPattern::Bggr => {
-                        for bx in 0..(bin_w as usize) {
-                            let p00 = row0[bx * 2] as f32;
-                            let p01 = row0[bx * 2 + 1] as f32;
-                            let p10 = row1[bx * 2] as f32;
-                            let p11 = row1[bx * 2 + 1] as f32;
+                    let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
 
-                            let b_norm = ((p00 - black) * scale).clamp(0.0, 1.0);
-                            let g_norm = (((p01 + p10) * 0.5 - black) * scale).clamp(0.0, 1.0);
-                            let r_norm = ((p11 - black) * scale).clamp(0.0, 1.0);
+                    let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
+                    let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
+                    let b_lin = (m20 * r_wb + m21 * g_wb + m22 * b_wb).max(0.0);
 
-                            let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
-
-                            let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
-                            let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
-                            let b_lin = (m20 * r_wb + m21 * g_wb + m22 * b_wb).max(0.0);
-
-                            let dst_idx = dst_row_off + bx * 4;
-                            u16_pixels[dst_idx] = f32_to_f16(r_lin);
-                            u16_pixels[dst_idx + 1] = f32_to_f16(g_lin);
-                            u16_pixels[dst_idx + 2] = f32_to_f16(b_lin);
-                            u16_pixels[dst_idx + 3] = a16;
-                        }
-                    }
-                    CfaPattern::Gbrg => {
-                        for bx in 0..(bin_w as usize) {
-                            let p00 = row0[bx * 2] as f32;
-                            let p01 = row0[bx * 2 + 1] as f32;
-                            let p10 = row1[bx * 2] as f32;
-                            let p11 = row1[bx * 2 + 1] as f32;
-
-                            let g_norm = (((p00 + p11) * 0.5 - black) * scale).clamp(0.0, 1.0);
-                            let b_norm = ((p01 - black) * scale).clamp(0.0, 1.0);
-                            let r_norm = ((p10 - black) * scale).clamp(0.0, 1.0);
-
-                            let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
-
-                            let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
-                            let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
-                            let b_lin = (m20 * r_wb + m21 * g_wb + m22 * b_wb).max(0.0);
-
-                            let dst_idx = dst_row_off + bx * 4;
-                            u16_pixels[dst_idx] = f32_to_f16(r_lin);
-                            u16_pixels[dst_idx + 1] = f32_to_f16(g_lin);
-                            u16_pixels[dst_idx + 2] = f32_to_f16(b_lin);
-                            u16_pixels[dst_idx + 3] = a16;
-                        }
-                    }
-                    CfaPattern::Grbg => {
-                        for bx in 0..(bin_w as usize) {
-                            let p00 = row0[bx * 2] as f32;
-                            let p01 = row0[bx * 2 + 1] as f32;
-                            let p10 = row1[bx * 2] as f32;
-                            let p11 = row1[bx * 2 + 1] as f32;
-
-                            let g_norm = (((p00 + p11) * 0.5 - black) * scale).clamp(0.0, 1.0);
-                            let r_norm = ((p01 - black) * scale).clamp(0.0, 1.0);
-                            let b_norm = ((p10 - black) * scale).clamp(0.0, 1.0);
-
-                            let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
-
-                            let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
-                            let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
-                            let b_lin = (m20 * r_wb + m21 * g_wb + m22 * b_wb).max(0.0);
-
-                            let dst_idx = dst_row_off + bx * 4;
-                            u16_pixels[dst_idx] = f32_to_f16(r_lin);
-                            u16_pixels[dst_idx + 1] = f32_to_f16(g_lin);
-                            u16_pixels[dst_idx + 2] = f32_to_f16(b_lin);
-                            u16_pixels[dst_idx + 3] = a16;
-                        }
-                    }
-                    _ => {}
+                    let dst_idx = dst_row_off + bx * 4;
+                    u16_pixels[dst_idx] = f32_to_f16(r_lin);
+                    u16_pixels[dst_idx + 1] = f32_to_f16(g_lin);
+                    u16_pixels[dst_idx + 2] = f32_to_f16(b_lin);
+                    u16_pixels[dst_idx + 3] = a16;
                 }
             }
         }
+
 
         (u16_pixels, bin_w, bin_h)
     }
@@ -780,14 +643,26 @@ impl RawSensorFrame {
         }
 
         let (wb_r, wb_b) = self.as_shot_wb();
-        let black = self.black_levels[0].max(0.0);
-        let white = self.white_levels[0].max(black + 1.0);
-        let scale = 1.0 / (white - black);
+        let mut scales = [1.0f32; 4];
+        let mut blacks = [0.0f32; 4];
+        for i in 0..4 {
+            let b = self.black_levels[i].max(0.0);
+            let w = self.white_levels[i].max(b + 1.0);
+            blacks[i] = b;
+            scales[i] = 1.0 / (w - b);
+        }
 
         let mut norm_pixels = Vec::with_capacity(full_w * full_h);
-        for &v in sensor {
-            norm_pixels.push(((v as f32 - black) * scale).clamp(0.0, 1.0));
+        for y in 0..full_h {
+            let row_off = y * full_w;
+            let y_mod = (y % 2) * 2;
+            for x in 0..full_w {
+                let cfa_idx = y_mod + (x % 2);
+                let v = sensor[row_off + x] as f32;
+                norm_pixels.push(((v - blacks[cfa_idx]) * scales[cfa_idx]).clamp(0.0, 1.0));
+            }
         }
+
 
         // Pre-demosaicing White Balance (standard in dcraw / LibRaw):
         // Applying white balance multipliers directly to CFA photosites before demosaicing
