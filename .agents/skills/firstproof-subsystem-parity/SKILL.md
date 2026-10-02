@@ -17,11 +17,11 @@ Every edge case (orientation, display vs sensor space, full-bleed zoom, stationa
 
 Whenever analyzing whether a pattern, mathematical model, coordinate mapping, or state transition is being reimplemented or ported:
 
-**The DEFAULT architectural preference must be to extract the logic into the centralized shared library (`firstproof-types` or `firstproof-core`) rather than duplicating it across Swift and TypeScript.**
+**The DEFAULT architectural preference must be to extract the logic into the centralized shared library (`firstproof-engine` or `firstproof-core`) rather than duplicating it across Swift and TypeScript.**
 
 1. **Test for Shared Extraction**:
    - Can this logic (aspect ratio calculation, viewport quad fitting, pan offset clamping, EXIF orientation decoding, curve evaluation, color transforms) be expressed as a pure function without UI framework dependencies?
-   - If **YES**: Extract it into Rust in `firstproof-types`.
+   - If **YES**: Extract it into Rust in `firstproof-engine`.
      - UniFFI generates Swift bindings for native macOS (`FirstProofBridge`).
      - WASM exports the exact same compiled binary to TypeScript (`WasmBridge`).
      - Pure Rust unit tests (`cargo test`) verify bounds, inversions, and invariants once for all platforms.

@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf};
-use super::data::XmpData;
-use super::reader::parse_xmp;
-use super::writer::generate_xmp;
+use firstproof_engine::xmp::{generate_xmp, parse_xmp, XmpData};
 
 /// Checks if an XMP record contains user edits or metadata adjustments beyond default identity.
 pub fn has_custom_adjustments(data: &XmpData) -> bool {

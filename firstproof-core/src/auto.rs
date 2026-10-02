@@ -14,8 +14,8 @@ pub struct AutoAdjustments {
     pub contrast: f32, // -15.0 .. +20.0
 }
 
-impl From<firstproof_types::auto::AutoAdjustments> for AutoAdjustments {
-    fn from(a: firstproof_types::auto::AutoAdjustments) -> Self {
+impl From<firstproof_engine::auto::AutoAdjustments> for AutoAdjustments {
+    fn from(a: firstproof_engine::auto::AutoAdjustments) -> Self {
         Self {
             exposure: a.exposure,
             contrast: a.contrast,
@@ -25,7 +25,7 @@ impl From<firstproof_types::auto::AutoAdjustments> for AutoAdjustments {
 
 /// Computes conservative auto adjustments from an array of linear Rec.2020 luminance samples.
 pub fn compute_auto_adjustments_from_luminances(lums: Vec<f32>) -> AutoAdjustments {
-    firstproof_types::auto::compute_auto_adjustments_from_luminances(lums).into()
+    firstproof_engine::auto::compute_auto_adjustments_from_luminances(lums).into()
 }
 
 /// Computes auto tone adjustments (exposure, contrast) from a 16-bit half-float RGBA buffer in Linear Rec.2020 space.
@@ -34,7 +34,7 @@ pub fn compute_auto_adjustments_from_f16_buffer(
     height: u32,
     data: &[u8],
 ) -> AutoAdjustments {
-    firstproof_types::auto::compute_auto_adjustments_from_f16_buffer(width, height, data).into()
+    firstproof_engine::auto::compute_auto_adjustments_from_f16_buffer(width, height, data).into()
 }
 
 /// Computes standalone Gray-World white balance from a 16-bit half-float RGBA buffer in Linear Rec.2020 space.

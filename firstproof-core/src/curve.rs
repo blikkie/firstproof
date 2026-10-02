@@ -1,4 +1,4 @@
-pub use firstproof_types::curve::{AllCurvesLutRecord, CurvePointRecord, ToneCurvesRecord};
+pub use firstproof_engine::curve::{AllCurvesLutRecord, CurvePointRecord, ToneCurvesRecord};
 
 
 

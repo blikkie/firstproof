@@ -17,7 +17,9 @@ pub mod gainmap;
 pub mod synthetic;
 pub mod checksum;
 
-pub use firstproof_types::{
+pub use firstproof_engine::{
+    all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,
+    AdjustmentDescriptor, ScaleMode, WorkspaceCategory,
     evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, ColorProfileMode,
     CurvePointRecord, EditSettings, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode,
     ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent, PrintMediaMode,
@@ -191,7 +193,22 @@ pub struct ImageMetadata {
 
 #[uniffi::export]
 pub fn decode_exif_orientation(orientation: u32) -> ExifOrientationRecord {
-    firstproof_types::decode_exif_orientation(orientation)
+    firstproof_engine::decode_exif_orientation(orientation)
+}
+
+#[uniffi::export]
+pub fn get_all_adjustments() -> Vec<AdjustmentDescriptor> {
+    all_adjustments()
+}
+
+#[uniffi::export]
+pub fn convert_kelvin_to_mired_norm(kelvin: f64) -> f64 {
+    kelvin_to_mired_norm(kelvin)
+}
+
+#[uniffi::export]
+pub fn convert_mired_norm_to_kelvin(norm: f64) -> f64 {
+    mired_norm_to_kelvin(norm)
 }
 
 #[derive(uniffi::Record)]
@@ -228,7 +245,7 @@ pub struct TakeoutMatchRecord {
 pub fn extract_metadata(path: String) -> Option<ImageMetadata> {
     match raw::extract_metadata(&path) {
         Ok(m) => Some(ImageMetadata {
-            file_path: m.file_path,
+            file_path: path,
             camera_make: m.camera_make,
             camera_model: m.camera_model,
             lens_model: m.lens_model,

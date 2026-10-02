@@ -21,7 +21,7 @@ Figma is a static 2D vector projection. It cannot compile state machines, run ph
 ```
                              ┌───────────────────────────────────┐
                              │    Canonical Domain Schema & Math │
-                             │      (firstproof-types::schema)   │
+                             │      (firstproof-engine::schema)  │
                              │  • Parameter ranges, steps, units │
                              │  • Physical scaling (Mired, EV)   │
                              │  • Scrub state machine contracts  │
@@ -45,7 +45,7 @@ Figma is a static 2D vector projection. It cannot compile state machines, run ph
 
 ## 3. Canonical Parameter Schema
 
-Every develop adjustment is declared in a single, authoritative descriptor in `firstproof-types`:
+Every develop adjustment is declared in a single, authoritative descriptor in `firstproof-engine`:
 
 | Parameter ID | Workspace | Range | Step | Default | Scale Mode | Format Readout |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |

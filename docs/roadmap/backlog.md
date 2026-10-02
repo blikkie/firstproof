@@ -7,9 +7,9 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.10: Architecture Clean-Up: Rename `firstproof-types` to `firstproof-engine` & Core De-Duplication** (P1)
-2. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
-3. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
+1. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
+2. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
+3. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
 4. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
 
 
@@ -100,7 +100,7 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1)
 
-A systematic initiative executed strictly under the [Subsystem Parity & Reference Deconstruction Protocol](../../.agents/skills/firstproof-subsystem-parity/SKILL.md) to eliminate duplicated logic, establish single sources of truth in `firstproof-types`, achieve 1:1 mathematical and behavioral parity with native macOS Metal, and purge AI slop and fake parity.
+A systematic initiative executed strictly under the [Subsystem Parity & Reference Deconstruction Protocol](../../.agents/skills/firstproof-subsystem-parity/SKILL.md) to eliminate duplicated logic, establish single sources of truth in `firstproof-engine`, achieve 1:1 mathematical and behavioral parity with native macOS Metal, and purge AI slop and fake parity.
 
 > **Authoritative Technical Mini Specs**:
 > - [Viewport Geometry, Gestures & Texture Lifecycle](../specs/viewport_geometry_and_gestures.md)
@@ -114,11 +114,13 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
     - `InspectorSyncController.ts` (slider bindings, curve listeners, tab navigation)
     - `FilmstripController.ts` (thumbnail card rendering, DOM recycling, selection, and viewport-driven lazy loading via `IntersectionObserver` / scroll listeners with concurrency throttling so thumbnails continuously load as the user scrolls)
     - `PhotoLoaderService.ts` (worker dispatch, debounce staging, cache coordinator)
+  - **Developer & Diagnostics Flag Quarantine**:
+    - Gate diagnostic affordances (`btn-parity-audit`, `ParityModal`) behind a developer flag (`?dev=1`, `?debug=1`, or `import.meta.env.DEV`), ensuring the public darkroom interface remains uncluttered and strictly focused on photographic craft without internal test harnesses in the primary toolbar.
   - Reduce `main.ts` to a lean application coordinator (< 250 lines).
   - *Verification*: Full end-to-end regression check across all tools, keyboard shortcuts, filmstrip smooth scrolling with lazy thumbnail hydration, and inspector tabs.
 
 ### 3.9 Unified RAW Container Intake & Camera Calibration Registry Engine (P1)
-- **Eliminate Ad-Hoc Tag Scanning (`firstproof-types::container`)**:
+- **Eliminate Ad-Hoc Tag Scanning (`firstproof-engine::container`)**:
   - Replace fragmented, hand-rolled binary scanners (`preview.rs`, `raw.rs`, `dcp.rs`) with a single, strongly-typed `RawContainerManifest` parser.
   - Parse TIFF/DNG IFD hierarchies (IFD0, SubIFDs, ExifIFD) in a single pass, strongly typing all DNG specification tags: `BaselineExposure` (Tag 50728), `BaselineNoise` (Tag 50730), `BaselineSharpness` (Tag 50731), `LinearResponseLimit` (Tag 50734), `ColorMatrix1/2`, `ForwardMatrix1/2`, `AnalogBalance`, `AsShotNeutral`, and `ActiveArea`.
 - **Structured Camera Calibration Database (`CameraCalibrationRegistry`)**:
@@ -127,27 +129,8 @@ A systematic initiative executed strictly under the [Subsystem Parity & Referenc
   - Augment with Adobe DNG Converter baseline exposure offsets and ForwardMatrices across major camera families (Canon EOS, Sony Alpha, Nikon Z/D, Fujifilm X, Panasonic Lumix, OM System/Olympus, Leica, Hasselblad).
   - Eliminate all fragile ad-hoc string heuristics (`if m.contains("canon")`) in favor of exact model indexing with principled manufacturer-family fallbacks.
 - **Dual-Format RAW vs DNG Regression Suite**:
-  - Integration test `test_raw_vs_dng_intake_parity` auditing paired proprietary RAWs and their Adobe DNG converted counterparts (e.g. `_MG_2332.CR2` vs `_MG_2332.dng`).
-  - Guarantees bit-level agreement: baseline exposure delta $\Delta \text{EV} < 0.01$, identical active sensor crop, and photometric wedge continuity across both native and web darkroom targets.
-
-### 3.10 Architecture Clean-Up: Rename `firstproof-types` to `firstproof-engine` & Core De-Duplication (P1)
-- **Architectural Crate Reclassification & Rename**:
-  - Rename crate `firstproof-types` to **`firstproof-engine`** (or `firstproof-kernel`), correcting the historical misnomer.
-  - Formally establish the 3-tier workspace architecture:
-    1. **`firstproof-engine`**: Pure, cross-platform algorithmic kernel (color science, sensitometry, AgX, demosaicing, auto-algorithms, tone curves, XMP). Zero native OS or C dependencies (`glam`, `serde`); compiles anywhere (macOS, Linux, WASM, embedded).
-    2. **`firstproof-core`**: Native desktop host adapter (SQLite catalog, LibRaw/Rawler disk I/O, LCMS2 ICC profiles, Rayon multithreaded batch export, UniFFI bridge).
-    3. **`firstproof-wasm`**: WebAssembly host adapter (memory scratchpad, `wasm-bindgen`, JS array buffer marshalling).
-  - Update all `Cargo.toml` workspace definitions, crate references, internal imports, and documentation.
-- **Deduplicate RAW Sensor Decoding**:
-  - Move `decode_raw_sensor_frame` into `firstproof-engine/src/raw.rs` as a shared method on `RawSensorFrame`.
-  - Both `firstproof-core/src/raw_decoder.rs` and `firstproof-wasm/src/lib.rs` consume the exact same decoder, eliminating 100 lines of copy-pasted Rawler decoding logic.
-- **Deduplicate XMP Engine**:
-  - Make `firstproof-engine/src/xmp.rs` the single canonical implementation of `XmpData`, `format_gps_xmp`, `parse_gps_xmp`, and XML read/write.
-  - Re-export from `firstproof-core::xmp`, eliminating duplicate files (`data.rs`, `reader.rs`, `writer.rs`).
-- **Deduplicate Metadata Structs**:
-  - Unify `ImageMetadata` (`firstproof-core/src/raw.rs`) and `ImageMetadataRecord` (`firstproof-engine/src/lib.rs`).
-- **Verification**:
-  - `cargo test --all-targets` across `firstproof-engine`, `firstproof-core`, and `firstproof-wasm`.
+   - Integration test `test_raw_vs_dng_intake_parity` auditing paired proprietary RAWs and their Adobe DNG converted counterparts (e.g. `_MG_2332.CR2` vs `_MG_2332.dng`).
+   - Guarantees bit-level agreement: baseline exposure delta $\Delta \text{EV} < 0.01$, identical active sensor crop, and photometric wedge continuity across both native and web darkroom targets.
 
 ### 3.11 Sensitometric Emulsion Balancing & Physical Optical Grain Engine (P2)
 > **Technical Mini Specs**:

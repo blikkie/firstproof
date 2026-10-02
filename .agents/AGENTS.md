@@ -48,7 +48,7 @@
 
 - **Shared Rust Primitives & Web Parity Invariant**:
   - Never duplicate RAW decoding, Bayer binning, tone curve evaluation, or color math logic ad-hoc inside `firstproof-wasm`.
-  - WASM decoders and calculations must strictly consume shared domain models (`RawSensorFrame`, `EditSettings`, `evaluate_curve_lut`) defined in `firstproof-types` to guarantee 1:1 color science, sensitometric math, and channel mapping parity across native macOS and web darkroom targets.
+  - WASM decoders and calculations must strictly consume shared domain models (`RawSensorFrame`, `EditSettings`, `evaluate_curve_lut`) defined in `firstproof-engine` to guarantee 1:1 color science, sensitometric math, and channel mapping parity across native macOS and web darkroom targets.
 
 - **Physical Sensitometric Math Over Magic Numbers & Piecewise Hacks**:
   - Emulations (film stocks, recording emulsions, print media, enlarger filtration, toner chemistry) must always be grounded in continuous physical, optical, and sensitometric math—never arbitrary "magic numbers", hard thresholds, or piecewise if/else hacks.
@@ -109,11 +109,11 @@
 - **Reference-First Architecture & Zero Greenfield Hallucination**:
   - Whenever building, porting, or refactoring subsystems in `web/`, `firstproof-wasm/`, or secondary targets where a native implementation already exists in `FirstProofApp/` (macOS Swift/Metal) or `firstproof-core/` (Rust):
   - **Never invent ad-hoc layout, math, or interaction models from general web/platform training priors.** (e.g. do not default to CSS `object-fit: contain` when native uses full-bleed vertex quad scaling; do not place floating tool dialogs in the photo center when native uses stationary bottom HUDs; do not hardcode landscape aspect ratios when native inverts them for portrait images).
-  - **Shared Library Extraction Preference**: When analyzing whether an algorithm, state transition, coordinate mapping, or mathematical model is being reimplemented or ported, the default preference MUST be to **extract it into the shared Rust library (`firstproof-types`)** rather than duplicating it across Swift and TypeScript. Only view hierarchy layout and platform event monitors belong in host code.
+  - **Shared Library Extraction Preference**: When analyzing whether an algorithm, state transition, coordinate mapping, or mathematical model is being reimplemented or ported, the default preference MUST be to **extract it into the shared Rust library (`firstproof-engine`)** rather than duplicating it across Swift and TypeScript. Only view hierarchy layout and platform event monitors belong in host code.
   - Always execute the **Reference Deconstruction Protocol** (`firstproof-subsystem-parity` skill) BEFORE writing target code:
     1. **Identify Authoritative Reference Files** in `FirstProofApp/` or `firstproof-core/`.
     2. **Extract the 4 Core Primitives**: Coordinate Spaces, Viewport/Sizing Negotiation, State Lifecycle & HUD Placement, and Orientation/Edge Cases.
-    3. **Generate a Porting Contract Matrix** mapping Swift/Metal constructs 1:1 to target equivalents (or extracting them into `firstproof-types`).
+    3. **Generate a Porting Contract Matrix** mapping Swift/Metal constructs 1:1 to target equivalents (or extracting them into `firstproof-engine`).
     4. **Mechanically Transcribe the Architecture** to preserve identical visual styling, mathematical guarantees, and interaction ergonomics.
 
 - **Proactive Customization Encoding**: Whenever a platform-specific quirk, non-obvious workaround, multi-step pipeline recipe, or architectural convention is established during development, proactively suggest encoding it into `.agents/AGENTS.md` or as a new skill under `.agents/skills/` so subsequent chats retain it automatically.

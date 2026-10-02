@@ -2,7 +2,7 @@
 
 ## Status: Approved for Phase 3 (Stories 3.11 & 3.12)
 **Author**: Remco van Bree  
-**Scope**: `firstproof-types`, `firstproof-core` (Rust), `FirstProofApp` (Metal), `web` (WebGL 2)
+**Scope**: `firstproof-engine`, `firstproof-core` (Rust), `FirstProofApp` (Metal), `web` (WebGL 2)
 
 ---
 
@@ -79,15 +79,15 @@ $$f(x) = x + \alpha \cdot x(1-x)(2x-1) + \beta \cdot x(1-x)$$
 
 ## 5. Architectural Integration
 
-### Data Models (`firstproof-types`)
-- [`modes.rs`](file:///home/remco/src/firstproof/firstproof-types/src/modes.rs):
+### Data Models (`firstproof-engine`)
+- [`modes.rs`](file:///home/remco/src/firstproof/firstproof-engine/src/modes.rs):
   - Update `EmulsionArchetype` enum:
     - Retain `RochesterPortrait400`, `AshigaraChrome50`, `RochesterK14Chrome64`, `RochesterCinema500`, `MobberleySilver400`, `CambridgeDiffusion100`.
     - Deprecate/merge `RochesterDaylight200` $\to$ `RochesterPortrait400`.
     - Add `LeverkusenPortrait160`, `AshigaraPortrait400`, `LiguriaCinema80`, `BaodingSilver100`.
   - Update `PrintMediaMode` enum:
     - Add `BamakoSilverContact`.
-- [`xmp.rs`](file:///home/remco/src/firstproof/firstproof-types/src/xmp.rs):
+- [`xmp.rs`](file:///home/remco/src/firstproof/firstproof-engine/src/xmp.rs):
   - Serialization/deserialization for new enum variants with backward-compatibility aliases.
 
 ### Shader & Pipeline Parity

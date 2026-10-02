@@ -2,7 +2,7 @@ use firstproof_core::{
     evaluate_all_curves_lut, evaluate_curve_lut, CurvePointRecord, EditSettings,
     EmulsionArchetype, ToneCurvesRecord,
 };
-use firstproof_types::xmp::{generate_xmp_sidecar, parse_xmp_sidecar, XmpData};
+use firstproof_engine::xmp::{generate_xmp_sidecar, parse_xmp_sidecar, XmpData};
 
 #[test]
 fn test_core_wasm_curve_eval_parity() {
@@ -13,7 +13,7 @@ fn test_core_wasm_curve_eval_parity() {
         CurvePointRecord { x: 1.0, y: 1.0 },
     ];
     let lut_core = evaluate_curve_lut(&pts);
-    let lut_types = firstproof_types::evaluate_curve_lut(&pts);
+    let lut_types = firstproof_engine::evaluate_curve_lut(&pts);
 
     assert_eq!(lut_core.len(), 256);
     assert_eq!(lut_core, lut_types);

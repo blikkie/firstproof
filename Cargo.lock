@@ -511,7 +511,7 @@ name = "firstproof-core"
 version = "0.1.0"
 dependencies = [
  "bayer",
- "firstproof-types",
+ "firstproof-engine",
  "glam",
  "image 0.24.9",
  "img-parts",
@@ -530,11 +530,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "firstproof-types"
+name = "firstproof-engine"
 version = "0.1.0"
 dependencies = [
  "glam",
  "kamadak-exif",
+ "rawler",
  "roxmltree",
  "serde",
  "uniffi",
@@ -545,7 +546,7 @@ dependencies = [
 name = "firstproof-wasm"
 version = "0.1.0"
 dependencies = [
- "firstproof-types",
+ "firstproof-engine",
  "getrandom 0.2.17",
  "glam",
  "image 0.24.9",

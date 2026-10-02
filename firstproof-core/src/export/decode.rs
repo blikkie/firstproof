@@ -143,7 +143,7 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                             b = 0.5 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y));
                         }
                     }
-                    let (r_wb, g_wb, b_wb) = firstproof_types::blend_sensor_highlights(r, g, b, wb_r, wb_b);
+                    let (r_wb, g_wb, b_wb) = firstproof_engine::blend_sensor_highlights(r, g, b, wb_r, wb_b);
                     let c_sensor = Color3::new(r_wb, g_wb, b_wb);
                     let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
                     let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);

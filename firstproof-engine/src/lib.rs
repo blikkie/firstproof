@@ -1,5 +1,5 @@
 #[cfg(feature = "uniffi")]
-uniffi::setup_scaffolding!("firstproof_types");
+uniffi::setup_scaffolding!("firstproof_engine");
 
 pub mod auto;
 pub mod color;

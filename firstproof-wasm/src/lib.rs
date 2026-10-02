@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 
 pub mod scratchpad;
 
-pub use firstproof_types::{
+pub use firstproof_engine::{
     evaluate_all_curves_lut, evaluate_curve_lut, extract_preview_slice,
     generate_xmp_sidecar, get_jpeg_dimensions, parse_xmp_sidecar, AllCurvesLutRecord,
     AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode, CurvePointRecord,
@@ -74,105 +74,7 @@ pub fn copy_into_scratchpad(offset: usize, bytes: &js_sys::Uint8Array) -> usize 
 }
 
 fn decode_raw_sensor_frame(slice: &[u8]) -> Option<RawSensorFrame> {
-    let rawfile = rawler::rawsource::RawSource::new_from_slice(slice);
-    let params = rawler::decoders::RawDecodeParams::default();
-    let raw = rawler::decode(&rawfile, &params).ok()?;
-
-    let (crop_top, crop_left, active_w, active_h) = if let Some(crop) = raw.crop_area {
-        let x = (crop.p.x as usize) & !1;
-        let y = (crop.p.y as usize) & !1;
-        let w = (crop.d.w as usize).max(2) & !1;
-        let h = (crop.d.h as usize).max(2) & !1;
-        (y, x, w, h)
-    } else {
-        (0, 0, raw.width & !1, raw.height & !1)
-    };
-
-    let c00 = raw.camera.cfa.color_at(0, 0);
-    let c01 = raw.camera.cfa.color_at(0, 1);
-    let c10 = raw.camera.cfa.color_at(1, 0);
-    let c11 = raw.camera.cfa.color_at(1, 1);
-
-    let cfa_pattern = match (c00, c01, c10, c11) {
-        (0, 1, 1, 2) => CfaPattern::Rggb,
-        (2, 1, 1, 0) => CfaPattern::Bggr,
-        (1, 2, 0, 1) => CfaPattern::Gbrg,
-        (1, 0, 2, 1) => CfaPattern::Grbg,
-        _ => CfaPattern::Rggb,
-    };
-
-    let camera_model = format!("{} {}", raw.clean_make, raw.clean_model).trim().to_string();
-
-    let mut black_levels = [0.0f32; 4];
-    if !raw.blacklevel.levels.is_empty() {
-        let r = &raw.blacklevel.levels[0];
-        let val = if r.d != 0 { r.n as f32 / r.d as f32 } else { r.n as f32 };
-        black_levels = [val; 4];
-    }
-
-    let mut white_levels = [65535.0f32; 4];
-    if !raw.whitelevel.0.is_empty() {
-        white_levels = [raw.whitelevel.0[0] as f32; 4];
-    }
-
-    let wb = raw.wb_coeffs;
-    let wb_coeffs = [wb[0], wb[1], wb[2], wb[3]];
-
-    let sensor_data = match raw.data {
-        rawler::RawImageData::Integer(cfa) => cfa,
-        _ => return None,
-    };
-
-    let find_matrix = |pattern: &str| -> Option<[[f32; 3]; 3]> {
-        raw.color_matrix.iter()
-            .find(|(k, _)| format!("{:?}", k).to_lowercase() == pattern)
-            .and_then(|(_, v)| {
-                if v.len() >= 9 {
-                    Some([
-                        [v[0], v[1], v[2]],
-                        [v[3], v[4], v[5]],
-                        [v[6], v[7], v[8]],
-                    ])
-                } else {
-                    None
-                }
-            })
-    };
-
-    let color_matrix_tungsten = find_matrix("a");
-    let color_matrix = find_matrix("d65")
-        .or_else(|| find_matrix("d50"))
-        .or_else(|| raw.color_matrix.iter().next().and_then(|(_, v)| {
-            if v.len() >= 9 {
-                Some([
-                    [v[0], v[1], v[2]],
-                    [v[3], v[4], v[5]],
-                    [v[6], v[7], v[8]],
-                ])
-            } else {
-                None
-            }
-        }));
-
-    let baseline_exposure = firstproof_types::resolve_baseline_exposure(slice, &camera_model);
-
-    Some(RawSensorFrame {
-        full_width: raw.width,
-        full_height: raw.height,
-        active_x: crop_left,
-        active_y: crop_top,
-        active_width: active_w,
-        active_height: active_h,
-        cfa_pattern,
-        black_levels,
-        white_levels,
-        wb_coeffs,
-        color_matrix,
-        color_matrix_tungsten,
-        camera_model,
-        baseline_exposure,
-        sensor_data,
-    })
+    RawSensorFrame::decode_from_bytes(slice)
 }
 
 fn decode_raw_binned_linear(slice: &[u8]) -> Option<(Vec<u16>, u32, u32)> {
@@ -187,7 +89,7 @@ pub fn decode_raw_linear_from_scratchpad(input_len: usize) -> Result<JsValue, Js
             let slice = buf
                 .slice(0, input_len)
                 .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
-            firstproof_types::extract_metadata_from_bytes(slice)
+            firstproof_engine::extract_metadata_from_bytes(slice)
         };
 
         let linear_res = {
@@ -245,7 +147,7 @@ pub fn decode_raw_full_linear_from_scratchpad(input_len: usize) -> Result<JsValu
             let slice = buf
                 .slice(0, input_len)
                 .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
-            firstproof_types::extract_metadata_from_bytes(slice)
+            firstproof_engine::extract_metadata_from_bytes(slice)
         };
 
         let linear_res = {
@@ -298,7 +200,7 @@ pub fn decode_preview_from_scratchpad(input_len: usize) -> Result<JsValue, JsVal
             let slice = buf
                 .slice(0, input_len)
                 .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
-            firstproof_types::extract_metadata_from_bytes(slice)
+            firstproof_engine::extract_metadata_from_bytes(slice)
         };
 
         // 1. Try extracting high-res embedded preview JPEG
@@ -451,7 +353,7 @@ pub fn evaluate_reference_frame(
     let edits: EditSettings = serde_json::from_str(edits_json)
         .map_err(|e| JsValue::from_str(&format!("Invalid edits JSON: {}", e)))?;
     let curves_lut = resolve_curves_lut(&edits, curves_lut_json)?;
-    Ok(firstproof_types::develop_frame_pipeline(
+    Ok(firstproof_engine::develop_frame_pipeline(
         input_data,
         is_linear_rec2020,
         width,
@@ -473,7 +375,7 @@ pub fn evaluate_reference_pixel(
     let edits: EditSettings = serde_json::from_str(edits_json)
         .map_err(|e| JsValue::from_str(&format!("Invalid edits JSON: {}", e)))?;
     let curves_lut = resolve_curves_lut(&edits, curves_lut_json)?;
-    let rgb = firstproof_types::develop_pixel_pipeline(
+    let rgb = firstproof_engine::develop_pixel_pipeline(
         r,
         g,
         b,
@@ -495,7 +397,7 @@ pub fn evaluate_display_luma(
 ) -> Result<f32, JsValue> {
     let edits: EditSettings = serde_json::from_str(edits_json)
         .map_err(|e| JsValue::from_str(&format!("Invalid edits JSON: {}", e)))?;
-    Ok(firstproof_types::evaluate_display_luma(
+    Ok(firstproof_engine::evaluate_display_luma(
         r,
         g,
         b,
@@ -510,13 +412,13 @@ pub fn compute_auto_adjustments_from_u16(data: &js_sys::Uint16Array, width: u32,
     let target_len = u16_len.min(data.length() as usize);
     let mut vec = vec![0u16; target_len];
     data.copy_to(&mut vec);
-    let adj = firstproof_types::auto::compute_auto_adjustments_from_u16_slice(width, height, &vec);
+    let adj = firstproof_engine::auto::compute_auto_adjustments_from_u16_slice(width, height, &vec);
     serde_wasm_bindgen::to_value(&adj).unwrap_or(JsValue::NULL)
 }
 
 #[wasm_bindgen]
 pub fn compute_auto_adjustments_from_luminances(lums: &[f32]) -> JsValue {
-    let adj = firstproof_types::auto::compute_auto_adjustments_from_luminances(lums.to_vec());
+    let adj = firstproof_engine::auto::compute_auto_adjustments_from_luminances(lums.to_vec());
     serde_wasm_bindgen::to_value(&adj).unwrap_or(JsValue::NULL)
 }
 
@@ -526,25 +428,25 @@ pub fn compute_auto_white_balance_from_u16(data: &js_sys::Uint16Array, width: u3
     let target_len = u16_len.min(data.length() as usize);
     let mut vec = vec![0u16; target_len];
     data.copy_to(&mut vec);
-    let wb = firstproof_types::auto::compute_auto_white_balance_from_u16_slice(width, height, &vec);
+    let wb = firstproof_engine::auto::compute_auto_white_balance_from_u16_slice(width, height, &vec);
     serde_wasm_bindgen::to_value(&wb).unwrap_or(JsValue::NULL)
 }
 
 #[wasm_bindgen]
 pub fn calculate_white_balance_from_sample(r: f32, g: f32, b: f32) -> JsValue {
-    let wb = firstproof_types::auto::calculate_white_balance_from_sample(r, g, b);
+    let wb = firstproof_engine::auto::calculate_white_balance_from_sample(r, g, b);
     serde_wasm_bindgen::to_value(&wb).unwrap_or(JsValue::NULL)
 }
 
 #[wasm_bindgen]
 pub fn decode_exif_orientation(orientation: u32) -> JsValue {
-    let rec = firstproof_types::decode_exif_orientation(orientation);
+    let rec = firstproof_engine::decode_exif_orientation(orientation);
     serde_wasm_bindgen::to_value(&rec).unwrap_or(JsValue::NULL)
 }
 
 #[wasm_bindgen]
 pub fn extract_metadata_from_bytes(bytes: &[u8]) -> JsValue {
-    let meta = firstproof_types::extract_metadata_from_bytes(bytes);
+    let meta = firstproof_engine::extract_metadata_from_bytes(bytes);
     serde_wasm_bindgen::to_value(&meta).unwrap_or(JsValue::NULL)
 }
 
@@ -799,17 +701,17 @@ mod tests {
 
     #[test]
     fn test_wasm_decode_exif_orientation() {
-        let r1 = firstproof_types::decode_exif_orientation(1);
+        let r1 = firstproof_engine::decode_exif_orientation(1);
         assert_eq!(r1.rotation, 0);
         assert!(!r1.flip_horizontal);
         assert!(!r1.flip_vertical);
 
-        let r6 = firstproof_types::decode_exif_orientation(6);
+        let r6 = firstproof_engine::decode_exif_orientation(6);
         assert_eq!(r6.rotation, 90);
         assert!(!r6.flip_horizontal);
         assert!(!r6.flip_vertical);
 
-        let r8 = firstproof_types::decode_exif_orientation(8);
+        let r8 = firstproof_engine::decode_exif_orientation(8);
         assert_eq!(r8.rotation, 270);
         assert!(!r8.flip_horizontal);
         assert!(!r8.flip_vertical);
@@ -828,7 +730,7 @@ mod tests {
         bytes[14..18].copy_from_slice(&1u32.to_le_bytes());      // Count
         bytes[18..22].copy_from_slice(&8u32.to_le_bytes());      // Value = 8 (270 deg)
 
-        let meta = firstproof_types::extract_metadata_from_bytes(&bytes);
+        let meta = firstproof_engine::extract_metadata_from_bytes(&bytes);
         assert_eq!(meta.orientation, Some(8));
     }
 

@@ -1026,7 +1026,7 @@ impl Database {
 
                 if let Some(data) = xmp_data {
                     let dst_xmp = dest_folder.join(format!("{}.xmp", src_path.file_stem().unwrap_or_default().to_string_lossy()));
-                    let xml_str = xmp::writer::generate_xmp(&data);
+                    let xml_str = xmp::generate_xmp(&data);
                     if let Err(e) = fs::write(&dst_xmp, xml_str) {
                         error_messages.push(format!("Failed to write consolidated XMP for {}: {}", src_path.display(), e));
                     } else {

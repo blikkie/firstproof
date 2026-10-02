@@ -1,11 +1,5 @@
-pub mod data;
-pub mod writer;
-pub mod reader;
+pub use firstproof_engine::xmp::*;
 pub mod io;
-
-pub use data::*;
-pub use writer::*;
-pub use reader::*;
 pub use io::*;
 
 #[cfg(test)]

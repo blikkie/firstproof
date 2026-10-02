@@ -1,5 +1,5 @@
 [package]
-name = "firstproof-types"
+name = "firstproof-engine"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,6 +9,7 @@ roxmltree = "0.19.0"
 xmp-writer = "0.3"
 kamadak-exif = "0.5.5"
 glam = "0.27"
+rawler = "0.8"
 uniffi = { version = "0.28", optional = true }
 
 [features]

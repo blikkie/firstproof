@@ -2,6 +2,6 @@
 members = [
     "firstproof-core",
     "firstproof-wasm",
-    "firstproof-types",
+    "firstproof-engine",
 ]
 resolver = "2"

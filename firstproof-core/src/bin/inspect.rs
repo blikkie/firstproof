@@ -233,7 +233,7 @@ fn main() {
                 let g_norm = if g_cnt > 0.0 { g_sum / g_cnt } else { 0.0 };
                 let b_norm = if b_cnt > 0.0 { b_sum / b_cnt } else { 0.0 };
 
-                let (r_wb, g_wb, b_wb) = firstproof_types::blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
+                let (r_wb, g_wb, b_wb) = firstproof_engine::blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
                 println!("Raw Norm: R={:.5}, G={:.5}, B={:.5}", r_norm, g_norm, b_norm);
                 println!("WB Signal: R={:.5}, G={:.5}, B={:.5}", r_wb, g_wb, b_wb);
 
