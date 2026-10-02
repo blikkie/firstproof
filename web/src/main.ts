@@ -25,6 +25,9 @@ import {
 } from './utils/formatters';
 import { readExifOrientationFromBlob } from './utils/exifReader';
 import { IntermediateTextureCache } from './IntermediateTextureCache';
+import { isDebugMode } from './utils/debug';
+import { KeyboardShortcutController } from './controllers/KeyboardShortcutController';
+import { CanvasViewportController } from './controllers/CanvasViewportController';
 
 import { decode_exif_orientation } from 'firstproof-wasm';
 import type { ExifOrientationRecord } from 'firstproof-wasm';
@@ -95,19 +98,37 @@ class DarkroomApp {
   private currentMetadata: any = {};
   private currentRating: number = 0;
   private currentStatus: string = 'Unflagged';
-  private activeEyedropper: 'wb' | 'white' | 'black' | null = null;
   private selectRequestId: number = 0;
   private selectDebounceTimer: any = null;
   private preloadDebounceTimer: any = null;
   private thumbLoadingSet: Set<number> = new Set();
   private prewarmLoadingSet: Set<number> = new Set();
 
-  // Zoom & Pan state (100% 1:1 sensor pixel peeping)
-  private zoomScale: number = 1.0;
-  private panOffset: { x: number; y: number } = { x: 0, y: 0 };
-  private isPanning: boolean = false;
-  private panStartPos: { x: number; y: number } = { x: 0, y: 0 };
-  private panStartOffset: { x: number; y: number } = { x: 0, y: 0 };
+  // Modular Controllers
+  private viewportController!: CanvasViewportController;
+  private keyboardController!: KeyboardShortcutController;
+
+  private get zoomScale(): number {
+    return this.viewportController ? this.viewportController.getZoom() : 1.0;
+  }
+  private set zoomScale(val: number) {
+    if (this.viewportController) {
+      this.viewportController.setZoom(val);
+    }
+  }
+
+  private get panOffset(): { x: number; y: number } {
+    return this.viewportController ? this.viewportController.getPan() : { x: 0, y: 0 };
+  }
+  private set panOffset(val: { x: number; y: number }) {
+    if (this.viewportController) {
+      this.viewportController.setZoom(this.viewportController.getZoom(), val);
+    }
+  }
+
+  private get activeEyedropper(): 'wb' | 'white' | 'black' | null {
+    return this.viewportController ? this.viewportController.getActiveEyedropper() : null;
+  }
 
   // Crop & Straighten tool state
   private isCropActive: boolean = false;
@@ -410,7 +431,105 @@ class DarkroomApp {
       }
     });
 
-    // 5. Bind UI Controls & Shortcuts
+    // 5. Init Viewport & Navigation Controllers
+    if (!isDebugMode()) {
+      const btnParity = document.getElementById('btn-parity-audit');
+      if (btnParity) {
+        btnParity.style.display = 'none';
+      }
+    }
+
+    const canvasWrapper = document.getElementById('canvas-wrapper') as HTMLElement;
+    const zoomBadge = document.getElementById('zoom-badge');
+    this.viewportController = new CanvasViewportController(
+      canvas,
+      canvasWrapper,
+      zoomBadge,
+      {
+        onRender: () => this.renderCanvas(),
+        onUpdateCropOverlay: () => {
+          if (this.isCropActive) this.updateCropOverlayPosition();
+        },
+        onSampleEyedropper: (mode, r, g, b) => this.handleSampleEyedropper(mode, r, g, b),
+        isCropActive: () => this.isCropActive,
+        getEdits: () => this.edits,
+        getImageDimensions: () => ({
+          width: this.activeLinearW || this.activeSourceW || 1920,
+          height: this.activeLinearH || this.activeSourceH || 1080,
+          rawWidth: this.currentMetadata?.raw_width,
+          rawHeight: this.currentMetadata?.raw_height,
+        }),
+      }
+    );
+    this.viewportController.bind();
+
+    this.keyboardController = new KeyboardShortcutController({
+      onEscape: () => {
+        if (this.cropController?.isRotating) {
+          this.cropController.cancelRotation();
+          return;
+        }
+        if (this.activeScrub) {
+          this.rollbackActiveScrub();
+          return;
+        }
+        if (this.isCropActive) {
+          this.toggleCropMode(false);
+          return;
+        }
+        if (this.viewportController.getActiveEyedropper()) {
+          this.viewportController.clearEyedropper();
+          return;
+        }
+      },
+      onSelectTab: (tab) => this.selectInspectorTab(tab),
+      onResetAllEdits: () => this.resetAllEdits(),
+      onApplyAutoTone: () => this.applyAutoTone(),
+      onOpenExportModal: () => this.openExportModal(),
+      onSetRating: (rating) => {
+        this.currentRating = rating;
+        this.syncRatingFlagUI();
+        this.autoSaveSidecar();
+      },
+      onTogglePick: () => {
+        this.currentStatus = (this.currentStatus === 'Pick') ? 'Unflagged' : 'Pick';
+        this.syncRatingFlagUI();
+        this.autoSaveSidecar();
+      },
+      onToggleReject: () => {
+        this.currentStatus = (this.currentStatus === 'Reject') ? 'Unflagged' : 'Reject';
+        this.syncRatingFlagUI();
+        this.autoSaveSidecar();
+      },
+      onUnflag: () => {
+        this.currentStatus = 'Unflagged';
+        this.syncRatingFlagUI();
+        this.autoSaveSidecar();
+      },
+      onEnter: () => {
+        if (this.isCropActive) this.toggleCropMode(false);
+      },
+      onToggleCrop: () => this.toggleCropMode(),
+      onCropFlipOrientation: () => this.cropController?.flipCropOrientation(),
+      onTogglePixelPeep: () => this.viewportController.togglePixelPeep(),
+      onRotate: (delta) => this.rotateImage(delta),
+      onToggleEyedropper: (mode) => this.viewportController.toggleEyedropper(mode),
+      onPeekOriginal: (active) => {
+        this.isOriginalPeek = active;
+        this.renderCanvas();
+      },
+      onNavigate: (dir) => {
+        if (dir === -1 && this.activeIdx > 0) {
+          this.selectPhoto(this.activeIdx - 1, true);
+        } else if (dir === 1 && this.activeIdx < this.fileEntries.length - 1) {
+          this.selectPhoto(this.activeIdx + 1, true);
+        }
+      },
+      isCropActive: () => this.isCropActive,
+    });
+    this.keyboardController.bind();
+
+    // 6. Bind UI Controls & Sliders
     this.bindEvents();
     this.updateUI();
 
@@ -520,20 +639,36 @@ class DarkroomApp {
   }
 
   private toggleEyedropper(mode: 'wb' | 'white' | 'black') {
-    const wrapper = document.getElementById('canvas-wrapper');
-    if (this.activeEyedropper === mode) {
-      this.activeEyedropper = null;
-      if (wrapper) wrapper.style.cursor = 'default';
-      this.elements['btn-wb-eyedropper']?.classList.remove('active');
-      this.elements['btn-white-point-picker']?.classList.remove('active');
-      this.elements['btn-black-point-picker']?.classList.remove('active');
-    } else {
-      this.activeEyedropper = mode;
-      if (wrapper) wrapper.style.cursor = 'crosshair';
-      this.elements['btn-wb-eyedropper']?.classList.toggle('active', mode === 'wb');
-      this.elements['btn-white-point-picker']?.classList.toggle('active', mode === 'white');
-      this.elements['btn-black-point-picker']?.classList.toggle('active', mode === 'black');
+    this.viewportController.toggleEyedropper(mode);
+  }
+
+  private handleSampleEyedropper(mode: 'wb' | 'white' | 'black', r: number, g: number, b: number) {
+    if (mode === 'wb') {
+      if (r > 0 && g > 0 && b > 0) {
+        const curTemp = this.edits.temperature;
+        const curTint = this.edits.tint;
+        const targetTemp = Math.min(Math.max(Math.round(curTemp * Math.pow(b / r, 0.35)), 2000), 15000);
+        const targetTint = Math.min(Math.max(Math.round(curTint + (g - (r + b) / 2) * 80), -150), 150);
+
+        this.edits.temperature = targetTemp;
+        this.edits.tint = targetTint;
+        if (this.elements['select-wb-preset']) {
+          (this.elements['select-wb-preset'] as HTMLSelectElement).value = 'Custom';
+        }
+      }
+    } else if (mode === 'white') {
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const shift = Math.round(Math.min(Math.max((1.0 - lum) * 100, -100), 100));
+      this.edits.whites = shift;
+    } else if (mode === 'black') {
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const shift = Math.round(Math.min(Math.max(-lum * 100, -100), 100));
+      this.edits.blacks = shift;
     }
+
+    this.syncSliderUI();
+    this.renderCanvas();
+    this.autoSaveSidecar();
   }
 
   private bindEvents() {
@@ -616,109 +751,10 @@ class DarkroomApp {
       this.autoSaveSidecar();
     });
 
-    // Eyedroppers & Pickers
-    this.elements['btn-wb-eyedropper']?.addEventListener('click', () => this.toggleEyedropper('wb'));
-    this.elements['btn-white-point-picker']?.addEventListener('click', () => this.toggleEyedropper('white'));
-    this.elements['btn-black-point-picker']?.addEventListener('click', () => this.toggleEyedropper('black'));
-
-    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
-    canvas.addEventListener('click', (e: MouseEvent) => {
-      if (!this.activeEyedropper) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = Math.floor((e.clientX - rect.left) * (canvas.width / rect.width));
-      const y = Math.floor((e.clientY - rect.top) * (canvas.height / rect.height));
-
-      const gl = (canvas as any).getContext('webgl2') as WebGL2RenderingContext;
-      if (gl) {
-        const pixels = new Uint8Array(4);
-        const glY = canvas.height - y - 1;
-        gl.readPixels(x, glY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        const [r, g, b] = [pixels[0] / 255, pixels[1] / 255, pixels[2] / 255];
-
-        if (this.activeEyedropper === 'wb') {
-          if (r > 0 && g > 0 && b > 0) {
-            const curTemp = this.edits.temperature;
-            const curTint = this.edits.tint;
-            const targetTemp = Math.min(Math.max(Math.round(curTemp * Math.pow(b / r, 0.35)), 2000), 15000);
-            const targetTint = Math.min(Math.max(Math.round(curTint + (g - (r + b) / 2) * 80), -150), 150);
-
-            this.edits.temperature = targetTemp;
-            this.edits.tint = targetTint;
-            if (this.elements['select-wb-preset']) {
-              (this.elements['select-wb-preset'] as HTMLSelectElement).value = 'Custom';
-            }
-          }
-        } else if (this.activeEyedropper === 'white') {
-          const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          const shift = Math.round(Math.min(Math.max((1.0 - lum) * 100, -100), 100));
-          this.edits.whites = shift;
-        } else if (this.activeEyedropper === 'black') {
-          const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          const shift = Math.round(Math.min(Math.max(-lum * 100, -100), 100));
-          this.edits.blacks = shift;
-        }
-
-        this.syncSliderUI();
-        this.renderCanvas();
-        this.autoSaveSidecar();
-        this.toggleEyedropper(this.activeEyedropper);
-      }
-    });
-
     // Header Crop & Rotation Tools
     this.elements['btn-crop-tool']?.addEventListener('click', () => this.toggleCropMode());
     this.elements['btn-rotate-ccw']?.addEventListener('click', () => this.rotateImage(-90));
     this.elements['btn-rotate-cw']?.addEventListener('click', () => this.rotateImage(90));
-    this.elements['zoom-badge']?.addEventListener('click', () => this.togglePixelPeep());
-
-    // Canvas Double-Click to Pixel Peep (100% 1:1 sensor view)
-    canvas.addEventListener('dblclick', (e: MouseEvent) => {
-      if (this.isCropActive) return;
-      this.togglePixelPeep(e.clientX, e.clientY);
-    });
-
-    // Canvas Drag to Pan Viewport when zoomed
-    canvas.addEventListener('mousedown', (e: MouseEvent) => {
-      if (this.activeEyedropper) return;
-      if (this.isCropActive) return;
-      if (this.zoomScale > 1.05 && e.button === 0) {
-        this.isPanning = true;
-        this.panStartPos = { x: e.clientX, y: e.clientY };
-        this.panStartOffset = { ...this.panOffset };
-        canvas.style.cursor = 'grabbing';
-        e.preventDefault();
-      }
-    });
-
-    window.addEventListener('mousemove', (e: MouseEvent) => {
-      if (this.isPanning) {
-        const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
-        const rect = wrapper ? wrapper.getBoundingClientRect() : canvas.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          const dx = ((e.clientX - this.panStartPos.x) / (rect.width / 2));
-          const dy = -((e.clientY - this.panStartPos.y) / (rect.height / 2));
-          this.panOffset.x = this.panStartOffset.x + dx;
-          this.panOffset.y = this.panStartOffset.y + dy;
-          this.clampPanOffset();
-          this.renderCanvas();
-        }
-      }
-    });
-
-    window.addEventListener('mouseup', () => {
-      if (this.isPanning) {
-        this.isPanning = false;
-        canvas.style.cursor = this.zoomScale > 1.05 ? 'grab' : 'default';
-      }
-    });
-
-    window.addEventListener('resize', () => {
-      this.updateCanvasDimensions();
-      this.renderCanvas();
-      if (this.isCropActive) {
-        this.updateCropOverlayPosition();
-      }
-    });
 
     // Auto Tone Button (Light & Exposure section)
     this.elements['btn-auto-tone']?.addEventListener('click', () => this.applyAutoTone());
@@ -1020,157 +1056,6 @@ class DarkroomApp {
     window.addEventListener('pointercancel', () => {
       if (this.activeScrub) {
         this.rollbackActiveScrub();
-      }
-    });
-
-    // Keyboard Shortcuts filter with FIRST-RESPONDER TEXT FIELD SHIELDING
-    window.addEventListener('keydown', (e: KeyboardEvent) => {
-      // Escape key rolls back active scrubbing slider, active rotation, or exits active crop mode
-      if (e.key === 'Escape') {
-        if (this.cropController?.isRotating) {
-          this.cropController.cancelRotation();
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-        if (this.activeScrub) {
-          this.rollbackActiveScrub();
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-        if (this.isCropActive) {
-          this.toggleCropMode(false);
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-      }
-
-      const activeEl = document.activeElement;
-      const isTextField = activeEl && (
-        (activeEl.tagName === 'INPUT' && (activeEl as HTMLInputElement).type !== 'range') ||
-        activeEl.tagName === 'TEXTAREA' ||
-        (activeEl as HTMLElement).isContentEditable
-      );
-      if (isTextField) {
-        return; // Guardrail: Never intercept single-key shortcuts while user is typing in metadata fields!
-      }
-
-      // Cmd+1..5 / Ctrl+1..5: Workspace Tab Navigation
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey) {
-        if (e.key === '1') { e.preventDefault(); this.selectInspectorTab('light'); return; }
-        if (e.key === '2') { e.preventDefault(); this.selectInspectorTab('color'); return; }
-        if (e.key === '3') { e.preventDefault(); this.selectInspectorTab('detail'); return; }
-        if (e.key === '4') { e.preventDefault(); this.selectInspectorTab('emulsion'); return; }
-        if (e.key === '5') { e.preventDefault(); this.selectInspectorTab('info'); return; }
-      }
-
-      // Cmd+Shift+R / Ctrl+Shift+R: Reset All Edits
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
-        e.preventDefault();
-        this.resetAllEdits();
-        return;
-      }
-
-      // Cmd+U / Ctrl+U: Auto Tone calculation
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'u' || e.key === 'U')) {
-        e.preventDefault();
-        this.applyAutoTone();
-        return;
-      }
-
-      // Cmd+E / Ctrl+E: Export Photo... (macOS Parity)
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'e' || e.key === 'E')) {
-        e.preventDefault();
-        this.openExportModal();
-        return;
-      }
-
-      switch (e.key) {
-        case '1': case '2': case '3': case '4': case '5':
-          this.currentRating = parseInt(e.key, 10);
-          this.syncRatingFlagUI();
-          this.autoSaveSidecar();
-          break;
-        case '0':
-          this.currentRating = 0;
-          this.syncRatingFlagUI();
-          this.autoSaveSidecar();
-          break;
-        case 'p': case 'P':
-          this.currentStatus = (this.currentStatus === 'Pick') ? 'Unflagged' : 'Pick';
-          this.syncRatingFlagUI();
-          this.autoSaveSidecar();
-          break;
-        case 'x': case 'X':
-          if (this.isCropActive) {
-            this.cropController.flipCropOrientation();
-            return;
-          }
-          this.currentStatus = (this.currentStatus === 'Reject') ? 'Unflagged' : 'Reject';
-          this.syncRatingFlagUI();
-          this.autoSaveSidecar();
-          break;
-        case 'u': case 'U':
-          this.currentStatus = 'Unflagged';
-          this.syncRatingFlagUI();
-          this.autoSaveSidecar();
-          break;
-        case 'Enter':
-          if (this.isCropActive) {
-            this.toggleCropMode(false);
-          }
-          break;
-        case 'c': case 'C':
-          this.toggleCropMode();
-          break;
-        case 'z': case 'Z':
-          if (!this.isCropActive) {
-            this.togglePixelPeep();
-          }
-          break;
-        case '[':
-          this.rotateImage(-90);
-          break;
-        case ']':
-          this.rotateImage(90);
-          break;
-        case 'w': case 'W':
-          this.toggleEyedropper('wb');
-          break;
-        case '\\':
-          this.isOriginalPeek = true;
-          this.renderCanvas();
-          break;
-        case 'ArrowLeft':
-        case 'ArrowUp':
-          if (this.activeIdx > 0) {
-            e.preventDefault();
-            this.selectPhoto(this.activeIdx - 1, true);
-          }
-          break;
-        case 'ArrowRight':
-        case 'ArrowDown':
-          if (this.activeIdx < this.fileEntries.length - 1) {
-            e.preventDefault();
-            this.selectPhoto(this.activeIdx + 1, true);
-          }
-          break;
-      }
-    });
-
-    window.addEventListener('keyup', (e: KeyboardEvent) => {
-      if (e.key === '\\') {
-        this.isOriginalPeek = false;
-        this.renderCanvas();
-      }
-    });
-
-    window.addEventListener('blur', () => {
-      if (this.isOriginalPeek) {
-        this.isOriginalPeek = false;
-        this.renderCanvas();
       }
     });
   }
