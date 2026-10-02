@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines)** (P1)
-2. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
-3. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
-4. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
+1. **Story 3.9: Unified RAW Container Intake & Camera Calibration Registry Engine** (P1)
+2. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
+3. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
+4. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -98,26 +98,8 @@ This document strictly tracks pending and deferred features calibrated against o
   - Strict anti-marketing principles: Zero email address capture, zero tracking scripts, zero waitlists. Direct link to open source repo and binaries when ready.
 
 
-### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1)
-
-A systematic initiative executed strictly under the [Subsystem Parity & Reference Deconstruction Protocol](../../.agents/skills/firstproof-subsystem-parity/SKILL.md) to eliminate duplicated logic, establish single sources of truth in `firstproof-engine`, achieve 1:1 mathematical and behavioral parity with native macOS Metal, and purge AI slop and fake parity.
-
-> **Authoritative Technical Mini Specs**:
-> - [Viewport Geometry, Gestures & Texture Lifecycle](../specs/viewport_geometry_and_gestures.md)
-> - [Pipeline Stages & Color Space Working Invariants](../specs/pipeline_stages_and_color_spaces.md)
-
-
-
-- **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,586 Lines) (P1)**:
-  - Extract dedicated modules from `main.ts`:
-    - `KeyboardShortcutController.ts` (first-responder shielded desktop shortcuts)
-    - `InspectorSyncController.ts` (slider bindings, curve listeners, tab navigation)
-    - `FilmstripController.ts` (thumbnail card rendering, DOM recycling, selection, and viewport-driven lazy loading via `IntersectionObserver` / scroll listeners with concurrency throttling so thumbnails continuously load as the user scrolls)
-    - `PhotoLoaderService.ts` (worker dispatch, debounce staging, cache coordinator)
-  - **Developer & Diagnostics Flag Quarantine**:
-    - Gate diagnostic affordances (`btn-parity-audit`, `ParityModal`) behind a developer flag (`?dev=1`, `?debug=1`, or `import.meta.env.DEV`), ensuring the public darkroom interface remains uncluttered and strictly focused on photographic craft without internal test harnesses in the primary toolbar.
-  - Reduce `main.ts` to a lean application coordinator (< 250 lines).
-  - *Verification*: Full end-to-end regression check across all tools, keyboard shortcuts, filmstrip smooth scrolling with lazy thumbnail hydration, and inspector tabs.
+### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1) - COMPLETED
+All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](completed.md).
 
 ### 3.9 Unified RAW Container Intake & Camera Calibration Registry Engine (P1)
 - **Eliminate Ad-Hoc Tag Scanning (`firstproof-engine::container`)**:

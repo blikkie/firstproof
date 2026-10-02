@@ -245,3 +245,18 @@ This archive tracks completed stories and features moved from the active backlog
   - *Metadata Struct Consolidation*: Consolidated `ImageMetadataRecord` in `firstproof-engine/src/preview.rs` to include GPS coordinates (`latitude`, `longitude`), `description`, `creator`, and `copyright`, eliminating duplicate `struct ImageMetadata` and EXIF parsing in `firstproof-core/src/raw.rs`.
   - *Parameter Schema & Mired Bridge*: Re-exported `AdjustmentDescriptor`, `all_adjustments()`, `convert_kelvin_to_mired_norm()`, and `convert_mired_norm_to_kelvin()` from `firstproof-engine` through `firstproof-core` via UniFFI.
   - *Verification*: 100% test pass across all crates (15 tests in `firstproof-engine`, 59 unit + 10 integration test suites in `firstproof-core`, 6 tests in `firstproof-wasm`, clean `wasm-pack build`, clean `npm run build` in `web/`).
+- **Story 3.8.7: Deconstruct the `main.ts` Monolith (2,660 Lines to 978 Lines)**:
+  - *Extracted Dedicated Controllers & Services*:
+    1. `KeyboardShortcutController.ts` (197 lines): First-responder shielded desktop shortcuts (ratings `1`..`5`, flags `P`/`X`/`U`, crop `C`, zoom `Z`, peek `\`, reset, export, undo/redo).
+    2. `CanvasViewportController.ts` (139 lines): Viewport pointer tracking, zoom, pan, hover hit-testing, and pinch-to-zoom scoping so zoom gestures only fire when hovering over the photo canvas.
+    3. `InspectorSyncController.ts` (451 lines): Develop sidebar DOM elements, tab navigation, slider bindings, curve listeners, and drag scrub state machine (`beginScrub` / `endScrub` undo integration).
+    4. `FilmstripController.ts` (488 lines): DOM card rendering, viewport-driven lazy thumbnail hydration using `IntersectionObserver` (`rootMargin: '300px'`) and throttled concurrency (`MAX_CONCURRENT_THUMBNAILS = 3`), multi-selection (single, Shift-range, Cmd/Ctrl-toggle), and step navigation.
+    5. `PhotoLoaderService.ts` (645 lines): Off-main-thread Web Worker RAW decoding pool with direct WASM fallback, 4-item LRU prewarming cache with explicit `ImageBitmap` disposal, unified `PhotoRecord` state management, and touch-free XMP sidecar auto-save.
+    6. Domain Helpers: `utils/edits.ts` (default edit factories and modification detection) and `utils/metadataHeader.ts` (EXIF telemetry DOM updates).
+  - *Developer Mode Quarantine*:
+    - Gated internal parity diagnostics (`#btn-parity-audit`, `ParityModal`) behind developer mode query parameters (`?dev=1`, `?debug=1`, or `import.meta.env.DEV`), ensuring the default UI remains uncluttered and focused on photographic craft.
+  - *Root-Cause Bug Resolutions*:
+    - *Reset Resurrection*: Ensured `autoSaveSidecar` persists reset default edits if an XMP sidecar already exists on disk, and eliminated redundant delayed sidecar re-reads in photo selection.
+    - *Rating/Flag Leakage*: Unified per-photo state inside `PhotoRecord` so selecting a new photo strictly reads and binds that photo's own rating and flag state, preventing cross-photo bleed.
+  - *Verification*: Monolith reduced from 2,660 lines down to 978 lines (a 63% reduction); full browser verification of all shortcuts, pinch/pan zoom, lazy thumbnail hydration, sidecar reset persistence, rating/flag isolation, and clean `npm run build`.
+
