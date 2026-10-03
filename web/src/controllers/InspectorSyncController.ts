@@ -11,14 +11,14 @@
  * - Emulsion workspace conditional visibility
  */
 
-import {
-  EditSettingsPayload,
+import type { ToneCurveWidget } from '../ToneCurveWidget';
+import { formatExposure } from '../utils/formatters';
+import type {
   ColorProfileMode,
+  EditSettingsPayload,
   EmulsionArchetype,
   PrintMediaMode,
 } from '../WasmBridge';
-import { ToneCurveWidget } from '../ToneCurveWidget';
-import { formatExposure } from '../utils/formatters';
 
 export interface ActiveSliderScrub {
   id: string;
@@ -110,9 +110,10 @@ export class InspectorSyncController {
     const p = Math.min(Math.max(pos, 0.0), 1.0);
     const mired = 500.0 - p * 450.0;
     const rawK = 1_000_000.0 / mired;
-    const steppedK = (rawK < 10000.0)
-      ? Math.round(rawK / 50.0) * 50.0
-      : Math.round(rawK / 200.0) * 200.0;
+    const steppedK =
+      rawK < 10000.0
+        ? Math.round(rawK / 50.0) * 50.0
+        : Math.round(rawK / 200.0) * 200.0;
     return Math.min(Math.max(steppedK, 2000.0), 20000.0);
   }
 
@@ -153,21 +154,22 @@ export class InspectorSyncController {
 
   public selectInspectorTab(tab: string): void {
     const tabBtns = document.querySelectorAll('.seg-btn');
-    tabBtns.forEach(b => {
+    tabBtns.forEach((b) => {
       const isMatch = b.getAttribute('data-tab') === tab;
       b.classList.toggle('active', isMatch);
       b.setAttribute('aria-selected', isMatch ? 'true' : 'false');
     });
 
     const panels = document.querySelectorAll('.workspace-panel');
-    panels.forEach(p => {
+    panels.forEach((p) => {
       p.classList.toggle('hidden', p.id !== `tab-${tab}`);
     });
   }
 
   public updateSplitToningHint(): void {
     const edits = this.delegate.getEdits();
-    const hasSplitToning = (edits.split_toning_shadow_sat > 0) || (edits.split_toning_highlight_sat > 0);
+    const hasSplitToning =
+      edits.split_toning_shadow_sat > 0 || edits.split_toning_highlight_sat > 0;
     const hintEl = document.getElementById('hint-split-toning');
     if (hintEl) {
       hintEl.innerText = hasSplitToning ? 'Active' : 'Off';
@@ -200,7 +202,9 @@ export class InspectorSyncController {
 
     // 3. Print media sliders only visible when print media is selected
     const hasPrintMedia = edits.print_media !== 'None';
-    const sectionPrintSliders = document.getElementById('section-print-media-sliders');
+    const sectionPrintSliders = document.getElementById(
+      'section-print-media-sliders',
+    );
     if (sectionPrintSliders) {
       sectionPrintSliders.classList.toggle('hidden', !hasPrintMedia);
     }
@@ -209,7 +213,11 @@ export class InspectorSyncController {
   public syncSliderUI(): void {
     const edits = this.delegate.getEdits();
 
-    const setVal = (id: string, val: number | undefined, format: (v: number) => string) => {
+    const setVal = (
+      id: string,
+      val: number | undefined,
+      format: (v: number) => string,
+    ) => {
       const input = document.getElementById(`slider-${id}`) as HTMLInputElement;
       const label = document.getElementById(`val-${id}`) as HTMLElement;
       if (input && label && val !== undefined) {
@@ -218,55 +226,101 @@ export class InspectorSyncController {
       }
     };
 
-    setVal('exposure', edits.exposure, v => formatExposure(v));
-    setVal('contrast', edits.contrast, v => `${Math.round(v)}`);
-    setVal('highlights', edits.highlights, v => `${Math.round(v)}`);
-    setVal('shadows', edits.shadows, v => `${Math.round(v)}`);
-    setVal('whites', edits.whites, v => `${Math.round(v)}`);
-    setVal('blacks', edits.blacks, v => `${Math.round(v)}`);
+    setVal('exposure', edits.exposure, (v) => formatExposure(v));
+    setVal('contrast', edits.contrast, (v) => `${Math.round(v)}`);
+    setVal('highlights', edits.highlights, (v) => `${Math.round(v)}`);
+    setVal('shadows', edits.shadows, (v) => `${Math.round(v)}`);
+    setVal('whites', edits.whites, (v) => `${Math.round(v)}`);
+    setVal('blacks', edits.blacks, (v) => `${Math.round(v)}`);
 
-    const tempInput = document.getElementById('slider-temp') as HTMLInputElement;
+    const tempInput = document.getElementById(
+      'slider-temp',
+    ) as HTMLInputElement;
     const tempLabel = document.getElementById('val-temp') as HTMLElement;
     if (tempInput && tempLabel && edits.temperature !== undefined) {
       tempInput.value = this.kelvinToMiredPos(edits.temperature).toFixed(4);
       tempLabel.innerText = `${Math.round(edits.temperature)} K`;
     }
 
-    setVal('tint', edits.tint, v => `${Math.round(v)}`);
-    setVal('vibrance', edits.vibrance, v => `${Math.round(v)}`);
-    setVal('saturation', edits.saturation, v => `${Math.round(v)}`);
-    setVal('deep-blue', edits.deep_blue, v => `${Math.round(v)}`);
-    setVal('foliage', edits.foliage, v => `${Math.round(v)}`);
-    setVal('emulsion-exp', edits.emulsion_exposure, v => formatExposure(v));
-    setVal('paper-grade', edits.print_paper_grade, v => `${v.toFixed(1)}`);
-    setVal('base-warmth', edits.print_base_warmth, v => `${Math.round(v)}`);
-    setVal('process-depth', edits.print_process_depth, v => `${Math.round(v)}%`);
-    setVal('sharpen-amount', edits.sharpening_amount, v => `${Math.round(v)}`);
-    setVal('sharpen-radius', edits.sharpening_radius, v => `${v.toFixed(1)} px`);
-    setVal('sharpen-masking', edits.sharpening_masking, v => `${Math.round(v)}`);
-    setVal('noise-reduction', edits.noise_reduction, v => `${Math.round(v)}`);
+    setVal('tint', edits.tint, (v) => `${Math.round(v)}`);
+    setVal('vibrance', edits.vibrance, (v) => `${Math.round(v)}`);
+    setVal('saturation', edits.saturation, (v) => `${Math.round(v)}`);
+    setVal('deep-blue', edits.deep_blue, (v) => `${Math.round(v)}`);
+    setVal('foliage', edits.foliage, (v) => `${Math.round(v)}`);
+    setVal('emulsion-exp', edits.emulsion_exposure, (v) => formatExposure(v));
+    setVal('paper-grade', edits.print_paper_grade, (v) => `${v.toFixed(1)}`);
+    setVal('base-warmth', edits.print_base_warmth, (v) => `${Math.round(v)}`);
+    setVal(
+      'process-depth',
+      edits.print_process_depth,
+      (v) => `${Math.round(v)}%`,
+    );
+    setVal(
+      'sharpen-amount',
+      edits.sharpening_amount,
+      (v) => `${Math.round(v)}`,
+    );
+    setVal(
+      'sharpen-radius',
+      edits.sharpening_radius,
+      (v) => `${v.toFixed(1)} px`,
+    );
+    setVal(
+      'sharpen-masking',
+      edits.sharpening_masking,
+      (v) => `${Math.round(v)}`,
+    );
+    setVal('noise-reduction', edits.noise_reduction, (v) => `${Math.round(v)}`);
 
-    setVal('shadow-hue', edits.split_toning_shadow_hue, v => `${Math.round(v)}°`);
-    setVal('shadow-sat', edits.split_toning_shadow_sat, v => `${Math.round(v)}`);
-    setVal('highlight-hue', edits.split_toning_highlight_hue, v => `${Math.round(v)}°`);
-    setVal('highlight-sat', edits.split_toning_highlight_sat, v => `${Math.round(v)}`);
-    setVal('split-balance', edits.split_toning_balance, v => `${Math.round(v)}`);
+    setVal(
+      'shadow-hue',
+      edits.split_toning_shadow_hue,
+      (v) => `${Math.round(v)}°`,
+    );
+    setVal(
+      'shadow-sat',
+      edits.split_toning_shadow_sat,
+      (v) => `${Math.round(v)}`,
+    );
+    setVal(
+      'highlight-hue',
+      edits.split_toning_highlight_hue,
+      (v) => `${Math.round(v)}°`,
+    );
+    setVal(
+      'highlight-sat',
+      edits.split_toning_highlight_sat,
+      (v) => `${Math.round(v)}`,
+    );
+    setVal(
+      'split-balance',
+      edits.split_toning_balance,
+      (v) => `${Math.round(v)}`,
+    );
 
     this.updateSplitToningHint();
 
-    const selectTone = document.getElementById('select-tone-profile') as HTMLSelectElement | null;
+    const selectTone = document.getElementById(
+      'select-tone-profile',
+    ) as HTMLSelectElement | null;
     if (selectTone && edits.tone_profile) {
       selectTone.value = edits.tone_profile;
     }
-    const selectEmulsion = document.getElementById('select-emulsion') as HTMLSelectElement | null;
+    const selectEmulsion = document.getElementById(
+      'select-emulsion',
+    ) as HTMLSelectElement | null;
     if (selectEmulsion && edits.emulsion_archetype) {
       selectEmulsion.value = edits.emulsion_archetype;
     }
-    const selectPrint = document.getElementById('select-print-media') as HTMLSelectElement | null;
+    const selectPrint = document.getElementById(
+      'select-print-media',
+    ) as HTMLSelectElement | null;
     if (selectPrint && edits.print_media) {
       selectPrint.value = edits.print_media;
     }
-    const selectFilter = document.getElementById('select-enlarger-filter') as HTMLSelectElement | null;
+    const selectFilter = document.getElementById(
+      'select-enlarger-filter',
+    ) as HTMLSelectElement | null;
     if (selectFilter) {
       selectFilter.value = edits.enlarger_filter ?? 'NeutralPanchromatic';
     }
@@ -281,7 +335,11 @@ export class InspectorSyncController {
     }
   }
 
-  public syncRatingFlagUI(rating: number, status: string, activeIdx: number): void {
+  public syncRatingFlagUI(
+    rating: number,
+    status: string,
+    activeIdx: number,
+  ): void {
     const starBtns = document.querySelectorAll('.star-btn');
     starBtns.forEach((btn, idx) => {
       btn.classList.toggle('active', idx < rating);
@@ -295,7 +353,9 @@ export class InspectorSyncController {
     if (activeIdx >= 0) {
       const cardEl = document.getElementById(`thumb-card-${activeIdx}`);
       if (cardEl) {
-        let ratingBadge = cardEl.querySelector('.thumb-badge-rating') as HTMLElement;
+        let ratingBadge = cardEl.querySelector(
+          '.thumb-badge-rating',
+        ) as HTMLElement;
         if (rating > 0) {
           if (!ratingBadge) {
             ratingBadge = document.createElement('div');
@@ -307,7 +367,9 @@ export class InspectorSyncController {
           ratingBadge.remove();
         }
 
-        let flagBadge = cardEl.querySelector('.thumb-badge-flag') as HTMLElement;
+        let flagBadge = cardEl.querySelector(
+          '.thumb-badge-flag',
+        ) as HTMLElement;
         if (status === 'Pick' || status === 'Reject') {
           if (!flagBadge) {
             flagBadge = document.createElement('div');
@@ -330,7 +392,7 @@ export class InspectorSyncController {
       id: string,
       prop: keyof EditSettingsPayload,
       format: (val: number) => string,
-      defaultVal: number | (() => number) = 0
+      defaultVal: number | (() => number) = 0,
     ) => {
       const input = document.getElementById(`slider-${id}`) as HTMLInputElement;
       const label = document.getElementById(`val-${id}`) as HTMLElement;
@@ -355,7 +417,12 @@ export class InspectorSyncController {
         });
 
         input.addEventListener('pointermove', (e: PointerEvent) => {
-          if (this.activeScrub && this.activeScrub.input === input && e.buttons === 1 && e.shiftKey) {
+          if (
+            this.activeScrub &&
+            this.activeScrub.input === input &&
+            e.buttons === 1 &&
+            e.shiftKey
+          ) {
             const rect = input.getBoundingClientRect();
             const width = rect.width || 150;
             const deltaX = e.clientX - this.activeScrub.startClientX;
@@ -364,8 +431,8 @@ export class InspectorSyncController {
               this.activeScrub.max,
               Math.max(
                 this.activeScrub.min,
-                this.activeScrub.startInputVal + (deltaX / width) * range * 0.1
-              )
+                this.activeScrub.startInputVal + (deltaX / width) * range * 0.1,
+              ),
             );
             input.value = fineVal.toString();
             const edits = this.delegate.getEdits();
@@ -393,7 +460,8 @@ export class InspectorSyncController {
         input.addEventListener('change', () => this.delegate.autoSaveSidecar());
 
         const resetFn = () => {
-          const resolvedDefault = typeof defaultVal === 'function' ? defaultVal() : defaultVal;
+          const resolvedDefault =
+            typeof defaultVal === 'function' ? defaultVal() : defaultVal;
           input.value = `${resolvedDefault}`;
           const edits = this.delegate.getEdits();
           (edits[prop] as number) = resolvedDefault;
@@ -410,37 +478,106 @@ export class InspectorSyncController {
       }
     };
 
-    bindSlider('exposure', 'exposure', v => formatExposure(v), 0.0);
-    bindSlider('contrast', 'contrast', v => `${Math.round(v)}`, 0.0);
-    bindSlider('highlights', 'highlights', v => `${Math.round(v)}`, 0.0);
-    bindSlider('shadows', 'shadows', v => `${Math.round(v)}`, 0.0);
-    bindSlider('whites', 'whites', v => `${Math.round(v)}`, 0.0);
-    bindSlider('blacks', 'blacks', v => `${Math.round(v)}`, 0.0);
+    bindSlider('exposure', 'exposure', (v) => formatExposure(v), 0.0);
+    bindSlider('contrast', 'contrast', (v) => `${Math.round(v)}`, 0.0);
+    bindSlider('highlights', 'highlights', (v) => `${Math.round(v)}`, 0.0);
+    bindSlider('shadows', 'shadows', (v) => `${Math.round(v)}`, 0.0);
+    bindSlider('whites', 'whites', (v) => `${Math.round(v)}`, 0.0);
+    bindSlider('blacks', 'blacks', (v) => `${Math.round(v)}`, 0.0);
 
-    bindSlider('tint', 'tint', v => `${Math.round(v)}`, 0.0);
-    bindSlider('vibrance', 'vibrance', v => `${Math.round(v)}`, 0.0);
-    bindSlider('saturation', 'saturation', v => `${Math.round(v)}`, 0.0);
-    bindSlider('deep-blue', 'deep_blue', v => `${Math.round(v)}`, 0.0);
-    bindSlider('foliage', 'foliage', v => `${Math.round(v)}`, 0.0);
-    bindSlider('emulsion-exp', 'emulsion_exposure', v => formatExposure(v), 0.0);
-    bindSlider('paper-grade', 'print_paper_grade', v => `${v.toFixed(1)}`, 0.0);
-    bindSlider('base-warmth', 'print_base_warmth', v => `${Math.round(v)}`, 0.0);
-    bindSlider('process-depth', 'print_process_depth', v => `${Math.round(v)}%`, 100.0);
-    bindSlider('sharpen-amount', 'sharpening_amount', v => `${Math.round(v)}`, () => this.delegate.isCurrentPhotoRaw() ? 20.0 : 0.0);
-    bindSlider('sharpen-radius', 'sharpening_radius', v => `${v.toFixed(1)} px`, 1.0);
-    bindSlider('sharpen-masking', 'sharpening_masking', v => `${Math.round(v)}`, () => this.delegate.isCurrentPhotoRaw() ? 15.0 : 0.0);
-    bindSlider('noise-reduction', 'noise_reduction', v => `${Math.round(v)}`, 0.0);
-    bindSlider('shadow-hue', 'split_toning_shadow_hue', v => `${Math.round(v)}°`, 215.0);
-    bindSlider('shadow-sat', 'split_toning_shadow_sat', v => `${Math.round(v)}`, 0.0);
-    bindSlider('highlight-hue', 'split_toning_highlight_hue', v => `${Math.round(v)}°`, 45.0);
-    bindSlider('highlight-sat', 'split_toning_highlight_sat', v => `${Math.round(v)}`, 0.0);
-    bindSlider('split-balance', 'split_toning_balance', v => `${Math.round(v)}`, 0.0);
+    bindSlider('tint', 'tint', (v) => `${Math.round(v)}`, 0.0);
+    bindSlider('vibrance', 'vibrance', (v) => `${Math.round(v)}`, 0.0);
+    bindSlider('saturation', 'saturation', (v) => `${Math.round(v)}`, 0.0);
+    bindSlider('deep-blue', 'deep_blue', (v) => `${Math.round(v)}`, 0.0);
+    bindSlider('foliage', 'foliage', (v) => `${Math.round(v)}`, 0.0);
+    bindSlider(
+      'emulsion-exp',
+      'emulsion_exposure',
+      (v) => formatExposure(v),
+      0.0,
+    );
+    bindSlider(
+      'paper-grade',
+      'print_paper_grade',
+      (v) => `${v.toFixed(1)}`,
+      0.0,
+    );
+    bindSlider(
+      'base-warmth',
+      'print_base_warmth',
+      (v) => `${Math.round(v)}`,
+      0.0,
+    );
+    bindSlider(
+      'process-depth',
+      'print_process_depth',
+      (v) => `${Math.round(v)}%`,
+      100.0,
+    );
+    bindSlider(
+      'sharpen-amount',
+      'sharpening_amount',
+      (v) => `${Math.round(v)}`,
+      () => (this.delegate.isCurrentPhotoRaw() ? 20.0 : 0.0),
+    );
+    bindSlider(
+      'sharpen-radius',
+      'sharpening_radius',
+      (v) => `${v.toFixed(1)} px`,
+      1.0,
+    );
+    bindSlider(
+      'sharpen-masking',
+      'sharpening_masking',
+      (v) => `${Math.round(v)}`,
+      () => (this.delegate.isCurrentPhotoRaw() ? 15.0 : 0.0),
+    );
+    bindSlider(
+      'noise-reduction',
+      'noise_reduction',
+      (v) => `${Math.round(v)}`,
+      0.0,
+    );
+    bindSlider(
+      'shadow-hue',
+      'split_toning_shadow_hue',
+      (v) => `${Math.round(v)}°`,
+      215.0,
+    );
+    bindSlider(
+      'shadow-sat',
+      'split_toning_shadow_sat',
+      (v) => `${Math.round(v)}`,
+      0.0,
+    );
+    bindSlider(
+      'highlight-hue',
+      'split_toning_highlight_hue',
+      (v) => `${Math.round(v)}°`,
+      45.0,
+    );
+    bindSlider(
+      'highlight-sat',
+      'split_toning_highlight_sat',
+      (v) => `${Math.round(v)}`,
+      0.0,
+    );
+    bindSlider(
+      'split-balance',
+      'split_toning_balance',
+      (v) => `${Math.round(v)}`,
+      0.0,
+    );
   }
 
   private bindTemperatureSlider(): void {
-    const tempInput = document.getElementById('slider-temp') as HTMLInputElement;
+    const tempInput = document.getElementById(
+      'slider-temp',
+    ) as HTMLInputElement;
     const tempLabel = document.getElementById('val-temp') as HTMLElement;
-    const tempRowLabel = tempInput?.closest('.slider-row')?.querySelector('label');
+    const tempRowLabel = tempInput
+      ?.closest('.slider-row')
+      ?.querySelector('label');
     if (tempInput && tempLabel) {
       tempInput.addEventListener('pointerdown', (e: PointerEvent) => {
         const edits = this.delegate.getEdits();
@@ -448,7 +585,7 @@ export class InspectorSyncController {
           id: 'temp',
           input: tempInput,
           label: tempLabel,
-          format: v => `${Math.round(v)} K`,
+          format: (v) => `${Math.round(v)} K`,
           isTemp: true,
           initialValue: edits.temperature,
           initialInputValue: tempInput.value,
@@ -460,7 +597,12 @@ export class InspectorSyncController {
       });
 
       tempInput.addEventListener('pointermove', (e: PointerEvent) => {
-        if (this.activeScrub && this.activeScrub.input === tempInput && e.buttons === 1 && e.shiftKey) {
+        if (
+          this.activeScrub &&
+          this.activeScrub.input === tempInput &&
+          e.buttons === 1 &&
+          e.shiftKey
+        ) {
           const rect = tempInput.getBoundingClientRect();
           const width = rect.width || 150;
           const deltaX = e.clientX - this.activeScrub.startClientX;
@@ -468,15 +610,17 @@ export class InspectorSyncController {
             1.0,
             Math.max(
               0.0,
-              this.activeScrub.startInputVal + (deltaX / width) * 0.1
-            )
+              this.activeScrub.startInputVal + (deltaX / width) * 0.1,
+            ),
           );
           tempInput.value = finePos.toFixed(4);
           const kelvin = this.miredPosToKelvin(finePos);
           const edits = this.delegate.getEdits();
           edits.temperature = kelvin;
           tempLabel.innerText = `${Math.round(kelvin)} K`;
-          const wbSelect = document.getElementById('select-wb-preset') as HTMLSelectElement | null;
+          const wbSelect = document.getElementById(
+            'select-wb-preset',
+          ) as HTMLSelectElement | null;
           if (wbSelect) wbSelect.value = 'Custom';
           this.delegate.renderCanvas();
         }
@@ -489,19 +633,25 @@ export class InspectorSyncController {
         const edits = this.delegate.getEdits();
         edits.temperature = kelvin;
         tempLabel.innerText = `${Math.round(kelvin)} K`;
-        const wbSelect = document.getElementById('select-wb-preset') as HTMLSelectElement | null;
+        const wbSelect = document.getElementById(
+          'select-wb-preset',
+        ) as HTMLSelectElement | null;
         if (wbSelect) wbSelect.value = 'Custom';
         this.delegate.renderCanvas();
       });
 
-      tempInput.addEventListener('change', () => this.delegate.autoSaveSidecar());
+      tempInput.addEventListener('change', () =>
+        this.delegate.autoSaveSidecar(),
+      );
 
       const resetTemp = () => {
         const edits = this.delegate.getEdits();
         edits.temperature = 5500.0;
         tempInput.value = this.kelvinToMiredPos(5500.0).toFixed(4);
         tempLabel.innerText = '5500 K';
-        const wbSelect = document.getElementById('select-wb-preset') as HTMLSelectElement | null;
+        const wbSelect = document.getElementById(
+          'select-wb-preset',
+        ) as HTMLSelectElement | null;
         if (wbSelect) wbSelect.value = 'Daylight';
         this.delegate.renderCanvas();
         this.delegate.autoSaveSidecar();
@@ -513,33 +663,44 @@ export class InspectorSyncController {
   }
 
   private bindSelects(): void {
-    const selectTone = document.getElementById('select-tone-profile') as HTMLSelectElement | null;
+    const selectTone = document.getElementById(
+      'select-tone-profile',
+    ) as HTMLSelectElement | null;
     selectTone?.addEventListener('change', (e) => {
       const edits = this.delegate.getEdits();
-      edits.tone_profile = (e.target as HTMLSelectElement).value as ColorProfileMode;
+      edits.tone_profile = (e.target as HTMLSelectElement)
+        .value as ColorProfileMode;
       this.delegate.renderCanvas();
       this.delegate.autoSaveSidecar();
     });
 
-    const selectEmulsion = document.getElementById('select-emulsion') as HTMLSelectElement | null;
+    const selectEmulsion = document.getElementById(
+      'select-emulsion',
+    ) as HTMLSelectElement | null;
     selectEmulsion?.addEventListener('change', (e) => {
       const edits = this.delegate.getEdits();
-      edits.emulsion_archetype = (e.target as HTMLSelectElement).value as EmulsionArchetype;
+      edits.emulsion_archetype = (e.target as HTMLSelectElement)
+        .value as EmulsionArchetype;
       this.updateEmulsionWorkspaceVisibility();
       this.delegate.renderCanvas();
       this.delegate.autoSaveSidecar();
     });
 
-    const selectPrint = document.getElementById('select-print-media') as HTMLSelectElement | null;
+    const selectPrint = document.getElementById(
+      'select-print-media',
+    ) as HTMLSelectElement | null;
     selectPrint?.addEventListener('change', (e) => {
       const edits = this.delegate.getEdits();
-      edits.print_media = (e.target as HTMLSelectElement).value as PrintMediaMode;
+      edits.print_media = (e.target as HTMLSelectElement)
+        .value as PrintMediaMode;
       this.updateEmulsionWorkspaceVisibility();
       this.delegate.renderCanvas();
       this.delegate.autoSaveSidecar();
     });
 
-    const selectFilter = document.getElementById('select-enlarger-filter') as HTMLSelectElement | null;
+    const selectFilter = document.getElementById(
+      'select-enlarger-filter',
+    ) as HTMLSelectElement | null;
     selectFilter?.addEventListener('change', (e) => {
       const edits = this.delegate.getEdits();
       edits.enlarger_filter = (e.target as HTMLSelectElement).value as any;
@@ -550,9 +711,11 @@ export class InspectorSyncController {
 
   private bindCurveControls(): void {
     const channelBtns = document.querySelectorAll('.channel-btn');
-    channelBtns.forEach(btn => {
+    channelBtns.forEach((btn) => {
       btn.addEventListener('click', (e) => {
-        channelBtns.forEach(b => b.classList.remove('active'));
+        channelBtns.forEach((b) => {
+          b.classList.remove('active');
+        });
         const target = e.target as HTMLElement;
         target.classList.add('active');
         const channel = target.getAttribute('data-channel') as any;
@@ -570,7 +733,7 @@ export class InspectorSyncController {
 
   private bindTabButtons(): void {
     const tabBtns = document.querySelectorAll('.seg-btn');
-    tabBtns.forEach(btn => {
+    tabBtns.forEach((btn) => {
       btn.addEventListener('click', () => {
         const tab = btn.getAttribute('data-tab');
         if (tab) this.selectInspectorTab(tab);
@@ -586,7 +749,12 @@ export class InspectorSyncController {
   }
 
   private bindMetadataInputs(): void {
-    const metaInputs = ['meta-input-title', 'meta-input-caption', 'meta-input-creator', 'meta-input-keywords'];
+    const metaInputs = [
+      'meta-input-title',
+      'meta-input-caption',
+      'meta-input-creator',
+      'meta-input-keywords',
+    ];
     for (const id of metaInputs) {
       const el = document.getElementById(id);
       if (el) {

@@ -4,8 +4,8 @@
  */
 
 const STANDARD_FSTOPS = [
-  1.0, 1.1, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.5, 2.8, 3.2, 3.5, 4.0, 4.5, 5.0, 5.6,
-  6.3, 7.1, 8.0, 9.0, 10, 11, 13, 14, 16, 18, 20, 22, 25, 29, 32, 45, 64
+  1.0, 1.1, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.5, 2.8, 3.2, 3.5, 4.0, 4.5, 5.0,
+  5.6, 6.3, 7.1, 8.0, 9.0, 10, 11, 13, 14, 16, 18, 20, 22, 25, 29, 32, 45, 64,
 ];
 
 /**
@@ -83,9 +83,9 @@ export function formatDimensions(
   previewW: number,
   previewH: number,
   rawW?: number | null,
-  rawH?: number | null
+  rawH?: number | null,
 ): string {
-  const w = (rawW && rawW >= previewW) ? rawW : previewW;
-  const h = (rawH && rawH >= previewH) ? rawH : previewH;
+  const w = rawW && rawW >= previewW ? rawW : previewW;
+  const h = rawH && rawH >= previewH ? rawH : previewH;
   return `${w} × ${h}`;
 }

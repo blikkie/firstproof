@@ -1,4 +1,4 @@
-.PHONY: all build-core build-bridge build-wasm build-web clean test test-all run
+.PHONY: all check build-core build-bridge build-wasm build-web clean test test-all run
 
 ARCH := $(shell uname -m)
 ifeq ($(ARCH),arm64)
@@ -8,6 +8,9 @@ else
 endif
 
 all: build-bridge
+
+check:
+	./scripts/check.sh
 
 build-core:
 	GIT_CONFIG_GLOBAL=/dev/null cargo build --release --target $(RUST_TARGET) -p firstproof-core

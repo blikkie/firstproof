@@ -36,7 +36,10 @@ export class ThumbnailCacheStore {
       };
 
       request.onerror = (e: Event) => {
-        console.warn('[ThumbnailCacheStore] IndexedDB failed to open:', (e.target as IDBOpenDBRequest).error);
+        console.warn(
+          '[ThumbnailCacheStore] IndexedDB failed to open:',
+          (e.target as IDBOpenDBRequest).error,
+        );
         reject((e.target as IDBOpenDBRequest).error);
       };
     });
@@ -83,7 +86,10 @@ export class ThumbnailCacheStore {
         req.onerror = (e) => reject((e.target as IDBRequest).error);
       });
     } catch (err) {
-      console.warn('[ThumbnailCacheStore] Failed to write thumbnail to IndexedDB:', err);
+      console.warn(
+        '[ThumbnailCacheStore] Failed to write thumbnail to IndexedDB:',
+        err,
+      );
     }
   }
 

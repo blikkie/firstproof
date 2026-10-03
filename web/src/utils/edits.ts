@@ -1,4 +1,4 @@
-import { EditSettingsPayload } from '../WasmBridge';
+import type { EditSettingsPayload } from '../WasmBridge';
 import { decodeExifOrientation } from './exifReader';
 
 export function getDefaultEdits(isRaw: boolean = false): EditSettingsPayload {
@@ -36,10 +36,22 @@ export function getDefaultEdits(isRaw: boolean = false): EditSettingsPayload {
     emulsion_format: 'Format35mm',
     emulsion_exposure: 0.0,
     curves: {
-      master: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-      red: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-      green: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-      blue: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+      master: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      red: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      green: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      blue: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
     },
     split_toning_shadow_hue: 215.0,
     split_toning_shadow_sat: 0.0,
@@ -59,11 +71,21 @@ export function hasModifications(
   orientation: number = 1,
   rating: number = 0,
   status: string = 'Unflagged',
-  meta?: { title?: string; description?: string; creator?: string; keywords?: string }
+  meta?: {
+    title?: string;
+    description?: string;
+    creator?: string;
+    keywords?: string;
+  },
 ): boolean {
   if (rating > 0) return true;
   if (status !== 'Unflagged') return true;
-  if (meta?.title?.trim() || meta?.description?.trim() || meta?.creator?.trim() || meta?.keywords?.trim()) {
+  if (
+    meta?.title?.trim() ||
+    meta?.description?.trim() ||
+    meta?.creator?.trim() ||
+    meta?.keywords?.trim()
+  ) {
     return true;
   }
 

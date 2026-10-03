@@ -209,6 +209,6 @@ mod tests {
         let sky = Color3::new(0.20, 0.35, 0.70);
         let out_sky = agx_tone_map_vivid(sky, 1.0);
         let (h_sky, _, _) = crate::color::rgb_to_hsv(out_sky.r(), out_sky.g(), out_sky.b());
-        assert!(h_sky <= 225.0 && h_sky >= 200.0, "AgX Vivid sky blue hue did not shift to azure: {}", h_sky);
+        assert!((200.0..=225.0).contains(&h_sky), "AgX Vivid sky blue hue did not shift to azure: {}", h_sky);
     }
 }

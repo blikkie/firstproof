@@ -271,5 +271,17 @@ This archive tracks completed stories and features moved from the active backlog
   - *Viewport 2×2 Box-Binning Chroma Parity*: Resolved the $18\times$ noise variance disparity between Green and Red in 2×2 box-binned viewports (caused by averaging two Green photosites while sampling Red unaveraged under $3\times$ warm WB gain) by integrating a 2-pass chromatic difference median filter on $(R - G)$ and $(B - G)$ into `to_binned_linear_f16`, leaving optical luminance $G$ completely untouched ($G' = G$).
   - *Desktop & WASM Engine Deduplication*: Replaced ~360 lines of duplicated binned decode code in `firstproof-core/src/export/decode.rs` (`decode_raw_preview_binned_buffer`) with a direct call to `frame.to_binned_linear_f16()`, guaranteeing bit-level perceptual parity between native macOS, WebAssembly darkroom, and export pipelines.
   - *Automated Regression Battery (`sensor_noise_mitigation_parity.rs`)*: Verified deep shadow chromatic standard deviation $\text{std}(R - G) < 0.020$ (measured $0.01457$) and maximum isolated chromatic spike $< 0.040$ across 55,000 pixels on real ISO 1600 Canon 60D RAW at extreme 9450K temperature.
-  - *Verification*: Confirmed in browser darkroom that red speckling in deep shadows and fabric weave is eliminated while preserving crisp optical acutance; 19 tests in `firstproof-engine` passing, 59 unit + 11 integration suites in `firstproof-core` passing, clean `wasm-pack build`, clean `npm run build`.
-
+- **Story 4.6.1: Harness Engineering — Unified Pre-Flight Sensor & Linter Suite (`scripts/check.sh`, `make check`, `web/biome.json`, `.agents/hooks.json`)**:
+  - *Adopted Harness Engineering Principle (Martin Fowler & Birgitta Böckeler)*: Codified "Agent = Model + Harness" and the Computational Steering Loop into `.agents/AGENTS.md`. Regressions and quality gates are enforced by deterministic computational feedback sensors rather than inferential prompt text.
+  - *Unified Pre-Flight Sensor Command (`scripts/check.sh` / `make check`)*: Orchestrates all testing and verification steps across Rust, WebAssembly, and TypeScript into a single deterministic script running in under 45 seconds:
+    1. Rust workspace tests (`cargo test --workspace --quiet`).
+    2. Workspace-wide Rust Clippy (`cargo clippy --workspace --all-targets -- -D warnings`).
+    3. Web TypeScript typecheck (`npm --prefix web run typecheck`).
+    4. Web Biome linter (`npm --prefix web run lint`).
+    5. WebAssembly package build and Node integration test (`wasm-pack build` and `test_wasm.js`).
+    6. Web production asset compilation (`npm --prefix web run build`).
+    7. Darwin-conditional Swift/Metal gate (executes on macOS; gracefully skips on Linux hosts).
+  - *Workspace-Wide Rust Clippy Discipline*: Activated workspace-level Clippy configuration (`[workspace.lints.clippy]` in root `Cargo.toml`), resolved unwrap anti-patterns, fixed missing methods, and tuned allowances for low-level image processing math.
+  - *TypeScript Hygiene & Biome Linter Suite*: Adopted Biome (`@biomejs/biome`) with `web/biome.json` (2-space indent, single quotes, excluding `dist`). Enabled `"noUnusedLocals": true` and `"noUnusedParameters": true` in `tsconfig.json`. Fixed all unused local variables across `web/src`.
+  - *Token Defense Lifecycle Hook (`.agents/hooks.json` & `.agents/hooks/pre_tool_view_file.py`)*: Codified the "Lifecycle Hooks vs. Prompt Rules Decision Framework" into `AGENTS.md`. Implemented a `PreToolUse` hook on `view_file` that structurally blocks reads of massive generated files (`firstproof_core.swift`, 4,400+ lines), physically preventing catastrophic token waste out-of-band.
+  - *Verification*: Executed `make check` and verified all 7 stages pass cleanly end-to-end; verified token defense hook blocks unauthorized reads with educational redirect.

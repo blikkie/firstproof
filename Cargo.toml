@@ -5,3 +5,15 @@ members = [
     "firstproof-engine",
 ]
 resolver = "2"
+
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+needless_range_loop = "allow"
+approx_constant = "allow"
+erasing_op = "allow"
+identity_op = "allow"
+manual_checked_ops = "allow"
+field_reassign_with_default = "allow"
+bool_assert_comparison = "allow"
+manual_range_contains = "allow"
+type_complexity = "allow"

@@ -29,6 +29,10 @@ impl ScratchpadBuffer {
         self.buffer.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
+    }
+
     pub fn slice(&self, start: usize, len: usize) -> Option<&[u8]> {
         if start + len <= self.buffer.len() {
             Some(&self.buffer[start..start + len])

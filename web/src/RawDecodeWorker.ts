@@ -5,14 +5,14 @@
  */
 
 import initWasm, {
-  init_scratchpad,
-  get_scratchpad_ptr,
   copy_into_scratchpad,
   decode_preview_from_scratchpad,
-  decode_raw_linear_from_scratchpad,
   decode_raw_full_linear_from_scratchpad,
+  decode_raw_linear_from_scratchpad,
+  get_scratchpad_ptr,
   get_scratchpad_u8_slice,
   get_scratchpad_u16_slice,
+  init_scratchpad,
 } from 'firstproof-wasm';
 
 let wasmInitialized = false;
@@ -53,7 +53,8 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
   try {
     if (!wasmInitialized) {
       const exports = await initWasm();
-      workerWasmMemory = (exports as any)?.memory || (initWasm as any)?.memory || null;
+      workerWasmMemory =
+        (exports as any)?.memory || (initWasm as any)?.memory || null;
       init_scratchpad(256); // 256MB scratchpad buffer for 50MP+ RAW files
       wasmInitialized = true;
     }
@@ -64,20 +65,43 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
     const preview = decode_preview_from_scratchpad(inputBytes.length);
     let imageSlice: Uint8Array;
     if (typeof get_scratchpad_u8_slice === 'function') {
-      imageSlice = get_scratchpad_u8_slice(preview.preview_offset, preview.preview_len);
+      imageSlice = get_scratchpad_u8_slice(
+        preview.preview_offset,
+        preview.preview_len,
+      );
     } else {
       const ptr = get_scratchpad_ptr();
       const wasmMem = workerWasmMemory?.buffer;
-      if (wasmMem && ptr + preview.preview_offset + preview.preview_len <= wasmMem.byteLength) {
-        imageSlice = new Uint8Array(wasmMem, ptr + preview.preview_offset, preview.preview_len).slice();
+      if (
+        wasmMem &&
+        ptr + preview.preview_offset + preview.preview_len <= wasmMem.byteLength
+      ) {
+        imageSlice = new Uint8Array(
+          wasmMem,
+          ptr + preview.preview_offset,
+          preview.preview_len,
+        ).slice();
       } else {
-        imageSlice = inputBytes.slice(preview.preview_offset, preview.preview_offset + preview.preview_len);
+        imageSlice = inputBytes.slice(
+          preview.preview_offset,
+          preview.preview_offset + preview.preview_len,
+        );
       }
     }
 
     // Off-main-thread 16-bit Linear Rec.2020 sensor frame decode for RAW files
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
-    const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
+    const isRawFile = [
+      'cr2',
+      'cr3',
+      'nef',
+      'arw',
+      'dng',
+      'rw2',
+      'orf',
+      'pef',
+      'raf',
+    ].includes(ext);
 
     let linearData: Uint16Array | undefined;
     let linearW = 0;
@@ -92,11 +116,17 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
           linearW = rawLin.width;
           linearH = rawLin.height;
           if (typeof get_scratchpad_u16_slice === 'function') {
-            linearData = get_scratchpad_u16_slice(rawLin.linear_offset, rawLin.linear_len / 2);
+            linearData = get_scratchpad_u16_slice(
+              rawLin.linear_offset,
+              rawLin.linear_len / 2,
+            );
           }
         }
       } catch (rawErr) {
-        console.warn(`[RawDecodeWorker] Off-thread RAW linear decode fallback for ${fileName}:`, rawErr);
+        console.warn(
+          `[RawDecodeWorker] Off-thread RAW linear decode fallback for ${fileName}:`,
+          rawErr,
+        );
       }
     }
 
@@ -104,7 +134,9 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
     performance.measure(measureName, markStart, markEnd);
 
     const decodeMs = performance.now() - startTime;
-    console.debug(`⚡ [RawDecodeWorker] ${fileName} decoded in ${decodeMs.toFixed(2)}ms (${(inputBytes.length / 1024 / 1024).toFixed(1)} MB)`);
+    console.debug(
+      `⚡ [RawDecodeWorker] ${fileName} decoded in ${decodeMs.toFixed(2)}ms (${(inputBytes.length / 1024 / 1024).toFixed(1)} MB)`,
+    );
 
     const response: WorkerResponseMessage = {
       id,
@@ -116,8 +148,8 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
       linearH,
       metrics: {
         decodeMs,
-        inputBytes: inputBytes.length
-      }
+        inputBytes: inputBytes.length,
+      },
     };
 
     // Transfer buffers back to main thread zero-copy
@@ -126,7 +158,6 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
       transferables.push(linearData.buffer);
     }
     (self as any).postMessage(response, transferables);
-
   } catch (err: any) {
     performance.mark(markEnd);
     const decodeMs = performance.now() - startTime;
@@ -137,8 +168,8 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
       error: err?.toString() || 'Worker RAW decoding failed',
       metrics: {
         decodeMs,
-        inputBytes: arrayBuffer.byteLength
-      }
+        inputBytes: arrayBuffer.byteLength,
+      },
     };
 
     (self as any).postMessage(response);

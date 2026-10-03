@@ -542,10 +542,7 @@ fn parse_gps(exif: &exif::Exif, tag: Tag, ref_tag: Tag) -> Option<f64> {
 pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
     let mut cursor = Cursor::new(bytes);
     let exif_reader = Reader::new();
-    let exif = match exif_reader.read_from_container(&mut cursor) {
-        Ok(e) => Some(e),
-        Err(_) => None,
-    };
+    let exif = exif_reader.read_from_container(&mut cursor).ok();
 
     let mut camera_make = None;
     let mut camera_model = None;

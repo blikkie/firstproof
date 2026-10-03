@@ -7,8 +7,8 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 4.6.1: Harness Engineering — Unified Pre-Flight Sensor & Linter Suite** (P1)
-2. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
+1. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
+2. **Story 4.6.2: Automated Architecture Fitness Functions** (P2)
 3. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
 4. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
 
@@ -242,20 +242,6 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 
 ### 4.6 Harness Engineering & Computational Verification Suite (P1)
 *Translating Martin Fowler & Birgitta Böckeler's Harness Engineering mental model into automated, computational feedback sensors across First Proof.*
-
-#### 4.6.1 Unified Pre-Flight Sensor & Linter Suite (P1)
-- **Single Deterministic Verification Command (`scripts/check.sh` / `make check`)**:
-  - Unify multi-target builds and tests into a single deterministic script running in under 45 seconds:
-    - Pure Rust unit tests (`cargo test --manifest-path firstproof-engine/Cargo.toml`).
-    - Core FFI, integration, and parity test battery (`cargo test --manifest-path firstproof-core/Cargo.toml`).
-    - WebAssembly package build (`wasm-pack build firstproof-wasm --target web`).
-    - Web TypeScript compilation and Vite asset build (`npm --prefix web run build`).
-  - Clear terminal color-coded summaries, exact error propagation, and benchmark timing.
-- **Automated Workspace Clippy & TypeScript Typecheck Sensors**:
-  - Integrate `cargo clippy --workspace -- -D warnings` into the pre-flight suite to catch dead code, redundant allocations, and type mismatches.
-  - Add explicit `npm --prefix web run typecheck` (`tsc --noEmit`) to catch DOM/controller signature mismatches before runtime.
-- **Pre-Commit Hook Integration**:
-  - Provide an opt-in `.git/hooks/pre-commit` wrapper invoking `./scripts/check.sh --quick` to block broken commits at the gate.
 
 #### 4.6.2 Automated Architecture Fitness Functions (P2)
 - **Dependency Purity Fitness Test**:

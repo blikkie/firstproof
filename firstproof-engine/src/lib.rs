@@ -262,7 +262,7 @@ mod tests {
 
         let temp_tungsten = frame_tungsten.as_shot_temperature();
         assert!(
-            temp_tungsten >= 2400.0 && temp_tungsten <= 3200.0,
+            (2400.0..=3200.0).contains(&temp_tungsten),
             "Expected tungsten Kelvin around 2856K, got {}",
             temp_tungsten
         );
@@ -292,7 +292,7 @@ mod tests {
 
         let temp_daylight = frame_daylight.as_shot_temperature();
         assert!(
-            temp_daylight >= 5000.0 && temp_daylight <= 7500.0,
+            (5000.0..=7500.0).contains(&temp_daylight),
             "Expected daylight Kelvin around 5500-6500K, got {}",
             temp_daylight
         );

@@ -1,6 +1,6 @@
 /**
  * Interactive Crop Controller for First Proof Web Darkroom
- * 
+ *
  * Implements a stationary full-canvas gesture container strictly adhering to
  * First Proof Desktop Gesture Architecture & Hit Testing invariants:
  * - Visual handles are purely declarative render elements with pointer-events: none.
@@ -12,15 +12,32 @@
  */
 
 export interface CropRect {
-  left: number;   // 0.0 .. 1.0 (normalized)
-  top: number;    // 0.0 .. 1.0
-  right: number;  // 0.0 .. 1.0
+  left: number; // 0.0 .. 1.0 (normalized)
+  top: number; // 0.0 .. 1.0
+  right: number; // 0.0 .. 1.0
   bottom: number; // 0.0 .. 1.0
 }
 
-export type AspectRatioMode = 'original' | 'free' | '1:1' | '3:2' | '4:3' | '16:9';
+export type AspectRatioMode =
+  | 'original'
+  | 'free'
+  | '1:1'
+  | '3:2'
+  | '4:3'
+  | '16:9';
 
-type DragHandle = 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w' | 'move' | 'rotate' | null;
+type DragHandle =
+  | 'nw'
+  | 'ne'
+  | 'sw'
+  | 'se'
+  | 'n'
+  | 's'
+  | 'e'
+  | 'w'
+  | 'move'
+  | 'rotate'
+  | null;
 
 export class CropController {
   private overlayEl: HTMLElement;
@@ -46,7 +63,12 @@ export class CropController {
   private imageAspect: number = 1.5; // width / height
   private aspectMode: AspectRatioMode = 'original';
   private isFlippedAspect: boolean = false;
-  private imageRect: { x: number; y: number; width: number; height: number } = { x: 0, y: 0, width: 800, height: 600 };
+  private imageRect: { x: number; y: number; width: number; height: number } = {
+    x: 0,
+    y: 0,
+    width: 800,
+    height: 600,
+  };
   private straightenAngle: number = 0.0;
   private dragStartStraighten: number = 0.0;
   public isRotating: boolean = false;
@@ -56,7 +78,8 @@ export class CropController {
   private dragStartCrop: CropRect = { left: 0, top: 0, right: 1, bottom: 1 };
 
   private onCropUpdateCallback: ((crop: CropRect) => void) | null = null;
-  private onStraightenUpdateCallback: ((angleDegrees: number) => void) | null = null;
+  private onStraightenUpdateCallback: ((angleDegrees: number) => void) | null =
+    null;
   private onStraightenEndCallback: (() => void) | null = null;
   private onDoneCallback: (() => void) | null = null;
   private onCancelCallback: (() => void) | null = null;
@@ -69,17 +92,31 @@ export class CropController {
       onStraightenEnd?: () => void;
       onDone?: () => void;
       onCancel?: () => void;
-    }
+    },
   ) {
     this.overlayEl = document.getElementById(overlayId) as HTMLElement;
     this.toolbarEl = document.getElementById('crop-toolbar') as HTMLElement;
-    this.gestureSurface = document.getElementById('crop-gesture-surface') as HTMLElement;
-    this.maskCutout = document.getElementById('crop-mask-cutout') as unknown as SVGRectElement;
-    this.boxBorder = document.getElementById('crop-box-border') as unknown as SVGRectElement;
-    this.gridH1 = document.getElementById('crop-grid-h1') as unknown as SVGLineElement;
-    this.gridH2 = document.getElementById('crop-grid-h2') as unknown as SVGLineElement;
-    this.gridV1 = document.getElementById('crop-grid-v1') as unknown as SVGLineElement;
-    this.gridV2 = document.getElementById('crop-grid-v2') as unknown as SVGLineElement;
+    this.gestureSurface = document.getElementById(
+      'crop-gesture-surface',
+    ) as HTMLElement;
+    this.maskCutout = document.getElementById(
+      'crop-mask-cutout',
+    ) as unknown as SVGRectElement;
+    this.boxBorder = document.getElementById(
+      'crop-box-border',
+    ) as unknown as SVGRectElement;
+    this.gridH1 = document.getElementById(
+      'crop-grid-h1',
+    ) as unknown as SVGLineElement;
+    this.gridH2 = document.getElementById(
+      'crop-grid-h2',
+    ) as unknown as SVGLineElement;
+    this.gridV1 = document.getElementById(
+      'crop-grid-v1',
+    ) as unknown as SVGLineElement;
+    this.gridV2 = document.getElementById(
+      'crop-grid-v2',
+    ) as unknown as SVGLineElement;
 
     this.handleElements = {
       nw: document.getElementById('handle-tl') as unknown as SVGElement,
@@ -92,18 +129,33 @@ export class CropController {
       e: document.getElementById('handle-r') as unknown as SVGElement,
     };
 
-    this.aspectSelect = document.getElementById('select-crop-aspect') as HTMLSelectElement;
-    this.btnFlip = document.getElementById('btn-crop-flip') as HTMLButtonElement;
-    this.btnReset = document.getElementById('btn-crop-reset') as HTMLButtonElement;
-    this.btnDone = document.getElementById('btn-crop-done') as HTMLButtonElement;
+    this.aspectSelect = document.getElementById(
+      'select-crop-aspect',
+    ) as HTMLSelectElement;
+    this.btnFlip = document.getElementById(
+      'btn-crop-flip',
+    ) as HTMLButtonElement;
+    this.btnReset = document.getElementById(
+      'btn-crop-reset',
+    ) as HTMLButtonElement;
+    this.btnDone = document.getElementById(
+      'btn-crop-done',
+    ) as HTMLButtonElement;
     this.straightenHudEl = document.getElementById('straighten-hud');
     this.straightenHudValueEl = document.getElementById('straighten-hud-value');
-    this.toolbarStraightenSlider = document.getElementById('crop-toolbar-straighten-slider') as HTMLInputElement | null;
-    this.toolbarStraightenVal = document.getElementById('crop-toolbar-straighten-val');
+    this.toolbarStraightenSlider = document.getElementById(
+      'crop-toolbar-straighten-slider',
+    ) as HTMLInputElement | null;
+    this.toolbarStraightenVal = document.getElementById(
+      'crop-toolbar-straighten-val',
+    );
 
-    if (callbacks?.onCropUpdate) this.onCropUpdateCallback = callbacks.onCropUpdate;
-    if (callbacks?.onStraightenUpdate) this.onStraightenUpdateCallback = callbacks.onStraightenUpdate;
-    if (callbacks?.onStraightenEnd) this.onStraightenEndCallback = callbacks.onStraightenEnd;
+    if (callbacks?.onCropUpdate)
+      this.onCropUpdateCallback = callbacks.onCropUpdate;
+    if (callbacks?.onStraightenUpdate)
+      this.onStraightenUpdateCallback = callbacks.onStraightenUpdate;
+    if (callbacks?.onStraightenEnd)
+      this.onStraightenEndCallback = callbacks.onStraightenEnd;
     if (callbacks?.onDone) this.onDoneCallback = callbacks.onDone;
     if (callbacks?.onCancel) this.onCancelCallback = callbacks.onCancel;
 
@@ -111,7 +163,10 @@ export class CropController {
   }
 
   private initEvents() {
-    this.gestureSurface?.addEventListener('pointerdown', this.onPointerDown.bind(this));
+    this.gestureSurface?.addEventListener(
+      'pointerdown',
+      this.onPointerDown.bind(this),
+    );
     window.addEventListener('pointermove', this.onPointerMove.bind(this));
     window.addEventListener('pointerup', this.onPointerUp.bind(this));
     window.addEventListener('pointercancel', this.onPointerUp.bind(this));
@@ -120,7 +175,8 @@ export class CropController {
       this.aspectMode = this.aspectSelect.value as AspectRatioMode;
       this.applyAspectConstraint();
       this.render();
-      if (this.onCropUpdateCallback) this.onCropUpdateCallback({ ...this.crop });
+      if (this.onCropUpdateCallback)
+        this.onCropUpdateCallback({ ...this.crop });
     });
 
     this.btnFlip?.addEventListener('click', () => {
@@ -146,8 +202,10 @@ export class CropController {
 
     this.toolbarStraightenSlider?.addEventListener('dblclick', () => {
       this.straightenAngle = 0.0;
-      if (this.toolbarStraightenSlider) this.toolbarStraightenSlider.value = '0';
-      if (this.toolbarStraightenVal) this.toolbarStraightenVal.textContent = '+0.0°';
+      if (this.toolbarStraightenSlider)
+        this.toolbarStraightenSlider.value = '0';
+      if (this.toolbarStraightenVal)
+        this.toolbarStraightenVal.textContent = '+0.0°';
       if (this.onStraightenUpdateCallback) {
         this.onStraightenUpdateCallback(0.0);
       }
@@ -171,18 +229,25 @@ export class CropController {
     let portrait = isPortrait;
     if (this.isFlippedAspect) portrait = !portrait;
 
-    const optOriginal = this.aspectSelect.querySelector('option[value="original"]');
+    const optOriginal = this.aspectSelect.querySelector(
+      'option[value="original"]',
+    );
     const opt32 = this.aspectSelect.querySelector('option[value="3:2"]');
     const opt43 = this.aspectSelect.querySelector('option[value="4:3"]');
     const opt169 = this.aspectSelect.querySelector('option[value="16:9"]');
 
-    if (optOriginal) optOriginal.textContent = portrait ? 'Original (Vertical)' : 'Original';
+    if (optOriginal)
+      optOriginal.textContent = portrait ? 'Original (Vertical)' : 'Original';
     if (opt32) opt32.textContent = portrait ? '2:3 (35mm)' : '3:2 (35mm)';
     if (opt43) opt43.textContent = portrait ? '3:4' : '4:3';
     if (opt169) opt169.textContent = portrait ? '9:16' : '16:9';
   }
 
-  public show(crop: CropRect, imageAspect: number, straightenAngle: number = 0.0) {
+  public show(
+    crop: CropRect,
+    imageAspect: number,
+    straightenAngle: number = 0.0,
+  ) {
     this.crop = {
       left: Math.max(0, Math.min(0.95, crop.left ?? 0.0)),
       top: Math.max(0, Math.min(0.95, crop.top ?? 0.0)),
@@ -214,7 +279,10 @@ export class CropController {
     this.activeHandle = null;
   }
 
-  public setImageRect(rect: { x: number; y: number; width: number; height: number }, imageAspect?: number) {
+  public setImageRect(
+    rect: { x: number; y: number; width: number; height: number },
+    imageAspect?: number,
+  ) {
     this.imageRect = { ...rect };
     if (imageAspect && imageAspect > 0) {
       this.imageAspect = imageAspect;
@@ -223,7 +291,12 @@ export class CropController {
     this.render();
   }
 
-  public updatePosition(overlayRect: { left: number; top: number; width: number; height: number }) {
+  public updatePosition(overlayRect: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  }) {
     this.setImageRect({
       x: overlayRect.left,
       y: overlayRect.top,
@@ -252,7 +325,12 @@ export class CropController {
         this.toolbarStraightenSlider.value = `${this.dragStartStraighten}`;
       }
       if (this.toolbarStraightenVal) {
-        const sign = this.dragStartStraighten > 0 ? '+' : (this.dragStartStraighten < 0 ? '' : '+');
+        const sign =
+          this.dragStartStraighten > 0
+            ? '+'
+            : this.dragStartStraighten < 0
+              ? ''
+              : '+';
         this.toolbarStraightenVal.textContent = `${sign}${this.dragStartStraighten.toFixed(1)}°`;
       }
       if (this.onStraightenUpdateCallback) {
@@ -261,6 +339,12 @@ export class CropController {
       return true;
     }
     return false;
+  }
+
+  public cancel(): void {
+    if (this.onCancelCallback) {
+      this.onCancelCallback();
+    }
   }
 
   public flipCropOrientation() {
@@ -272,7 +356,8 @@ export class CropController {
     const centerX = (this.crop.left + this.crop.right) / 2.0;
     const centerY = (this.crop.top + this.crop.bottom) / 2.0;
 
-    const currentPhotoAspect = (currentW / Math.max(currentH, 0.001)) * this.imageAspect;
+    const currentPhotoAspect =
+      (currentW / Math.max(currentH, 0.001)) * this.imageAspect;
     const newPhotoAspect = 1.0 / Math.max(currentPhotoAspect, 0.01);
     const newNormAspect = newPhotoAspect / this.imageAspect;
 
@@ -292,7 +377,12 @@ export class CropController {
     const newTop = Math.max(0, centerY - newH / 2.0);
     const newBottom = Math.min(1.0, newTop + newH);
 
-    this.crop = { left: newLeft, top: newTop, right: newRight, bottom: newBottom };
+    this.crop = {
+      left: newLeft,
+      top: newTop,
+      right: newRight,
+      bottom: newBottom,
+    };
     this.render();
     if (this.onCropUpdateCallback) {
       this.onCropUpdateCallback({ ...this.crop });
@@ -305,7 +395,8 @@ export class CropController {
     this.aspectMode = 'original';
     if (this.aspectSelect) this.aspectSelect.value = 'original';
     if (this.toolbarStraightenSlider) this.toolbarStraightenSlider.value = '0';
-    if (this.toolbarStraightenVal) this.toolbarStraightenVal.textContent = '+0.0°';
+    if (this.toolbarStraightenVal)
+      this.toolbarStraightenVal.textContent = '+0.0°';
     this.updateAspectOptionLabels();
     this.crop = { left: 0.0, top: 0.0, right: 1.0, bottom: 1.0 };
     this.render();
@@ -320,7 +411,13 @@ export class CropController {
 
   private resolveHitTarget(clientX: number, clientY: number): DragHandle {
     const rect = this.gestureSurface.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0 || this.imageRect.width <= 0 || this.imageRect.height <= 0) return null;
+    if (
+      rect.width <= 0 ||
+      rect.height <= 0 ||
+      this.imageRect.width <= 0 ||
+      this.imageRect.height <= 0
+    )
+      return null;
 
     const px = clientX - rect.left;
     const py = clientY - rect.top;
@@ -330,8 +427,8 @@ export class CropController {
     const yT = this.imageRect.y + this.crop.top * this.imageRect.height;
     const yB = this.imageRect.y + this.crop.bottom * this.imageRect.height;
 
-    const cornerRadius = 24;       // Corner resize handles
-    const edgeRadius = 16;         // Edge resize handles
+    const cornerRadius = 24; // Corner resize handles
+    const edgeRadius = 16; // Edge resize handles
     const cornerRotateRadius = 60; // Outer corner rotation zone
 
     // 1. Check corners (resize)
@@ -341,10 +438,30 @@ export class CropController {
     if (Math.hypot(px - xR, py - yB) <= cornerRadius) return 'se';
 
     // 2. Check edges (resize)
-    if (Math.abs(py - yT) <= edgeRadius && px >= xL - edgeRadius && px <= xR + edgeRadius) return 'n';
-    if (Math.abs(py - yB) <= edgeRadius && px >= xL - edgeRadius && px <= xR + edgeRadius) return 's';
-    if (Math.abs(px - xL) <= edgeRadius && py >= yT - edgeRadius && py <= yB + edgeRadius) return 'w';
-    if (Math.abs(px - xR) <= edgeRadius && py >= yT - edgeRadius && py <= yB + edgeRadius) return 'e';
+    if (
+      Math.abs(py - yT) <= edgeRadius &&
+      px >= xL - edgeRadius &&
+      px <= xR + edgeRadius
+    )
+      return 'n';
+    if (
+      Math.abs(py - yB) <= edgeRadius &&
+      px >= xL - edgeRadius &&
+      px <= xR + edgeRadius
+    )
+      return 's';
+    if (
+      Math.abs(px - xL) <= edgeRadius &&
+      py >= yT - edgeRadius &&
+      py <= yB + edgeRadius
+    )
+      return 'w';
+    if (
+      Math.abs(px - xR) <= edgeRadius &&
+      py >= yT - edgeRadius &&
+      py <= yB + edgeRadius
+    )
+      return 'e';
 
     // 3. Check corner rotation zones (outer margin around 4 corners)
     if (Math.hypot(px - xL, py - yT) <= cornerRotateRadius) return 'rotate';
@@ -354,7 +471,11 @@ export class CropController {
 
     // 4. Inside crop box -> move (only if not full frame)
     if (px > xL && px < xR && py > yT && py < yB) {
-      const isFull = this.crop.left <= 0.001 && this.crop.top <= 0.001 && this.crop.right >= 0.999 && this.crop.bottom >= 0.999;
+      const isFull =
+        this.crop.left <= 0.001 &&
+        this.crop.top <= 0.001 &&
+        this.crop.right >= 0.999 &&
+        this.crop.bottom >= 0.999;
       return isFull ? null : 'move';
     }
 
@@ -384,7 +505,8 @@ export class CropController {
         this.gestureSurface.style.cursor = 'move';
         break;
       case 'rotate':
-        this.gestureSurface.style.cursor = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g fill='none' stroke='%23000000' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21.5 2v6h-6'/><path d='M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67'/></g><g fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21.5 2v6h-6'/><path d='M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67'/></g></svg>\") 12 12, crosshair";
+        this.gestureSurface.style.cursor =
+          "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g fill='none' stroke='%23000000' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21.5 2v6h-6'/><path d='M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67'/></g><g fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21.5 2v6h-6'/><path d='M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67'/></g></svg>\") 12 12, crosshair";
         break;
       default:
         this.gestureSurface.style.cursor = 'default';
@@ -419,34 +541,49 @@ export class CropController {
     }
 
     const rect = this.gestureSurface.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0 || this.imageRect.width <= 0 || this.imageRect.height <= 0) return;
+    if (
+      rect.width <= 0 ||
+      rect.height <= 0 ||
+      this.imageRect.width <= 0 ||
+      this.imageRect.height <= 0
+    )
+      return;
 
     if (this.activeHandle === 'rotate') {
       const centerX = this.imageRect.x + this.imageRect.width / 2.0;
       const centerY = this.imageRect.y + this.imageRect.height / 2.0;
-      const startVector = { x: this.dragStartPos.x - rect.left - centerX, y: this.dragStartPos.y - rect.top - centerY };
-      const currentVector = { x: e.clientX - rect.left - centerX, y: e.clientY - rect.top - centerY };
+      const startVector = {
+        x: this.dragStartPos.x - rect.left - centerX,
+        y: this.dragStartPos.y - rect.top - centerY,
+      };
+      const currentVector = {
+        x: e.clientX - rect.left - centerX,
+        y: e.clientY - rect.top - centerY,
+      };
       const startAngle = Math.atan2(startVector.y, startVector.x);
       const currentAngle = Math.atan2(currentVector.y, currentVector.x);
       let deltaDegrees = ((currentAngle - startAngle) * 180.0) / Math.PI;
       if (deltaDegrees > 180.0) deltaDegrees -= 360.0;
       if (deltaDegrees < -180.0) deltaDegrees += 360.0;
 
-      const newStraighten = Math.max(-45.0, Math.min(45.0, this.dragStartStraighten + deltaDegrees));
+      const newStraighten = Math.max(
+        -45.0,
+        Math.min(45.0, this.dragStartStraighten + deltaDegrees),
+      );
       this.straightenAngle = newStraighten;
 
       if (this.straightenHudEl) {
         this.straightenHudEl.classList.remove('hidden');
       }
       if (this.straightenHudValueEl) {
-        const sign = newStraighten > 0 ? '+' : (newStraighten < 0 ? '' : '+');
+        const sign = newStraighten > 0 ? '+' : newStraighten < 0 ? '' : '+';
         this.straightenHudValueEl.textContent = `Straighten: ${sign}${newStraighten.toFixed(1)}°`;
       }
       if (this.toolbarStraightenSlider) {
         this.toolbarStraightenSlider.value = `${newStraighten}`;
       }
       if (this.toolbarStraightenVal) {
-        const sign = newStraighten > 0 ? '+' : (newStraighten < 0 ? '' : '+');
+        const sign = newStraighten > 0 ? '+' : newStraighten < 0 ? '' : '+';
         this.toolbarStraightenVal.textContent = `${sign}${newStraighten.toFixed(1)}°`;
       }
 
@@ -462,8 +599,14 @@ export class CropController {
     if (this.activeHandle === 'move') {
       const w = this.dragStartCrop.right - this.dragStartCrop.left;
       const h = this.dragStartCrop.bottom - this.dragStartCrop.top;
-      let left = Math.max(0, Math.min(1.0 - w, this.dragStartCrop.left + deltaU));
-      let top = Math.max(0, Math.min(1.0 - h, this.dragStartCrop.top + deltaV));
+      const left = Math.max(
+        0,
+        Math.min(1.0 - w, this.dragStartCrop.left + deltaU),
+      );
+      const top = Math.max(
+        0,
+        Math.min(1.0 - h, this.dragStartCrop.top + deltaV),
+      );
       this.crop = { left, top, right: left + w, bottom: top + h };
     } else if (['n', 's', 'e', 'w'].includes(this.activeHandle)) {
       this.updateEdgeDrag(this.activeHandle, deltaU, deltaV);
@@ -512,44 +655,80 @@ export class CropController {
 
       switch (handle) {
         case 'e': {
-          const maxAllowedW = Math.max(0.01, Math.min(1.0 - this.dragStartCrop.left, 2.0 * Math.min(Yc, 1.0 - Yc) * normRatio));
+          const maxAllowedW = Math.max(
+            0.01,
+            Math.min(
+              1.0 - this.dragStartCrop.left,
+              2.0 * Math.min(Yc, 1.0 - Yc) * normRatio,
+            ),
+          );
           const minW = Math.min(0.05, maxAllowedW);
           const newW = Math.max(minW, Math.min(maxAllowedW, W0 + deltaU));
           const newH = newW / normRatio;
           this.crop.left = this.dragStartCrop.left;
-          this.crop.right = Math.max(0.0, Math.min(1.0, this.dragStartCrop.left + newW));
+          this.crop.right = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.left + newW),
+          );
           this.crop.top = Math.max(0.0, Math.min(1.0, Yc - newH / 2.0));
           this.crop.bottom = Math.max(0.0, Math.min(1.0, Yc + newH / 2.0));
           break;
         }
         case 'w': {
-          const maxAllowedW = Math.max(0.01, Math.min(this.dragStartCrop.right, 2.0 * Math.min(Yc, 1.0 - Yc) * normRatio));
+          const maxAllowedW = Math.max(
+            0.01,
+            Math.min(
+              this.dragStartCrop.right,
+              2.0 * Math.min(Yc, 1.0 - Yc) * normRatio,
+            ),
+          );
           const minW = Math.min(0.05, maxAllowedW);
           const newW = Math.max(minW, Math.min(maxAllowedW, W0 - deltaU));
           const newH = newW / normRatio;
-          this.crop.left = Math.max(0.0, Math.min(1.0, this.dragStartCrop.right - newW));
+          this.crop.left = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.right - newW),
+          );
           this.crop.right = this.dragStartCrop.right;
           this.crop.top = Math.max(0.0, Math.min(1.0, Yc - newH / 2.0));
           this.crop.bottom = Math.max(0.0, Math.min(1.0, Yc + newH / 2.0));
           break;
         }
         case 's': {
-          const maxAllowedH = Math.max(0.01, Math.min(1.0 - this.dragStartCrop.top, 2.0 * Math.min(Xc, 1.0 - Xc) / normRatio));
+          const maxAllowedH = Math.max(
+            0.01,
+            Math.min(
+              1.0 - this.dragStartCrop.top,
+              (2.0 * Math.min(Xc, 1.0 - Xc)) / normRatio,
+            ),
+          );
           const minH = Math.min(0.05, maxAllowedH);
           const newH = Math.max(minH, Math.min(maxAllowedH, H0 + deltaV));
           const newW = newH * normRatio;
           this.crop.top = this.dragStartCrop.top;
-          this.crop.bottom = Math.max(0.0, Math.min(1.0, this.dragStartCrop.top + newH));
+          this.crop.bottom = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.top + newH),
+          );
           this.crop.left = Math.max(0.0, Math.min(1.0, Xc - newW / 2.0));
           this.crop.right = Math.max(0.0, Math.min(1.0, Xc + newW / 2.0));
           break;
         }
         case 'n': {
-          const maxAllowedH = Math.max(0.01, Math.min(this.dragStartCrop.bottom, 2.0 * Math.min(Xc, 1.0 - Xc) / normRatio));
+          const maxAllowedH = Math.max(
+            0.01,
+            Math.min(
+              this.dragStartCrop.bottom,
+              (2.0 * Math.min(Xc, 1.0 - Xc)) / normRatio,
+            ),
+          );
           const minH = Math.min(0.05, maxAllowedH);
           const newH = Math.max(minH, Math.min(maxAllowedH, H0 - deltaV));
           const newW = newH * normRatio;
-          this.crop.top = Math.max(0.0, Math.min(1.0, this.dragStartCrop.bottom - newH));
+          this.crop.top = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.bottom - newH),
+          );
           this.crop.bottom = this.dragStartCrop.bottom;
           this.crop.left = Math.max(0.0, Math.min(1.0, Xc - newW / 2.0));
           this.crop.right = Math.max(0.0, Math.min(1.0, Xc + newW / 2.0));
@@ -559,16 +738,40 @@ export class CropController {
     } else {
       switch (handle) {
         case 'n':
-          this.crop.top = Math.max(0.0, Math.min(this.dragStartCrop.bottom - 0.05, this.dragStartCrop.top + deltaV));
+          this.crop.top = Math.max(
+            0.0,
+            Math.min(
+              this.dragStartCrop.bottom - 0.05,
+              this.dragStartCrop.top + deltaV,
+            ),
+          );
           break;
         case 's':
-          this.crop.bottom = Math.min(1.0, Math.max(this.dragStartCrop.top + 0.05, this.dragStartCrop.bottom + deltaV));
+          this.crop.bottom = Math.min(
+            1.0,
+            Math.max(
+              this.dragStartCrop.top + 0.05,
+              this.dragStartCrop.bottom + deltaV,
+            ),
+          );
           break;
         case 'w':
-          this.crop.left = Math.max(0.0, Math.min(this.dragStartCrop.right - 0.05, this.dragStartCrop.left + deltaU));
+          this.crop.left = Math.max(
+            0.0,
+            Math.min(
+              this.dragStartCrop.right - 0.05,
+              this.dragStartCrop.left + deltaU,
+            ),
+          );
           break;
         case 'e':
-          this.crop.right = Math.min(1.0, Math.max(this.dragStartCrop.left + 0.05, this.dragStartCrop.right + deltaU));
+          this.crop.right = Math.min(
+            1.0,
+            Math.max(
+              this.dragStartCrop.left + 0.05,
+              this.dragStartCrop.right + deltaU,
+            ),
+          );
           break;
       }
     }
@@ -584,49 +787,97 @@ export class CropController {
       switch (handle) {
         case 'se': {
           const delta = (deltaU + deltaV * normRatio) / 2.0;
-          const maxAllowedW = Math.max(0.01, Math.min(1.0 - this.dragStartCrop.left, (1.0 - this.dragStartCrop.top) * normRatio));
+          const maxAllowedW = Math.max(
+            0.01,
+            Math.min(
+              1.0 - this.dragStartCrop.left,
+              (1.0 - this.dragStartCrop.top) * normRatio,
+            ),
+          );
           const minW = Math.min(0.05, maxAllowedW);
           const newW = Math.max(minW, Math.min(maxAllowedW, W0 + delta));
           const newH = newW / normRatio;
           this.crop.left = this.dragStartCrop.left;
-          this.crop.right = Math.max(0.0, Math.min(1.0, this.dragStartCrop.left + newW));
+          this.crop.right = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.left + newW),
+          );
           this.crop.top = this.dragStartCrop.top;
-          this.crop.bottom = Math.max(0.0, Math.min(1.0, this.dragStartCrop.top + newH));
+          this.crop.bottom = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.top + newH),
+          );
           break;
         }
         case 'ne': {
           const delta = (deltaU - deltaV * normRatio) / 2.0;
-          const maxAllowedW = Math.max(0.01, Math.min(1.0 - this.dragStartCrop.left, this.dragStartCrop.bottom * normRatio));
+          const maxAllowedW = Math.max(
+            0.01,
+            Math.min(
+              1.0 - this.dragStartCrop.left,
+              this.dragStartCrop.bottom * normRatio,
+            ),
+          );
           const minW = Math.min(0.05, maxAllowedW);
           const newW = Math.max(minW, Math.min(maxAllowedW, W0 + delta));
           const newH = newW / normRatio;
           this.crop.left = this.dragStartCrop.left;
-          this.crop.right = Math.max(0.0, Math.min(1.0, this.dragStartCrop.left + newW));
-          this.crop.top = Math.max(0.0, Math.min(1.0, this.dragStartCrop.bottom - newH));
+          this.crop.right = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.left + newW),
+          );
+          this.crop.top = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.bottom - newH),
+          );
           this.crop.bottom = this.dragStartCrop.bottom;
           break;
         }
         case 'sw': {
           const delta = (-deltaU + deltaV * normRatio) / 2.0;
-          const maxAllowedW = Math.max(0.01, Math.min(this.dragStartCrop.right, (1.0 - this.dragStartCrop.top) * normRatio));
+          const maxAllowedW = Math.max(
+            0.01,
+            Math.min(
+              this.dragStartCrop.right,
+              (1.0 - this.dragStartCrop.top) * normRatio,
+            ),
+          );
           const minW = Math.min(0.05, maxAllowedW);
           const newW = Math.max(minW, Math.min(maxAllowedW, W0 + delta));
           const newH = newW / normRatio;
-          this.crop.left = Math.max(0.0, Math.min(1.0, this.dragStartCrop.right - newW));
+          this.crop.left = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.right - newW),
+          );
           this.crop.right = this.dragStartCrop.right;
           this.crop.top = this.dragStartCrop.top;
-          this.crop.bottom = Math.max(0.0, Math.min(1.0, this.dragStartCrop.top + newH));
+          this.crop.bottom = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.top + newH),
+          );
           break;
         }
         case 'nw': {
           const delta = (-deltaU - deltaV * normRatio) / 2.0;
-          const maxAllowedW = Math.max(0.01, Math.min(this.dragStartCrop.right, this.dragStartCrop.bottom * normRatio));
+          const maxAllowedW = Math.max(
+            0.01,
+            Math.min(
+              this.dragStartCrop.right,
+              this.dragStartCrop.bottom * normRatio,
+            ),
+          );
           const minW = Math.min(0.05, maxAllowedW);
           const newW = Math.max(minW, Math.min(maxAllowedW, W0 + delta));
           const newH = newW / normRatio;
-          this.crop.left = Math.max(0.0, Math.min(1.0, this.dragStartCrop.right - newW));
+          this.crop.left = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.right - newW),
+          );
           this.crop.right = this.dragStartCrop.right;
-          this.crop.top = Math.max(0.0, Math.min(1.0, this.dragStartCrop.bottom - newH));
+          this.crop.top = Math.max(
+            0.0,
+            Math.min(1.0, this.dragStartCrop.bottom - newH),
+          );
           this.crop.bottom = this.dragStartCrop.bottom;
           break;
         }
@@ -634,20 +885,68 @@ export class CropController {
     } else {
       switch (handle) {
         case 'nw':
-          this.crop.left = Math.max(0.0, Math.min(this.dragStartCrop.right - 0.05, this.dragStartCrop.left + deltaU));
-          this.crop.top = Math.max(0.0, Math.min(this.dragStartCrop.bottom - 0.05, this.dragStartCrop.top + deltaV));
+          this.crop.left = Math.max(
+            0.0,
+            Math.min(
+              this.dragStartCrop.right - 0.05,
+              this.dragStartCrop.left + deltaU,
+            ),
+          );
+          this.crop.top = Math.max(
+            0.0,
+            Math.min(
+              this.dragStartCrop.bottom - 0.05,
+              this.dragStartCrop.top + deltaV,
+            ),
+          );
           break;
         case 'ne':
-          this.crop.right = Math.min(1.0, Math.max(this.dragStartCrop.left + 0.05, this.dragStartCrop.right + deltaU));
-          this.crop.top = Math.max(0.0, Math.min(this.dragStartCrop.bottom - 0.05, this.dragStartCrop.top + deltaV));
+          this.crop.right = Math.min(
+            1.0,
+            Math.max(
+              this.dragStartCrop.left + 0.05,
+              this.dragStartCrop.right + deltaU,
+            ),
+          );
+          this.crop.top = Math.max(
+            0.0,
+            Math.min(
+              this.dragStartCrop.bottom - 0.05,
+              this.dragStartCrop.top + deltaV,
+            ),
+          );
           break;
         case 'sw':
-          this.crop.left = Math.max(0.0, Math.min(this.dragStartCrop.right - 0.05, this.dragStartCrop.left + deltaU));
-          this.crop.bottom = Math.min(1.0, Math.max(this.dragStartCrop.top + 0.05, this.dragStartCrop.bottom + deltaV));
+          this.crop.left = Math.max(
+            0.0,
+            Math.min(
+              this.dragStartCrop.right - 0.05,
+              this.dragStartCrop.left + deltaU,
+            ),
+          );
+          this.crop.bottom = Math.min(
+            1.0,
+            Math.max(
+              this.dragStartCrop.top + 0.05,
+              this.dragStartCrop.bottom + deltaV,
+            ),
+          );
           break;
         case 'se':
-          this.crop.right = Math.min(1.0, Math.max(this.dragStartCrop.left + 0.05, this.dragStartCrop.right + deltaU));
-          this.crop.bottom = Math.min(1.0, Math.max(this.dragStartCrop.top + 0.05, this.dragStartCrop.bottom + deltaV));
+          this.crop.right = Math.min(
+            1.0,
+            Math.max(
+              this.dragStartCrop.left + 0.05,
+              this.dragStartCrop.right + deltaU,
+            ),
+          );
+          this.crop.bottom = Math.min(
+            1.0,
+            Math.max(
+              this.dragStartCrop.top + 0.05,
+              this.dragStartCrop.bottom + deltaV,
+            ),
+          );
           break;
       }
     }
@@ -658,10 +957,14 @@ export class CropController {
 
     const currentW = this.dragStartCrop.right - this.dragStartCrop.left;
     const currentH = this.dragStartCrop.bottom - this.dragStartCrop.top;
-    const isCurrentlyPortrait = (currentW * this.imageAspect) < currentH;
-    let isPortrait = (this.dragStartCrop.left < 0.01 && this.dragStartCrop.top < 0.01 && this.dragStartCrop.right > 0.99 && this.dragStartCrop.bottom > 0.99)
-      ? (this.imageAspect < 1.0)
-      : isCurrentlyPortrait;
+    const isCurrentlyPortrait = currentW * this.imageAspect < currentH;
+    let isPortrait =
+      this.dragStartCrop.left < 0.01 &&
+      this.dragStartCrop.top < 0.01 &&
+      this.dragStartCrop.right > 0.99 &&
+      this.dragStartCrop.bottom > 0.99
+        ? this.imageAspect < 1.0
+        : isCurrentlyPortrait;
 
     if (this.isFlippedAspect) {
       isPortrait = !isPortrait;
@@ -670,16 +973,18 @@ export class CropController {
     switch (this.aspectMode) {
       case 'original': {
         const isBasePortrait = this.imageAspect < 1.0;
-        return (isPortrait === isBasePortrait) ? this.imageAspect : (1.0 / this.imageAspect);
+        return isPortrait === isBasePortrait
+          ? this.imageAspect
+          : 1.0 / this.imageAspect;
       }
       case '1:1':
         return 1.0;
       case '4:3':
-        return isPortrait ? (3.0 / 4.0) : (4.0 / 3.0);
+        return isPortrait ? 3.0 / 4.0 : 4.0 / 3.0;
       case '3:2':
-        return isPortrait ? (2.0 / 3.0) : (3.0 / 2.0);
+        return isPortrait ? 2.0 / 3.0 : 3.0 / 2.0;
       case '16:9':
-        return isPortrait ? (9.0 / 16.0) : (16.0 / 9.0);
+        return isPortrait ? 9.0 / 16.0 : 16.0 / 9.0;
       default:
         return null;
     }
@@ -711,12 +1016,24 @@ export class CropController {
 
   public render() {
     const rect = this.gestureSurface.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0 || this.imageRect.width <= 0 || this.imageRect.height <= 0) return;
+    if (
+      rect.width <= 0 ||
+      rect.height <= 0 ||
+      this.imageRect.width <= 0 ||
+      this.imageRect.height <= 0
+    )
+      return;
 
     const x = this.imageRect.x + this.crop.left * this.imageRect.width;
     const y = this.imageRect.y + this.crop.top * this.imageRect.height;
-    const boxW = Math.max(4, (this.crop.right - this.crop.left) * this.imageRect.width);
-    const boxH = Math.max(4, (this.crop.bottom - this.crop.top) * this.imageRect.height);
+    const boxW = Math.max(
+      4,
+      (this.crop.right - this.crop.left) * this.imageRect.width,
+    );
+    const boxH = Math.max(
+      4,
+      (this.crop.bottom - this.crop.top) * this.imageRect.height,
+    );
 
     // Update mask cutout
     this.maskCutout.setAttribute('x', `${x}`);
@@ -758,10 +1075,22 @@ export class CropController {
 
     // 4 Corner Brackets (18px arm length, 3.5px stroke - Mac App Parity)
     const arm = 18;
-    this.handleElements.nw.setAttribute('d', `M ${x} ${y + arm} L ${x} ${y} L ${x + arm} ${y}`);
-    this.handleElements.ne.setAttribute('d', `M ${x + boxW - arm} ${y} L ${x + boxW} ${y} L ${x + boxW} ${y + arm}`);
-    this.handleElements.sw.setAttribute('d', `M ${x} ${y + boxH - arm} L ${x} ${y + boxH} L ${x + arm} ${y + boxH}`);
-    this.handleElements.se.setAttribute('d', `M ${x + boxW - arm} ${y + boxH} L ${x + boxW} ${y + boxH} L ${x + boxW} ${y + boxH - arm}`);
+    this.handleElements.nw.setAttribute(
+      'd',
+      `M ${x} ${y + arm} L ${x} ${y} L ${x + arm} ${y}`,
+    );
+    this.handleElements.ne.setAttribute(
+      'd',
+      `M ${x + boxW - arm} ${y} L ${x + boxW} ${y} L ${x + boxW} ${y + arm}`,
+    );
+    this.handleElements.sw.setAttribute(
+      'd',
+      `M ${x} ${y + boxH - arm} L ${x} ${y + boxH} L ${x + arm} ${y + boxH}`,
+    );
+    this.handleElements.se.setAttribute(
+      'd',
+      `M ${x + boxW - arm} ${y + boxH} L ${x + boxW} ${y + boxH} L ${x + boxW} ${y + boxH - arm}`,
+    );
 
     // 4 Edge Capsules (26x5 / 5x26 white pills - Mac App Parity)
     const barLen = 26;

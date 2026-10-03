@@ -407,15 +407,9 @@ fn find_rdf_li_vals(node: Node) -> Vec<String> {
 }
 
 fn find_desc_node<'a, 'd>(doc: &'a Document<'d>) -> Option<Node<'a, 'd>> {
-    for node in doc.descendants() {
-        if node.is_element()
+    doc.descendants().find(|&node| node.is_element()
             && (node.has_tag_name(("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "Description"))
-                || node.tag_name().name() == "Description")
-        {
-            return Some(node);
-        }
-    }
-    None
+                || node.tag_name().name() == "Description"))
 }
 
 fn get_prop<'a, 'd>(desc: &'a Node<'a, 'd>, ns: &str, name: &str) -> Option<&'a str> {

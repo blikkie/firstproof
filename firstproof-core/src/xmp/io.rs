@@ -37,11 +37,10 @@ pub fn has_custom_adjustments(data: &XmpData) -> bool {
 /// If both foo.CR2.xmp and foo.xmp exist, intelligently selects the one containing custom First Proof edits.
 pub fn resolve_xmp_read_path<P: AsRef<Path>>(path: P) -> Option<PathBuf> {
     let p = path.as_ref();
-    if p.extension().map(|e| e.to_string_lossy().eq_ignore_ascii_case("xmp")).unwrap_or(false) {
-        if p.exists() {
+    if p.extension().map(|e| e.to_string_lossy().eq_ignore_ascii_case("xmp")).unwrap_or(false)
+        && p.exists() {
             return Some(p.to_path_buf());
         }
-    }
     let p_str = p.to_string_lossy();
     let xmp_sidecar = PathBuf::from(format!("{}.xmp", p_str));
     let xmp_stem = p.with_extension("xmp");

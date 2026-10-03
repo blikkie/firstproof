@@ -1,23 +1,22 @@
-import {
-  WasmBridge,
-  EditSettingsPayload,
-  PreviewResult,
-} from './WasmBridge';
-import { WebGLRenderer } from './WebGLRenderer';
-import { FolderIntake, PhotoFileEntry } from './FolderIntake';
-import { ToneCurveWidget } from './ToneCurveWidget';
-import { ParityModal } from './parity/ParityModal';
 import { CropController } from './CropController';
-import { ExportModal, ExportExecutionOptions } from './ExportModal';
-import { decodeExifOrientation } from './utils/exifReader';
-import { isDebugMode } from './utils/debug';
-import { getDefaultEdits, hasModifications } from './utils/edits';
-import { updateMetadataHeaderElements } from './utils/metadataHeader';
-import { KeyboardShortcutController } from './controllers/KeyboardShortcutController';
 import { CanvasViewportController } from './controllers/CanvasViewportController';
-import { InspectorSyncController } from './controllers/InspectorSyncController';
 import { FilmstripController } from './controllers/FilmstripController';
-import { PhotoLoaderService, PhotoRecord } from './services/PhotoLoaderService';
+import { InspectorSyncController } from './controllers/InspectorSyncController';
+import { KeyboardShortcutController } from './controllers/KeyboardShortcutController';
+import { type ExportExecutionOptions, ExportModal } from './ExportModal';
+import { FolderIntake, type PhotoFileEntry } from './FolderIntake';
+import { ParityModal } from './parity/ParityModal';
+import {
+  PhotoLoaderService,
+  type PhotoRecord,
+} from './services/PhotoLoaderService';
+import { ToneCurveWidget } from './ToneCurveWidget';
+import { isDebugMode } from './utils/debug';
+import { getDefaultEdits } from './utils/edits';
+import { decodeExifOrientation } from './utils/exifReader';
+import { updateMetadataHeaderElements } from './utils/metadataHeader';
+import { type EditSettingsPayload, WasmBridge } from './WasmBridge';
+import { WebGLRenderer } from './WebGLRenderer';
 
 class DarkroomApp {
   private bridge!: WasmBridge;
@@ -64,12 +63,16 @@ class DarkroomApp {
       this.loaderService = new PhotoLoaderService(this.bridge);
     } catch (err) {
       console.error('[App] Failed to initialize WASM scratchpad:', err);
-      alert('Failed to initialize WebAssembly core engine. Check browser console.');
+      alert(
+        'Failed to initialize WebAssembly core engine. Check browser console.',
+      );
       return;
     }
 
     // 2. Init WebGL Renderer
-    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
+    const canvas = document.getElementById(
+      'darkroom-canvas',
+    ) as HTMLCanvasElement;
     canvas.width = 1920;
     canvas.height = 1080;
     this.renderer = new WebGLRenderer(canvas);
@@ -80,14 +83,22 @@ class DarkroomApp {
       () => this.edits,
       () => {
         if (this.filmstripController.getActiveIndex() < 0) return null;
-        if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
+        if (
+          this.activeLinearData &&
+          this.activeLinearW > 0 &&
+          this.activeLinearH > 0
+        ) {
           return {
             isLinearRec2020: true,
             width: this.activeLinearW,
             height: this.activeLinearH,
             linearData: this.activeLinearData,
           };
-        } else if (this.activeSourceImage && this.activeSourceW > 0 && this.activeSourceH > 0) {
+        } else if (
+          this.activeSourceImage &&
+          this.activeSourceW > 0 &&
+          this.activeSourceH > 0
+        ) {
           return {
             isLinearRec2020: false,
             width: this.activeSourceW,
@@ -96,15 +107,21 @@ class DarkroomApp {
           };
         }
         return null;
-      }
+      },
     );
 
     // 3. Init Export Modal
-    this.exportModal.init((photos, options, onProgress) => this.handleExport(photos, options, onProgress));
+    this.exportModal.init((photos, options, onProgress) =>
+      this.handleExport(photos, options, onProgress),
+    );
 
     // 4. Init Tone Curve Widget
-    const curveCanvas = document.getElementById('curve-canvas') as HTMLCanvasElement;
-    this.curveWidget = new ToneCurveWidget(curveCanvas, () => this.onCurveChange());
+    const curveCanvas = document.getElementById(
+      'curve-canvas',
+    ) as HTMLCanvasElement;
+    this.curveWidget = new ToneCurveWidget(curveCanvas, () =>
+      this.onCurveChange(),
+    );
     const initialLut = this.bridge.evaluateCurves(this.edits.curves);
     this.renderer.updateToneCurvesLut(initialLut);
 
@@ -119,10 +136,13 @@ class DarkroomApp {
       },
       onStraightenUpdate: (angle) => {
         this.edits.crop_angle = angle;
-        const straightenSlider = document.getElementById('slider-straighten') as HTMLInputElement;
+        const straightenSlider = document.getElementById(
+          'slider-straighten',
+        ) as HTMLInputElement;
         const straightenVal = document.getElementById('val-straighten');
         if (straightenSlider) straightenSlider.value = `${angle}`;
-        if (straightenVal) straightenVal.textContent = `${angle > 0 ? '+' : ''}${angle.toFixed(1)}°`;
+        if (straightenVal)
+          straightenVal.textContent = `${angle > 0 ? '+' : ''}${angle.toFixed(1)}°`;
         this.renderCanvas();
       },
       onStraightenEnd: () => {
@@ -142,27 +162,37 @@ class DarkroomApp {
       if (btnParity) btnParity.style.display = 'none';
     }
 
-    const canvasWrapper = document.getElementById('canvas-wrapper') as HTMLElement;
+    const canvasWrapper = document.getElementById(
+      'canvas-wrapper',
+    ) as HTMLElement;
     const zoomBadge = document.getElementById('zoom-badge');
-    this.viewportController = new CanvasViewportController(canvas, canvasWrapper, zoomBadge, {
-      onRender: () => this.renderCanvas(),
-      onUpdateCropOverlay: () => {
-        if (this.isCropActive) this.updateCropOverlayPosition();
+    this.viewportController = new CanvasViewportController(
+      canvas,
+      canvasWrapper,
+      zoomBadge,
+      {
+        onRender: () => this.renderCanvas(),
+        onUpdateCropOverlay: () => {
+          if (this.isCropActive) this.updateCropOverlayPosition();
+        },
+        onSampleEyedropper: (mode, r, g, b) =>
+          this.handleSampleEyedropper(mode, r, g, b),
+        isCropActive: () => this.isCropActive,
+        getEdits: () => this.edits,
+        getImageDimensions: () => ({
+          width: this.activeLinearW || this.activeSourceW || 1920,
+          height: this.activeLinearH || this.activeSourceH || 1080,
+          rawWidth: this.currentMetadata?.raw_width,
+          rawHeight: this.currentMetadata?.raw_height,
+        }),
       },
-      onSampleEyedropper: (mode, r, g, b) => this.handleSampleEyedropper(mode, r, g, b),
-      isCropActive: () => this.isCropActive,
-      getEdits: () => this.edits,
-      getImageDimensions: () => ({
-        width: this.activeLinearW || this.activeSourceW || 1920,
-        height: this.activeLinearH || this.activeSourceH || 1080,
-        rawWidth: this.currentMetadata?.raw_width,
-        rawHeight: this.currentMetadata?.raw_height,
-      }),
-    });
+    );
     this.viewportController.bind();
 
     // 7. Init Filmstrip Controller
-    const filmstripScroll = document.getElementById('filmstrip-scroll') as HTMLElement;
+    const filmstripScroll = document.getElementById(
+      'filmstrip-scroll',
+    ) as HTMLElement;
     const filmstripCount = document.getElementById('filmstrip-count');
     const emptyState = document.getElementById('empty-state');
 
@@ -176,7 +206,7 @@ class DarkroomApp {
         onSelectPhoto: (idx, centerFilmstrip, keepMultiSelection) => {
           this.selectPhoto(idx, centerFilmstrip, keepMultiSelection);
         },
-      }
+      },
     );
 
     // 8. Init Keyboard Shortcut Controller
@@ -192,7 +222,8 @@ class DarkroomApp {
         this.renderCanvas();
       },
       onTogglePixelPeep: () => this.viewportController.togglePixelPeep(),
-      onToggleEyedropper: (mode) => this.viewportController.toggleEyedropper(mode),
+      onToggleEyedropper: (mode) =>
+        this.viewportController.toggleEyedropper(mode),
       onEnter: () => {
         if (this.isCropActive) this.toggleCropMode(false);
       },
@@ -225,12 +256,14 @@ class DarkroomApp {
         this.autoSaveSidecar();
       },
       onTogglePick: () => {
-        this.currentStatus = (this.currentStatus === 'Pick') ? 'Unflagged' : 'Pick';
+        this.currentStatus =
+          this.currentStatus === 'Pick' ? 'Unflagged' : 'Pick';
         this.syncRatingFlagUI();
         this.autoSaveSidecar();
       },
       onToggleReject: () => {
-        this.currentStatus = (this.currentStatus === 'Reject') ? 'Unflagged' : 'Reject';
+        this.currentStatus =
+          this.currentStatus === 'Reject' ? 'Unflagged' : 'Reject';
         this.syncRatingFlagUI();
         this.autoSaveSidecar();
       },
@@ -272,7 +305,9 @@ class DarkroomApp {
           btnRecent.style.marginLeft = '0.6rem';
           btnRecent.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Re-open ${recent.name}`;
           btnRecent.addEventListener('click', async () => {
-            const entries = await FolderIntake.processDirectoryHandle(recent.dirHandle);
+            const entries = await FolderIntake.processDirectoryHandle(
+              recent.dirHandle,
+            );
             if (entries.length > 0) {
               FolderIntake.saveRecentDirHandle(recent.dirHandle);
               let initialName: string | null = null;
@@ -294,22 +329,73 @@ class DarkroomApp {
     const entry = this.filmstripController.getActiveEntry();
     if (!entry) return false;
     const ext = entry.name.split('.').pop()?.toLowerCase() || '';
-    return ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
+    return [
+      'cr2',
+      'cr3',
+      'nef',
+      'arw',
+      'dng',
+      'rw2',
+      'orf',
+      'pef',
+      'raf',
+    ].includes(ext);
   }
-
 
   private cacheElements() {
     const ids = [
-      'btn-open-folder', 'file-input-fallback', 'btn-original-peek', 'btn-export-proof', 'btn-parity-audit', 'btn-shortcuts',
-      'empty-state', 'btn-empty-open', 'developing-spinner', 'filmstrip-count', 'filmstrip-scroll',
-      'meta-filename', 'meta-dimensions', 'meta-camera', 'meta-iso', 'meta-aperture', 'meta-shutter',
-      'meta-format-badge', 'meta-full-camera', 'meta-lens', 'meta-focal-length', 'meta-exposure-summary',
-      'meta-sensor-res', 'meta-date-taken', 'meta-sidecar-status', 'btn-reset-all',
-      'btn-pick', 'btn-reject', 'modal-shortcuts', 'btn-close-modal', 'select-tone-profile',
-      'select-wb-preset', 'btn-wb-eyedropper', 'btn-white-point-picker', 'btn-black-point-picker',
-      'select-emulsion', 'select-print-media', 'select-enlarger-filter', 'row-enlarger-filter', 'row-emulsion-exp', 'section-print-media-sliders', 'btn-reset-curve', 'btn-auto-tone',
-      'meta-input-title', 'meta-input-caption', 'meta-input-creator', 'meta-input-keywords',
-      'btn-crop-tool', 'btn-rotate-ccw', 'btn-rotate-cw', 'zoom-badge', 'peek-badge',
+      'btn-open-folder',
+      'file-input-fallback',
+      'btn-original-peek',
+      'btn-export-proof',
+      'btn-parity-audit',
+      'btn-shortcuts',
+      'empty-state',
+      'btn-empty-open',
+      'developing-spinner',
+      'filmstrip-count',
+      'filmstrip-scroll',
+      'meta-filename',
+      'meta-dimensions',
+      'meta-camera',
+      'meta-iso',
+      'meta-aperture',
+      'meta-shutter',
+      'meta-format-badge',
+      'meta-full-camera',
+      'meta-lens',
+      'meta-focal-length',
+      'meta-exposure-summary',
+      'meta-sensor-res',
+      'meta-date-taken',
+      'meta-sidecar-status',
+      'btn-reset-all',
+      'btn-pick',
+      'btn-reject',
+      'modal-shortcuts',
+      'btn-close-modal',
+      'select-tone-profile',
+      'select-wb-preset',
+      'btn-wb-eyedropper',
+      'btn-white-point-picker',
+      'btn-black-point-picker',
+      'select-emulsion',
+      'select-print-media',
+      'select-enlarger-filter',
+      'row-enlarger-filter',
+      'row-emulsion-exp',
+      'section-print-media-sliders',
+      'btn-reset-curve',
+      'btn-auto-tone',
+      'meta-input-title',
+      'meta-input-caption',
+      'meta-input-creator',
+      'meta-input-keywords',
+      'btn-crop-tool',
+      'btn-rotate-ccw',
+      'btn-rotate-cw',
+      'zoom-badge',
+      'peek-badge',
     ];
     for (const id of ids) {
       const el = document.getElementById(id);
@@ -317,23 +403,37 @@ class DarkroomApp {
     }
   }
 
-  private handleSampleEyedropper(mode: 'wb' | 'white' | 'black', r: number, g: number, b: number) {
+  private handleSampleEyedropper(
+    mode: 'wb' | 'white' | 'black',
+    r: number,
+    g: number,
+    b: number,
+  ) {
     if (mode === 'wb') {
       if (r > 0 && g > 0 && b > 0) {
         const curTemp = this.edits.temperature;
         const curTint = this.edits.tint;
-        const targetTemp = Math.min(Math.max(Math.round(curTemp * Math.pow(b / r, 0.35)), 2000), 15000);
-        const targetTint = Math.min(Math.max(Math.round(curTint + (g - (r + b) / 2) * 80), -150), 150);
+        const targetTemp = Math.min(
+          Math.max(Math.round(curTemp * (b / r) ** 0.35), 2000),
+          15000,
+        );
+        const targetTint = Math.min(
+          Math.max(Math.round(curTint + (g - (r + b) / 2) * 80), -150),
+          150,
+        );
 
         this.edits.temperature = targetTemp;
         this.edits.tint = targetTint;
         if (this.elements['select-wb-preset']) {
-          (this.elements['select-wb-preset'] as HTMLSelectElement).value = 'Custom';
+          (this.elements['select-wb-preset'] as HTMLSelectElement).value =
+            'Custom';
         }
       }
     } else if (mode === 'white') {
       const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      const shift = Math.round(Math.min(Math.max((1.0 - lum) * 100, -100), 100));
+      const shift = Math.round(
+        Math.min(Math.max((1.0 - lum) * 100, -100), 100),
+      );
       this.edits.whites = shift;
     } else if (mode === 'black') {
       const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -362,71 +462,108 @@ class DarkroomApp {
         }
       }
 
-      const fallbackEl = this.elements['file-input-fallback'] as HTMLInputElement;
+      const fallbackEl = this.elements[
+        'file-input-fallback'
+      ] as HTMLInputElement;
       if (fallbackEl) {
         fallbackEl.value = '';
         fallbackEl.click();
       }
     };
 
-    this.elements['btn-open-folder'].addEventListener('click', handleOpenFolder);
+    this.elements['btn-open-folder'].addEventListener(
+      'click',
+      handleOpenFolder,
+    );
     this.elements['btn-empty-open'].addEventListener('click', handleOpenFolder);
 
-    (this.elements['file-input-fallback'] as HTMLInputElement).addEventListener('change', (e: Event) => {
-      const target = e.target as HTMLInputElement;
-      if (target.files && target.files.length > 0) {
-        const entries = FolderIntake.processFileList(target.files);
-        this.filmstripController.loadPhotos(entries);
-      }
-    });
+    (this.elements['file-input-fallback'] as HTMLInputElement).addEventListener(
+      'change',
+      (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target.files && target.files.length > 0) {
+          const entries = FolderIntake.processFileList(target.files);
+          this.filmstripController.loadPhotos(entries);
+        }
+      },
+    );
 
     // Original Peek \
     const btnPeek = this.elements['btn-original-peek'];
-    btnPeek.addEventListener('mousedown', () => { this.isOriginalPeek = true; this.renderCanvas(); });
-    btnPeek.addEventListener('mouseup', () => { this.isOriginalPeek = false; this.renderCanvas(); });
-    btnPeek.addEventListener('mouseleave', () => { this.isOriginalPeek = false; this.renderCanvas(); });
+    btnPeek.addEventListener('mousedown', () => {
+      this.isOriginalPeek = true;
+      this.renderCanvas();
+    });
+    btnPeek.addEventListener('mouseup', () => {
+      this.isOriginalPeek = false;
+      this.renderCanvas();
+    });
+    btnPeek.addEventListener('mouseleave', () => {
+      this.isOriginalPeek = false;
+      this.renderCanvas();
+    });
 
     // Export Photo Modal
-    this.elements['btn-export-proof'].addEventListener('click', () => this.openExportModal());
+    this.elements['btn-export-proof'].addEventListener('click', () =>
+      this.openExportModal(),
+    );
 
     // Mechanical Parity Audit Modal
-    this.elements['btn-parity-audit']?.addEventListener('click', () => this.parityModal.show());
+    this.elements['btn-parity-audit']?.addEventListener('click', () =>
+      this.parityModal.show(),
+    );
 
     // Shortcuts Modal
     const modal = this.elements['modal-shortcuts'] as HTMLDialogElement;
-    this.elements['btn-shortcuts'].addEventListener('click', () => modal.showModal());
-    this.elements['btn-close-modal'].addEventListener('click', () => modal.close());
+    this.elements['btn-shortcuts'].addEventListener('click', () =>
+      modal.showModal(),
+    );
+    this.elements['btn-close-modal'].addEventListener('click', () =>
+      modal.close(),
+    );
 
     // Rating & Flag Toolbar
     const starBtns = document.querySelectorAll('.star-btn');
     starBtns.forEach((btn) => {
       btn.addEventListener('click', (e) => {
-        const star = parseInt((e.target as HTMLElement).getAttribute('data-star') || '0', 10);
-        this.currentRating = (this.currentRating === star) ? 0 : star;
+        const star = parseInt(
+          (e.target as HTMLElement).getAttribute('data-star') || '0',
+          10,
+        );
+        this.currentRating = this.currentRating === star ? 0 : star;
         this.syncRatingFlagUI();
         this.autoSaveSidecar();
       });
     });
 
     this.elements['btn-pick'].addEventListener('click', () => {
-      this.currentStatus = (this.currentStatus === 'Pick') ? 'Unflagged' : 'Pick';
+      this.currentStatus = this.currentStatus === 'Pick' ? 'Unflagged' : 'Pick';
       this.syncRatingFlagUI();
       this.autoSaveSidecar();
     });
 
     this.elements['btn-reject'].addEventListener('click', () => {
-      this.currentStatus = (this.currentStatus === 'Reject') ? 'Unflagged' : 'Reject';
+      this.currentStatus =
+        this.currentStatus === 'Reject' ? 'Unflagged' : 'Reject';
       this.syncRatingFlagUI();
       this.autoSaveSidecar();
     });
 
     // Header Crop & Rotation Tools
-    this.elements['btn-crop-tool']?.addEventListener('click', () => this.toggleCropMode());
-    this.elements['btn-rotate-ccw']?.addEventListener('click', () => this.rotateImage(-90));
-    this.elements['btn-rotate-cw']?.addEventListener('click', () => this.rotateImage(90));
+    this.elements['btn-crop-tool']?.addEventListener('click', () =>
+      this.toggleCropMode(),
+    );
+    this.elements['btn-rotate-ccw']?.addEventListener('click', () =>
+      this.rotateImage(-90),
+    );
+    this.elements['btn-rotate-cw']?.addEventListener('click', () =>
+      this.rotateImage(90),
+    );
 
     // Auto Tone Button
-    this.elements['btn-auto-tone']?.addEventListener('click', () => this.applyAutoTone());
+    this.elements['btn-auto-tone']?.addEventListener('click', () =>
+      this.applyAutoTone(),
+    );
 
     // Light Source Presets
     this.elements['select-wb-preset']?.addEventListener('change', (e) => {
@@ -474,7 +611,11 @@ class DarkroomApp {
     });
   }
 
-  private async selectPhoto(idx: number, centerFilmstrip: boolean = false, keepMultiSelection: boolean = false) {
+  private async selectPhoto(
+    idx: number,
+    centerFilmstrip: boolean = false,
+    keepMultiSelection: boolean = false,
+  ) {
     const entries = this.filmstripController.getEntries();
     if (idx < 0 || idx >= entries.length) return;
 
@@ -486,7 +627,11 @@ class DarkroomApp {
     }
 
     const requestId = ++this.selectRequestId;
-    this.filmstripController.selectIndex(idx, centerFilmstrip, keepMultiSelection);
+    this.filmstripController.selectIndex(
+      idx,
+      centerFilmstrip,
+      keepMultiSelection,
+    );
     this.inspectorController.rollbackActiveScrub();
 
     const entry = entries[idx];
@@ -507,7 +652,17 @@ class DarkroomApp {
 
     // Stage 0: Up-Front Edit & Metadata Staging
     const ext = entry.name.split('.').pop()?.toLowerCase() || '';
-    const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
+    const isRawFile = [
+      'cr2',
+      'cr3',
+      'nef',
+      'arw',
+      'dng',
+      'rw2',
+      'orf',
+      'pef',
+      'raf',
+    ].includes(ext);
 
     const knownRot = this.loaderService.getCachedExif(entry.name);
     const defaultRot = knownRot?.rotation ?? 0;
@@ -519,7 +674,7 @@ class DarkroomApp {
       isRawFile,
       defaultRot,
       defaultFlipH,
-      defaultFlipV
+      defaultFlipV,
     );
 
     if (requestId !== this.selectRequestId) return;
@@ -536,13 +691,16 @@ class DarkroomApp {
         idx,
         this.edits.rotation,
         this.edits.flip_horizontal,
-        this.edits.flip_vertical
+        this.edits.flip_vertical,
       );
     }
     this.updateSidecarStatusBadge(record.hasSidecarOnDisk);
 
     // Check High-Resolution Intermediate Texture Cache
-    const cachedIntermediate = this.loaderService.getIntermediate(entry.name, this.edits);
+    const cachedIntermediate = this.loaderService.getIntermediate(
+      entry.name,
+      this.edits,
+    );
     if (cachedIntermediate) {
       this.elements['developing-spinner']?.classList.add('hidden');
       this.activeLinearData = null;
@@ -566,7 +724,7 @@ class DarkroomApp {
     }
 
     const isPrewarmedHit = this.loaderService.hasPrewarmed(idx);
-    const delay = (isPrewarmedHit || cachedIntermediate) ? 0 : 35;
+    const delay = isPrewarmedHit || cachedIntermediate ? 0 : 35;
 
     this.selectDebounceTimer = setTimeout(async () => {
       if (requestId !== this.selectRequestId) return;
@@ -575,7 +733,11 @@ class DarkroomApp {
       }
 
       try {
-        const frame = await this.loaderService.loadPhotoFrame(entry, isRawFile, idx);
+        const frame = await this.loaderService.loadPhotoFrame(
+          entry,
+          isRawFile,
+          idx,
+        );
         if (requestId !== this.selectRequestId) return;
 
         this.currentMetadata = frame.preview.metadata;
@@ -596,7 +758,11 @@ class DarkroomApp {
           this.activeSourceImage = null;
           this.activeSourceW = 0;
           this.activeSourceH = 0;
-          this.renderer.uploadLinearRec2020Texture(frame.linearW, frame.linearH, frame.linearData);
+          this.renderer.uploadLinearRec2020Texture(
+            frame.linearW,
+            frame.linearH,
+            frame.linearData,
+          );
         } else {
           this.activeLinearData = null;
           this.activeLinearW = 0;
@@ -616,13 +782,15 @@ class DarkroomApp {
           entry.name,
           this.edits,
           this.renderer,
-          this.viewportController.getZoom() === 1.0 && !this.isCropActive && !this.isOriginalPeek
+          this.viewportController.getZoom() === 1.0 &&
+            !this.isCropActive &&
+            !this.isOriginalPeek,
         );
 
         // Prewarm adjacent frames
         if (idx > 0) this.loaderService.prewarmPhoto(idx - 1, entries[idx - 1]);
-        if (idx < entries.length - 1) this.loaderService.prewarmPhoto(idx + 1, entries[idx + 1]);
-
+        if (idx < entries.length - 1)
+          this.loaderService.prewarmPhoto(idx + 1, entries[idx + 1]);
       } catch (err) {
         if (requestId === this.selectRequestId) {
           console.error(`[App] Error developing photo ${entry.name}:`, err);
@@ -637,19 +805,23 @@ class DarkroomApp {
 
   private setMetadataFormFields(xmp: any) {
     if (this.elements['meta-input-title']) {
-      (this.elements['meta-input-title'] as HTMLInputElement).value = xmp.title || '';
+      (this.elements['meta-input-title'] as HTMLInputElement).value =
+        xmp.title || '';
     }
     if (this.elements['meta-input-caption']) {
-      (this.elements['meta-input-caption'] as HTMLTextAreaElement).value = xmp.description || '';
+      (this.elements['meta-input-caption'] as HTMLTextAreaElement).value =
+        xmp.description || '';
     }
     if (this.elements['meta-input-creator']) {
-      (this.elements['meta-input-creator'] as HTMLInputElement).value = xmp.creator || '';
+      (this.elements['meta-input-creator'] as HTMLInputElement).value =
+        xmp.creator || '';
     }
     if (this.elements['meta-input-keywords']) {
-      (this.elements['meta-input-keywords'] as HTMLInputElement).value = (xmp.keywords || []).join(', ');
+      (this.elements['meta-input-keywords'] as HTMLInputElement).value = (
+        xmp.keywords || []
+      ).join(', ');
     }
   }
-
 
   private updateSidecarStatusBadge(synced: boolean) {
     const el = this.elements['meta-sidecar-status'];
@@ -681,7 +853,12 @@ class DarkroomApp {
 
     const idx = this.filmstripController.getActiveIndex();
     if (idx >= 0) {
-      this.filmstripController.updateThumbnailCardOrientation(idx, exifOri.rotation, exifOri.flipH, exifOri.flipV);
+      this.filmstripController.updateThumbnailCardOrientation(
+        idx,
+        exifOri.rotation,
+        exifOri.flipH,
+        exifOri.flipV,
+      );
     }
     if (this.isCropActive) {
       this.cropController.resetCrop();
@@ -692,7 +869,9 @@ class DarkroomApp {
     this.viewportController.updateCanvasDimensions();
     this.renderCanvas();
     this.autoSaveSidecar();
-    console.log(`⚡ [App] Reset all edits to as-shot defaults (isRaw: ${isRaw})`);
+    console.log(
+      `⚡ [App] Reset all edits to as-shot defaults (isRaw: ${isRaw})`,
+    );
   }
 
   public rotateImage(deltaDeg: number) {
@@ -706,7 +885,7 @@ class DarkroomApp {
       idx,
       newRot,
       this.edits.flip_horizontal,
-      this.edits.flip_vertical
+      this.edits.flip_vertical,
     );
     this.viewportController.updateCanvasDimensions();
     this.renderCanvas();
@@ -733,9 +912,14 @@ class DarkroomApp {
 
       requestAnimationFrame(() => {
         this.updateCropOverlayPosition();
-        const isOrthogonal = (this.edits.rotation === 90 || this.edits.rotation === 270);
-        const w = isOrthogonal ? (this.activeLinearH || this.activeSourceH || 1) : (this.activeLinearW || this.activeSourceW || 1);
-        const h = isOrthogonal ? (this.activeLinearW || this.activeSourceW || 1) : (this.activeLinearH || this.activeSourceH || 1);
+        const isOrthogonal =
+          this.edits.rotation === 90 || this.edits.rotation === 270;
+        const w = isOrthogonal
+          ? this.activeLinearH || this.activeSourceH || 1
+          : this.activeLinearW || this.activeSourceW || 1;
+        const h = isOrthogonal
+          ? this.activeLinearW || this.activeSourceW || 1
+          : this.activeLinearH || this.activeSourceH || 1;
         const aspect = w / h;
         this.cropController.show(
           {
@@ -745,7 +929,7 @@ class DarkroomApp {
             bottom: this.edits.crop_bottom ?? 1.0,
           },
           aspect,
-          this.edits.crop_angle ?? 0.0
+          this.edits.crop_angle ?? 0.0,
         );
       });
     } else {
@@ -762,7 +946,8 @@ class DarkroomApp {
 
     const imgW = this.activeLinearW || this.activeSourceW || 1920;
     const imgH = this.activeLinearH || this.activeSourceH || 1080;
-    const isOrthogonal = (this.edits.rotation === 90 || this.edits.rotation === 270);
+    const isOrthogonal =
+      this.edits.rotation === 90 || this.edits.rotation === 270;
     const dispW = isOrthogonal ? imgH : imgW;
     const dispH = isOrthogonal ? imgW : imgH;
     const imgAspect = dispW / Math.max(dispH, 1);
@@ -784,7 +969,10 @@ class DarkroomApp {
     const left = (viewW - renderW) / 2.0;
     const top = (viewH - renderH) / 2.0;
 
-    this.cropController.setImageRect({ x: left, y: top, width: renderW, height: renderH }, imgAspect);
+    this.cropController.setImageRect(
+      { x: left, y: top, width: renderW, height: renderH },
+      imgAspect,
+    );
   }
 
   private renderCanvas() {
@@ -794,7 +982,7 @@ class DarkroomApp {
         this.isOriginalPeek,
         this.viewportController.getZoom(),
         this.viewportController.getPan(),
-        this.isCropActive
+        this.isCropActive,
       );
       this.updatePeekBadge();
     }
@@ -807,25 +995,44 @@ class DarkroomApp {
     }
   }
 
-  private updateEmulsionWorkspaceVisibility() {
-    this.inspectorController.updateEmulsionWorkspaceVisibility();
-  }
-
   private syncRatingFlagUI() {
     const idx = this.filmstripController.getActiveIndex();
-    this.inspectorController.syncRatingFlagUI(this.currentRating, this.currentStatus, idx);
-    this.filmstripController.updateRatingFlagBadge(idx, this.currentRating, this.currentStatus);
+    this.inspectorController.syncRatingFlagUI(
+      this.currentRating,
+      this.currentStatus,
+      idx,
+    );
+    this.filmstripController.updateRatingFlagBadge(
+      idx,
+      this.currentRating,
+      this.currentStatus,
+    );
   }
 
   private getActivePhotoRecord(): PhotoRecord {
-    const title = (this.elements['meta-input-title'] as HTMLInputElement)?.value.trim() || '';
-    const description = (this.elements['meta-input-caption'] as HTMLTextAreaElement)?.value.trim() || '';
-    const creator = (this.elements['meta-input-creator'] as HTMLInputElement)?.value.trim() || '';
-    const kwStr = (this.elements['meta-input-keywords'] as HTMLInputElement)?.value;
-    const keywords = kwStr ? kwStr.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    const title =
+      (this.elements['meta-input-title'] as HTMLInputElement)?.value.trim() ||
+      '';
+    const description =
+      (
+        this.elements['meta-input-caption'] as HTMLTextAreaElement
+      )?.value.trim() || '';
+    const creator =
+      (this.elements['meta-input-creator'] as HTMLInputElement)?.value.trim() ||
+      '';
+    const kwStr = (this.elements['meta-input-keywords'] as HTMLInputElement)
+      ?.value;
+    const keywords = kwStr
+      ? kwStr
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
     const activeEntry = this.filmstripController.getActiveEntry();
-    const existing = activeEntry ? this.loaderService.getPhotoRecord(activeEntry.name) : undefined;
+    const existing = activeEntry
+      ? this.loaderService.getPhotoRecord(activeEntry.name)
+      : undefined;
 
     return {
       edits: { ...this.edits },
@@ -842,7 +1049,11 @@ class DarkroomApp {
   private async saveActivePhotoState(entry: PhotoFileEntry) {
     const record = this.getActivePhotoRecord();
     const orientation = this.currentMetadata?.orientation ?? 1;
-    const saved = await this.loaderService.autoSaveSidecar(entry, record, orientation);
+    const saved = await this.loaderService.autoSaveSidecar(
+      entry,
+      record,
+      orientation,
+    );
     if (saved) {
       this.updateSidecarStatusBadge(true);
     }
@@ -856,7 +1067,9 @@ class DarkroomApp {
       entry.name,
       this.edits,
       this.renderer,
-      this.viewportController.getZoom() === 1.0 && !this.isCropActive && !this.isOriginalPeek
+      this.viewportController.getZoom() === 1.0 &&
+        !this.isCropActive &&
+        !this.isOriginalPeek,
     );
 
     await this.saveActivePhotoState(entry);
@@ -871,7 +1084,7 @@ class DarkroomApp {
   private async handleExport(
     photos: PhotoFileEntry[],
     options: ExportExecutionOptions,
-    onProgress: (status: string, current: number, total: number) => void
+    onProgress: (status: string, current: number, total: number) => void,
   ): Promise<{ success: boolean; message: string }> {
     const activeEntry = this.filmstripController.getActiveEntry();
     return this.loaderService.handleExport(
@@ -880,12 +1093,14 @@ class DarkroomApp {
       this.edits,
       (isRaw) => getDefaultEdits(isRaw),
       options,
-      onProgress
+      onProgress,
     );
   }
 
   private getSceneLuminances(): Float32Array {
-    const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
+    const canvas = document.getElementById(
+      'darkroom-canvas',
+    ) as HTMLCanvasElement;
     const gl = canvas?.getContext('webgl2') as WebGL2RenderingContext;
     if (!gl) return new Float32Array(0);
 
@@ -894,7 +1109,15 @@ class DarkroomApp {
     const startX = Math.max(0, Math.floor((canvas.width - sampleW) / 2));
     const startY = Math.max(0, Math.floor((canvas.height - sampleH) / 2));
     const pixels = new Uint8Array(sampleW * sampleH * 4);
-    gl.readPixels(startX, startY, sampleW, sampleH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.readPixels(
+      startX,
+      startY,
+      sampleW,
+      sampleH,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      pixels,
+    );
 
     const lums = new Float32Array(sampleW * sampleH);
     for (let i = 0; i < lums.length; i++) {
@@ -910,8 +1133,16 @@ class DarkroomApp {
     if (this.filmstripController.getActiveIndex() < 0) return;
 
     let adj: { exposure: number; contrast: number } | null = null;
-    if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
-      adj = this.bridge.computeAutoAdjustments(this.activeLinearData, this.activeLinearW, this.activeLinearH);
+    if (
+      this.activeLinearData &&
+      this.activeLinearW > 0 &&
+      this.activeLinearH > 0
+    ) {
+      adj = this.bridge.computeAutoAdjustments(
+        this.activeLinearData,
+        this.activeLinearW,
+        this.activeLinearH,
+      );
     }
 
     if (!adj) {
@@ -934,30 +1165,50 @@ class DarkroomApp {
     if (this.filmstripController.getActiveIndex() < 0) return;
 
     let wb: { temperature: number; tint: number } | null = null;
-    if (this.activeLinearData && this.activeLinearW > 0 && this.activeLinearH > 0) {
-      wb = this.bridge.computeAutoWhiteBalance(this.activeLinearData, this.activeLinearW, this.activeLinearH);
+    if (
+      this.activeLinearData &&
+      this.activeLinearW > 0 &&
+      this.activeLinearH > 0
+    ) {
+      wb = this.bridge.computeAutoWhiteBalance(
+        this.activeLinearData,
+        this.activeLinearW,
+        this.activeLinearH,
+      );
     }
 
     if (!wb) {
-      const canvas = document.getElementById('darkroom-canvas') as HTMLCanvasElement;
+      const canvas = document.getElementById(
+        'darkroom-canvas',
+      ) as HTMLCanvasElement;
       const gl = canvas?.getContext('webgl2') as WebGL2RenderingContext;
       if (gl) {
         const readW = Math.min(100, canvas.width);
         const readH = Math.min(100, canvas.height);
         const pixels = new Uint8Array(readW * readH * 4);
         gl.readPixels(0, 0, readW, readH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        let rSum = 0, gSum = 0, bSum = 0, count = 0;
+        let rSum = 0,
+          gSum = 0,
+          bSum = 0,
+          count = 0;
         for (let i = 0; i < readW * readH; i++) {
           const r = pixels[i * 4] / 255.0;
           const g = pixels[i * 4 + 1] / 255.0;
           const b = pixels[i * 4 + 2] / 255.0;
           const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
           if (y >= 0.05 && y <= 0.85) {
-            rSum += r; gSum += g; bSum += b; count++;
+            rSum += r;
+            gSum += g;
+            bSum += b;
+            count++;
           }
         }
         if (count > 20) {
-          wb = this.bridge.calculateWhiteBalanceFromSample(rSum / count, gSum / count, bSum / count);
+          wb = this.bridge.calculateWhiteBalanceFromSample(
+            rSum / count,
+            gSum / count,
+            bSum / count,
+          );
         }
       }
     }

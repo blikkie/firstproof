@@ -132,10 +132,10 @@ impl RawSensorFrame {
     /// Decodes a `RawSensorFrame` from a decoded `rawler::RawImage` structure and an optional header/full-file byte slice.
     pub fn decode_from_raw_image(raw: rawler::RawImage, header_or_full_slice: &[u8]) -> Option<Self> {
         let (crop_top, crop_left, active_w, active_h) = if let Some(crop) = raw.crop_area {
-            let x = (crop.p.x as usize) & !1;
-            let y = (crop.p.y as usize) & !1;
-            let w = (crop.d.w as usize).max(2) & !1;
-            let h = (crop.d.h as usize).max(2) & !1;
+            let x = crop.p.x & !1;
+            let y = crop.p.y & !1;
+            let w = crop.d.w.max(2) & !1;
+            let h = crop.d.h.max(2) & !1;
             (y, x, w, h)
         } else {
             (0, 0, raw.width & !1, raw.height & !1)
@@ -463,7 +463,7 @@ impl RawSensorFrame {
 
             // Universal XYZ D50 -> CAT16 -> Linear Rec.2020 matrix:
             let d50_to_rec2020 = glam::Mat3::from_cols_array(&[
-                1.7005930, -0.66840535, 0.017304685,
+                1.700_593, -0.66840535, 0.017304685,
                 -0.43057728, 1.6541731, -0.029557694,
                 -0.25366065, -0.01167498, 1.2275668,
             ]);
@@ -513,9 +513,9 @@ impl RawSensorFrame {
         ]);
 
         let rec2020_to_xyz = glam::Mat3::from_cols_array(&[
-            0.6369580, 0.2627002, 0.0000000,
+            0.636_958, 0.2627002, 0.0000000,
             0.1446169, 0.6779981, 0.0280727,
-            0.1688810, 0.0593017, 1.0609851,
+            0.168_881, 0.0593017, 1.0609851,
         ]);
 
         let rec2cam_raw = xyz2cam * rec2020_to_xyz;

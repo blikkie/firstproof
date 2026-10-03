@@ -68,7 +68,7 @@ pub fn linear_srgb_to_lab(srgb: Color3) -> Lab {
 
     let x = 0.4124564 * r + 0.3575761 * g + 0.1804375 * b;
     let y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b;
-    let z = 0.0193339 * r + 0.1191920 * g + 0.9503041 * b;
+    let z = 0.0193339 * r + 0.119_192 * g + 0.9503041 * b;
 
     xyz_d65_to_lab(Color3([x, y, z]))
 }

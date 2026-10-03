@@ -5,8 +5,12 @@
  * against the reference CPU export pipeline.
  */
 
+import {
+  type EditSettingsPayload,
+  type EvaluatedLut,
+  WasmBridge,
+} from '../WasmBridge';
 import { WebGLRenderer } from '../WebGLRenderer';
-import { EditSettingsPayload, EvaluatedLut, WasmBridge } from '../WasmBridge';
 
 export interface ParityPixelResult {
   glRgb: [number, number, number];
@@ -20,12 +24,21 @@ export interface ParityPixelResult {
 export interface ParityTestCase {
   id: string;
   name: string;
-  category: 'macbeth' | 'exposure' | 'white_balance' | 'tone_recovery' | 'color' | 'curves' | 'active_photo';
+  category:
+    | 'macbeth'
+    | 'exposure'
+    | 'white_balance'
+    | 'tone_recovery'
+    | 'color'
+    | 'curves'
+    | 'active_photo';
   edits: EditSettingsPayload;
   isLinearRec2020: boolean;
   textureWidth: number;
   textureHeight: number;
-  createTexture: () => ImageData | { data: Uint16Array; width: number; height: number };
+  createTexture: () =>
+    | ImageData
+    | { data: Uint16Array; width: number; height: number };
 }
 
 export interface ParityAuditResult {
@@ -46,33 +59,33 @@ export interface ParityAuditResult {
 
 export const MACBETH_SRGB_24: [number, number, number][] = [
   // Row 1: Natural tones
-  [115, 82, 68],   // 1. Dark Skin
+  [115, 82, 68], // 1. Dark Skin
   [194, 150, 130], // 2. Light Skin
-  [98, 122, 157],  // 3. Blue Sky
-  [87, 108, 67],   // 4. Foliage
+  [98, 122, 157], // 3. Blue Sky
+  [87, 108, 67], // 4. Foliage
   [133, 128, 177], // 5. Purplish Blue
   [103, 189, 170], // 6. Delicate Blue
   // Row 2: Miscellaneous
-  [214, 126, 44],  // 7. Orange
-  [80, 91, 166],   // 8. Purplish Blue 2
-  [193, 90, 99],   // 9. Moderate Red
-  [94, 60, 108],   // 10. Purple
-  [157, 188, 64],  // 11. Yellow Green
-  [224, 163, 46],  // 12. Orange Yellow
+  [214, 126, 44], // 7. Orange
+  [80, 91, 166], // 8. Purplish Blue 2
+  [193, 90, 99], // 9. Moderate Red
+  [94, 60, 108], // 10. Purple
+  [157, 188, 64], // 11. Yellow Green
+  [224, 163, 46], // 12. Orange Yellow
   // Row 3: Primary & Secondary colors
-  [56, 61, 150],   // 13. Blue
-  [70, 148, 73],   // 14. Green
-  [175, 54, 60],   // 15. Red
-  [231, 199, 31],  // 16. Yellow
-  [187, 86, 149],  // 17. Magenta
-  [8, 133, 161],   // 18. Cyan
+  [56, 61, 150], // 13. Blue
+  [70, 148, 73], // 14. Green
+  [175, 54, 60], // 15. Red
+  [231, 199, 31], // 16. Yellow
+  [187, 86, 149], // 17. Magenta
+  [8, 133, 161], // 18. Cyan
   // Row 4: Neutral Grayscale (White -> Black)
   [243, 243, 242], // 19. White 9.5 (.05 D)
   [200, 200, 200], // 20. Neutral 8 (.23 D)
   [160, 160, 160], // 21. Neutral 6.5 (.44 D)
   [122, 122, 121], // 22. Neutral 5 (.70 D)
-  [85, 85, 85],    // 23. Neutral 3.5 (1.05 D)
-  [52, 52, 52],    // 24. Black 2 (1.50 D)
+  [85, 85, 85], // 23. Neutral 3.5 (1.05 D)
+  [52, 52, 52], // 24. Black 2 (1.50 D)
 ];
 
 export function createDefaultEdits(): EditSettingsPayload {
@@ -152,9 +165,9 @@ export class ParityHarness {
         const [pr, pg, pb] = MACBETH_SRGB_24[patchIdx];
 
         const startX = c * patchW;
-        const endX = (c === cols - 1) ? w : (c + 1) * patchW;
+        const endX = c === cols - 1 ? w : (c + 1) * patchW;
         const startY = r * patchH;
-        const endY = (r === rows - 1) ? h : (r + 1) * patchH;
+        const endY = r === rows - 1 ? h : (r + 1) * patchH;
 
         for (let y = startY; y < endY; y++) {
           for (let x = startX; x < endX; x++) {
@@ -193,14 +206,21 @@ export class ParityHarness {
   /**
    * Executes a single parity test case, comparing WebGL output with reference CPU export.
    */
-  public auditTestCase(test: ParityTestCase, toleranceMaxDelta: number = 2): ParityAuditResult {
+  public auditTestCase(
+    test: ParityTestCase,
+    toleranceMaxDelta: number = 2,
+  ): ParityAuditResult {
     const w = test.textureWidth;
     const h = test.textureHeight;
 
     // 1. Upload Texture to WebGL
     const texturePayload = test.createTexture();
     if (test.isLinearRec2020) {
-      const lin = texturePayload as { data: Uint16Array; width: number; height: number };
+      const lin = texturePayload as {
+        data: Uint16Array;
+        width: number;
+        height: number;
+      };
       this.renderer.uploadLinearRec2020Texture(lin.width, lin.height, lin.data);
     } else {
       const imgData = texturePayload as ImageData;
@@ -208,8 +228,14 @@ export class ParityHarness {
     }
 
     // If test case has tone curves, evaluate and upload LUT to test renderer
-    let curveLut: EvaluatedLut | undefined = undefined;
-    if (test.edits.curves && (test.edits.curves.master?.length > 2 || test.edits.curves.red?.length > 2 || test.edits.curves.green?.length > 2 || test.edits.curves.blue?.length > 2)) {
+    let curveLut: EvaluatedLut | undefined;
+    if (
+      test.edits.curves &&
+      (test.edits.curves.master?.length > 2 ||
+        test.edits.curves.red?.length > 2 ||
+        test.edits.curves.green?.length > 2 ||
+        test.edits.curves.blue?.length > 2)
+    ) {
       try {
         const bridge = WasmBridge.getInstance();
         curveLut = bridge.evaluateCurves(test.edits.curves);
@@ -241,11 +267,23 @@ export class ParityHarness {
 
     let inputBytes: Uint8Array;
     if (test.isLinearRec2020) {
-      const lin = texturePayload as { data: Uint16Array; width: number; height: number };
-      inputBytes = new Uint8Array(lin.data.buffer, lin.data.byteOffset, lin.data.byteLength);
+      const lin = texturePayload as {
+        data: Uint16Array;
+        width: number;
+        height: number;
+      };
+      inputBytes = new Uint8Array(
+        lin.data.buffer,
+        lin.data.byteOffset,
+        lin.data.byteLength,
+      );
     } else {
       const imgData = texturePayload as ImageData;
-      inputBytes = new Uint8Array(imgData.data.buffer, imgData.data.byteOffset, imgData.data.byteLength);
+      inputBytes = new Uint8Array(
+        imgData.data.buffer,
+        imgData.data.byteOffset,
+        imgData.data.byteLength,
+      );
     }
 
     const refPixels = bridge.evaluateReferenceFrame(
@@ -254,7 +292,7 @@ export class ParityHarness {
       w,
       h,
       test.edits,
-      curveLut
+      curveLut,
     );
 
     for (let y = 0; y < h; y++) {
@@ -319,16 +357,23 @@ export class ParityHarness {
     const meanChannelDelta = sumDelta / totalPixels;
     const mse = sumSqError / totalPixels;
     const psnr = mse > 1e-10 ? 10 * Math.log10((255 * 255) / mse) : 99.9;
-    const pass = maxChannelDelta <= toleranceMaxDelta && meanChannelDelta <= 1.0;
+    const pass =
+      maxChannelDelta <= toleranceMaxDelta && meanChannelDelta <= 1.0;
 
     // Diagnose most likely mathematical cause of divergence
     let stageDiagnosis = 'Parity Verified (Exact Mathematical Bit Match)';
     if (!pass) {
       if (maxChannelDelta > 30) {
-        if (worstGlRgb[0] > worstExportRgb[0] && worstGlRgb[1] > worstExportRgb[1] && worstGlRgb[2] > worstExportRgb[2]) {
-          stageDiagnosis = 'CRITICAL: GL is significantly lighter than Export. Likely double gamma encoding (linearToSrgbGamma called on display-referred AgX output)!';
+        if (
+          worstGlRgb[0] > worstExportRgb[0] &&
+          worstGlRgb[1] > worstExportRgb[1] &&
+          worstGlRgb[2] > worstExportRgb[2]
+        ) {
+          stageDiagnosis =
+            'CRITICAL: GL is significantly lighter than Export. Likely double gamma encoding (linearToSrgbGamma called on display-referred AgX output)!';
         } else if (worstGlRgb[2] > worstExportRgb[2] + 20) {
-          stageDiagnosis = 'CRITICAL: GL blue channel significantly higher than Export. Likely missing Sensor-to-Rec.2020 color matrix calibration!';
+          stageDiagnosis =
+            'CRITICAL: GL blue channel significantly higher than Export. Likely missing Sensor-to-Rec.2020 color matrix calibration!';
         } else {
           stageDiagnosis = `Large Tone Mapping Divergence: Peak Δ=${maxChannelDelta}/255 at (${worstCoord[0]},${worstCoord[1]}) [GL: ${worstGlRgb.join(',')}, Export: ${worstExportRgb.join(',')}]`;
         }
@@ -426,7 +471,12 @@ export class ParityHarness {
         id: 'color_vibrance_saturation',
         name: 'Color Tuning (Vibrance +35, Saturation +20, Deep Blue +30)',
         category: 'color',
-        edits: { ...createDefaultEdits(), vibrance: 35.0, saturation: 20.0, deep_blue: 30.0 },
+        edits: {
+          ...createDefaultEdits(),
+          vibrance: 35.0,
+          saturation: 20.0,
+          deep_blue: 30.0,
+        },
         isLinearRec2020: false,
         textureWidth: w,
         textureHeight: h,
@@ -486,7 +536,10 @@ export class ParityHarness {
         id: 'emulsion_rochester_portrait_400',
         name: 'Emulsion: Rochester Portrait 400 (C-41 Color Negative)',
         category: 'color',
-        edits: { ...createDefaultEdits(), emulsion_archetype: 'RochesterPortrait400' },
+        edits: {
+          ...createDefaultEdits(),
+          emulsion_archetype: 'RochesterPortrait400',
+        },
         isLinearRec2020: false,
         textureWidth: w,
         textureHeight: h,
@@ -496,7 +549,10 @@ export class ParityHarness {
         id: 'emulsion_mobberley_silver_400',
         name: 'Emulsion: Mobberley Silver 400 (Panchromatic B&W)',
         category: 'color',
-        edits: { ...createDefaultEdits(), emulsion_archetype: 'MobberleySilver400' },
+        edits: {
+          ...createDefaultEdits(),
+          emulsion_archetype: 'MobberleySilver400',
+        },
         isLinearRec2020: false,
         textureWidth: w,
         textureHeight: h,
@@ -526,7 +582,12 @@ export class ParityHarness {
         id: 'sharpening_baseline_raw',
         name: 'Sharpening Baseline (RAW Default: Amount 20, Radius 1.0, Masking 15)',
         category: 'color',
-        edits: { ...createDefaultEdits(), sharpening_amount: 20.0, sharpening_radius: 1.0, sharpening_masking: 15.0 },
+        edits: {
+          ...createDefaultEdits(),
+          sharpening_amount: 20.0,
+          sharpening_radius: 1.0,
+          sharpening_masking: 15.0,
+        },
         isLinearRec2020: false,
         textureWidth: w,
         textureHeight: h,
@@ -536,7 +597,12 @@ export class ParityHarness {
         id: 'sharpening_crisp',
         name: 'Sharpening Crisp (Amount 50, Radius 1.0, Masking 0)',
         category: 'color',
-        edits: { ...createDefaultEdits(), sharpening_amount: 50.0, sharpening_radius: 1.0, sharpening_masking: 0.0 },
+        edits: {
+          ...createDefaultEdits(),
+          sharpening_amount: 50.0,
+          sharpening_radius: 1.0,
+          sharpening_masking: 0.0,
+        },
         isLinearRec2020: false,
         textureWidth: w,
         textureHeight: h,
@@ -546,7 +612,12 @@ export class ParityHarness {
         id: 'sharpening_edge_masked',
         name: 'Sharpening Edge-Masked (Amount 70, Radius 1.0, Masking 35)',
         category: 'color',
-        edits: { ...createDefaultEdits(), sharpening_amount: 70.0, sharpening_radius: 1.0, sharpening_masking: 35.0 },
+        edits: {
+          ...createDefaultEdits(),
+          sharpening_amount: 70.0,
+          sharpening_radius: 1.0,
+          sharpening_masking: 35.0,
+        },
         isLinearRec2020: false,
         textureWidth: w,
         textureHeight: h,
@@ -560,6 +631,6 @@ export class ParityHarness {
    */
   public runFullAudit(): ParityAuditResult[] {
     const suite = this.getStandardTestSuite();
-    return suite.map(tc => this.auditTestCase(tc));
+    return suite.map((tc) => this.auditTestCase(tc));
   }
 }

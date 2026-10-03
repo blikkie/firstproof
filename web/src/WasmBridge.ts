@@ -1,44 +1,44 @@
-import initWasm, * as wasm from 'firstproof-wasm';
 import type {
-  ExifOrientationRecord,
-  ImageMetadataRecord,
-  PreviewResultRecord,
-  RawLinearResultRecord,
-  CurvePointRecord,
-  ToneCurvesRecord,
   AllCurvesLutRecord,
-  ColorProfileMode,
-  ExportColorSpace,
-  ExportRenderingIntent,
-  EmulsionArchetype,
-  EmulsionFormat,
-  PrintMediaMode,
-  EnlargerFilterMode,
-  EditSettings,
-  XmpData,
   AutoAdjustments,
   AutoWhiteBalanceResult,
+  ColorProfileMode,
+  CurvePointRecord,
+  EditSettings,
+  EmulsionArchetype,
+  EmulsionFormat,
+  EnlargerFilterMode,
+  ExifOrientationRecord,
+  ExportColorSpace,
+  ExportRenderingIntent,
+  ImageMetadataRecord,
+  PreviewResultRecord,
+  PrintMediaMode,
+  RawLinearResultRecord,
+  ToneCurvesRecord,
+  XmpData,
 } from 'firstproof-wasm';
+import initWasm, * as wasm from 'firstproof-wasm';
 
 export type {
-  ExifOrientationRecord,
-  ImageMetadataRecord,
-  PreviewResultRecord,
-  RawLinearResultRecord,
-  CurvePointRecord,
-  ToneCurvesRecord,
   AllCurvesLutRecord,
-  ColorProfileMode,
-  ExportColorSpace,
-  ExportRenderingIntent,
-  EmulsionArchetype,
-  EmulsionFormat,
-  PrintMediaMode,
-  EnlargerFilterMode,
-  EditSettings,
-  XmpData,
   AutoAdjustments,
   AutoWhiteBalanceResult,
+  ColorProfileMode,
+  CurvePointRecord,
+  EditSettings,
+  EmulsionArchetype,
+  EmulsionFormat,
+  EnlargerFilterMode,
+  ExifOrientationRecord,
+  ExportColorSpace,
+  ExportRenderingIntent,
+  ImageMetadataRecord,
+  PreviewResultRecord,
+  PrintMediaMode,
+  RawLinearResultRecord,
+  ToneCurvesRecord,
+  XmpData,
 };
 
 // Aliases for backward compatibility with existing web darkroom modules
@@ -65,7 +65,9 @@ export class WasmBridge {
       bridge.wasmMemory = (exports as any)?.memory || null;
       bridge.memoryPtr = wasm.init_scratchpad(capacityMb);
       bridge.memoryLen = wasm.get_scratchpad_len();
-      console.log(`[WASM] Scratchpad initialized: ${(bridge.memoryLen / (1024 * 1024)).toFixed(1)} MB at 0x${bridge.memoryPtr.toString(16)}`);
+      console.log(
+        `[WASM] Scratchpad initialized: ${(bridge.memoryLen / (1024 * 1024)).toFixed(1)} MB at 0x${bridge.memoryPtr.toString(16)}`,
+      );
       WasmBridge.instance = bridge;
     }
     return WasmBridge.instance;
@@ -73,7 +75,9 @@ export class WasmBridge {
 
   public static getInstance(): WasmBridge {
     if (!WasmBridge.instance) {
-      throw new Error("WasmBridge not initialized. Call WasmBridge.init() first.");
+      throw new Error(
+        'WasmBridge not initialized. Call WasmBridge.init() first.',
+      );
     }
     return WasmBridge.instance;
   }
@@ -85,7 +89,10 @@ export class WasmBridge {
     return null;
   }
 
-  public decodeImageBytes(bytes: Uint8Array): { preview: PreviewResult; imageSlice: Uint8Array } {
+  public decodeImageBytes(bytes: Uint8Array): {
+    preview: PreviewResult;
+    imageSlice: Uint8Array;
+  } {
     const liveBuf = this.getWasmMemoryBuffer();
     const ptr = wasm.get_scratchpad_ptr();
     if (liveBuf && ptr + bytes.length <= liveBuf.byteLength) {
@@ -100,20 +107,37 @@ export class WasmBridge {
     // Get slice directly from scratchpad memory using typed getter or fallback
     let imageSlice: Uint8Array;
     if (typeof (wasm as any).get_scratchpad_u8_slice === 'function') {
-      imageSlice = (wasm as any).get_scratchpad_u8_slice(preview.preview_offset, preview.preview_len);
+      imageSlice = (wasm as any).get_scratchpad_u8_slice(
+        preview.preview_offset,
+        preview.preview_len,
+      );
     } else {
       const freshBuf = this.getWasmMemoryBuffer();
-      if (freshBuf && ptr + preview.preview_offset + preview.preview_len <= freshBuf.byteLength) {
-        imageSlice = new Uint8Array(freshBuf, ptr + preview.preview_offset, preview.preview_len).slice();
+      if (
+        freshBuf &&
+        ptr + preview.preview_offset + preview.preview_len <=
+          freshBuf.byteLength
+      ) {
+        imageSlice = new Uint8Array(
+          freshBuf,
+          ptr + preview.preview_offset,
+          preview.preview_len,
+        ).slice();
       } else {
-        imageSlice = bytes.slice(preview.preview_offset, preview.preview_offset + preview.preview_len);
+        imageSlice = bytes.slice(
+          preview.preview_offset,
+          preview.preview_offset + preview.preview_len,
+        );
       }
     }
 
     return { preview, imageSlice };
   }
 
-  public decodeRawLinear(bytes: Uint8Array): { res: any; linearData: Uint16Array } {
+  public decodeRawLinear(bytes: Uint8Array): {
+    res: any;
+    linearData: Uint16Array;
+  } {
     const liveBuf = this.getWasmMemoryBuffer();
     const ptr = wasm.get_scratchpad_ptr();
     if (liveBuf && ptr + bytes.length <= liveBuf.byteLength) {
@@ -127,12 +151,19 @@ export class WasmBridge {
 
     let linearData: Uint16Array;
     if (typeof (wasm as any).get_scratchpad_u16_slice === 'function') {
-      linearData = (wasm as any).get_scratchpad_u16_slice(res.linear_offset, res.linear_len / 2);
+      linearData = (wasm as any).get_scratchpad_u16_slice(
+        res.linear_offset,
+        res.linear_len / 2,
+      );
     } else {
       const freshBuf = this.getWasmMemoryBuffer();
       const absOffset = ptr + res.linear_offset;
       if (freshBuf && absOffset + res.linear_len <= freshBuf.byteLength) {
-        linearData = new Uint16Array(freshBuf, absOffset, res.linear_len / 2).slice();
+        linearData = new Uint16Array(
+          freshBuf,
+          absOffset,
+          res.linear_len / 2,
+        ).slice();
       } else {
         throw new Error(`WASM memory buffer bounds error`);
       }
@@ -141,7 +172,10 @@ export class WasmBridge {
     return { res, linearData };
   }
 
-  public decodeRawFullLinear(bytes: Uint8Array): { res: any; linearData: Uint16Array } {
+  public decodeRawFullLinear(bytes: Uint8Array): {
+    res: any;
+    linearData: Uint16Array;
+  } {
     const liveBuf = this.getWasmMemoryBuffer();
     const ptr = wasm.get_scratchpad_ptr();
     if (liveBuf && ptr + bytes.length <= liveBuf.byteLength) {
@@ -150,17 +184,26 @@ export class WasmBridge {
       wasm.copy_into_scratchpad(0, bytes);
     }
 
-    const resVal = (wasm as any).decode_raw_full_linear_from_scratchpad(bytes.length);
+    const resVal = (wasm as any).decode_raw_full_linear_from_scratchpad(
+      bytes.length,
+    );
     const res = resVal as any;
 
     let linearData: Uint16Array;
     if (typeof (wasm as any).get_scratchpad_u16_slice === 'function') {
-      linearData = (wasm as any).get_scratchpad_u16_slice(res.linear_offset, res.linear_len / 2);
+      linearData = (wasm as any).get_scratchpad_u16_slice(
+        res.linear_offset,
+        res.linear_len / 2,
+      );
     } else {
       const freshBuf = this.getWasmMemoryBuffer();
       const absOffset = ptr + res.linear_offset;
       if (freshBuf && absOffset + res.linear_len <= freshBuf.byteLength) {
-        linearData = new Uint16Array(freshBuf, absOffset, res.linear_len / 2).slice();
+        linearData = new Uint16Array(
+          freshBuf,
+          absOffset,
+          res.linear_len / 2,
+        ).slice();
       } else {
         throw new Error(`WASM memory buffer bounds error`);
       }
@@ -185,32 +228,61 @@ export class WasmBridge {
     return wasm.generate_xmp(jsonStr);
   }
 
-  public computeAutoAdjustments(linearData: Uint16Array, width: number, height: number): { exposure: number; contrast: number } | null {
+  public computeAutoAdjustments(
+    linearData: Uint16Array,
+    width: number,
+    height: number,
+  ): { exposure: number; contrast: number } | null {
     if (typeof (wasm as any).compute_auto_adjustments_from_u16 === 'function') {
-      const res = (wasm as any).compute_auto_adjustments_from_u16(linearData, width, height);
+      const res = (wasm as any).compute_auto_adjustments_from_u16(
+        linearData,
+        width,
+        height,
+      );
       return res as { exposure: number; contrast: number };
     }
     return null;
   }
 
-  public computeAutoAdjustmentsFromLuminances(lums: Float32Array): { exposure: number; contrast: number } | null {
-    if (typeof (wasm as any).compute_auto_adjustments_from_luminances === 'function') {
+  public computeAutoAdjustmentsFromLuminances(
+    lums: Float32Array,
+  ): { exposure: number; contrast: number } | null {
+    if (
+      typeof (wasm as any).compute_auto_adjustments_from_luminances ===
+      'function'
+    ) {
       const res = (wasm as any).compute_auto_adjustments_from_luminances(lums);
       return res as { exposure: number; contrast: number };
     }
     return null;
   }
 
-  public computeAutoWhiteBalance(linearData: Uint16Array, width: number, height: number): { temperature: number; tint: number } | null {
-    if (typeof (wasm as any).compute_auto_white_balance_from_u16 === 'function') {
-      const res = (wasm as any).compute_auto_white_balance_from_u16(linearData, width, height);
+  public computeAutoWhiteBalance(
+    linearData: Uint16Array,
+    width: number,
+    height: number,
+  ): { temperature: number; tint: number } | null {
+    if (
+      typeof (wasm as any).compute_auto_white_balance_from_u16 === 'function'
+    ) {
+      const res = (wasm as any).compute_auto_white_balance_from_u16(
+        linearData,
+        width,
+        height,
+      );
       return res as { temperature: number; tint: number };
     }
     return null;
   }
 
-  public calculateWhiteBalanceFromSample(r: number, g: number, b: number): { temperature: number; tint: number } | null {
-    if (typeof (wasm as any).calculate_white_balance_from_sample === 'function') {
+  public calculateWhiteBalanceFromSample(
+    r: number,
+    g: number,
+    b: number,
+  ): { temperature: number; tint: number } | null {
+    if (
+      typeof (wasm as any).calculate_white_balance_from_sample === 'function'
+    ) {
       const res = (wasm as any).calculate_white_balance_from_sample(r, g, b);
       return res as { temperature: number; tint: number };
     }
@@ -231,7 +303,7 @@ export class WasmBridge {
     width: number,
     height: number,
     edits: EditSettingsPayload,
-    curvesLut?: EvaluatedLut | null
+    curvesLut?: EvaluatedLut | null,
   ): Uint8Array {
     const editsJson = JSON.stringify(edits);
     const curvesJson = curvesLut ? JSON.stringify(curvesLut) : null;
@@ -241,7 +313,7 @@ export class WasmBridge {
       width,
       height,
       editsJson,
-      curvesJson
+      curvesJson,
     );
   }
 
@@ -251,7 +323,7 @@ export class WasmBridge {
     b: number,
     isLinearRec2020: boolean,
     edits: EditSettingsPayload,
-    curvesLut?: EvaluatedLut | null
+    curvesLut?: EvaluatedLut | null,
   ): [number, number, number] {
     const editsJson = JSON.stringify(edits);
     const curvesJson = curvesLut ? JSON.stringify(curvesLut) : null;
@@ -261,7 +333,7 @@ export class WasmBridge {
       b,
       isLinearRec2020,
       editsJson,
-      curvesJson
+      curvesJson,
     );
     return [res[0], res[1], res[2]];
   }
@@ -271,10 +343,9 @@ export class WasmBridge {
     g: number,
     b: number,
     isLinearRec2020: boolean,
-    edits: EditSettingsPayload
+    edits: EditSettingsPayload,
   ): number {
     const editsJson = JSON.stringify(edits);
     return wasm.evaluate_display_luma(r, g, b, isLinearRec2020, editsJson);
   }
 }
-

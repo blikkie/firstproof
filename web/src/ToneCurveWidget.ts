@@ -1,14 +1,31 @@
-import { CurvePoint, EvaluatedLut, ToneCurvesPayload, WasmBridge } from './WasmBridge';
+import {
+  type CurvePoint,
+  type EvaluatedLut,
+  type ToneCurvesPayload,
+  WasmBridge,
+} from './WasmBridge';
 
 export class ToneCurveWidget {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private channel: 'master' | 'red' | 'green' | 'blue' = 'master';
   private points: Record<string, CurvePoint[]> = {
-    master: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-    red: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-    green: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-    blue: [{ x: 0, y: 0 }, { x: 1, y: 1 }]
+    master: [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ],
+    red: [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ],
+    green: [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ],
+    blue: [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ],
   };
   private onChange: () => void;
   private draggingIdx: number = -1;
@@ -39,16 +56,31 @@ export class ToneCurveWidget {
   }
 
   public resetCurrentChannel() {
-    this.points[this.channel] = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+    this.points[this.channel] = [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ];
     this.render();
     this.onChange();
   }
 
   public resetAllChannels() {
-    this.points.master = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
-    this.points.red = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
-    this.points.green = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
-    this.points.blue = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+    this.points.master = [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ];
+    this.points.red = [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ];
+    this.points.green = [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ];
+    this.points.blue = [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ];
     this.render();
     this.onChange();
   }
@@ -77,7 +109,7 @@ export class ToneCurveWidget {
         // Add new point
         pts.push({ x: mx, y: my });
         pts.sort((a, b) => a.x - b.x);
-        this.draggingIdx = pts.findIndex(p => Math.abs(p.x - mx) < 0.001);
+        this.draggingIdx = pts.findIndex((p) => Math.abs(p.x - mx) < 0.001);
         this.onChange();
       }
       this.render();
@@ -87,7 +119,10 @@ export class ToneCurveWidget {
       if (this.draggingIdx < 0) return;
       const rect = this.canvas.getBoundingClientRect();
       let mx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      let my = Math.max(0, Math.min(1, 1.0 - (e.clientY - rect.top) / rect.height));
+      const my = Math.max(
+        0,
+        Math.min(1, 1.0 - (e.clientY - rect.top) / rect.height),
+      );
 
       const pts = this.points[this.channel];
       // Pin first and last x coordinate
@@ -97,7 +132,7 @@ export class ToneCurveWidget {
       pts[this.draggingIdx].x = mx;
       pts[this.draggingIdx].y = my;
       pts.sort((a, b) => a.x - b.x);
-      this.draggingIdx = pts.findIndex(p => p.y === my);
+      this.draggingIdx = pts.findIndex((p) => p.y === my);
 
       this.render();
       this.onChange();
@@ -176,12 +211,21 @@ export class ToneCurveWidget {
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
       const p = (i / 4) * w;
-      ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, h); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(w, p); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(p, 0);
+      ctx.lineTo(p, h);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, p);
+      ctx.lineTo(w, p);
+      ctx.stroke();
     }
     // Diagonal reference
     ctx.strokeStyle = '#2a3245';
-    ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(w, 0); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    ctx.lineTo(w, 0);
+    ctx.stroke();
 
     // Draw active channel curve
     const pts = this.points[this.channel];
@@ -189,7 +233,7 @@ export class ToneCurveWidget {
       master: '#ffffff',
       red: '#ef4444',
       green: '#10b981',
-      blue: '#3b82f6'
+      blue: '#3b82f6',
     };
     const strokeColor = colors[this.channel];
 
@@ -201,7 +245,12 @@ export class ToneCurveWidget {
     } catch (_) {}
 
     // 1. Ghost master curve if currently inspecting Red, Green, or Blue
-    if (this.channel !== 'master' && lut && lut['master'] && lut['master'].length === 256) {
+    if (
+      this.channel !== 'master' &&
+      lut &&
+      lut['master'] &&
+      lut['master'].length === 256
+    ) {
       const masterSamples = lut['master'];
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
       ctx.lineWidth = 1.5;
@@ -267,11 +316,14 @@ export class ToneCurveWidget {
     for (let i = 0; i < pts.length; i++) {
       const cx = pts[i].x * w;
       const cy = (1.0 - pts[i].y) * h;
-      const isDragged = (i === this.draggingIdx);
+      const isDragged = i === this.draggingIdx;
 
       // Outer aura when dragged
       if (isDragged) {
-        ctx.fillStyle = this.channel === 'master' ? 'rgba(255, 255, 255, 0.35)' : `${strokeColor}44`;
+        ctx.fillStyle =
+          this.channel === 'master'
+            ? 'rgba(255, 255, 255, 0.35)'
+            : `${strokeColor}44`;
         ctx.beginPath();
         ctx.arc(cx, cy, 9, 0, Math.PI * 2);
         ctx.fill();

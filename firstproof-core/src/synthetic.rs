@@ -24,7 +24,7 @@ pub struct SyntheticTestChart {
     pub sample_points: Vec<SyntheticSamplePoint>,
 }
 
-const MACBETH_24_SRGB: [(&'static str, [u8; 3]); 24] = [
+const MACBETH_24_SRGB: [(&str, [u8; 3]); 24] = [
     ("Dark Skin",     [115,  82,  68]),
     ("Light Skin",    [194, 150, 130]),
     ("Blue Sky",      [ 98, 122, 157]),

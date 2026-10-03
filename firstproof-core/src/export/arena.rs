@@ -8,6 +8,12 @@ pub struct DecodeScratchArena {
     pub linear_rgb_f32: Vec<f32>,
 }
 
+impl Default for DecodeScratchArena {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DecodeScratchArena {
     pub fn new() -> Self {
         Self {

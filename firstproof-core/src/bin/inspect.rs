@@ -4,7 +4,7 @@
 //! (simulated Metal shader math on binned raw) and the CPU export pipeline (full demosaic).
 
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use firstproof_core::color::{Color3, agx_tone_map_vivid, ciede2000::linear_srgb_to_lab, ciede2000::ciede2000};
 use firstproof_core::export::{
     decode_image, decode_raw_preview_binned_buffer, apply_edits, f16_to_f32, apply_tone_recovery,
@@ -188,8 +188,13 @@ fn main() {
         "compare-pixel-matrices" => {
             use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
             let path = Path::new(&args[2]);
-            let frame = RawlerDecoder.decode(path).unwrap();
-            let dng_bytes = std::fs::read("/home/remco/Pictures/Lightroom/from laptop/2015/2015-03-14/_MG_2332.dng").unwrap();
+            let frame = RawDecoder::decode(&RawlerDecoder, path).unwrap();
+            let dng_path = if args.len() > 3 {
+                PathBuf::from(&args[3])
+            } else {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/_MG_2651.dng")
+            };
+            let dng_bytes = std::fs::read(&dng_path).unwrap();
             let dcp = firstproof_core::color::dcp::DcpProfile::from_bytes(&dng_bytes).unwrap();
             let temp = frame.as_shot_temperature();
             let m_fwd = dcp.interpolate_sensor_to_rec2020(temp);
@@ -793,9 +798,9 @@ fn cmd_compare_images(path1_str: &str, path2_str: &str) {
         for x in 0..target_w {
             let p1 = img1.get_pixel(x, y);
             let p2 = img2_resized.get_pixel(x, y);
-            total_diff_r += (p1.0[0] as i32 - p2.0[0] as i32).abs() as u64;
-            total_diff_g += (p1.0[1] as i32 - p2.0[1] as i32).abs() as u64;
-            total_diff_b += (p1.0[2] as i32 - p2.0[2] as i32).abs() as u64;
+            total_diff_r += (p1.0[0] as i32 - p2.0[0] as i32).unsigned_abs() as u64;
+            total_diff_g += (p1.0[1] as i32 - p2.0[1] as i32).unsigned_abs() as u64;
+            total_diff_b += (p1.0[2] as i32 - p2.0[2] as i32).unsigned_abs() as u64;
         }
     }
 
@@ -887,9 +892,9 @@ fn cmd_compare_camera_preview(raw_path_str: &str) {
         for x in 0..target_w {
             let p1 = preview_img.get_pixel(x, y);
             let p2 = export_resized.get_pixel(x, y);
-            total_diff_r += (p1.0[0] as i32 - p2.0[0] as i32).abs() as u64;
-            total_diff_g += (p1.0[1] as i32 - p2.0[1] as i32).abs() as u64;
-            total_diff_b += (p1.0[2] as i32 - p2.0[2] as i32).abs() as u64;
+            total_diff_r += (p1.0[0] as i32 - p2.0[0] as i32).unsigned_abs() as u64;
+            total_diff_g += (p1.0[1] as i32 - p2.0[1] as i32).unsigned_abs() as u64;
+            total_diff_b += (p1.0[2] as i32 - p2.0[2] as i32).unsigned_abs() as u64;
         }
     }
 

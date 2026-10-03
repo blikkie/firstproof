@@ -34,8 +34,12 @@ export interface KeyboardActions {
 export function isTextInputActive(): boolean {
   const activeEl = document.activeElement;
   if (!activeEl) return false;
-  const isInput = activeEl.tagName === 'INPUT' && (activeEl as HTMLInputElement).type !== 'range';
-  const isText = activeEl.tagName === 'TEXTAREA' || (activeEl as HTMLElement).isContentEditable;
+  const isInput =
+    activeEl.tagName === 'INPUT' &&
+    (activeEl as HTMLInputElement).type !== 'range';
+  const isText =
+    activeEl.tagName === 'TEXTAREA' ||
+    (activeEl as HTMLElement).isContentEditable;
   return Boolean(isInput || isText);
 }
 
@@ -84,16 +88,48 @@ export class KeyboardShortcutController {
 
     // 3. Modifier-based shortcuts
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey) {
-      if (e.key === '1') { e.preventDefault(); this.actions.onSelectTab('light'); return; }
-      if (e.key === '2') { e.preventDefault(); this.actions.onSelectTab('color'); return; }
-      if (e.key === '3') { e.preventDefault(); this.actions.onSelectTab('detail'); return; }
-      if (e.key === '4') { e.preventDefault(); this.actions.onSelectTab('emulsion'); return; }
-      if (e.key === '5') { e.preventDefault(); this.actions.onSelectTab('info'); return; }
-      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); this.actions.onOpenExportModal(); return; }
-      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); this.actions.onApplyAutoTone(); return; }
+      if (e.key === '1') {
+        e.preventDefault();
+        this.actions.onSelectTab('light');
+        return;
+      }
+      if (e.key === '2') {
+        e.preventDefault();
+        this.actions.onSelectTab('color');
+        return;
+      }
+      if (e.key === '3') {
+        e.preventDefault();
+        this.actions.onSelectTab('detail');
+        return;
+      }
+      if (e.key === '4') {
+        e.preventDefault();
+        this.actions.onSelectTab('emulsion');
+        return;
+      }
+      if (e.key === '5') {
+        e.preventDefault();
+        this.actions.onSelectTab('info');
+        return;
+      }
+      if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        this.actions.onOpenExportModal();
+        return;
+      }
+      if (e.key === 'u' || e.key === 'U') {
+        e.preventDefault();
+        this.actions.onApplyAutoTone();
+        return;
+      }
     }
 
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
+    if (
+      (e.metaKey || e.ctrlKey) &&
+      e.shiftKey &&
+      (e.key === 'r' || e.key === 'R')
+    ) {
       e.preventDefault();
       this.actions.onResetAllEdits();
       return;
@@ -101,32 +137,41 @@ export class KeyboardShortcutController {
 
     // 4. Single-key muscle memory
     switch (e.key) {
-      case '1': case '2': case '3': case '4': case '5':
+      case '1':
+      case '2':
+      case '3':
+      case '4':
+      case '5':
         this.actions.onSetRating(parseInt(e.key, 10));
         break;
       case '0':
         this.actions.onSetRating(0);
         break;
-      case 'p': case 'P':
+      case 'p':
+      case 'P':
         this.actions.onTogglePick();
         break;
-      case 'x': case 'X':
+      case 'x':
+      case 'X':
         if (this.actions.isCropActive() && this.actions.onCropFlipOrientation) {
           this.actions.onCropFlipOrientation();
           return;
         }
         this.actions.onToggleReject();
         break;
-      case 'u': case 'U':
+      case 'u':
+      case 'U':
         this.actions.onUnflag();
         break;
       case 'Enter':
         this.actions.onEnter();
         break;
-      case 'c': case 'C':
+      case 'c':
+      case 'C':
         this.actions.onToggleCrop();
         break;
-      case 'z': case 'Z':
+      case 'z':
+      case 'Z':
         if (!this.actions.isCropActive()) {
           this.actions.onTogglePixelPeep();
         }
@@ -137,7 +182,8 @@ export class KeyboardShortcutController {
       case ']':
         this.actions.onRotate(90);
         break;
-      case 'w': case 'W':
+      case 'w':
+      case 'W':
         this.actions.onToggleEyedropper('wb');
         break;
       case '\\':

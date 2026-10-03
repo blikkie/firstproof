@@ -1,0 +1,16 @@
+{
+  "token-defense": {
+    "PreToolUse": [
+      {
+        "matcher": "view_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 hooks/pre_tool_view_file.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -11,12 +11,17 @@
  * - Outside the canvas (Inspector, filmstrip), native scrolling operates undisturbed.
  */
 
-import { EditSettingsPayload } from '../WasmBridge';
+import type { EditSettingsPayload } from '../WasmBridge';
 
 export interface CanvasViewportDelegate {
   onRender: () => void;
   onUpdateCropOverlay?: () => void;
-  onSampleEyedropper?: (mode: 'wb' | 'white' | 'black', r: number, g: number, b: number) => void;
+  onSampleEyedropper?: (
+    mode: 'wb' | 'white' | 'black',
+    r: number,
+    g: number,
+    b: number,
+  ) => void;
   isCropActive: () => boolean;
   getEdits: () => EditSettingsPayload;
   getImageDimensions: () => {
@@ -60,7 +65,7 @@ export class CanvasViewportController {
     canvas: HTMLCanvasElement,
     wrapper: HTMLElement,
     zoomBadge: HTMLElement | null,
-    delegate: CanvasViewportDelegate
+    delegate: CanvasViewportDelegate,
   ) {
     this.canvas = canvas;
     this.wrapper = wrapper;
@@ -84,7 +89,9 @@ export class CanvasViewportController {
     if (this.isBound) return;
 
     // Wheel/Pinch listener strictly attached to wrapper with non-passive option to allow preventDefault
-    this.wrapper.addEventListener('wheel', this.boundOnWheel, { passive: false });
+    this.wrapper.addEventListener('wheel', this.boundOnWheel, {
+      passive: false,
+    });
     this.canvas.addEventListener('mousedown', this.boundOnMouseDown);
     this.canvas.addEventListener('dblclick', this.boundOnDblClick);
     this.canvas.addEventListener('click', this.boundOnClick);
@@ -100,10 +107,14 @@ export class CanvasViewportController {
       this.btnWb.addEventListener('click', () => this.toggleEyedropper('wb'));
     }
     if (this.btnWhite) {
-      this.btnWhite.addEventListener('click', () => this.toggleEyedropper('white'));
+      this.btnWhite.addEventListener('click', () =>
+        this.toggleEyedropper('white'),
+      );
     }
     if (this.btnBlack) {
-      this.btnBlack.addEventListener('click', () => this.toggleEyedropper('black'));
+      this.btnBlack.addEventListener('click', () =>
+        this.toggleEyedropper('black'),
+      );
     }
 
     this.isBound = true;
@@ -179,13 +190,13 @@ export class CanvasViewportController {
   public getZoomScale100(): number {
     const edits = this.delegate.getEdits();
     const dims = this.delegate.getImageDimensions();
-    const isOrthogonal = (edits.rotation === 90 || edits.rotation === 270);
+    const isOrthogonal = edits.rotation === 90 || edits.rotation === 270;
     const sensorW = isOrthogonal
-      ? (dims.rawHeight || dims.height || 1920)
-      : (dims.rawWidth || dims.width || 1920);
+      ? dims.rawHeight || dims.height || 1920
+      : dims.rawWidth || dims.width || 1920;
     const sensorH = isOrthogonal
-      ? (dims.rawWidth || dims.width || 1920)
-      : (dims.rawHeight || dims.height || 1080);
+      ? dims.rawWidth || dims.width || 1920
+      : dims.rawHeight || dims.height || 1080;
     const imgAspect = sensorW / Math.max(sensorH, 1);
 
     const viewW = this.wrapper?.clientWidth || 800;
@@ -223,7 +234,7 @@ export class CanvasViewportController {
         const ndcY = -(((clientY - rect.top) / rect.height) * 2.0 - 1.0);
         this.panOffset = {
           x: ndcX * (1.0 - targetScale),
-          y: ndcY * (1.0 - targetScale)
+          y: ndcY * (1.0 - targetScale),
         };
         this.clampPanOffset();
       } else {
@@ -241,9 +252,9 @@ export class CanvasViewportController {
   public clampPanOffset(): void {
     const edits = this.delegate.getEdits();
     const dims = this.delegate.getImageDimensions();
-    const isOrthogonal = (edits.rotation === 90 || edits.rotation === 270);
-    const origW = isOrthogonal ? (dims.height || 1920) : (dims.width || 1920);
-    const origH = isOrthogonal ? (dims.width || 1920) : (dims.height || 1080);
+    const isOrthogonal = edits.rotation === 90 || edits.rotation === 270;
+    const origW = isOrthogonal ? dims.height || 1920 : dims.width || 1920;
+    const origH = isOrthogonal ? dims.width || 1920 : dims.height || 1080;
     const cropActive = this.delegate.isCropActive();
     const cL = cropActive ? 0.0 : (edits.crop_left ?? 0.0);
     const cT = cropActive ? 0.0 : (edits.crop_top ?? 0.0);
@@ -264,7 +275,7 @@ export class CanvasViewportController {
       fitScaleX = (viewH * imgAspect) / Math.max(viewW, 1);
     } else {
       fitScaleX = 1.0;
-      fitScaleY = (viewW / imgAspect) / Math.max(viewH, 1);
+      fitScaleY = viewW / imgAspect / Math.max(viewH, 1);
     }
 
     const effW = fitScaleX * this.zoomScale;
@@ -369,7 +380,7 @@ export class CanvasViewportController {
     if (this.isPanning) {
       const rect = this.wrapper.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
-        const dx = ((e.clientX - this.panStartPos.x) / (rect.width / 2));
+        const dx = (e.clientX - this.panStartPos.x) / (rect.width / 2);
         const dy = -((e.clientY - this.panStartPos.y) / (rect.height / 2));
         this.panOffset.x = this.panStartOffset.x + dx;
         this.panOffset.y = this.panStartOffset.y + dy;
@@ -404,8 +415,12 @@ export class CanvasViewportController {
     const mode = this.activeEyedropper;
 
     const rect = this.canvas.getBoundingClientRect();
-    const x = Math.floor((e.clientX - rect.left) * (this.canvas.width / rect.width));
-    const y = Math.floor((e.clientY - rect.top) * (this.canvas.height / rect.height));
+    const x = Math.floor(
+      (e.clientX - rect.left) * (this.canvas.width / rect.width),
+    );
+    const y = Math.floor(
+      (e.clientY - rect.top) * (this.canvas.height / rect.height),
+    );
 
     const gl = this.canvas.getContext('webgl2') as WebGL2RenderingContext;
     if (gl) {

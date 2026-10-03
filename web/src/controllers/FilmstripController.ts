@@ -1,11 +1,18 @@
-import { PhotoFileEntry, FolderIntake } from '../FolderIntake';
+import { FolderIntake, type PhotoFileEntry } from '../FolderIntake';
+import type { PhotoLoaderService } from '../services/PhotoLoaderService';
 import { ThumbnailCacheStore } from '../ThumbnailCacheStore';
-import { readExifOrientationFromBlob, decodeExifOrientation } from '../utils/exifReader';
-import { WasmBridge } from '../WasmBridge';
-import { PhotoLoaderService } from '../services/PhotoLoaderService';
+import {
+  decodeExifOrientation,
+  readExifOrientationFromBlob,
+} from '../utils/exifReader';
+import type { WasmBridge } from '../WasmBridge';
 
 export interface FilmstripDelegate {
-  onSelectPhoto: (idx: number, centerFilmstrip: boolean, keepMultiSelection: boolean) => void;
+  onSelectPhoto: (
+    idx: number,
+    centerFilmstrip: boolean,
+    keepMultiSelection: boolean,
+  ) => void;
 }
 
 export class FilmstripController {
@@ -19,7 +26,10 @@ export class FilmstripController {
   private fileEntries: PhotoFileEntry[] = [];
   private activeIdx: number = -1;
   private selectedIndices: Set<number> = new Set();
-  private cardRotations: Map<number, { rotation: number; flipH: boolean; flipV: boolean }> = new Map();
+  private cardRotations: Map<
+    number,
+    { rotation: number; flipH: boolean; flipV: boolean }
+  > = new Map();
   private thumbCache: Map<number, string> = new Map(); // idx -> Blob URL
   private thumbLoadingSet: Set<number> = new Set();
 
@@ -34,7 +44,7 @@ export class FilmstripController {
     emptyState: HTMLElement | null,
     bridge: WasmBridge,
     loaderService: PhotoLoaderService,
-    delegate: FilmstripDelegate
+    delegate: FilmstripDelegate,
   ) {
     this.container = container;
     this.countBadge = countBadge;
@@ -64,7 +74,7 @@ export class FilmstripController {
           root: this.container,
           rootMargin: '300px', // Pre-fetch thumbnails 300px before scrolling into view
           threshold: 0.01,
-        }
+        },
       );
     }
   }
@@ -95,7 +105,10 @@ export class FilmstripController {
     return [];
   }
 
-  public loadPhotos(entries: PhotoFileEntry[], initialPhotoName?: string | null) {
+  public loadPhotos(
+    entries: PhotoFileEntry[],
+    initialPhotoName?: string | null,
+  ) {
     this.fileEntries = entries;
     this.activeIdx = -1;
     this.selectedIndices.clear();
@@ -187,7 +200,10 @@ export class FilmstripController {
         if (sidecarXml) {
           try {
             const xmp = this.bridge.parseXmp(sidecarXml);
-            if (xmp.edits?.rotation !== undefined && xmp.edits?.rotation !== null) {
+            if (
+              xmp.edits?.rotation !== undefined &&
+              xmp.edits?.rotation !== null
+            ) {
               rot = xmp.edits.rotation;
               flipH = xmp.edits.flip_horizontal ?? false;
               flipV = xmp.edits.flip_vertical ?? false;
@@ -210,7 +226,11 @@ export class FilmstripController {
     }
   }
 
-  public selectIndex(idx: number, centerFilmstrip: boolean = false, keepMultiSelection: boolean = false) {
+  public selectIndex(
+    idx: number,
+    centerFilmstrip: boolean = false,
+    keepMultiSelection: boolean = false,
+  ) {
     if (idx < 0 || idx >= this.fileEntries.length) return;
     this.activeIdx = idx;
 
@@ -264,7 +284,8 @@ export class FilmstripController {
       const containerWidth = this.container.clientWidth;
       const cardOffsetLeft = cardEl.offsetLeft;
       const cardWidth = cardEl.offsetWidth;
-      const targetScrollLeft = cardOffsetLeft - containerWidth / 2 + cardWidth / 2;
+      const targetScrollLeft =
+        cardOffsetLeft - containerWidth / 2 + cardWidth / 2;
 
       this.container.scrollTo({
         left: Math.max(0, targetScrollLeft),
@@ -277,7 +298,7 @@ export class FilmstripController {
     idx: number,
     rotation: number = 0,
     flipH: boolean = false,
-    flipV: boolean = false
+    flipV: boolean = false,
   ) {
     this.cardRotations.set(idx, { rotation, flipH, flipV });
     const cardEl = document.getElementById(`thumb-card-${idx}`);
@@ -299,7 +320,9 @@ export class FilmstripController {
     const cardEl = document.getElementById(`thumb-card-${idx}`);
     if (!cardEl) return;
 
-    let ratingBadge = cardEl.querySelector('.thumb-badge-rating') as HTMLElement;
+    let ratingBadge = cardEl.querySelector(
+      '.thumb-badge-rating',
+    ) as HTMLElement;
     if (rating > 0) {
       if (!ratingBadge) {
         ratingBadge = document.createElement('div');
@@ -344,7 +367,12 @@ export class FilmstripController {
 
     const knownRot = this.cardRotations.get(idx);
     if (knownRot) {
-      this.updateThumbnailCardOrientation(idx, knownRot.rotation, knownRot.flipH, knownRot.flipV);
+      this.updateThumbnailCardOrientation(
+        idx,
+        knownRot.rotation,
+        knownRot.flipH,
+        knownRot.flipV,
+      );
     }
   }
 
@@ -359,7 +387,8 @@ export class FilmstripController {
   }
 
   private async processQueue() {
-    if (this.activeDecodes >= FilmstripController.MAX_CONCURRENT_THUMBNAILS) return;
+    if (this.activeDecodes >= FilmstripController.MAX_CONCURRENT_THUMBNAILS)
+      return;
     if (this.thumbnailQueue.length === 0) return;
 
     const idx = this.thumbnailQueue.shift();
@@ -411,8 +440,11 @@ export class FilmstripController {
       if (!previewUrl) {
         const arrayBuffer = await entry.file.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
-        const { imageSlice, preview } = this.loaderService.decodeImageBytes(bytes);
-        const previewBlob = new Blob([new Uint8Array(imageSlice)], { type: 'image/jpeg' });
+        const { imageSlice, preview } =
+          this.loaderService.decodeImageBytes(bytes);
+        const previewBlob = new Blob([new Uint8Array(imageSlice)], {
+          type: 'image/jpeg',
+        });
         previewUrl = URL.createObjectURL(previewBlob);
         this.thumbCache.set(idx, previewUrl);
 
@@ -426,7 +458,10 @@ export class FilmstripController {
         if (sidecarXml) {
           try {
             const xmp = this.bridge.parseXmp(sidecarXml);
-            if (xmp.edits?.rotation !== undefined && xmp.edits?.rotation !== null) {
+            if (
+              xmp.edits?.rotation !== undefined &&
+              xmp.edits?.rotation !== null
+            ) {
               cardRot = xmp.edits.rotation;
               cardFlipH = xmp.edits.flip_horizontal ?? false;
               cardFlipV = xmp.edits.flip_vertical ?? false;
@@ -453,7 +488,10 @@ export class FilmstripController {
         if (sidecarXml) {
           try {
             const xmp = this.bridge.parseXmp(sidecarXml);
-            if (xmp.edits?.rotation !== undefined && xmp.edits?.rotation !== null) {
+            if (
+              xmp.edits?.rotation !== undefined &&
+              xmp.edits?.rotation !== null
+            ) {
               cardRot = xmp.edits.rotation;
               cardFlipH = xmp.edits.flip_horizontal ?? false;
               cardFlipV = xmp.edits.flip_vertical ?? false;
@@ -466,12 +504,20 @@ export class FilmstripController {
 
       const knownRot = this.cardRotations.get(idx);
       if (knownRot) {
-        this.updateThumbnailCardOrientation(idx, knownRot.rotation, knownRot.flipH, knownRot.flipV);
+        this.updateThumbnailCardOrientation(
+          idx,
+          knownRot.rotation,
+          knownRot.flipH,
+          knownRot.flipV,
+        );
       } else {
         this.updateThumbnailCardOrientation(idx, cardRot, cardFlipH, cardFlipV);
       }
     } catch (err) {
-      console.warn(`[Filmstrip] Could not extract preview thumbnail for ${this.fileEntries[idx].name}:`, err);
+      console.warn(
+        `[Filmstrip] Could not extract preview thumbnail for ${this.fileEntries[idx].name}:`,
+        err,
+      );
     }
   }
 

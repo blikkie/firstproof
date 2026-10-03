@@ -1,16 +1,16 @@
-import { PreviewResult } from '../WasmBridge';
+import type { PreviewResult } from '../WasmBridge';
 import {
   formatAperture,
-  formatShutterSpeed,
+  formatDimensions,
   formatFocalLength,
   formatISO,
-  formatDimensions,
+  formatShutterSpeed,
 } from './formatters';
 
 export function updateMetadataHeaderElements(
   elements: Record<string, HTMLElement>,
   preview: PreviewResult,
-  fileName: string
+  fileName: string,
 ): void {
   const meta = preview.metadata;
   if (elements['meta-dimensions']) {
@@ -18,7 +18,7 @@ export function updateMetadataHeaderElements(
       preview.width,
       preview.height,
       meta.raw_width,
-      meta.raw_height
+      meta.raw_height,
     );
   }
   if (elements['meta-camera']) {
@@ -41,7 +41,8 @@ export function updateMetadataHeaderElements(
 
   const make = meta.camera_make || '';
   const model = meta.camera_model || '';
-  const fullCamera = `${make} ${model}`.trim() || meta.camera_model || 'Bayer Sensor';
+  const fullCamera =
+    `${make} ${model}`.trim() || meta.camera_model || 'Bayer Sensor';
   if (elements['meta-full-camera']) {
     elements['meta-full-camera'].innerText = fullCamera;
   }
@@ -49,17 +50,20 @@ export function updateMetadataHeaderElements(
     elements['meta-lens'].innerText = meta.lens_model || '—';
   }
   if (elements['meta-focal-length']) {
-    elements['meta-focal-length'].innerText = formatFocalLength(meta.focal_length);
+    elements['meta-focal-length'].innerText = formatFocalLength(
+      meta.focal_length,
+    );
   }
   if (elements['meta-exposure-summary']) {
-    elements['meta-exposure-summary'].innerText = `${formatShutterSpeed(meta.shutter_speed)} • ${formatAperture(meta.aperture)} • ISO ${formatISO(meta.iso)}`;
+    elements['meta-exposure-summary'].innerText =
+      `${formatShutterSpeed(meta.shutter_speed)} • ${formatAperture(meta.aperture)} • ISO ${formatISO(meta.iso)}`;
   }
   if (elements['meta-sensor-res']) {
     elements['meta-sensor-res'].innerText = formatDimensions(
       preview.width,
       preview.height,
       meta.raw_width,
-      meta.raw_height
+      meta.raw_height,
     );
   }
   if (elements['meta-date-taken']) {

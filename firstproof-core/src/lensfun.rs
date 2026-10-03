@@ -105,7 +105,7 @@ impl LensfunDatabase {
 
         for entry in entries.filter_map(std::result::Result::ok) {
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "xml") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "xml") {
                 if let Ok(content) = fs::read_to_string(&path) {
                     if self.load_xml_string(&content).is_ok() {
                         loaded_files += 1;

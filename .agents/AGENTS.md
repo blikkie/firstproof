@@ -14,6 +14,10 @@
   - **Agent = Model + Harness**: Never rely solely on inferential prompt text or model self-critique to guarantee quality. System integrity must be enforced by automated, deterministic computational feedback sensors (tests, typecheckers, linters, parity assertions).
   - **Keep Quality Left**: Catch regressions in the agent's fast inner loop before handing off to the user.
   - **The Steering Loop**: Whenever an error, edge-case failure, or architectural regression is encountered, do not just patch the code or add verbal instructions to a prompt. Feed it back into the harness: add a permanent computational sensor (a unit test, parity assertion, or fitness function) so that class of failure is structurally impossible in the future.
+  - **Lifecycle Hooks vs. Prompt Rules Decision Framework**:
+    - **When to Use a Lifecycle Hook (`.agents/hooks.json`)**: If a policy can be stated as *"Never execute tool X with argument Y"* (e.g. reading 4,400-line generated files like `firstproof_core.swift`) or *"Always run check Z before action W"*, it MUST be codified as a deterministic lifecycle hook rather than an inferential prompt guideline. Hooks execute out-of-band, cost zero context tokens during normal execution, and physically prevent regressions by denying unauthorized actions or rewriting unsafe invocations.
+    - **When to Use Markdown Rules (`AGENTS.md`)**: Reserve prompt text for high-level architectural invariants, optical/sensitometric color principles, semantic domain models, and contextual aesthetic guardrails (anti-slop, honest capture) that require inferential reasoning and synthesis.
+  - **Unified Pre-Flight Sensor Suite (`make check`)**: Every workspace modification across Rust, WebAssembly, and TypeScript must be validated with `./scripts/check.sh` (or `make check`) before handing off work to the user.
 
 - **Adversarial Code Reviews & Anti-Magic Number Audit**: Before every commit and check-in, perform an adversarial review:
   - Probe diffs for race conditions, memory leaks/retain cycles, WebGL/Metal texture clobbering, error boundary misses, out-of-order async responses, and main-thread bottlenecks.
@@ -124,7 +128,7 @@
 - **Proactive Customization Encoding**: Whenever a platform-specific quirk, non-obvious workaround, multi-step pipeline recipe, or architectural convention is established during development, proactively suggest encoding it into `.agents/AGENTS.md` or as a new skill under `.agents/skills/` so subsequent chats retain it automatically.
 
 - **Token Efficiency Invariants**:
-  - Never view `firstproof_core.swift` directly (4,400+ generated lines); inspect `firstproof-core/src/lib.rs` for exported FFI signatures or specific Rust sub-modules.
+  - Never view `firstproof_core.swift` directly (4,400+ generated lines; enforced structurally by `.agents/hooks.json` token-defense hook); inspect `firstproof-core/src/lib.rs` for exported FFI signatures or specific Rust sub-modules.
   - Slices on large files: always provide `StartLine` and `EndLine` (target ~80–120 lines per slice) when viewing files over 300 lines instead of dumping full files into context.
   - Targeted searches: always scope `grep_search` with `Includes` (e.g. `*.swift`, `*.rs`) and specific subdirectories (`SearchPath`) rather than searching the workspace root.
 

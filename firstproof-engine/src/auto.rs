@@ -229,7 +229,7 @@ pub fn compute_auto_white_balance_from_u16_slice(
 
         let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
         // Filter out extreme highlights (>0.85) and deep shadow noise (<0.02)
-        if y >= 0.02 && y <= 0.85 && r > 0.0 && g > 0.0 && b > 0.0 {
+        if (0.02..=0.85).contains(&y) && r > 0.0 && g > 0.0 && b > 0.0 {
             r_sum += r as f64;
             g_sum += g as f64;
             b_sum += b as f64;

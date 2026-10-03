@@ -9,6 +9,8 @@
 //! 4. Providing built-in calibrated dual-illuminant profiles for major camera families
 //!    (Canon EOS, Sony Alpha, Nikon Z).
 
+#![allow(clippy::erasing_op, clippy::identity_op, clippy::approx_constant)]
+
 use super::Matrix3x3;
 
 // Standard DNG / DCP TIFF Tag IDs
@@ -485,7 +487,7 @@ impl DcpProfile {
                     forward_matrix2 = parse_matrix(count)?;
                 }
                 TAG_PROFILE_TONE_CURVE => {
-                    if field_type == 11 && count >= 2 && count % 2 == 0 {
+                    if field_type == 11 && count >= 2 && count.is_multiple_of(2) {
                         // Array of float pairs (x, y)
                         let byte_offset = resolve_offset(count * 4)?;
                         let num_points = count / 2;
@@ -519,7 +521,7 @@ impl DcpProfile {
                     }
                 }
                 TAG_PROFILE_HUE_SAT_MAP_DATA_1 => {
-                    if field_type == 11 && count >= 3 && count % 3 == 0 {
+                    if field_type == 11 && count >= 3 && count.is_multiple_of(3) {
                         let byte_offset = resolve_offset(count * 4)?;
                         let num_triplets = count / 3;
                         let mut triplets = Vec::with_capacity(num_triplets);
@@ -532,8 +534,8 @@ impl DcpProfile {
                         hue_sat_data1 = Some(triplets);
                     }
                 }
-                TAG_PROFILE_HUE_SAT_MAP_DATA_2 => {
-                    if field_type == 11 && count >= 3 && count % 3 == 0 {
+                TAG_PROFILE_HUE_SAT_MAP_DATA_2
+                    if field_type == 11 && count >= 3 && count.is_multiple_of(3) => {
                         let byte_offset = resolve_offset(count * 4)?;
                         let num_triplets = count / 3;
                         let mut triplets = Vec::with_capacity(num_triplets);
@@ -545,7 +547,6 @@ impl DcpProfile {
                         }
                         hue_sat_data2 = Some(triplets);
                     }
-                }
                 _ => {}
             }
 

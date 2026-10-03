@@ -1,10 +1,15 @@
-import { WasmBridge, PreviewResult, EditSettingsPayload, XmpPayload } from '../WasmBridge';
-import { PhotoFileEntry, FolderIntake } from '../FolderIntake';
+import type { ExportExecutionOptions } from '../ExportModal';
+import { FolderIntake, type PhotoFileEntry } from '../FolderIntake';
 import { IntermediateTextureCache } from '../IntermediateTextureCache';
-import { WebGLRenderer } from '../WebGLRenderer';
-import { ExportExecutionOptions } from '../ExportModal';
-import { encodeTiff } from '../utils/tiffEncoder';
 import { getDefaultEdits, hasModifications } from '../utils/edits';
+import { encodeTiff } from '../utils/tiffEncoder';
+import type {
+  EditSettingsPayload,
+  PreviewResult,
+  WasmBridge,
+  XmpPayload,
+} from '../WasmBridge';
+import { WebGLRenderer } from '../WebGLRenderer';
 
 export interface DecodedImagePayload {
   preview: PreviewResult;
@@ -73,7 +78,10 @@ export class PhotoLoaderService {
 
   private initWorker() {
     try {
-      this.rawWorker = new Worker(new URL('../RawDecodeWorker.ts', import.meta.url), { type: 'module' });
+      this.rawWorker = new Worker(
+        new URL('../RawDecodeWorker.ts', import.meta.url),
+        { type: 'module' },
+      );
       this.rawWorker.onmessage = (e: MessageEvent) => {
         const { id } = e.data;
         const resolve = this.workerPendingMap.get(id);
@@ -82,22 +90,37 @@ export class PhotoLoaderService {
           resolve(e.data);
         }
       };
-      console.log('⚡ [PhotoLoaderService] Off-main-thread RawDecodeWorker active');
+      console.log(
+        '⚡ [PhotoLoaderService] Off-main-thread RawDecodeWorker active',
+      );
     } catch (err) {
-      console.warn('[PhotoLoaderService] WebWorker pool initialization fallback:', err);
+      console.warn(
+        '[PhotoLoaderService] WebWorker pool initialization fallback:',
+        err,
+      );
     }
   }
 
   public async decodeInWorker(
     arrayBuffer: ArrayBuffer,
     fileName: string,
-    fullResolution: boolean = false
+    fullResolution: boolean = false,
   ): Promise<DecodedImagePayload> {
     if (!this.rawWorker) {
       const bytes = new Uint8Array(arrayBuffer);
       const res = this.bridge.decodeImageBytes(bytes);
       const ext = fileName.split('.').pop()?.toLowerCase() || '';
-      const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(ext);
+      const isRawFile = [
+        'cr2',
+        'cr3',
+        'nef',
+        'arw',
+        'dng',
+        'rw2',
+        'orf',
+        'pef',
+        'raf',
+      ].includes(ext);
       let linearData: Uint16Array | undefined;
       let linearW: number | undefined;
       let linearH: number | undefined;
@@ -110,10 +133,19 @@ export class PhotoLoaderService {
           linearW = rawLin.res.width;
           linearH = rawLin.res.height;
         } catch (e) {
-          console.warn('[PhotoLoaderService] Fallback decodeRawLinear failed:', e);
+          console.warn(
+            '[PhotoLoaderService] Fallback decodeRawLinear failed:',
+            e,
+          );
         }
       }
-      return { preview: res.preview, imageSlice: res.imageSlice, linearData, linearW, linearH };
+      return {
+        preview: res.preview,
+        imageSlice: res.imageSlice,
+        linearData,
+        linearW,
+        linearH,
+      };
     }
 
     const id = ++this.workerMsgId;
@@ -137,11 +169,17 @@ export class PhotoLoaderService {
         }
       });
       const workerBuffer = arrayBuffer.slice(0);
-      this.rawWorker!.postMessage({ id, arrayBuffer: workerBuffer, fileName, fullResolution }, [workerBuffer]);
+      this.rawWorker!.postMessage(
+        { id, arrayBuffer: workerBuffer, fileName, fullResolution },
+        [workerBuffer],
+      );
     });
   }
 
-  public decodeImageBytes(bytes: Uint8Array): { preview: PreviewResult; imageSlice: Uint8Array } {
+  public decodeImageBytes(bytes: Uint8Array): {
+    preview: PreviewResult;
+    imageSlice: Uint8Array;
+  } {
     return this.bridge.decodeImageBytes(bytes);
   }
 
@@ -151,7 +189,9 @@ export class PhotoLoaderService {
     try {
       const arrayBuffer = await entry.file.arrayBuffer();
       const res = await this.decodeInWorker(arrayBuffer, entry.name);
-      const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
+      const blob = new Blob([new Uint8Array(res.imageSlice)], {
+        type: 'image/jpeg',
+      });
       let imgBitmap: ImageBitmap;
       try {
         imgBitmap = await createImageBitmap(blob, { resizeWidth: 2560 });
@@ -231,7 +271,7 @@ export class PhotoLoaderService {
     isRaw: boolean,
     defaultRotation: number = 0,
     defaultFlipH: boolean = false,
-    defaultFlipV: boolean = false
+    defaultFlipV: boolean = false,
   ): Promise<PhotoRecord> {
     const existing = this.photoRecords.get(entry.name);
     if (existing) {
@@ -277,7 +317,7 @@ export class PhotoLoaderService {
   public async loadPhotoFrame(
     entry: PhotoFileEntry,
     isRawFile: boolean,
-    idx: number
+    idx: number,
   ): Promise<DevelopedFramePayload> {
     const prewarmed = this.prewarmedCache.get(idx);
     if (prewarmed) {
@@ -301,14 +341,23 @@ export class PhotoLoaderService {
     let linearH = res.linearH || 0;
 
     if (!isRawFile || !linear16Data) {
-      const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
+      const blob = new Blob([new Uint8Array(res.imageSlice)], {
+        type: 'image/jpeg',
+      });
       try {
         imgBitmap = await createImageBitmap(blob, { resizeQuality: 'high' });
       } catch (decodeErr) {
-        console.warn(`[PhotoLoaderService] createImageBitmap failed for ${entry.name}, creating fallback canvas:`, decodeErr);
+        console.warn(
+          `[PhotoLoaderService] createImageBitmap failed for ${entry.name}, creating fallback canvas:`,
+          decodeErr,
+        );
         const fallbackCanvas = document.createElement('canvas');
-        fallbackCanvas.width = (res.preview.width && res.preview.width > 0) ? res.preview.width : 1920;
-        fallbackCanvas.height = (res.preview.height && res.preview.height > 0) ? res.preview.height : 1080;
+        fallbackCanvas.width =
+          res.preview.width && res.preview.width > 0 ? res.preview.width : 1920;
+        fallbackCanvas.height =
+          res.preview.height && res.preview.height > 0
+            ? res.preview.height
+            : 1080;
         const ctx = fallbackCanvas.getContext('2d');
         if (ctx) {
           ctx.fillStyle = '#111318';
@@ -329,7 +378,10 @@ export class PhotoLoaderService {
         linearW = rawLin.res.width;
         linearH = rawLin.res.height;
       } catch (linErr) {
-        console.error(`[PhotoLoaderService] Linear Rec.2020 RAW decode failed for ${entry.name}:`, linErr);
+        console.error(
+          `[PhotoLoaderService] Linear Rec.2020 RAW decode failed for ${entry.name}:`,
+          linErr,
+        );
       }
     }
 
@@ -348,7 +400,7 @@ export class PhotoLoaderService {
     fileName: string,
     edits: EditSettingsPayload,
     renderer: WebGLRenderer,
-    allowed: boolean
+    allowed: boolean,
   ): void {
     if (!allowed) return;
     renderer
@@ -359,11 +411,16 @@ export class PhotoLoaderService {
         }
       })
       .catch((err) => {
-        console.warn('[PhotoLoaderService] Failed to capture intermediate bitmap:', err);
+        console.warn(
+          '[PhotoLoaderService] Failed to capture intermediate bitmap:',
+          err,
+        );
       });
   }
 
-  public async loadSidecar(entry: PhotoFileEntry): Promise<{ xmp: any | null; rawXml: string | null }> {
+  public async loadSidecar(
+    entry: PhotoFileEntry,
+  ): Promise<{ xmp: any | null; rawXml: string | null }> {
     let sidecarXml = await FolderIntake.readSidecarFromDisk(entry);
     if (!sidecarXml) {
       try {
@@ -391,7 +448,7 @@ export class PhotoLoaderService {
       description?: string;
       creator?: string;
       keywords?: string[];
-    }
+    },
   ): Promise<void> {
     this.setCachedEdits(entry.name, edits);
 
@@ -401,7 +458,10 @@ export class PhotoLoaderService {
       title: metadata.title || undefined,
       description: metadata.description || undefined,
       creator: metadata.creator || undefined,
-      keywords: metadata.keywords && metadata.keywords.length > 0 ? metadata.keywords : undefined,
+      keywords:
+        metadata.keywords && metadata.keywords.length > 0
+          ? metadata.keywords
+          : undefined,
       edits,
     };
 
@@ -417,16 +477,22 @@ export class PhotoLoaderService {
   public async autoSaveSidecar(
     entry: PhotoFileEntry,
     record: PhotoRecord,
-    orientation: number = 1
+    orientation: number = 1,
   ): Promise<boolean> {
     this.setPhotoRecord(entry.name, record);
 
-    const modified = hasModifications(record.edits, orientation, record.rating, record.status, {
-      title: record.title,
-      description: record.description,
-      creator: record.creator,
-      keywords: record.keywords?.join(', '),
-    });
+    const modified = hasModifications(
+      record.edits,
+      orientation,
+      record.rating,
+      record.status,
+      {
+        title: record.title,
+        description: record.description,
+        creator: record.creator,
+        keywords: record.keywords?.join(', '),
+      },
+    );
 
     if (modified || record.hasSidecarOnDisk) {
       const xmpPayload: XmpPayload = {
@@ -435,7 +501,10 @@ export class PhotoLoaderService {
         title: record.title || undefined,
         description: record.description || undefined,
         creator: record.creator || undefined,
-        keywords: record.keywords && record.keywords.length > 0 ? record.keywords : undefined,
+        keywords:
+          record.keywords && record.keywords.length > 0
+            ? record.keywords
+            : undefined,
         edits: record.edits,
       };
 
@@ -453,7 +522,10 @@ export class PhotoLoaderService {
     return false;
   }
 
-  public getExportRenderer(): { canvas: HTMLCanvasElement; renderer: WebGLRenderer } {
+  public getExportRenderer(): {
+    canvas: HTMLCanvasElement;
+    renderer: WebGLRenderer;
+  } {
     if (!this.exportCanvas || !this.exportRenderer) {
       this.exportCanvas = document.createElement('canvas');
       this.exportCanvas.style.display = 'none';
@@ -469,22 +541,37 @@ export class PhotoLoaderService {
     activeEdits: EditSettingsPayload | null,
     getDefaultEdits: (isRaw: boolean) => EditSettingsPayload,
     options: ExportExecutionOptions,
-    onProgress: (status: string, current: number, total: number) => void
+    onProgress: (status: string, current: number, total: number) => void,
   ): Promise<{ success: boolean; message: string }> {
     if (photos.length === 0) {
       return { success: false, message: 'No photos selected for export.' };
     }
 
-    const { canvas: expCanvas, renderer: expRenderer } = this.getExportRenderer();
+    const { canvas: expCanvas, renderer: expRenderer } =
+      this.getExportRenderer();
     let successCount = 0;
     let lastOutputPath = '';
 
     for (let i = 0; i < photos.length; i++) {
       const entry = photos[i];
-      onProgress(`Exporting ${i + 1} of ${photos.length}...`, i + 1, photos.length);
+      onProgress(
+        `Exporting ${i + 1} of ${photos.length}...`,
+        i + 1,
+        photos.length,
+      );
 
       const fileExt = entry.name.split('.').pop()?.toLowerCase() || '';
-      const isRawFile = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef', 'raf'].includes(fileExt);
+      const isRawFile = [
+        'cr2',
+        'cr3',
+        'nef',
+        'arw',
+        'dng',
+        'rw2',
+        'orf',
+        'pef',
+        'raf',
+      ].includes(fileExt);
 
       let photoEdits: EditSettingsPayload;
       if (entry.name === activeEntryName && activeEdits) {
@@ -494,7 +581,8 @@ export class PhotoLoaderService {
         if (sidecar.xmp?.edits) {
           photoEdits = { ...getDefaultEdits(isRawFile), ...sidecar.xmp.edits };
         } else {
-          photoEdits = this.getCachedEdits(entry.name) ?? getDefaultEdits(isRawFile);
+          photoEdits =
+            this.getCachedEdits(entry.name) ?? getDefaultEdits(isRawFile);
         }
       }
 
@@ -504,11 +592,17 @@ export class PhotoLoaderService {
         const arrayBuffer = await entry.file.arrayBuffer();
         const res = await this.decodeInWorker(arrayBuffer, entry.name, true);
         if (res.linearData && res.linearW && res.linearH) {
-          expRenderer.uploadLinearRec2020Texture(res.linearW, res.linearH, res.linearData);
+          expRenderer.uploadLinearRec2020Texture(
+            res.linearW,
+            res.linearH,
+            res.linearData,
+          );
           texW = res.linearW;
           texH = res.linearH;
         } else {
-          const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
+          const blob = new Blob([new Uint8Array(res.imageSlice)], {
+            type: 'image/jpeg',
+          });
           const imgBitmap = await createImageBitmap(blob);
           expRenderer.uploadImage(imgBitmap);
           texW = imgBitmap.width;
@@ -517,7 +611,9 @@ export class PhotoLoaderService {
       } else {
         const arrayBuffer = await entry.file.arrayBuffer();
         const res = await this.decodeInWorker(arrayBuffer, entry.name, false);
-        const blob = new Blob([new Uint8Array(res.imageSlice)], { type: 'image/jpeg' });
+        const blob = new Blob([new Uint8Array(res.imageSlice)], {
+          type: 'image/jpeg',
+        });
         const imgBitmap = await createImageBitmap(blob);
         expRenderer.uploadImage(imgBitmap);
         texW = imgBitmap.width;
@@ -538,7 +634,10 @@ export class PhotoLoaderService {
           const lut = this.bridge.evaluateCurves(photoEdits.curves);
           expRenderer.updateToneCurvesLut(lut);
         } catch (err) {
-          console.warn('[PhotoLoaderService] Could not evaluate curve LUT:', err);
+          console.warn(
+            '[PhotoLoaderService] Could not evaluate curve LUT:',
+            err,
+          );
         }
       }
 
@@ -551,15 +650,22 @@ export class PhotoLoaderService {
       const cropT = photoEdits.crop_top ?? 0.0;
       const cropR = photoEdits.crop_right ?? 1.0;
       const cropB = photoEdits.crop_bottom ?? 1.0;
-      const effectiveW = Math.max(1, Math.round(baseW * Math.max(0.01, cropR - cropL)));
-      const effectiveH = Math.max(1, Math.round(baseH * Math.max(0.01, cropB - cropT)));
+      const effectiveW = Math.max(
+        1,
+        Math.round(baseW * Math.max(0.01, cropR - cropL)),
+      );
+      const effectiveH = Math.max(
+        1,
+        Math.round(baseH * Math.max(0.01, cropB - cropT)),
+      );
 
       let targetW = effectiveW;
       let targetH = effectiveH;
       let maxDim: number | null = null;
       if (options.sizeOption === '2048') maxDim = 2048;
       else if (options.sizeOption === '3840') maxDim = 3840;
-      else if (options.sizeOption === 'Custom') maxDim = options.customDimension;
+      else if (options.sizeOption === 'Custom')
+        maxDim = options.customDimension;
 
       if (maxDim && (effectiveW > maxDim || effectiveH > maxDim)) {
         if (effectiveW >= effectiveH) {
@@ -571,7 +677,10 @@ export class PhotoLoaderService {
         }
       }
 
-      const maxGl = expRenderer.glContext.getParameter(expRenderer.glContext.MAX_VIEWPORT_DIMS)?.[0] || 8192;
+      const maxGl =
+        expRenderer.glContext.getParameter(
+          expRenderer.glContext.MAX_VIEWPORT_DIMS,
+        )?.[0] || 8192;
       if (targetW > maxGl || targetH > maxGl) {
         const scale = maxGl / Math.max(targetW, targetH);
         targetW = Math.max(1, Math.round(targetW * scale));
@@ -582,7 +691,8 @@ export class PhotoLoaderService {
       expCanvas.height = targetH;
       expRenderer.render(photoEdits, false, 1.0, { x: 0, y: 0 }, false);
 
-      const stem = entry.name.substring(0, entry.name.lastIndexOf('.')) || entry.name;
+      const stem =
+        entry.name.substring(0, entry.name.lastIndexOf('.')) || entry.name;
       const ext = options.format === 'TIFF' ? 'tiff' : 'jpg';
       const filename = `${stem}_FirstProof.${ext}`;
       lastOutputPath = filename;
@@ -591,25 +701,33 @@ export class PhotoLoaderService {
       if (options.format === 'TIFF') {
         const pixels = expRenderer.readRgbaPixels(targetW, targetH);
         const tiffBytes = encodeTiff(targetW, targetH, pixels);
-        fileBlob = new Blob([tiffBytes.buffer as ArrayBuffer], { type: 'image/tiff' });
+        fileBlob = new Blob([tiffBytes.buffer as ArrayBuffer], {
+          type: 'image/tiff',
+        });
       } else {
         fileBlob = await new Promise<Blob>((resolve, reject) => {
           expCanvas.toBlob(
             (b) => (b ? resolve(b) : reject(new Error('Canvas toBlob failed'))),
             'image/jpeg',
-            options.quality / 100
+            options.quality / 100,
           );
         });
       }
 
       if (options.destinationDirHandle) {
         try {
-          const fileHandle = await options.destinationDirHandle.getFileHandle(filename, { create: true });
+          const fileHandle = await options.destinationDirHandle.getFileHandle(
+            filename,
+            { create: true },
+          );
           const writable = await fileHandle.createWritable();
           await writable.write(fileBlob);
           await writable.close();
         } catch (writeErr) {
-          console.warn('[PhotoLoaderService] File system write failed, falling back to download:', writeErr);
+          console.warn(
+            '[PhotoLoaderService] File system write failed, falling back to download:',
+            writeErr,
+          );
           this.triggerDownload(fileBlob, filename);
         }
       } else {

@@ -5,9 +5,13 @@
  * and automated test battery execution between the WebGL GPU canvas and Reference CPU Export.
  */
 
-import { ParityHarness, ParityAuditResult, ParityTestCase } from './ParityHarness';
-import { WebGLRenderer } from '../WebGLRenderer';
-import { EditSettingsPayload } from '../WasmBridge';
+import type { EditSettingsPayload } from '../WasmBridge';
+import type { WebGLRenderer } from '../WebGLRenderer';
+import {
+  type ParityAuditResult,
+  ParityHarness,
+  type ParityTestCase,
+} from './ParityHarness';
 
 export interface ActivePhotoInput {
   isLinearRec2020: boolean;
@@ -33,7 +37,7 @@ export class ParityModal {
   public init(
     activeRenderer: WebGLRenderer,
     getActiveEdits: () => EditSettingsPayload,
-    getActivePhoto?: () => ActivePhotoInput | null
+    getActivePhoto?: () => ActivePhotoInput | null,
   ) {
     this.activeRenderer = activeRenderer;
     this.getActiveEdits = getActiveEdits;
@@ -151,9 +155,11 @@ export class ParityModal {
     this.results = this.harness.runFullAudit();
     this.renderTableRows();
 
-    const passAll = this.results.every(r => r.pass);
+    const passAll = this.results.every((r) => r.pass);
     if (badge) {
-      badge.innerText = passAll ? '✓ 100% Bit-Level Parity Pass' : '⚠ Parity Divergence Detected';
+      badge.innerText = passAll
+        ? '✓ 100% Bit-Level Parity Pass'
+        : '⚠ Parity Divergence Detected';
       badge.className = `parity-summary-pill ${passAll ? 'pass' : 'fail'}`;
     }
 
@@ -195,10 +201,13 @@ export class ParityModal {
     });
 
     const titleEl = document.getElementById('parity-inspect-title');
-    if (titleEl) titleEl.innerText = `${res.testName} — ${res.pass ? 'Exact Match' : 'Divergence Analysis'}`;
+    if (titleEl)
+      titleEl.innerText = `${res.testName} — ${res.pass ? 'Exact Match' : 'Divergence Analysis'}`;
 
     // Draw Heatmap
-    const canvas = document.getElementById('parity-heatmap-canvas') as HTMLCanvasElement;
+    const canvas = document.getElementById(
+      'parity-heatmap-canvas',
+    ) as HTMLCanvasElement;
     if (canvas && res.heatmapData) {
       canvas.width = res.heatmapData.width;
       canvas.height = res.heatmapData.height;
@@ -219,7 +228,8 @@ export class ParityModal {
     const coordEl = document.getElementById('worst-pixel-coord');
     const glEl = document.getElementById('worst-gl-rgb');
     const expEl = document.getElementById('worst-exp-rgb');
-    if (coordEl) coordEl.innerText = `(${res.worstPixelCoord[0]}, ${res.worstPixelCoord[1]})`;
+    if (coordEl)
+      coordEl.innerText = `(${res.worstPixelCoord[0]}, ${res.worstPixelCoord[1]})`;
     if (glEl) glEl.innerText = `rgb(${res.worstGlRgb.join(', ')})`;
     if (expEl) expEl.innerText = `rgb(${res.worstExportRgb.join(', ')})`;
   }

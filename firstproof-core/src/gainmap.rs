@@ -241,10 +241,9 @@ pub fn extract_gain_map(jpeg_bytes: &[u8]) -> Option<(GainMapMetadata, Vec<u8>, 
                 break;
             }
         }
-        if let Some(offset) = found_offset {
+        {
+            let offset = found_offset?;
             &jpeg_bytes[offset..]
-        } else {
-            return None;
         }
     };
     

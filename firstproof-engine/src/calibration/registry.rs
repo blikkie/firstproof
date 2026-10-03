@@ -4,6 +4,8 @@
 //! In-memory Camera Calibration Database mapping camera make and model
 //! to authoritative physical sensor properties, eliminating fragile string heuristics.
 
+#![allow(clippy::approx_constant)]
+
 use super::models::CameraCalibration;
 use crate::raw::CfaPattern;
 

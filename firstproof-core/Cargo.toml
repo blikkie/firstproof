@@ -3,6 +3,9 @@ name = "firstproof-core"
 version = "0.1.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [lib]
 crate-type = ["staticlib", "cdylib", "rlib"]
 name = "firstproof_core"

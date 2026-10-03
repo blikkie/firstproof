@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ColorProfileMode {
+    #[default]
     AgxVivid,
     AgxFilmic,
     CameraStandard,
@@ -11,41 +13,32 @@ pub enum ColorProfileMode {
     CameraVivid,
 }
 
-impl Default for ColorProfileMode {
-    fn default() -> Self {
-        Self::AgxVivid
-    }
-}
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ExportColorSpace {
+    #[default]
     Srgb,
     DisplayP3,
 }
 
-impl Default for ExportColorSpace {
-    fn default() -> Self {
-        Self::Srgb
-    }
-}
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ExportRenderingIntent {
     Perceptual,
+    #[default]
     RelativeColorimetric,
 }
 
-impl Default for ExportRenderingIntent {
-    fn default() -> Self {
-        Self::RelativeColorimetric
-    }
-}
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum EmulsionArchetype {
+    #[default]
     None,
     RochesterPortrait400,  // C-41 Color Negative (Rochester NY)
     AshigaraChrome50,      // E-6 Color Reversal (Minamiashigara, Japan)
@@ -56,11 +49,6 @@ pub enum EmulsionArchetype {
     CambridgeDiffusion100, // Instant Dye Diffusion Reversal (Cambridge MA)
 }
 
-impl Default for EmulsionArchetype {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 impl EmulsionArchetype {
     #[inline]
@@ -98,17 +86,14 @@ impl EmulsionArchetype {
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum EmulsionFormat {
+    #[default]
     Format35mm,
     Format120,
     Format4x5,
 }
 
-impl Default for EmulsionFormat {
-    fn default() -> Self {
-        Self::Format35mm
-    }
-}
 
 impl EmulsionFormat {
     #[inline]
@@ -131,7 +116,9 @@ impl EmulsionFormat {
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum PrintMediaMode {
+    #[default]
     None,
     ChromogenicTypeC,
     SilverDyeBleach,
@@ -142,11 +129,6 @@ pub enum PrintMediaMode {
     Cyanotype,
 }
 
-impl Default for PrintMediaMode {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 impl PrintMediaMode {
     #[inline]
@@ -190,7 +172,9 @@ impl PrintMediaMode {
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum EnlargerFilterMode {
+    #[default]
     NeutralPanchromatic,
     YellowK2,
     Orange16,
@@ -199,11 +183,6 @@ pub enum EnlargerFilterMode {
     Orthochromatic,
 }
 
-impl Default for EnlargerFilterMode {
-    fn default() -> Self {
-        Self::NeutralPanchromatic
-    }
-}
 
 impl EnlargerFilterMode {
     #[inline]

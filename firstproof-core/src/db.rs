@@ -699,20 +699,21 @@ impl Database {
         let now = current_timestamp();
         let mut count = 0u32;
         {
-            if update_rating && status.is_some() {
-                let st = status.unwrap();
-                let mut stmt = tx.prepare_cached(
-                    "UPDATE photos SET rating = ?1, status = ?2, updated_at = ?3 WHERE file_path = ?4",
-                )?;
-                for p in file_paths {
-                    count += stmt.execute(params![rating, st, now, p])? as u32;
-                }
-            } else if update_rating {
-                let mut stmt = tx.prepare_cached(
-                    "UPDATE photos SET rating = ?1, updated_at = ?2 WHERE file_path = ?3",
-                )?;
-                for p in file_paths {
-                    count += stmt.execute(params![rating, now, p])? as u32;
+            if update_rating {
+                if let Some(st) = status {
+                    let mut stmt = tx.prepare_cached(
+                        "UPDATE photos SET rating = ?1, status = ?2, updated_at = ?3 WHERE file_path = ?4",
+                    )?;
+                    for p in file_paths {
+                        count += stmt.execute(params![rating, st, now, p])? as u32;
+                    }
+                } else {
+                    let mut stmt = tx.prepare_cached(
+                        "UPDATE photos SET rating = ?1, updated_at = ?2 WHERE file_path = ?3",
+                    )?;
+                    for p in file_paths {
+                        count += stmt.execute(params![rating, now, p])? as u32;
+                    }
                 }
             } else if let Some(st) = status {
                 let mut stmt = tx.prepare_cached(

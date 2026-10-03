@@ -1,10 +1,10 @@
 /**
  * High-Resolution Rendered Intermediate Texture Cache for First Proof Web
- * 
+ *
  * Implements 1:1 parity with macOS ThumbnailCache.shared.intermediateImage.
  * Caches high-resolution developed frames (already having exposure, AgX, curves,
  * and geometry baked into pixels) in GPU-backed ImageBitmaps.
- * 
+ *
  * When navigating back to previously viewed or pre-rendered photos:
  * - 0ms instant display from memory
  * - Passed to WebGL with u_isIntermediate = 1 (bypassing fragment color transforms
@@ -63,7 +63,10 @@ export class IntermediateTextureCache {
   /**
    * Retrieves a cached high-resolution intermediate bitmap matching the file and edits
    */
-  public static get(filePath: string, edits?: EditSettingsPayload): CachedIntermediate | null {
+  public static get(
+    filePath: string,
+    edits?: EditSettingsPayload,
+  ): CachedIntermediate | null {
     const entry = this.cache.get(filePath);
     if (!entry) return null;
 
@@ -81,7 +84,11 @@ export class IntermediateTextureCache {
   /**
    * Stores a newly rendered intermediate bitmap in the LRU cache
    */
-  public static set(filePath: string, edits: EditSettingsPayload, bitmap: ImageBitmap): void {
+  public static set(
+    filePath: string,
+    edits: EditSettingsPayload,
+    bitmap: ImageBitmap,
+  ): void {
     // Evict oldest entries if cache exceeds capacity
     if (this.cache.size >= this.MAX_ENTRIES && !this.cache.has(filePath)) {
       let oldestKey: string | null = null;

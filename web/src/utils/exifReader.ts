@@ -4,8 +4,15 @@
  * orientation tag (1-8) via shared WASM `extract_metadata_from_bytes`
  * without loading or decoding the entire RAW file.
  */
-import initWasm, { extract_metadata_from_bytes, decode_exif_orientation } from 'firstproof-wasm';
-import type { ImageMetadataRecord, ExifOrientationRecord } from 'firstproof-wasm';
+
+import type {
+  ExifOrientationRecord,
+  ImageMetadataRecord,
+} from 'firstproof-wasm';
+import initWasm, {
+  decode_exif_orientation,
+  extract_metadata_from_bytes,
+} from 'firstproof-wasm';
 
 export async function readExifOrientationFromBlob(blob: Blob): Promise<number> {
   try {
@@ -15,7 +22,12 @@ export async function readExifOrientationFromBlob(blob: Blob): Promise<number> {
 
     await initWasm();
     const meta: ImageMetadataRecord = extract_metadata_from_bytes(bytes);
-    if (meta && typeof meta.orientation === 'number' && meta.orientation >= 1 && meta.orientation <= 8) {
+    if (
+      meta &&
+      typeof meta.orientation === 'number' &&
+      meta.orientation >= 1 &&
+      meta.orientation <= 8
+    ) {
       return meta.orientation;
     }
   } catch (_) {

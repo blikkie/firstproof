@@ -14,6 +14,7 @@ use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
 use firstproof_core::export::decode::f16_to_f32;
 
 #[test]
+#[ignore = "Slow real RAW disk decode"]
 fn test_high_iso_viewport_chroma_parity_real_file() {
     let dng_path = Path::new("/home/remco/Pictures/Lightroom/from laptop/2015/2015-07-18/_MG_2565.dng");
     if !dng_path.exists() {
