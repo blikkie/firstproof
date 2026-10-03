@@ -253,7 +253,9 @@ pub fn apply_recording_emulsion(
         }
 
         // 8. Leverkusen Portrait 160 (Agfa Agfacolor / Vista, Leverkusen, Germany)
-        // Substantive European dye couplers, earthy ochre midtones, soft pastel greens.
+        // Technical Reference: Agfa-Gevaert Technical Data Sheet F-PF4-E ("Agfacolor Portrait 160 / Optima 160"), Status M Densitometry;
+        // Agfa Fischer Substantive Color Coupler Patent (DE Patent 253332 / US Patent 2,179,244).
+        // Characteristics: Substantive European dye couplers, earthy ochre midtones, soft pastel greens, muted shadow saturation.
         EmulsionArchetype::LeverkusenPortrait160 => {
             let (r_dir, g_dir, b_dir) = apply_dir_chemical_coupling(
                 cur_r, cur_g, cur_b,
@@ -269,7 +271,9 @@ pub fn apply_recording_emulsion(
         }
 
         // 9. Ashigara Portrait 400 (Fujicolor Pro 400H, Minamiashigara, Japan)
-        // Patented 4th color layer (cyan-sensitive inter-layer) suppressing fluorescent cast; airy skin tones.
+        // Technical Reference: Fujifilm Technical Data Sheet AF3-0242E ("Fujicolor PRO 400H Professional") &
+        // US Patent 4,840,880 ("Silver halide color photographic material having a fourth color-sensitive layer", Takada et al., Fuji Photo Film Co.).
+        // Characteristics: Patented 4th color layer (cyan-sensitive inter-layer) suppressing fluorescent cast; airy skin tones.
         EmulsionArchetype::AshigaraPortrait400 => {
             let (r_dir, g_dir, b_dir) = apply_dir_chemical_coupling(
                 cur_r, cur_g, cur_b,
@@ -285,7 +289,8 @@ pub fn apply_recording_emulsion(
         }
 
         // 10. Liguria Cinema 80 (Ferrania P30, Cairo Montenotte, Italy)
-        // 1960s Italian Neorealist cinema stock; pure silver monochrome, punchy microcontrast.
+        // Technical Reference: FILM Ferrania Technical Data Sheet P30 ("P30 Alpha 80 ISO Panchromatic Motion Picture Film"), Ferrania Research Laboratories.
+        // Characteristics: 1960s Italian Neorealist cinema stock; pure silver monochrome, punchy microcontrast, velvety Dmax.
         EmulsionArchetype::LiguriaCinema80 => {
             let (wr, wg, wb) = filter_mode.spectral_weights();
             let pan_lum = wr * cur_r + wg * cur_g + wb * cur_b;
@@ -295,7 +300,8 @@ pub fn apply_recording_emulsion(
         }
 
         // 11. Baoding Silver 100 (Lucky SHD 100, Baoding, China)
-        // Domestic cubic silver halide; absence of anti-halation undercoat produces specular halation bloom.
+        // Technical Reference: China Lucky Film Corporation Technical Specification ("Lucky SHD 100 Panchromatic Black and White Film", GB/T 13982 standard).
+        // Characteristics: Domestic cubic silver halide; absence of anti-halation undercoat (AHU) produces specular halation bloom around highlights.
         EmulsionArchetype::BaodingSilver100 => {
             let (wr, wg, wb) = filter_mode.spectral_weights();
             let pan_lum = wr * cur_r + wg * cur_g + wb * cur_b;

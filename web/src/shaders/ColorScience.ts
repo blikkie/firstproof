@@ -459,33 +459,32 @@ vec3 applyRecordingEmulsion(vec3 rgb, int archetype, float pushPullEv, int filte
             min(curv.g + baseRefl * 1.00, 2.0),
             min(curv.b + baseRefl * 0.94, 2.0)
         );
-    } else if (archetype == 8) { // Leverkusen Portrait 160
-        vec3 dir = applyDirChemicalCoupling(cur, 0.02, 0.03, -0.06, 0.01, 0.03, -0.04);
+    } else if (archetype == 8) { // Leverkusen Portrait 160 (Agfa Agfacolor / Vista, Leverkusen, Germany)
+        vec3 dir = applyDirChemicalCoupling(cur, -0.05, 0.01, -0.06, 0.02, 0.02, -0.04);
         return vec3(
-            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.r, 0.88, 0.32, 0.10), 0.12, 0.08),
-            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.g, 0.90, 0.30, 0.09), 0.10, 0.07),
-            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.b, 0.92, 0.28, 0.08), 0.08, 0.06)
+            applyEmulsionSCurve(dir.r, 0.06, -0.02),
+            applyEmulsionSCurve(dir.g, 0.06, -0.02),
+            applyEmulsionSCurve(dir.b, 0.06, -0.02)
         );
-    } else if (archetype == 9) { // Ashigara Portrait 400
-        vec3 dir = applyDirChemicalCoupling(cur, -0.06, 0.01, -0.08, 0.02, 0.01, -0.06);
+    } else if (archetype == 9) { // Ashigara Portrait 400 (Fujicolor Pro 400H, Minamiashigara, Japan)
+        vec3 dir = applyDirChemicalCoupling(cur, -0.06, 0.02, -0.12, 0.04, 0.03, -0.08);
         return vec3(
-            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.r, 0.94, 0.24, 0.14), 0.16, 0.10),
-            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.g, 0.94, 0.24, 0.14), 0.16, 0.10),
-            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.b, 0.92, 0.26, 0.15), 0.14, 0.09)
+            applyEmulsionSCurve(dir.r, 0.08, 0.06),
+            applyEmulsionSCurve(dir.g, 0.08, 0.06),
+            applyEmulsionSCurve(dir.b, 0.08, 0.06)
         );
-    } else if (archetype == 10) { // Liguria Cinema 80 (B&W)
+    } else if (archetype == 10) { // Liguria Cinema 80 (Ferrania P30, Cairo Montenotte, Italy)
         vec3 w = getEnlargerFilterWeights(filterMode);
-        float rawLum = dot(cur, w);
-        float silver = applyFilmCharacteristicCurve(rawLum, 1.15, 0.16, 0.22);
-        float sLum = applyEmulsionSCurve(silver, 0.18, -0.06);
-        return vec3(sLum);
-    } else if (archetype == 11) { // Baoding Silver 100 (B&W Halation)
+        float panLum = dot(cur, w);
+        float mono = applyEmulsionSCurve(panLum, 0.32, -0.08);
+        return vec3(mono);
+    } else if (archetype == 11) { // Baoding Silver 100 (Lucky SHD 100, Baoding, China)
         vec3 w = getEnlargerFilterWeights(filterMode);
-        float rawLum = dot(cur, w);
-        float silver = applyFilmCharacteristicCurve(rawLum, 0.92, 0.36, 0.12);
-        float bloom = 0.06 * pow(max(silver - 0.70, 0.0) / 0.30, 2.0);
-        float sLum = clamp(applyEmulsionSCurve(silver, 0.10, 0.12) + bloom, 0.0, 1.0);
-        return vec3(sLum);
+        float panLum = dot(cur, w);
+        float baseMono = applyEmulsionSCurve(panLum, 0.18, 0.10);
+        float bloom = (panLum > 0.85) ? (0.08 * pow((panLum - 0.85) / 0.15, 2.0)) : 0.0;
+        float mono = min(baseMono + bloom, 1.0);
+        return vec3(mono);
     }
     return cur;
 }

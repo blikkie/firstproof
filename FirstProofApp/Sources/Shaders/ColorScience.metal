@@ -735,7 +735,7 @@ inline float3 applyRecordingEmulsion(
             float baseRefl = 0.025 * max(1.0 - lum, 0.0);
             return min(curv + baseRefl * float3(1.02, 1.00, 0.94), 2.0);
         }
-        case 8: { // LeverkusenPortrait160 (Agfa Agfacolor / Vista, Leverkusen, Germany)
+        case 8: { // LeverkusenPortrait160 - Ref: Agfa TDS F-PF4-E (Optima 160) & Fischer Patent US 2,179,244
             float3 dir = applyDirChemicalCoupling(curRgb, -0.05, 0.01, -0.06, 0.02, 0.02, -0.04);
             return float3(
                 applyEmulsionSCurve(dir.r, 0.06, -0.02),
@@ -743,7 +743,7 @@ inline float3 applyRecordingEmulsion(
                 applyEmulsionSCurve(dir.b, 0.06, -0.02)
             );
         }
-        case 9: { // AshigaraPortrait400 (Fujicolor Pro 400H, Minamiashigara, Japan)
+        case 9: { // AshigaraPortrait400 - Ref: Fujifilm TDS AF3-0242E (PRO 400H) & US Patent 4,840,880 (4th Layer)
             float3 dir = applyDirChemicalCoupling(curRgb, -0.06, 0.02, -0.12, 0.04, 0.03, -0.08);
             return float3(
                 applyEmulsionSCurve(dir.r, 0.08, 0.06),
@@ -751,13 +751,13 @@ inline float3 applyRecordingEmulsion(
                 applyEmulsionSCurve(dir.b, 0.08, 0.06)
             );
         }
-        case 10: { // LiguriaCinema80 (Ferrania P30, Cairo Montenotte, Italy)
+        case 10: { // LiguriaCinema80 - Ref: FILM Ferrania TDS P30 (Cairo Montenotte Laboratories)
             float3 w = getEnlargerFilterWeights(filterMode);
             float panLum = dot(curRgb, w);
             float mono = applyEmulsionSCurve(panLum, 0.32, -0.08);
             return float3(mono);
         }
-        case 11: { // BaodingSilver100 (Lucky SHD 100, Baoding, China)
+        case 11: { // BaodingSilver100 - Ref: China Lucky Film Corp Spec (Lucky SHD 100, GB/T 13982)
             float3 w = getEnlargerFilterWeights(filterMode);
             float panLum = dot(curRgb, w);
             float baseMono = applyEmulsionSCurve(panLum, 0.18, 0.10);

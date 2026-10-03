@@ -24,17 +24,21 @@
   - **Audit for Arbitrary Constants & Heuristics**: Rigorously inspect every camera processing, color science, and exposure adjustment in the diff for arbitrary magic numbers, localized scalar multipliers, or piecewise if/else heuristics. Any new numerical parameter must trace directly to published sensitometric standards (e.g. DNG specification, Troy Sobotka's AgX specification, CIE photopic luminance) rather than trial-and-error curve fitting.
 
 - **Verification Gatekeeping & Harness Delegation Framework**:
-  - **Harness-First Delegation**: When a task's changes are 100% covered and asserted by automated computational feedback sensors in `./scripts/check.sh` (`make check`, Rust unit tests, architectural fitness functions, Vitest behavioral tests, parity assertions), do NOT block the user with ceremonial manual testing pauses. Catch regressions in the fast inner loop and proceed directly to the adversarial code review and commit tour.
-  - **When Manual Verification is Mandated**: An explicit pause and manual verification prompt is required ONLY when changes introduce or alter:
-    1. Interactive pointer gestures, dragging, or scrubbing behaviors (e.g. crop handles, slider drag lifecycle, pinch-to-zoom).
-    2. Visual shader aesthetics or perceptual rendering (e.g. tone curves, split toning, film grain look, print media paper textures) where human visual inspection is essential.
-    3. Host windowing or OS integration (e.g. AppKit first responder, native file dialogs, window resize behavior).
-  - When manual verification is mandated, prompt the user with concrete verification steps and pause until confirmed before generating the commit tour.
+  - **Always Tour Before Committing**: Never execute `git commit` before presenting the educational tour and review of changes to the user. The tour must always be delivered first so the user knows exactly what was built, why each change was made, and what to verify before committing.
+  - **Mandatory Manual Testing Instructions for Perceptual & Visual Changes**:
+    - Automated sensors in `./scripts/check.sh` (`make check`, Rust unit tests, architectural fitness functions, Vitest behavioral tests, parity assertions) catch computational and mathematical regressions in the fast inner loop.
+    - However, whenever changes introduce or modify **color rendering formulations, visual shader aesthetics, tone curves, emulsion/print media curves, film grain look, or interactive pointer gestures/windowing**, ALWAYS provide explicit, actionable manual testing instructions in the tour:
+      1. Which test fixtures, camera profiles, or real RAW captures to load.
+      2. Which specific sliders, workspace tabs, or emulsion/print archetypes to toggle or scrub.
+      3. What concrete perceptual rendering behaviors, tonal roll-offs, or optical artifacts to inspect in the viewport.
+    - Never skip these verification instructions even when all automated parity tests pass, because human visual inspection remains essential for perceptual color science.
 
-- **Educational Commit Tours (No Quizzes)**: Before every commit/PR check-in (following harness verification or confirmed manual verification), provide a tour of the code changes:
+- **Educational Commit Tours (No Quizzes)**: Always present the tour of changes BEFORE requesting or creating any commit:
   - Focus strictly on what was built and explain the concrete rationale behind each change made.
   - Whenever a new concept, system primitive, or pattern is introduced into the codebase, provide an educational deep-dive explaining how that concept works under the hood.
+  - Pair the tour with the concrete manual verification instructions whenever rendering or interactivity was touched.
   - Do not include quizzes or external language comparisons unless directly relevant to understanding the architecture.
+  - Await user review and confirmation before executing the commit.
 
 - **Desktop Keyboard Architecture & First-Responder Shielding**:
   - Single-key shortcuts (`1`..`5` for ratings, `P`/`X`/`U` for flags, `C` for crop, `Z` for zoom, `[`/`]` for rotation, `\` for original peek) must **never** fire while the user is actively typing in editable text fields (e.g. Title, Caption, Keywords, Creator in the metadata panel).
