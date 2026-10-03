@@ -5,13 +5,13 @@ use image::{ColorType, ImageBuffer, Rgb, RgbImage};
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::tiff::TiffEncoder;
 
-use crate::{EditSettings, ExportColorSpace, ExportRenderingIntent};
+use crate::{DemosaicQuality, EditSettings, ExportColorSpace, ExportRenderingIntent, RenderTier};
 use crate::color::linear_to_srgb_gamma;
-use super::decode::{decode_image, sample_bilinear};
-use super::pipeline::{apply_detail_and_sharpening_rgb, apply_edits};
+use super::decode::{decode_image_with_quality, sample_bilinear};
+use super::pipeline::{apply_detail_and_sharpening_rgb, apply_edits_with_tier};
 use super::icc::{create_display_p3_profile, inject_icc_profile_into_jpeg};
 
-/// Exports an edited photo to JPEG or 16-bit TIFF on disk with optional resizing, color space management, and Lensfun distortion correction.
+/// Exports an edited photo to JPEG or true 16-bit TIFF on disk with default standard demosaicing.
 pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     input_path: P,
     output_path: Q,
@@ -23,11 +23,42 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     rendering_intent: ExportRenderingIntent,
     ultra_hdr: bool,
 ) -> Result<(), String> {
+    export_photo_file_advanced(
+        input_path,
+        output_path,
+        edits,
+        lens_distortion,
+        quality,
+        max_dimension,
+        color_space,
+        rendering_intent,
+        ultra_hdr,
+        DemosaicQuality::Standard,
+        false,
+        RenderTier::ArchivalExport,
+    )
+}
+
+/// Exports an edited photo to JPEG or true 16-bit TIFF with selectable RenderTier, demosaicing precision, and chemical edge diffusion.
+pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
+    input_path: P,
+    output_path: Q,
+    edits: &EditSettings,
+    lens_distortion: Option<(&[f32], &str)>,
+    quality: u8,
+    max_dimension: Option<u32>,
+    color_space: ExportColorSpace,
+    rendering_intent: ExportRenderingIntent,
+    ultra_hdr: bool,
+    demosaic_quality: DemosaicQuality,
+    chemical_edge_diffusion: bool,
+    render_tier: RenderTier,
+) -> Result<(), String> {
     let input_path = input_path.as_ref();
     let output_path = output_path.as_ref();
     
-    let mut image = decode_image(input_path)?;
-    apply_edits(&mut image, edits);
+    let mut image = decode_image_with_quality(input_path, demosaic_quality)?;
+    apply_edits_with_tier(&mut image, edits, render_tier, chemical_edge_diffusion);
     
     let orig_width = image.width as u32;
     let orig_height = image.height as u32;
@@ -61,10 +92,18 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
         (effective_orig_w, effective_orig_h)
     };
     
-    // Build 8-bit RGB image buffer with geometric warp and bilinear filtering
-    let mut rgb_img: RgbImage = ImageBuffer::new(target_w, target_h);
-    let mut sdr_luma = if ultra_hdr { Vec::with_capacity((target_w * target_h) as usize) } else { Vec::new() };
-    let mut hdr_luma = if ultra_hdr { Vec::with_capacity((target_w * target_h) as usize) } else { Vec::new() };
+    let ext = output_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("jpg")
+        .to_lowercase();
+    let is_tiff = ext == "tif" || ext == "tiff";
+
+    // Build RGB image buffer with geometric warp and bilinear filtering
+    let mut rgb_img: RgbImage = if !is_tiff { ImageBuffer::new(target_w, target_h) } else { ImageBuffer::new(0, 0) };
+    let mut rgb16_img: ImageBuffer<Rgb<u16>, Vec<u16>> = if is_tiff { ImageBuffer::new(target_w, target_h) } else { ImageBuffer::new(0, 0) };
+    let mut sdr_luma = if ultra_hdr && !is_tiff { Vec::with_capacity((target_w * target_h) as usize) } else { Vec::new() };
+    let mut hdr_luma = if ultra_hdr && !is_tiff { Vec::with_capacity((target_w * target_h) as usize) } else { Vec::new() };
     
     let aspect_ratio = (orig_width as f32) / (orig_height as f32);
     let angle_rad = edits.crop_angle * std::f32::consts::PI / 180.0;
@@ -189,11 +228,11 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                 let (rr, gr, br) = sample_bilinear(&image, sx + r_step, sy);
                 let (rt, gt, bt) = sample_bilinear(&image, sx, sy - r_step);
                 let (rb, gb, bb) = sample_bilinear(&image, sx, sy + r_step);
-                let y_c = 0.2126 * r_lin + 0.7152 * g_lin + 0.0722 * b_lin;
-                let y_l = 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
-                let y_r = 0.2126 * rr + 0.7152 * gr + 0.0722 * br;
-                let y_t = 0.2126 * rt + 0.7152 * gt + 0.0722 * bt;
-                let y_b = 0.2126 * rb + 0.7152 * gb + 0.0722 * bb;
+                let y_c = 0.2627 * r_lin + 0.6780 * g_lin + 0.0593 * b_lin;
+                let y_l = 0.2627 * rl + 0.6780 * gl + 0.0593 * bl;
+                let y_r = 0.2627 * rr + 0.6780 * gr + 0.0593 * br;
+                let y_t = 0.2627 * rt + 0.6780 * gt + 0.0593 * bt;
+                let y_b = 0.2627 * rb + 0.6780 * gb + 0.0593 * bb;
                 if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
                     let (r_sharp, g_sharp, b_sharp) = apply_detail_and_sharpening_rgb(
                         r_lin, g_lin, b_lin,
@@ -226,24 +265,91 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
             let g_disp = linear_to_srgb_gamma(g_lin).clamp(0.0, 1.0);
             let b_disp = linear_to_srgb_gamma(b_lin).clamp(0.0, 1.0);
 
-            let srgb8 = [
-                (r_disp * 255.0).round() as u8,
-                (g_disp * 255.0).round() as u8,
-                (b_disp * 255.0).round() as u8,
-            ];
-            
-            rgb_img.put_pixel(tx, ty, Rgb(srgb8));
+            if is_tiff {
+                let r16 = (r_disp * 65535.0).round().clamp(0.0, 65535.0) as u16;
+                let g16 = (g_disp * 65535.0).round().clamp(0.0, 65535.0) as u16;
+                let b16 = (b_disp * 65535.0).round().clamp(0.0, 65535.0) as u16;
+                rgb16_img.put_pixel(tx, ty, Rgb([r16, g16, b16]));
+            } else {
+                let srgb8 = [
+                    (r_disp * 255.0).round().clamp(0.0, 255.0) as u8,
+                    (g_disp * 255.0).round().clamp(0.0, 255.0) as u8,
+                    (b_disp * 255.0).round().clamp(0.0, 255.0) as u8,
+                ];
+                rgb_img.put_pixel(tx, ty, Rgb(srgb8));
 
-            if ultra_hdr {
-                let y_sdr = 0.2126 * r_disp.clamp(0.0, 1.0) + 0.7152 * g_disp.clamp(0.0, 1.0) + 0.0722 * b_disp.clamp(0.0, 1.0);
-                let y_hdr = 0.2126 * r_lin.max(0.0) + 0.7152 * g_lin.max(0.0) + 0.0722 * b_lin.max(0.0);
-                sdr_luma.push(y_sdr);
-                hdr_luma.push(y_hdr);
+                if ultra_hdr {
+                    let y_sdr = 0.2627 * r_disp + 0.6780 * g_disp + 0.0593 * b_disp;
+                    let y_hdr = 0.2627 * r_lin.max(0.0) + 0.6780 * g_lin.max(0.0) + 0.0593 * b_lin.max(0.0);
+                    sdr_luma.push(y_sdr);
+                    hdr_luma.push(y_hdr);
+                }
             }
         }
     }
     
-    // Apply 90/180/270 degree rotation and horizontal/vertical flips
+    // Ensure parent directory exists
+    if let Some(parent) = output_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    if is_tiff {
+        // Apply 90/180/270 degree rotation and horizontal/vertical flips on 16-bit buffer
+        if edits.rotation != 0 || edits.flip_horizontal || edits.flip_vertical {
+            match edits.rotation {
+                90 => rgb16_img = image::imageops::rotate90(&rgb16_img),
+                180 => rgb16_img = image::imageops::rotate180(&rgb16_img),
+                270 => rgb16_img = image::imageops::rotate270(&rgb16_img),
+                _ => {}
+            }
+            if edits.flip_horizontal {
+                rgb16_img = image::imageops::flip_horizontal(&rgb16_img);
+            }
+            if edits.flip_vertical {
+                rgb16_img = image::imageops::flip_vertical(&rgb16_img);
+            }
+        }
+
+        let final_w = rgb16_img.width();
+        let final_h = rgb16_img.height();
+
+        let target_u16 = rgb16_img.into_raw();
+        let mut tiff_bytes = Vec::with_capacity(target_u16.len() * 2);
+        for val in target_u16 {
+            tiff_bytes.extend_from_slice(&val.to_le_bytes());
+        }
+
+        // Color Management in 16-bit: convert from working sRGB to target color space (Display P3) if requested
+        if color_space == ExportColorSpace::DisplayP3 {
+            let in_prof = lcms2::Profile::new_srgb();
+            if let Ok(p3_prof) = create_display_p3_profile() {
+                let intent = match rendering_intent {
+                    ExportRenderingIntent::Perceptual => lcms2::Intent::Perceptual,
+                    ExportRenderingIntent::RelativeColorimetric => lcms2::Intent::RelativeColorimetric,
+                };
+                if let Ok(transform) = lcms2::Transform::<u8, u8>::new(
+                    &in_prof,
+                    lcms2::PixelFormat::RGB_16,
+                    &p3_prof,
+                    lcms2::PixelFormat::RGB_16,
+                    intent,
+                ) {
+                    transform.transform_in_place(&mut tiff_bytes);
+                }
+            }
+        }
+
+        let file = File::create(output_path).map_err(|e| format!("Failed to create output file: {}", e))?;
+        let mut writer = BufWriter::new(file);
+        let encoder = TiffEncoder::new(&mut writer);
+        encoder
+            .encode(&tiff_bytes, final_w, final_h, ColorType::Rgb16)
+            .map_err(|e| format!("Failed to encode 16-bit TIFF: {}", e))?;
+
+        return Ok(());
+    }
+
+    // Apply 90/180/270 degree rotation and horizontal/vertical flips on 8-bit buffer
     if edits.rotation != 0 || edits.flip_horizontal || edits.flip_vertical {
         match edits.rotation {
             90 => rgb_img = image::imageops::rotate90(&rgb_img),
@@ -261,11 +367,6 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     
     let final_w = rgb_img.width();
     let final_h = rgb_img.height();
-    
-    // Ensure parent directory exists
-    if let Some(parent) = output_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
 
     // Color Management: convert from working sRGB to target color space (Display P3) if requested
     let (target_rgb_bytes, icc_to_embed): (Vec<u8>, Vec<u8>) = if color_space == ExportColorSpace::DisplayP3 {
@@ -295,45 +396,30 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     } else {
         (rgb_img.as_raw().to_vec(), crate::color::SRGB_ICC_PROFILE.to_vec())
     };
-    
-    let ext = output_path
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("jpg")
-        .to_lowercase();
+
+    let mut jpeg_buf = Vec::new();
+    let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_buf, quality.clamp(1, 100));
+    encoder
+        .encode(&target_rgb_bytes, final_w, final_h, ColorType::Rgb8)
+        .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
         
-    if ext == "tif" || ext == "tiff" {
-        let file = File::create(output_path).map_err(|e| format!("Failed to create output file: {}", e))?;
-        let mut writer = BufWriter::new(file);
-        let encoder = TiffEncoder::new(&mut writer);
-        encoder
-            .encode(&target_rgb_bytes, final_w, final_h, ColorType::Rgb8)
-            .map_err(|e| format!("Failed to encode TIFF: {}", e))?;
+    let tagged_jpeg = inject_icc_profile_into_jpeg(&jpeg_buf, &icc_to_embed);
+    let final_jpeg_bytes = if ultra_hdr && !sdr_luma.is_empty() {
+        let meta = crate::gainmap::GainMapMetadata::default();
+        let (_gm_img, gm_jpeg) = crate::gainmap::generate_gain_map(
+            &sdr_luma,
+            &hdr_luma,
+            target_w as usize,
+            target_h as usize,
+            &meta,
+        );
+        crate::gainmap::package_ultra_hdr_jpeg(&tagged_jpeg, &gm_jpeg, &meta)
+            .unwrap_or(tagged_jpeg)
     } else {
-        let mut jpeg_buf = Vec::new();
-        let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_buf, quality.clamp(1, 100));
-        encoder
-            .encode(&target_rgb_bytes, final_w, final_h, ColorType::Rgb8)
-            .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
-            
-        let tagged_jpeg = inject_icc_profile_into_jpeg(&jpeg_buf, &icc_to_embed);
-        let final_jpeg_bytes = if ultra_hdr && !sdr_luma.is_empty() {
-            let meta = crate::gainmap::GainMapMetadata::default();
-            let (_gm_img, gm_jpeg) = crate::gainmap::generate_gain_map(
-                &sdr_luma,
-                &hdr_luma,
-                target_w as usize,
-                target_h as usize,
-                &meta,
-            );
-            crate::gainmap::package_ultra_hdr_jpeg(&tagged_jpeg, &gm_jpeg, &meta)
-                .unwrap_or(tagged_jpeg)
-        } else {
-            tagged_jpeg
-        };
-        let mut file = File::create(output_path).map_err(|e| format!("Failed to create output file: {}", e))?;
-        file.write_all(&final_jpeg_bytes).map_err(|e| format!("Failed to write JPEG: {}", e))?;
-    }
+        tagged_jpeg
+    };
+    let mut file = File::create(output_path).map_err(|e| format!("Failed to create output file: {}", e))?;
+    file.write_all(&final_jpeg_bytes).map_err(|e| format!("Failed to write JPEG: {}", e))?;
     
     Ok(())
 }

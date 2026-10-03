@@ -1,4 +1,5 @@
 import { FRAGMENT_SHADER_SOURCE as FRAGMENT_SHADER_SRC } from './shaders/FragmentShader';
+import { isCurveActive } from './utils/edits';
 import type { EditSettingsPayload, EvaluatedLut } from './WasmBridge';
 
 const VERTEX_SHADER_SRC = `#version 300 es
@@ -738,13 +739,13 @@ export class WebGLRenderer {
     gl.uniform1i(this.uLocs['u_isLinearRec2020'], this.isLinearRec2020 ? 1 : 0);
     gl.uniform1i(
       this.uLocs['u_hasMasterCurve'],
-      edits.curves.master.length > 2 ? 1 : 0,
+      isCurveActive(edits.curves?.master) ? 1 : 0,
     );
     gl.uniform1i(
       this.uLocs['u_hasRgbCurves'],
-      edits.curves.red.length > 2 ||
-        edits.curves.green.length > 2 ||
-        edits.curves.blue.length > 2
+      isCurveActive(edits.curves?.red) ||
+        isCurveActive(edits.curves?.green) ||
+        isCurveActive(edits.curves?.blue)
         ? 1
         : 0,
     );

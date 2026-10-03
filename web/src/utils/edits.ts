@@ -68,6 +68,29 @@ export function getDefaultEdits(isRaw: boolean = false): EditSettingsPayload {
   };
 }
 
+export function isCurveActive(pts?: { x: number; y: number }[]): boolean {
+  if (!pts || pts.length < 2) return false;
+  if (pts.length > 2) return true;
+  return (
+    Math.abs(pts[0].x - pts[0].y) > 1e-4 || Math.abs(pts[1].x - pts[1].y) > 1e-4
+  );
+}
+
+export function areCurvesActive(curves?: {
+  master?: { x: number; y: number }[];
+  red?: { x: number; y: number }[];
+  green?: { x: number; y: number }[];
+  blue?: { x: number; y: number }[];
+}): boolean {
+  if (!curves) return false;
+  return (
+    isCurveActive(curves.master) ||
+    isCurveActive(curves.red) ||
+    isCurveActive(curves.green) ||
+    isCurveActive(curves.blue)
+  );
+}
+
 export function hasModifications(
   edits: EditSettingsPayload,
   orientation: number = 1,
@@ -120,6 +143,7 @@ export function hasModifications(
   if (Math.abs((edits.crop_top ?? 0.0) - 0.0) > 1e-4) return true;
   if (Math.abs((edits.crop_right ?? 1.0) - 1.0) > 1e-4) return true;
   if (Math.abs((edits.crop_bottom ?? 1.0) - 1.0) > 1e-4) return true;
+  if (areCurvesActive(edits.curves)) return true;
 
   const exifOri = decodeExifOrientation(orientation);
   if ((edits.rotation ?? 0) !== exifOri.rotation) return true;

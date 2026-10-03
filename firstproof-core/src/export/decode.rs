@@ -3,6 +3,7 @@ use rayon::prelude::*;
 use crate::color::{
     Color3, LINEAR_SRGB_TO_REC2020, srgb_gamma_to_linear,
 };
+use crate::DemosaicQuality;
 
 pub struct DemosaicedImage {
     pub width: usize,
@@ -22,8 +23,16 @@ impl DemosaicedImage {
     }
 }
 
-/// Decodes a RAW CFA Bayer sensor image or master standard image into linear 3-channel float RGB.
+/// Decodes a RAW CFA Bayer sensor image or master standard image into linear 3-channel float RGB using default standard quality.
 pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> {
+    decode_image_with_quality(path, DemosaicQuality::Standard)
+}
+
+/// Decodes a RAW CFA Bayer sensor image or master standard image with selectable demosaicing quality (Standard vs Archival).
+pub fn decode_image_with_quality<P: AsRef<Path>>(
+    path: P,
+    quality: DemosaicQuality,
+) -> Result<DemosaicedImage, String> {
     let path = path.as_ref();
     
     // 1. Try decoding with library-agnostic RawDecoder (backed by RawlerDecoder)
@@ -81,25 +90,45 @@ pub fn decode_image<P: AsRef<Path>>(path: P) -> Result<DemosaicedImage, String> 
                     }
                 });
 
-                let mut demosaiced_rgb = soft_adaptive_demosaic(
-                    &norm_pixels,
-                    full_w,
-                    full_h,
-                    frame.active_x,
-                    frame.active_y,
-                    active_w,
-                    active_h,
-                    &frame,
-                );
+                let mut demosaiced_rgb = match quality {
+                    DemosaicQuality::Archival => rcd_archival_demosaic(
+                        &norm_pixels,
+                        full_w,
+                        full_h,
+                        frame.active_x,
+                        frame.active_y,
+                        active_w,
+                        active_h,
+                        &frame,
+                    ),
+                    DemosaicQuality::Standard => soft_adaptive_demosaic(
+                        &norm_pixels,
+                        full_w,
+                        full_h,
+                        frame.active_x,
+                        frame.active_y,
+                        active_w,
+                        active_h,
+                        &frame,
+                    ),
+                };
 
                 if demosaiced_rgb.len() == active_w * active_h {
-                    apply_chromatic_median_filter(&mut demosaiced_rgb, active_w, active_h, 2);
+                    let median_passes = match quality {
+                        DemosaicQuality::Archival => 4,
+                        DemosaicQuality::Standard => 2,
+                    };
+                    apply_chromatic_median_filter(&mut demosaiced_rgb, active_w, active_h, median_passes);
 
                     demosaiced.data.par_chunks_exact_mut(active_w * 3).enumerate().for_each(|(y, row_slice)| {
                         let row_start = y * active_w;
                         for x in 0..active_w {
                             let [r_wb, g_wb, b_wb] = demosaiced_rgb[row_start + x];
-                            let c_sensor = Color3::new(r_wb, g_wb, b_wb);
+                            let r_raw = if wb_r > 0.001 { r_wb / wb_r } else { r_wb };
+                            let g_raw = g_wb;
+                            let b_raw = if wb_b > 0.001 { b_wb / wb_b } else { b_wb };
+                            let (r_clean, g_clean, b_clean) = firstproof_engine::blend_sensor_highlights(r_raw, g_raw, b_raw, wb_r, wb_b);
+                            let c_sensor = Color3::new(r_clean, g_clean, b_clean);
                             let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
                             let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);
 
@@ -556,6 +585,197 @@ pub fn apply_chromatic_median_filter(
     }
 
     *pixels = src;
+}
+
+/// Archival Multi-Pass Edge-Adaptive AMaZE / RCD Demosaicing
+///
+/// Implements Residual Color Difference (RCD) demosaicing with iterative green refinement
+/// and multi-directional edge gradient estimation.
+///
+/// 1. Directional green estimation evaluating horizontal and vertical gradients.
+/// 2. Residual Color Difference (RCD) Iteration: evaluates local chromatic residuals (R - G)
+///    and (B - G) across diagonal neighbors to iteratively refine green estimates at red and blue photosites.
+/// 3. Directionally-guided red and blue reconstruction.
+pub fn rcd_archival_demosaic(
+    norm_pixels: &[f32],
+    full_w: usize,
+    full_h: usize,
+    active_x: usize,
+    active_y: usize,
+    active_w: usize,
+    active_h: usize,
+    frame: &crate::raw_decoder::RawSensorFrame,
+) -> Vec<[f32; 3]> {
+    let sample = |fy: isize, fx: isize| -> f32 {
+        let y_clamped = fy.clamp(0, (full_h - 1) as isize) as usize;
+        let x_clamped = fx.clamp(0, (full_w - 1) as isize) as usize;
+        norm_pixels[y_clamped * full_w + x_clamped]
+    };
+
+    let apron_w = active_w + 4;
+    let apron_h = active_h + 4;
+    let mut green_plane = vec![0.0f32; apron_w * apron_h];
+
+    // Pass 1: Multi-directional initial green reconstruction
+    green_plane.par_chunks_mut(apron_w).enumerate().for_each(|(ay, g_row)| {
+        let fy = (active_y as isize + ay as isize - 2).clamp(0, (full_h - 1) as isize);
+        for ax in 0..apron_w {
+            let fx = (active_x as isize + ax as isize - 2).clamp(0, (full_w - 1) as isize);
+            let color = frame.color_at(fy as usize, fx as usize);
+            if color == crate::raw_decoder::CFA_COLOR_GREEN {
+                g_row[ax] = sample(fy, fx);
+            } else {
+                let c = sample(fy, fx);
+                let g_n = sample(fy - 1, fx);
+                let g_s = sample(fy + 1, fx);
+                let g_w = sample(fy, fx - 1);
+                let g_e = sample(fy, fx + 1);
+
+                let c_n2 = sample(fy - 2, fx);
+                let c_s2 = sample(fy + 2, fx);
+                let c_w2 = sample(fy, fx - 2);
+                let c_e2 = sample(fy, fx + 2);
+
+                let delta_h = (g_w - g_e).abs() + (2.0 * c - c_w2 - c_e2).abs();
+                let delta_v = (g_n - g_s).abs() + (2.0 * c - c_n2 - c_s2).abs();
+
+                let g_h = 0.5 * (g_w + g_e) + 0.25 * (2.0 * c - c_w2 - c_e2);
+                let g_v = 0.5 * (g_n + g_s) + 0.25 * (2.0 * c - c_n2 - c_s2);
+
+                let diff = delta_h - delta_v;
+                let sum = delta_h + delta_v + 1e-5;
+                let t = (diff / sum).clamp(-1.0, 1.0);
+                let u = 0.5 + 0.5 * t;
+                let w_v = u * u * (3.0 - 2.0 * u);
+                let w_h = 1.0 - w_v;
+
+                g_row[ax] = (w_h * g_h + w_v * g_v).max(0.0);
+            }
+        }
+    });
+
+    // Pass 2: Iterative Residual Color Difference (RCD) green refinement
+    // Calculate residual diff at R and B sites: diff = C - G
+    let mut refined_green = green_plane.clone();
+    refined_green.par_chunks_mut(apron_w).enumerate().for_each(|(ay, g_row)| {
+        if ay < 2 || ay >= apron_h - 2 { return; }
+        let fy = (active_y as isize + ay as isize - 2).clamp(0, (full_h - 1) as isize);
+        for ax in 2..(apron_w - 2) {
+            let fx = (active_x as isize + ax as isize - 2).clamp(0, (full_w - 1) as isize);
+            let color = frame.color_at(fy as usize, fx as usize);
+            if color != crate::raw_decoder::CFA_COLOR_GREEN {
+                let c = sample(fy, fx);
+                // 3x3 median on local residual (C_neighbor - G_neighbor)
+                let d_c = c - green_plane[ay * apron_w + ax];
+                let d_nw = sample(fy - 2, fx - 2) - green_plane[(ay - 2) * apron_w + (ax - 2)];
+                let d_ne = sample(fy - 2, fx + 2) - green_plane[(ay - 2) * apron_w + (ax + 2)];
+                let d_sw = sample(fy + 2, fx - 2) - green_plane[(ay + 2) * apron_w + (ax - 2)];
+                let d_se = sample(fy + 2, fx + 2) - green_plane[(ay + 2) * apron_w + (ax + 2)];
+
+                let mut med_d = [d_nw, d_ne, d_c, d_sw, d_se];
+                med_d.sort_unstable_by(|a, b| a.total_cmp(b));
+                let residual_correction = med_d[2];
+
+                // Refine green estimate with residual guidance
+                g_row[ax] = (c - residual_correction).max(0.0);
+            }
+        }
+    });
+
+    let g_sample = |ay: isize, ax: isize| -> f32 {
+        let y_clamped = ay.clamp(0, (apron_h - 1) as isize) as usize;
+        let x_clamped = ax.clamp(0, (apron_w - 1) as isize) as usize;
+        refined_green[y_clamped * apron_w + x_clamped]
+    };
+
+    // Step 3: Interpolate Red and Blue using refined residual differences
+    let mut out_rgb = vec![[0.0f32; 3]; active_w * active_h];
+
+    out_rgb.par_chunks_mut(active_w).enumerate().for_each(|(y, out_row)| {
+        let ay = (y + 2) as isize;
+        let fy = (active_y + y) as isize;
+
+        for x in 0..active_w {
+            let ax = (x + 2) as isize;
+            let fx = (active_x + x) as isize;
+            let color = frame.color_at(
+                fy.clamp(0, (full_h - 1) as isize) as usize,
+                fx.clamp(0, (full_w - 1) as isize) as usize,
+            );
+            let g = g_sample(ay, ax);
+
+            let r: f32;
+            let b: f32;
+
+            if color == crate::raw_decoder::CFA_COLOR_RED {
+                r = sample(fy, fx);
+                let d_nw = sample(fy - 1, fx - 1) - g_sample(ay - 1, ax - 1);
+                let d_ne = sample(fy - 1, fx + 1) - g_sample(ay - 1, ax + 1);
+                let d_sw = sample(fy + 1, fx - 1) - g_sample(ay + 1, ax - 1);
+                let d_se = sample(fy + 1, fx + 1) - g_sample(ay + 1, ax + 1);
+
+                let grad_d1 = (sample(fy - 1, fx - 1) - sample(fy + 1, fx + 1)).abs() + (g_sample(ay - 1, ax - 1) - g_sample(ay + 1, ax + 1)).abs();
+                let grad_d2 = (sample(fy - 1, fx + 1) - sample(fy + 1, fx - 1)).abs() + (g_sample(ay - 1, ax + 1) - g_sample(ay + 1, ax - 1)).abs();
+
+                let diff_d = grad_d1 - grad_d2;
+                let sum_d = grad_d1 + grad_d2 + 1e-5;
+                let t_d = (diff_d / sum_d).clamp(-1.0, 1.0);
+                let u_d = 0.5 + 0.5 * t_d;
+                let w_d2 = u_d * u_d * (3.0 - 2.0 * u_d);
+                let w_d1 = 1.0 - w_d2;
+
+                let b_d1 = 0.5 * (d_nw + d_se);
+                let b_d2 = 0.5 * (d_ne + d_sw);
+                b = (g + w_d1 * b_d1 + w_d2 * b_d2).max(0.0);
+            } else if color == crate::raw_decoder::CFA_COLOR_BLUE {
+                b = sample(fy, fx);
+                let d_nw = sample(fy - 1, fx - 1) - g_sample(ay - 1, ax - 1);
+                let d_ne = sample(fy - 1, fx + 1) - g_sample(ay - 1, ax + 1);
+                let d_sw = sample(fy + 1, fx - 1) - g_sample(ay + 1, ax - 1);
+                let d_se = sample(fy + 1, fx + 1) - g_sample(ay + 1, ax + 1);
+
+                let grad_d1 = (sample(fy - 1, fx - 1) - sample(fy + 1, fx + 1)).abs() + (g_sample(ay - 1, ax - 1) - g_sample(ay + 1, ax + 1)).abs();
+                let grad_d2 = (sample(fy - 1, fx + 1) - sample(fy + 1, fx - 1)).abs() + (g_sample(ay - 1, ax + 1) - g_sample(ay + 1, ax - 1)).abs();
+
+                let diff_d = grad_d1 - grad_d2;
+                let sum_d = grad_d1 + grad_d2 + 1e-5;
+                let t_d = (diff_d / sum_d).clamp(-1.0, 1.0);
+                let u_d = 0.5 + 0.5 * t_d;
+                let w_d2 = u_d * u_d * (3.0 - 2.0 * u_d);
+                let w_d1 = 1.0 - w_d2;
+
+                let r_d1 = 0.5 * (d_nw + d_se);
+                let r_d2 = 0.5 * (d_ne + d_sw);
+                r = (g + w_d1 * r_d1 + w_d2 * r_d2).max(0.0);
+            } else {
+                let fy_u = fy.clamp(0, (full_h - 1) as isize) as usize;
+                let fx_prev = (fx - 1).clamp(0, (full_w - 1) as isize) as usize;
+                let fx_next = (fx + 1).clamp(0, (full_w - 1) as isize) as usize;
+                let is_r_horizontal = frame.color_at(fy_u, fx_prev) == crate::raw_decoder::CFA_COLOR_RED
+                    || frame.color_at(fy_u, fx_next) == crate::raw_decoder::CFA_COLOR_RED;
+
+                let d_w = sample(fy, fx - 1) - g_sample(ay, ax - 1);
+                let d_e = sample(fy, fx + 1) - g_sample(ay, ax + 1);
+                let d_n = sample(fy - 1, fx) - g_sample(ay - 1, ax);
+                let d_s = sample(fy + 1, fx) - g_sample(ay + 1, ax);
+
+                let d_h = 0.5 * (d_w + d_e);
+                let d_v = 0.5 * (d_n + d_s);
+
+                if is_r_horizontal {
+                    r = (g + d_h).max(0.0);
+                    b = (g + d_v).max(0.0);
+                } else {
+                    b = (g + d_h).max(0.0);
+                    r = (g + d_v).max(0.0);
+                }
+            }
+
+            out_row[x] = [r, g, b];
+        }
+    });
+
+    out_rgb
 }
 
 

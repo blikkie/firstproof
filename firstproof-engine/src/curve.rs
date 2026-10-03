@@ -48,6 +48,14 @@ pub struct AllCurvesLutRecord {
     pub blue: Vec<f32>,
 }
 
+/// Checks if a tone curve deviates from the linear identity transfer line.
+#[inline(always)]
+pub fn is_curve_active(pts: &[CurvePointRecord]) -> bool {
+    pts.len() > 2
+        || (pts.len() == 2
+            && ((pts[0].x - pts[0].y).abs() > 1e-4 || (pts[1].x - pts[1].y).abs() > 1e-4))
+}
+
 /// Evaluates a 256-sample lookup table [0.0, 1.0] using Fritsch-Carlson monotone cubic spline interpolation.
 pub fn evaluate_curve_lut(points: &[CurvePointRecord]) -> Vec<f32> {
     if points.is_empty() {

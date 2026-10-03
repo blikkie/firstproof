@@ -7,11 +7,11 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.5: Archival High-Precision Multi-Pass Export & Differential Rendering Engine** (P1)
-2. **Story 3.17: Physical Optical Halation Scatter & Point-Spread Emulsion Diffusion** (P2)
-3. **Story 3.18: Multi-Scale Hierarchical Bilateral Tone Recovery** (P2)
-4. **Story 3.19: Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling** (P2)
-5. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+1. **Story 3.17: Physical Optical Halation Scatter & Point-Spread Emulsion Diffusion** (P2)
+2. **Story 3.18: Multi-Scale Hierarchical Bilateral Tone Recovery** (P2)
+3. **Story 3.19: Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling** (P2)
+4. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+5. **Story 3.4: ColorSync Soft Proofing** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -44,25 +44,6 @@ This document strictly tracks pending and deferred features calibrated against o
 - **Canvas Soft Proofing Mode**:
   - Canvas toolbar mode simulating sRGB and standard print gamut clipping (e.g., ISO Coated v2 / US Web Coated SWOP) on wide-gamut displays.
   - Gamut warning overlay highlighting out-of-gamut pixels in high-contrast overlay color.
-
-### 3.5 Archival High-Precision Multi-Pass Export & Differential Rendering Engine (P1 - Pulled Forward)
-- **Differential Rendering Framework (`RenderTier`)**:
-  - Establish a formal execution contract between **Real-Time Viewport** (`RenderTier::Viewport`, 60–120fps GPU canvas) and **Archival Export** (`RenderTier::ArchivalExport`, high-precision offline CPU/WASM render pipeline).
-  - Provides the structural harness for upcoming spatial physics (Stories 3.17 Halation, 3.18 Bilateral Illumination, 3.19 Grain Clusters), allowing fast sparse approximations on screen while executing full multi-pass, separable 2D convolutions in export.
-- **Decoupled Quality Controls in Export Sheet**:
-  - Cleanly separate general optical RAW demosaicing precision from spatial chemical edge diffusion in `ExportSheetView.swift`:
-    1. *RAW Demosaicing Precision*: `Standard (PPG Demosaic)` vs. `Archival (Edge-Adaptive AMaZE / RCD with Chromatic Median Filtering)`.
-    2. *Spatial Chemical Edge Diffusion (Mackie Lines)*: Dedicated toggle when an emulsion is active.
-- **Control 1: Multi-Pass Edge-Directed Demosaicing & Chromatic Median Filtering**:
-  - *Standard (Soft-Adaptive Hamilton-Adams Demosaic)*: Integrated in Story 5.8 with smooth Hermite gradient blending and 2 passes of chromatic difference median filtering ($(R - G)$ and $(B - G)$), eliminating checkerboard, zipper, and maze artifacts while preserving 100% of spatial green luminance sharpness ($G$).
-  - *Archival (Multi-pass AMaZE / RCD)*: Multi-pass iterative demosaicing for extreme fine fabric moiré.
-- **Control 2: Spatial Lateral Chemical Diffusion (Mackie Lines / Developer Exhaustion)**:
-  - Extends vertical DIR coupling to 2D spatial inhibitor diffusion across contrasting borders, recreating authentic photochemical Mackie lines and developer exhaustion boundaries for organic edge acutance without digital unsharp masking.
-- **True 16-Bit Archival TIFF Export (Cross-Platform & Web)**:
-  - Generate authentic 16-bit uncompressed RGB TIFF 6.0 files with genuine 65,536 tonal levels per channel ($0\dots65,535$) for downstream Photoshop editing and fine-art print RIPs.
-  - *Web Darkroom Architecture*: Render via an `RGBA16F` half-float framebuffer attachment in WebGL 2 (or route full-resolution RAW frames directly through the compiled `f32` Rust WASM export pipeline), capturing true high-precision continuous gradients with zero comb-tooth histogram banding.
-- **Strict WYSIWYG Tonal & Color Parity Invariant**:
-  - Viewport and archival export match bit-for-bit in global tone curve, AgX mapping, color separation, and White Balance.
 
 ### 3.6 Cross-Platform Linux Toolchain & Headless Development Engine (P1 - Pulled Forward)
 - **Kubuntu & Multi-Arch Linux Toolchain (x86_64 / aarch64)**:

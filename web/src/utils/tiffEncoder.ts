@@ -2,15 +2,18 @@
  * First Proof — Client-Side TIFF Encoder
  *
  * Implements a standards-compliant uncompressed TIFF 6.0 encoder for authentic
- * 8-bit RGB image export with bit-level parity to desktop libtiff output.
+ * 8-bit and 16-bit RGB image export with bit-level parity to desktop libtiff output.
  */
 
 export function encodeTiff(
   width: number,
   height: number,
-  rgbaData: Uint8Array,
+  data: Uint8Array | Uint16Array,
+  bitsPerSample: 8 | 16 = 8,
+  flipY: boolean = true,
 ): Uint8Array {
-  const bytesPerPixel = 3; // 8-bit RGB (SamplesPerPixel = 3)
+  const bytesPerChannel = bitsPerSample === 16 ? 2 : 1;
+  const bytesPerPixel = 3 * bytesPerChannel; // RGB
   const pixelBytes = width * height * bytesPerPixel;
   const totalBytes = 192 + pixelBytes;
   const buf = new ArrayBuffer(totalBytes);
@@ -58,10 +61,10 @@ export function encodeTiff(
   view.setUint32(offset, 0, true);
 
   // Auxiliary data values:
-  // Offset 170: BitsPerSample [8, 8, 8]
-  view.setUint16(170, 8, true);
-  view.setUint16(172, 8, true);
-  view.setUint16(174, 8, true);
+  // Offset 170: BitsPerSample [bits, bits, bits]
+  view.setUint16(170, bitsPerSample, true);
+  view.setUint16(172, bitsPerSample, true);
+  view.setUint16(174, bitsPerSample, true);
 
   // Offset 176: XResolution 72/1
   view.setUint32(176, 72, true);
@@ -72,19 +75,62 @@ export function encodeTiff(
   view.setUint32(188, 1, true);
 
   // Pixel Raster data starting at offset 192
-  // Note: WebGL gl.readPixels returns bottom-to-top raster.
-  // TIFF expects top-to-bottom raster, so row 0 is top.
+  // Note: WebGL gl.readPixels returns bottom-to-top raster (requires flipY = true).
+  // TIFF expects top-to-bottom raster (row 0 is top).
   let dst = 192;
-  for (let y = 0; y < height; y++) {
-    const srcRow = height - 1 - y;
-    const rowOffset = srcRow * width * 4;
-    for (let x = 0; x < width; x++) {
-      const srcIdx = rowOffset + x * 4;
-      u8[dst++] = rgbaData[srcIdx];
-      u8[dst++] = rgbaData[srcIdx + 1];
-      u8[dst++] = rgbaData[srcIdx + 2];
+  if (bitsPerSample === 16) {
+    if (data instanceof Uint16Array) {
+      const channels = data.length >= width * height * 4 ? 4 : 3;
+      for (let y = 0; y < height; y++) {
+        const srcRow = flipY ? height - 1 - y : y;
+        const rowOffset = srcRow * width * channels;
+        for (let x = 0; x < width; x++) {
+          const srcIdx = rowOffset + x * channels;
+          view.setUint16(dst, data[srcIdx], true);
+          dst += 2;
+          view.setUint16(dst, data[srcIdx + 1], true);
+          dst += 2;
+          view.setUint16(dst, data[srcIdx + 2], true);
+          dst += 2;
+        }
+      }
+    } else {
+      for (let y = 0; y < height; y++) {
+        const srcRow = flipY ? height - 1 - y : y;
+        const rowOffset = srcRow * width * 4;
+        for (let x = 0; x < width; x++) {
+          const srcIdx = rowOffset + x * 4;
+          view.setUint16(dst, data[srcIdx] * 257, true);
+          dst += 2;
+          view.setUint16(dst, data[srcIdx + 1] * 257, true);
+          dst += 2;
+          view.setUint16(dst, data[srcIdx + 2] * 257, true);
+          dst += 2;
+        }
+      }
+    }
+  } else {
+    const u8Data = data as Uint8Array;
+    for (let y = 0; y < height; y++) {
+      const srcRow = flipY ? height - 1 - y : y;
+      const rowOffset = srcRow * width * 4;
+      for (let x = 0; x < width; x++) {
+        const srcIdx = rowOffset + x * 4;
+        u8[dst++] = u8Data[srcIdx];
+        u8[dst++] = u8Data[srcIdx + 1];
+        u8[dst++] = u8Data[srcIdx + 2];
+      }
     }
   }
 
   return u8;
+}
+
+export function encodeTiff16(
+  width: number,
+  height: number,
+  data: Uint16Array | Uint8Array,
+  flipY: boolean = true,
+): Uint8Array {
+  return encodeTiff(width, height, data, 16, flipY);
 }

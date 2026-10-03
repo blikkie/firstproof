@@ -14,6 +14,8 @@ public struct ExportSheetView: View {
     @State private var colorSpaceChoice: String = "sRGB" // "sRGB" or "DisplayP3"
     @State private var renderingIntentChoice: String = "RelativeColorimetric" // "RelativeColorimetric" or "Perceptual"
     @State private var isUltraHdrEnabled: Bool = false
+    @State private var demosaicQualityChoice: String = "Standard" // "Standard" or "Archival"
+    @State private var chemicalEdgeDiffusionEnabled: Bool = false
     @State private var isExporting: Bool = false
     @State private var exportResultMessage: String? = nil
     
@@ -21,6 +23,14 @@ public struct ExportSheetView: View {
     
     private var targetPhotos: [PhotoRecord] {
         viewModel.selectedPhotosList
+    }
+
+    private var hasActiveEmulsion: Bool {
+        if let photo = viewModel.selectedPhoto {
+            let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits ?? .defaultIdentity)
+            return edits.emulsionArchetype != .none
+        }
+        return false
     }
     
     public var body: some View {
@@ -146,6 +156,40 @@ public struct ExportSheetView: View {
                     }
                 }
             }
+
+            // Render Fidelity & Demosaicing Precision
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Render Fidelity & Precision:")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                Picker("Demosaicing", selection: $demosaicQualityChoice) {
+                    Text("Standard (PPG / Hamilton-Adams)").tag("Standard")
+                    Text("Archival (Edge-Adaptive AMaZE / RCD)").tag("Archival")
+                }
+                .pickerStyle(.segmented)
+                
+                if demosaicQualityChoice == "Archival" {
+                    Text("4-pass chromatic median filtering with residual color difference refinement to prevent fabric moiré.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+
+                if hasActiveEmulsion {
+                    Toggle(isOn: $chemicalEdgeDiffusionEnabled) {
+                        Text("Spatial Chemical Edge Diffusion (Mackie Lines)")
+                            .font(.subheadline)
+                    }
+                    .toggleStyle(.checkbox)
+                    .padding(.top, 2)
+
+                    if chemicalEdgeDiffusionEnabled {
+                        Text("Simulates lateral 2D developer exhaustion and bromide inhibitor diffusion across contrasting edges.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
             
             // Sizing
             VStack(alignment: .leading, spacing: 6) {
@@ -251,6 +295,8 @@ public struct ExportSheetView: View {
             let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits ?? .defaultIdentity)
             let lensCoeffs = (photo.filePath == viewModel.selectedPhoto?.filePath && viewModel.lensCorrectionEnabled) ? viewModel.lensCoefficients : nil
             
+            let dq: DemosaicQuality = (demosaicQualityChoice == "Archival") ? .archival : .standard
+            
             DispatchQueue.global(qos: .userInitiated).async {
                 let success = exportPhoto(
                     inputPath: photo.filePath,
@@ -261,7 +307,10 @@ public struct ExportSheetView: View {
                     maxDimension: maxDim,
                     colorSpace: cs,
                     renderingIntent: ri,
-                    ultraHdr: (exportFormat == "JPEG") && isUltraHdrEnabled
+                    ultraHdr: (exportFormat == "JPEG") && isUltraHdrEnabled,
+                    demosaicQuality: dq,
+                    chemicalEdgeDiffusion: chemicalEdgeDiffusionEnabled,
+                    renderTier: .archivalExport
                 )
                 
                 DispatchQueue.main.async {
@@ -279,6 +328,7 @@ public struct ExportSheetView: View {
             }
         } else {
             // Batch export (Story 17.2 & 17.3): Dismiss sheet immediately and run in background queue with docked progress bar!
+            let dq: DemosaicQuality = (demosaicQualityChoice == "Archival") ? .archival : .standard
             var items: [BatchExportItemRecord] = []
             for photo in photos {
                 let baseName = URL(fileURLWithPath: photo.filePath).deletingPathExtension().lastPathComponent
@@ -297,7 +347,10 @@ public struct ExportSheetView: View {
                     maxDimension: maxDim,
                     colorSpace: cs,
                     renderingIntent: ri,
-                    ultraHdr: (exportFormat == "JPEG") && isUltraHdrEnabled
+                    ultraHdr: (exportFormat == "JPEG") && isUltraHdrEnabled,
+                    demosaicQuality: dq,
+                    chemicalEdgeDiffusion: chemicalEdgeDiffusionEnabled,
+                    renderTier: .archivalExport
                 ))
             }
             

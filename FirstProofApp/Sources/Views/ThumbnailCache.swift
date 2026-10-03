@@ -425,7 +425,10 @@ public struct AsyncThumbnailView: View {
                     maxDimension: 320,
                     colorSpace: nil,
                     renderingIntent: nil,
-                    ultraHdr: false
+                    ultraHdr: false,
+                    demosaicQuality: nil,
+                    chemicalEdgeDiffusion: nil,
+                    renderTier: nil
                 )
                 
                 guard !renderOp.isCancelled else { return }

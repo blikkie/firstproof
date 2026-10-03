@@ -1,7 +1,11 @@
 import type { ExportExecutionOptions } from '../ExportModal';
 import { FolderIntake, type PhotoFileEntry } from '../FolderIntake';
 import { IntermediateTextureCache } from '../IntermediateTextureCache';
-import { getDefaultEdits, hasModifications } from '../utils/edits';
+import {
+  areCurvesActive,
+  getDefaultEdits,
+  hasModifications,
+} from '../utils/edits';
 import { encodeTiff } from '../utils/tiffEncoder';
 import type {
   EditSettingsPayload,
@@ -586,27 +590,121 @@ export class PhotoLoaderService {
         }
       }
 
-      let texW = 0;
-      let texH = 0;
+      const stem =
+        entry.name.substring(0, entry.name.lastIndexOf('.')) || entry.name;
+      const ext = options.format === 'TIFF' ? 'tiff' : 'jpg';
+      const filename = `${stem}_FirstProof.${ext}`;
+      lastOutputPath = filename;
+
+      let fileBlob: Blob;
+
       if (isRawFile) {
         const arrayBuffer = await entry.file.arrayBuffer();
-        const res = await this.decodeInWorker(arrayBuffer, entry.name, true);
-        if (res.linearData && res.linearW && res.linearH) {
-          expRenderer.uploadLinearRec2020Texture(
-            res.linearW,
-            res.linearH,
-            res.linearData,
+        const rawBytes = new Uint8Array(arrayBuffer);
+        const quality = options.demosaicQuality ?? 'Standard';
+        const chemDiff = !!options.chemicalEdgeDiffusion;
+
+        const developed = this.bridge.developRawArchival(
+          rawBytes,
+          photoEdits,
+          quality,
+          chemDiff,
+        );
+
+        const rot = (photoEdits.rotation ?? 0) % 360;
+        const isOrthogonal = rot === 90 || rot === 270;
+        const baseW = isOrthogonal ? developed.height : developed.width;
+        const baseH = isOrthogonal ? developed.width : developed.height;
+
+        const cropL = Math.max(
+          0.0,
+          Math.min(0.99, photoEdits.crop_left ?? 0.0),
+        );
+        const cropT = Math.max(0.0, Math.min(0.99, photoEdits.crop_top ?? 0.0));
+        const cropR = Math.max(
+          cropL + 0.01,
+          Math.min(1.0, photoEdits.crop_right ?? 1.0),
+        );
+        const cropB = Math.max(
+          cropT + 0.01,
+          Math.min(1.0, photoEdits.crop_bottom ?? 1.0),
+        );
+
+        const effectiveW = Math.max(1, Math.round(baseW * (cropR - cropL)));
+        const effectiveH = Math.max(1, Math.round(baseH * (cropB - cropT)));
+
+        let targetW = effectiveW;
+        let targetH = effectiveH;
+        let maxDim: number | null = null;
+        if (options.sizeOption === '2048') maxDim = 2048;
+        else if (options.sizeOption === '3840') maxDim = 3840;
+        else if (options.sizeOption === 'Custom')
+          maxDim = options.customDimension;
+
+        if (maxDim && (effectiveW > maxDim || effectiveH > maxDim)) {
+          if (effectiveW >= effectiveH) {
+            targetW = maxDim;
+            targetH = Math.max(
+              1,
+              Math.round((effectiveH * maxDim) / effectiveW),
+            );
+          } else {
+            targetH = maxDim;
+            targetW = Math.max(
+              1,
+              Math.round((effectiveW * maxDim) / effectiveH),
+            );
+          }
+        }
+
+        const resampledU16 = this.resampleRgb16(
+          developed.width,
+          developed.height,
+          developed.linearData,
+          rot,
+          cropL,
+          cropT,
+          cropR,
+          cropB,
+          !!photoEdits.flip_horizontal,
+          !!photoEdits.flip_vertical,
+          targetW,
+          targetH,
+        );
+
+        if (options.format === 'TIFF') {
+          const tiffBytes = encodeTiff(
+            targetW,
+            targetH,
+            resampledU16,
+            16,
+            false,
           );
-          texW = res.linearW;
-          texH = res.linearH;
-        } else {
-          const blob = new Blob([new Uint8Array(res.imageSlice)], {
-            type: 'image/jpeg',
+          fileBlob = new Blob([tiffBytes.buffer as ArrayBuffer], {
+            type: 'image/tiff',
           });
-          const imgBitmap = await createImageBitmap(blob);
-          expRenderer.uploadImage(imgBitmap);
-          texW = imgBitmap.width;
-          texH = imgBitmap.height;
+        } else {
+          const offCanvas = document.createElement('canvas');
+          offCanvas.width = targetW;
+          offCanvas.height = targetH;
+          const ctx = offCanvas.getContext('2d');
+          if (!ctx) throw new Error('Could not create 2d canvas context');
+          const imgData = ctx.createImageData(targetW, targetH);
+          for (let p = 0; p < targetW * targetH; p++) {
+            imgData.data[p * 4] = resampledU16[p * 3] >> 8;
+            imgData.data[p * 4 + 1] = resampledU16[p * 3 + 1] >> 8;
+            imgData.data[p * 4 + 2] = resampledU16[p * 3 + 2] >> 8;
+            imgData.data[p * 4 + 3] = 255;
+          }
+          ctx.putImageData(imgData, 0, 0);
+          fileBlob = await new Promise<Blob>((resolve, reject) => {
+            offCanvas.toBlob(
+              (b) =>
+                b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
+              'image/jpeg',
+              options.quality / 100,
+            );
+          });
         }
       } else {
         const arrayBuffer = await entry.file.arrayBuffer();
@@ -616,102 +714,96 @@ export class PhotoLoaderService {
         });
         const imgBitmap = await createImageBitmap(blob);
         expRenderer.uploadImage(imgBitmap);
-        texW = imgBitmap.width;
-        texH = imgBitmap.height;
-      }
+        let texW = imgBitmap.width;
+        let texH = imgBitmap.height;
 
-      if (texW <= 0) texW = 1920;
-      if (texH <= 0) texH = 1080;
+        if (texW <= 0) texW = 1920;
+        if (texH <= 0) texH = 1080;
 
-      if (
-        photoEdits.curves &&
-        (photoEdits.curves.master?.length > 2 ||
-          photoEdits.curves.red?.length > 2 ||
-          photoEdits.curves.green?.length > 2 ||
-          photoEdits.curves.blue?.length > 2)
-      ) {
-        try {
-          const lut = this.bridge.evaluateCurves(photoEdits.curves);
-          expRenderer.updateToneCurvesLut(lut);
-        } catch (err) {
-          console.warn(
-            '[PhotoLoaderService] Could not evaluate curve LUT:',
-            err,
-          );
+        if (photoEdits.curves && areCurvesActive(photoEdits.curves)) {
+          try {
+            const lut = this.bridge.evaluateCurves(photoEdits.curves);
+            expRenderer.updateToneCurvesLut(lut);
+          } catch (err) {
+            console.warn(
+              '[PhotoLoaderService] Could not evaluate curve LUT:',
+              err,
+            );
+          }
         }
-      }
 
-      const rot = (photoEdits.rotation ?? 0) % 360;
-      const isOrthogonal = rot === 90 || rot === 270;
-      const baseW = isOrthogonal ? texH : texW;
-      const baseH = isOrthogonal ? texW : texH;
+        const rot = (photoEdits.rotation ?? 0) % 360;
+        const isOrthogonal = rot === 90 || rot === 270;
+        const baseW = isOrthogonal ? texH : texW;
+        const baseH = isOrthogonal ? texW : texH;
 
-      const cropL = photoEdits.crop_left ?? 0.0;
-      const cropT = photoEdits.crop_top ?? 0.0;
-      const cropR = photoEdits.crop_right ?? 1.0;
-      const cropB = photoEdits.crop_bottom ?? 1.0;
-      const effectiveW = Math.max(
-        1,
-        Math.round(baseW * Math.max(0.01, cropR - cropL)),
-      );
-      const effectiveH = Math.max(
-        1,
-        Math.round(baseH * Math.max(0.01, cropB - cropT)),
-      );
+        const cropL = photoEdits.crop_left ?? 0.0;
+        const cropT = photoEdits.crop_top ?? 0.0;
+        const cropR = photoEdits.crop_right ?? 1.0;
+        const cropB = photoEdits.crop_bottom ?? 1.0;
+        const effectiveW = Math.max(
+          1,
+          Math.round(baseW * Math.max(0.01, cropR - cropL)),
+        );
+        const effectiveH = Math.max(
+          1,
+          Math.round(baseH * Math.max(0.01, cropB - cropT)),
+        );
 
-      let targetW = effectiveW;
-      let targetH = effectiveH;
-      let maxDim: number | null = null;
-      if (options.sizeOption === '2048') maxDim = 2048;
-      else if (options.sizeOption === '3840') maxDim = 3840;
-      else if (options.sizeOption === 'Custom')
-        maxDim = options.customDimension;
+        let targetW = effectiveW;
+        let targetH = effectiveH;
+        let maxDim: number | null = null;
+        if (options.sizeOption === '2048') maxDim = 2048;
+        else if (options.sizeOption === '3840') maxDim = 3840;
+        else if (options.sizeOption === 'Custom')
+          maxDim = options.customDimension;
 
-      if (maxDim && (effectiveW > maxDim || effectiveH > maxDim)) {
-        if (effectiveW >= effectiveH) {
-          targetW = maxDim;
-          targetH = Math.max(1, Math.round((effectiveH * maxDim) / effectiveW));
+        if (maxDim && (effectiveW > maxDim || effectiveH > maxDim)) {
+          if (effectiveW >= effectiveH) {
+            targetW = maxDim;
+            targetH = Math.max(
+              1,
+              Math.round((effectiveH * maxDim) / effectiveW),
+            );
+          } else {
+            targetH = maxDim;
+            targetW = Math.max(
+              1,
+              Math.round((effectiveW * maxDim) / effectiveH),
+            );
+          }
+        }
+
+        const maxGl =
+          expRenderer.glContext.getParameter(
+            expRenderer.glContext.MAX_VIEWPORT_DIMS,
+          )?.[0] || 8192;
+        if (targetW > maxGl || targetH > maxGl) {
+          const scale = maxGl / Math.max(targetW, targetH);
+          targetW = Math.max(1, Math.round(targetW * scale));
+          targetH = Math.max(1, Math.round(targetH * scale));
+        }
+
+        expCanvas.width = targetW;
+        expCanvas.height = targetH;
+        expRenderer.render(photoEdits, false, 1.0, { x: 0, y: 0 }, false);
+
+        if (options.format === 'TIFF') {
+          const pixels = expRenderer.readRgbaPixels(targetW, targetH);
+          const tiffBytes = encodeTiff(targetW, targetH, pixels, 16);
+          fileBlob = new Blob([tiffBytes.buffer as ArrayBuffer], {
+            type: 'image/tiff',
+          });
         } else {
-          targetH = maxDim;
-          targetW = Math.max(1, Math.round((effectiveW * maxDim) / effectiveH));
+          fileBlob = await new Promise<Blob>((resolve, reject) => {
+            expCanvas.toBlob(
+              (b) =>
+                b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
+              'image/jpeg',
+              options.quality / 100,
+            );
+          });
         }
-      }
-
-      const maxGl =
-        expRenderer.glContext.getParameter(
-          expRenderer.glContext.MAX_VIEWPORT_DIMS,
-        )?.[0] || 8192;
-      if (targetW > maxGl || targetH > maxGl) {
-        const scale = maxGl / Math.max(targetW, targetH);
-        targetW = Math.max(1, Math.round(targetW * scale));
-        targetH = Math.max(1, Math.round(targetH * scale));
-      }
-
-      expCanvas.width = targetW;
-      expCanvas.height = targetH;
-      expRenderer.render(photoEdits, false, 1.0, { x: 0, y: 0 }, false);
-
-      const stem =
-        entry.name.substring(0, entry.name.lastIndexOf('.')) || entry.name;
-      const ext = options.format === 'TIFF' ? 'tiff' : 'jpg';
-      const filename = `${stem}_FirstProof.${ext}`;
-      lastOutputPath = filename;
-
-      let fileBlob: Blob;
-      if (options.format === 'TIFF') {
-        const pixels = expRenderer.readRgbaPixels(targetW, targetH);
-        const tiffBytes = encodeTiff(targetW, targetH, pixels);
-        fileBlob = new Blob([tiffBytes.buffer as ArrayBuffer], {
-          type: 'image/tiff',
-        });
-      } else {
-        fileBlob = await new Promise<Blob>((resolve, reject) => {
-          expCanvas.toBlob(
-            (b) => (b ? resolve(b) : reject(new Error('Canvas toBlob failed'))),
-            'image/jpeg',
-            options.quality / 100,
-          );
-        });
       }
 
       if (options.destinationDirHandle) {
@@ -752,6 +844,105 @@ export class PhotoLoaderService {
     link.download = filename;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  private resampleRgb16(
+    srcW: number,
+    srcH: number,
+    srcData: Uint16Array,
+    rot: number,
+    cropL: number,
+    cropT: number,
+    cropR: number,
+    cropB: number,
+    flipH: boolean,
+    flipV: boolean,
+    targetW: number,
+    targetH: number,
+  ): Uint16Array {
+    if (
+      targetW === srcW &&
+      targetH === srcH &&
+      rot === 0 &&
+      cropL <= 0.001 &&
+      cropT <= 0.001 &&
+      cropR >= 0.999 &&
+      cropB >= 0.999 &&
+      !flipH &&
+      !flipV
+    ) {
+      return srcData;
+    }
+
+    const out = new Uint16Array(targetW * targetH * 3);
+    for (let dy = 0; dy < targetH; dy++) {
+      let inY = (dy + 0.5) / targetH;
+      if (flipV) inY = 1.0 - inY;
+
+      for (let dx = 0; dx < targetW; dx++) {
+        let inX = (dx + 0.5) / targetW;
+        if (flipH) inX = 1.0 - inX;
+
+        let orientedX = inX;
+        let orientedY = inY;
+        if (rot === 90) {
+          orientedX = inY;
+          orientedY = 1.0 - inX;
+        } else if (rot === 180) {
+          orientedX = 1.0 - inX;
+          orientedY = 1.0 - inY;
+        } else if (rot === 270) {
+          orientedX = 1.0 - inY;
+          orientedY = inX;
+        }
+
+        const finalU = cropL + orientedX * (cropR - cropL);
+        const finalV = cropT + orientedY * (cropB - cropT);
+
+        const sx = Math.max(0, Math.min(srcW - 1, finalU * srcW - 0.5));
+        const sy = Math.max(0, Math.min(srcH - 1, finalV * srcH - 0.5));
+        const x0 = Math.floor(sx);
+        const y0 = Math.floor(sy);
+        const x1 = Math.min(srcW - 1, x0 + 1);
+        const y1 = Math.min(srcH - 1, y0 + 1);
+        const fx = sx - x0;
+        const fy = sy - y0;
+        const w00 = (1 - fx) * (1 - fy);
+        const w10 = fx * (1 - fy);
+        const w01 = (1 - fx) * fy;
+        const w11 = fx * fy;
+
+        const idx00 = (y0 * srcW + x0) * 3;
+        const idx10 = (y0 * srcW + x1) * 3;
+        const idx01 = (y1 * srcW + x0) * 3;
+        const idx11 = (y1 * srcW + x1) * 3;
+
+        const r = Math.round(
+          w00 * srcData[idx00] +
+            w10 * srcData[idx10] +
+            w01 * srcData[idx01] +
+            w11 * srcData[idx11],
+        );
+        const g = Math.round(
+          w00 * srcData[idx00 + 1] +
+            w10 * srcData[idx10 + 1] +
+            w01 * srcData[idx01 + 1] +
+            w11 * srcData[idx11 + 1],
+        );
+        const b = Math.round(
+          w00 * srcData[idx00 + 2] +
+            w10 * srcData[idx10 + 2] +
+            w01 * srcData[idx01 + 2] +
+            w11 * srcData[idx11 + 2],
+        );
+
+        const dstIdx = (dy * targetW + dx) * 3;
+        out[dstIdx] = Math.max(0, Math.min(65535, r));
+        out[dstIdx + 1] = Math.max(0, Math.min(65535, g));
+        out[dstIdx + 2] = Math.max(0, Math.min(65535, b));
+      }
+    }
+    return out;
   }
 
   public dispose(): void {

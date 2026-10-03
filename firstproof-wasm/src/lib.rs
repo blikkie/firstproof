@@ -7,10 +7,10 @@ pub use firstproof_engine::{
     generate_xmp_sidecar, get_adjustment, get_jpeg_dimensions, kelvin_to_mired_norm,
     mired_norm_to_kelvin, parse_xmp_sidecar, AdjustmentDescriptor, AllCurvesLutRecord,
     AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode, CurvePointRecord,
-    EditSettings, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode, ExifOrientationRecord,
-    ExportColorSpace, ExportRenderingIntent, f16_to_f32, ImageMetadataRecord, PreviewResultRecord,
-    PrintMediaMode, RawLinearResultRecord, RawSensorFrame, ScaleMode, ToneCurvesRecord,
-    WorkspaceCategory, XmpData,
+    DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode,
+    ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent, f16_to_f32, ImageMetadataRecord,
+    PreviewResultRecord, PrintMediaMode, RawLinearResultRecord, RawSensorFrame, RenderTier,
+    ScaleMode, ToneCurvesRecord, WorkspaceCategory, XmpData,
 };
 use scratchpad::with_scratchpad;
 
@@ -192,6 +192,73 @@ pub fn decode_raw_full_linear_from_scratchpad(input_len: usize) -> Result<JsValu
         }
 
         Err(JsValue::from_str("Failed to decode full-resolution 16-bit linear RAW frame"))
+    })
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ArchivalExportResultRecord {
+    pub linear_offset: u64,
+    pub linear_len: u64,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[wasm_bindgen]
+pub fn develop_raw_archival_from_scratchpad(
+    input_len: usize,
+    edits_json: &str,
+    quality: u32,
+    chemical_edge_diffusion: bool,
+) -> Result<JsValue, JsValue> {
+    let edits: EditSettings = serde_json::from_str(edits_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid edits JSON: {}", e)))?;
+
+    let quality_mode = if quality == 1 {
+        DemosaicQuality::Archival
+    } else {
+        DemosaicQuality::Standard
+    };
+
+    with_scratchpad(|buf| {
+        let frame = {
+            let slice = buf
+                .slice(0, input_len)
+                .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
+            RawSensorFrame::decode_from_bytes(slice)
+                .ok_or_else(|| JsValue::from_str("Failed to decode RawSensorFrame from bytes"))?
+        };
+
+        let (w, h, u16_data) = firstproof_engine::develop_raw_sensor_frame_archival(
+            &frame,
+            &edits,
+            quality_mode,
+            chemical_edge_diffusion,
+        );
+
+        let bytes_needed = u16_data.len() * 2;
+        let aligned_offset = (input_len + 15) & !15;
+        let scratch_len = buf.len();
+        if aligned_offset + bytes_needed > scratch_len {
+            buf.resize(aligned_offset + bytes_needed);
+        }
+        if let Some(target_slice) = buf.slice_mut(aligned_offset, bytes_needed) {
+            let u8_view = unsafe {
+                std::slice::from_raw_parts(
+                    u16_data.as_ptr() as *const u8,
+                    bytes_needed,
+                )
+            };
+            target_slice.copy_from_slice(u8_view);
+        }
+
+        let res = ArchivalExportResultRecord {
+            linear_offset: aligned_offset as u64,
+            linear_len: bytes_needed as u64,
+            width: w as u32,
+            height: h as u32,
+        };
+
+        serde_wasm_bindgen::to_value(&res).map_err(|e| JsValue::from_str(&e.to_string()))
     })
 }
 

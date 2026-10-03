@@ -614,6 +614,9 @@ mod tests {
                 color_space: if i % 2 == 0 { ExportColorSpace::Srgb } else { ExportColorSpace::DisplayP3 },
                 rendering_intent: ExportRenderingIntent::RelativeColorimetric,
                 ultra_hdr: false,
+                demosaic_quality: None,
+                chemical_edge_diffusion: None,
+                render_tier: None,
             });
         }
 
@@ -710,5 +713,157 @@ mod tests {
         // Center pixel's R should be filtered back to 0.5 by median filter
         assert!((outlier_grid[2 * 5 + 2][0] - 0.5).abs() < 1e-4);
     }
+
+    #[test]
+    fn test_16bit_tiff_export_precision() {
+        let tmp_in = "test_tiff16_in.jpg";
+        let tmp_out = "test_tiff16_out.tif";
+
+        let img = RgbImage::from_fn(40, 40, |x, y| {
+            Rgb([((x * 6) % 256) as u8, ((y * 6) % 256) as u8, 128])
+        });
+        img.save(tmp_in).unwrap();
+
+        let edits = EditSettings {
+            exposure: 0.5,
+            contrast: 15.0,
+            ..Default::default()
+        };
+
+        let res = export_photo_file_advanced(
+            tmp_in,
+            tmp_out,
+            &edits,
+            None,
+            90,
+            Some(20),
+            ExportColorSpace::DisplayP3,
+            ExportRenderingIntent::RelativeColorimetric,
+            false,
+            crate::DemosaicQuality::Archival,
+            false,
+            crate::RenderTier::ArchivalExport,
+        );
+        assert!(res.is_ok(), "Export failed: {:?}", res.err());
+
+        let decoded = image::open(tmp_out).expect("Failed to open exported TIFF");
+        assert_eq!(decoded.width(), 20);
+        assert_eq!(decoded.height(), 20);
+
+        match decoded {
+            image::DynamicImage::ImageRgb16(rgb16) => {
+                let mut found_high_precision = false;
+                for p in rgb16.pixels() {
+                    // In 16-bit, values should span into the high range > 255
+                    if p.0[0] > 255 || p.0[1] > 255 || p.0[2] > 255 {
+                        found_high_precision = true;
+                        break;
+                    }
+                }
+                assert!(found_high_precision, "TIFF must contain true 16-bit samples (>255)");
+            }
+            other => panic!("Expected ImageRgb16 for TIFF export, got {:?}", other.color()),
+        }
+
+        let _ = std::fs::remove_file(tmp_in);
+        let _ = std::fs::remove_file(tmp_out);
+    }
+
+    #[test]
+    fn test_rcd_archival_demosaic_execution() {
+        let w = 8;
+        let h = 8;
+        let mut raw = vec![0.0f32; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                raw[y * w + x] = match (y % 2, x % 2) {
+                    (0, 0) => 0.6, // R
+                    (0, 1) => 0.5, // Gr
+                    (1, 0) => 0.5, // Gb
+                    _ => 0.4,      // B
+                };
+            }
+        }
+
+        let frame = crate::raw_decoder::RawSensorFrame {
+            full_width: w,
+            full_height: h,
+            active_x: 0,
+            active_y: 0,
+            active_width: w,
+            active_height: h,
+            cfa_pattern: crate::raw_decoder::CfaPattern::Rggb,
+            black_levels: [0.0; 4],
+            white_levels: [1.0; 4],
+            wb_coeffs: [1.0, 1.0, 1.0, 1.0],
+            color_matrix: Some([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+            color_matrix_tungsten: None,
+            forward_matrix_tungsten: None,
+            forward_matrix_daylight: None,
+            camera_model: "Synthetic Test".to_string(),
+            baseline_exposure: 0.0,
+            noise_profile: None,
+            sensor_data: vec![1000u16; w * h],
+        };
+
+        let demosaiced = rcd_archival_demosaic(&raw, w, h, 0, 0, w, h, &frame);
+        assert_eq!(demosaiced.len(), w * h);
+        for p in &demosaiced {
+            assert!(!p[0].is_nan() && !p[1].is_nan() && !p[2].is_nan());
+            assert!(p[0] >= 0.0 && p[1] >= 0.0 && p[2] >= 0.0);
+        }
+    }
+
+    #[test]
+    fn test_lateral_chemical_diffusion_mackie_lines() {
+        // 1. Uniform patch: zero change
+        let w = 16;
+        let h = 16;
+        let mut uniform = vec![0.5f32; w * h * 3];
+        apply_lateral_chemical_diffusion(&mut uniform, w, h, 0.15);
+        for &val in &uniform {
+            assert!((val - 0.5).abs() < 1e-4, "Uniform patch must remain unchanged");
+        }
+
+        // 2. Step edge: Mackie lines (border contrast enhancement / developer exhaustion)
+        // Left half: 0.2 (shadow), Right half: 0.8 (highlight)
+        let mut edge = vec![0.0f32; w * h * 3];
+        for y in 0..h {
+            for x in 0..w {
+                let v = if x < 8 { 0.2 } else { 0.8 };
+                let idx = (y * w + x) * 3;
+                edge[idx] = v;
+                edge[idx + 1] = v;
+                edge[idx + 2] = v;
+            }
+        }
+
+        apply_lateral_chemical_diffusion(&mut edge, w, h, 0.20);
+
+        // In the middle row (away from top/bottom borders):
+        let mid_y = h / 2;
+        let p_shadow_near_edge = edge[(mid_y * w + 7) * 3]; // x=7: shadow border
+        let p_shadow_far = edge[(mid_y * w + 1) * 3];       // x=1: deep shadow
+
+        let p_highlight_near_edge = edge[(mid_y * w + 8) * 3]; // x=8: highlight border
+        let p_highlight_far = edge[(mid_y * w + 14) * 3];      // x=14: uniform highlight
+
+        // Adjacent to the bright area, developer is exhausted by high silver reduction,
+        // so the shadow border receives less active developer: density drops / undershoot occurs.
+        assert!(
+            p_shadow_near_edge <= p_shadow_far,
+            "Shadow edge must exhibit bromide inhibition / undershoot (got {} vs far {})",
+            p_shadow_near_edge, p_shadow_far
+        );
+
+        // Conversely, fresh developer diffuses from the unexposed shadow across into the highlight border,
+        // producing the Mackie line (overshoot / adjacency fringe):
+        assert!(
+            p_highlight_near_edge >= p_highlight_far,
+            "Highlight edge must exhibit fresh developer boost / overshoot (got {} vs far {})",
+            p_highlight_near_edge, p_highlight_far
+        );
+    }
 }
+
 

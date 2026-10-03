@@ -32,8 +32,8 @@ pub use curve::{
     ToneCurvesRecord,
 };
 pub use modes::{
-    ColorProfileMode, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode,
-    ExportColorSpace, ExportRenderingIntent, PrintMediaMode,
+    ColorProfileMode, DemosaicQuality, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode,
+    EnlargerFilterMode, ExportColorSpace, ExportRenderingIntent, PrintMediaMode, RenderTier,
 };
 pub use preview::{
     decode_exif_orientation, extract_metadata_from_bytes, extract_preview_slice,
@@ -49,7 +49,8 @@ pub use xmp::{
     serialize_curve_points, XmpData,
 };
 pub use color::{
-    develop_frame_pipeline, develop_pixel_pipeline, evaluate_display_luma, is_neutral_edits,
+    apply_lateral_chemical_diffusion, develop_frame_pipeline, develop_pixel_pipeline,
+    develop_raw_sensor_frame_archival, evaluate_display_luma, is_neutral_edits,
     linear_rgb_to_srgb8, linear_to_srgb_gamma, srgb_gamma_to_linear, Color3, ColorSpacePrimaries,
     Matrix3x3,
 };

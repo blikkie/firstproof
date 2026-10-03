@@ -52,10 +52,18 @@ export class IntermediateTextureCache {
       edits.crop_right?.toFixed(3) ?? '1',
       edits.crop_bottom?.toFixed(3) ?? '1',
       edits.crop_angle?.toFixed(2) ?? '0',
-      edits.curves?.master?.length ?? '0',
-      edits.curves?.red?.length ?? '0',
-      edits.curves?.green?.length ?? '0',
-      edits.curves?.blue?.length ?? '0',
+      edits.curves?.master
+        ?.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`)
+        .join(';') ?? '0',
+      edits.curves?.red
+        ?.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`)
+        .join(';') ?? '0',
+      edits.curves?.green
+        ?.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`)
+        .join(';') ?? '0',
+      edits.curves?.blue
+        ?.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`)
+        .join(';') ?? '0',
     ];
     return parts.join('|');
   }

@@ -21,9 +21,9 @@ pub use firstproof_engine::{
     all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,
     AdjustmentDescriptor, ScaleMode, WorkspaceCategory,
     evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, ColorProfileMode,
-    CurvePointRecord, EditSettings, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode,
-    EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent,
-    PrintMediaMode, ToneCurvesRecord, WhiteBalanceResult,
+    CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat,
+    EmulsionGrainMode, EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace,
+    ExportRenderingIntent, PrintMediaMode, RenderTier, ToneCurvesRecord, WhiteBalanceResult,
 };
 
 pub use lensfun::LensCorrectionCoefficients;
@@ -39,6 +39,9 @@ pub struct BatchExportItemRecord {
     pub color_space: ExportColorSpace,
     pub rendering_intent: ExportRenderingIntent,
     pub ultra_hdr: bool,
+    pub demosaic_quality: Option<DemosaicQuality>,
+    pub chemical_edge_diffusion: Option<bool>,
+    pub render_tier: Option<RenderTier>,
 }
 
 #[derive(uniffi::Record, Clone, Debug)]
@@ -370,6 +373,9 @@ pub fn export_photo(
     color_space: Option<ExportColorSpace>,
     rendering_intent: Option<ExportRenderingIntent>,
     ultra_hdr: Option<bool>,
+    demosaic_quality: Option<DemosaicQuality>,
+    chemical_edge_diffusion: Option<bool>,
+    render_tier: Option<RenderTier>,
 ) -> bool {
     let dist_tuple = lens_coeffs.as_ref().and_then(|c| {
         if c.has_distortion {
@@ -382,8 +388,11 @@ pub fn export_photo(
     let cs = color_space.unwrap_or_default();
     let ri = rendering_intent.unwrap_or_default();
     let uhdr = ultra_hdr.unwrap_or(false);
+    let dq = demosaic_quality.unwrap_or_default();
+    let ced = chemical_edge_diffusion.unwrap_or(false);
+    let rt = render_tier.unwrap_or(RenderTier::ArchivalExport);
     
-    match export::export_photo_file(
+    match export::export_photo_file_advanced(
         &input_path,
         &output_path,
         &edits,
@@ -393,6 +402,9 @@ pub fn export_photo(
         cs,
         ri,
         uhdr,
+        dq,
+        ced,
+        rt,
     ) {
         Ok(_) => true,
         Err(e) => {

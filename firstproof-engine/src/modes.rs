@@ -33,6 +33,27 @@ pub enum ExportRenderingIntent {
     RelativeColorimetric,
 }
 
+/// Execution tier for rendering: fast interactive 60–120fps viewport canvas
+/// vs. high-precision multi-pass offline export pipeline.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
+pub enum RenderTier {
+    #[default]
+    Viewport,
+    ArchivalExport,
+}
+
+/// RAW CFA Bayer demosaicing precision quality mode.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
+pub enum DemosaicQuality {
+    #[default]
+    Standard,
+    Archival,
+}
+
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

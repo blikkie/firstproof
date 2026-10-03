@@ -658,7 +658,7 @@
           <label class="export-group-label">Export Format:</label>
           <div class="export-format-segmented">
             <button type="button" class="segmented-btn active" data-format="JPEG">JPEG (.jpg)</button>
-            <button type="button" class="segmented-btn" data-format="TIFF">8-Bit TIFF (.tiff)</button>
+            <button type="button" class="segmented-btn" data-format="TIFF">16-Bit TIFF (.tiff)</button>
           </div>
 
           <!-- JPEG Options -->
@@ -681,6 +681,32 @@
               </label>
             </div>
           </div>
+        </div>
+
+        <!-- Render Fidelity & Precision -->
+        <div class="export-form-group" id="export-fidelity-group">
+          <label class="export-group-label">Render Fidelity &amp; Precision:</label>
+          <div class="export-format-segmented" id="export-demosaic-segmented">
+            <button type="button" class="segmented-btn active" data-quality="Standard">Standard (PPG / Hamilton-Adams)</button>
+            <button type="button" class="segmented-btn" data-quality="Archival">Archival (AMaZE / RCD)</button>
+          </div>
+          <span id="export-demosaic-hint" class="export-caption hidden">
+            4-pass chromatic median filtering with residual color difference refinement to prevent fabric moiré.
+          </span>
+
+          <div id="export-mackie-container" class="hidden" style="margin-top: 4px;">
+            <label class="checkbox-label">
+              <input type="checkbox" id="export-check-mackie" />
+              <span>Spatial Chemical Edge Diffusion (Mackie Lines)</span>
+            </label>
+            <span id="export-mackie-hint" class="export-caption hidden" style="display: block; margin-top: 2px; margin-left: 20px;">
+              Simulates lateral 2D developer exhaustion and bromide inhibitor diffusion across contrasting edges.
+            </span>
+          </div>
+
+          <span class="export-caption" style="color: var(--text-dim); font-size: 0.72rem; margin-top: 4px;">
+            * Multi-pass RCD demosaicing runs in-browser WebAssembly. Native macOS desktop is hardware-accelerated via multi-core Rayon.
+          </span>
         </div>
 
         <!-- Image Sizing -->

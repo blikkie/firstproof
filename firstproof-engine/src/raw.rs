@@ -747,9 +747,14 @@ impl RawSensorFrame {
             let dst_row = y * active_w * 4;
             for x in 0..active_w {
                 let [r_wb, g_wb, b_wb] = demosaiced_rgb[src_row + x];
-                let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
-                let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
-                let b_lin = (m20 * r_wb + m21 * g_wb + m22 * b_wb).max(0.0);
+                let r_raw = if wb_r > 0.001 { r_wb / wb_r } else { r_wb };
+                let g_raw = g_wb;
+                let b_raw = if wb_b > 0.001 { b_wb / wb_b } else { b_wb };
+                let (r_clean, g_clean, b_clean) =
+                    blend_sensor_highlights(r_raw, g_raw, b_raw, wb_r, wb_b);
+                let r_lin = (m00 * r_clean + m01 * g_clean + m02 * b_clean).max(0.0);
+                let g_lin = (m10 * r_clean + m11 * g_clean + m12 * b_clean).max(0.0);
+                let b_lin = (m20 * r_clean + m21 * g_clean + m22 * b_clean).max(0.0);
 
                 let dst_idx = dst_row + x * 4;
                 u16_pixels[dst_idx] = f32_to_f16(r_lin);

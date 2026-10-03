@@ -1,6 +1,6 @@
 use rayon::prelude::*;
 use crate::{BatchExportItemRecord, BatchExportResultRecord};
-use super::encoders::export_photo_file;
+use super::encoders::export_photo_file_advanced;
 
 /// Dispatches multiple photo exports concurrently across all available CPU cores using Rayon.
 pub fn export_batch_photos(
@@ -17,7 +17,11 @@ pub fn export_batch_photos(
                 }
             });
 
-            match export_photo_file(
+            let demosaic_quality = item.demosaic_quality.unwrap_or_default();
+            let chemical_edge_diffusion = item.chemical_edge_diffusion.unwrap_or(false);
+            let render_tier = item.render_tier.unwrap_or(crate::RenderTier::ArchivalExport);
+
+            match export_photo_file_advanced(
                 &item.input_path,
                 &item.output_path,
                 &item.edits,
@@ -27,6 +31,9 @@ pub fn export_batch_photos(
                 item.color_space,
                 item.rendering_intent,
                 item.ultra_hdr,
+                demosaic_quality,
+                chemical_edge_diffusion,
+                render_tier,
             ) {
                 Ok(()) => BatchExportResultRecord {
                     input_path: item.input_path,

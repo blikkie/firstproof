@@ -19,6 +19,8 @@ export interface ExportExecutionOptions {
   sizeOption: 'Original' | '2048' | '3840' | 'Custom';
   customDimension: number;
   destinationDirHandle?: any;
+  demosaicQuality?: 'Standard' | 'Archival';
+  chemicalEdgeDiffusion?: boolean;
 }
 
 export type ExportHandler = (
@@ -40,6 +42,9 @@ export class ExportModal {
   private quality: number = 90;
   private sizeOption: 'Original' | '2048' | '3840' | 'Custom' = 'Original';
   private customDimension: number = 2048;
+  private demosaicQuality: 'Standard' | 'Archival' = 'Standard';
+  private chemicalEdgeDiffusion: boolean = false;
+  private hasActiveEmulsion: boolean = false;
 
   public init(onExport: ExportHandler) {
     this.onExportHandler = onExport;
@@ -53,8 +58,9 @@ export class ExportModal {
     this.bindEvents();
   }
 
-  public open(photos: PhotoFileEntry[]) {
+  public open(photos: PhotoFileEntry[], hasActiveEmulsion: boolean = false) {
     this.targetPhotos = photos;
+    this.hasActiveEmulsion = hasActiveEmulsion;
     this.isExporting = false;
     this.resetStatusMessage();
     this.updateUI();
@@ -159,6 +165,36 @@ export class ExportModal {
       }
     });
 
+    // Demosaic Quality Segmented Control
+    const demosaicButtons = this.dialogEl.querySelectorAll<HTMLButtonElement>(
+      '#export-demosaic-segmented button',
+    );
+    const demosaicHint = this.dialogEl.querySelector('#export-demosaic-hint');
+    demosaicButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const quality = btn.getAttribute('data-quality') as
+          | 'Standard'
+          | 'Archival';
+        if (quality) {
+          this.demosaicQuality = quality;
+          demosaicButtons.forEach((b) => {
+            b.classList.toggle('active', b === btn);
+          });
+          demosaicHint?.classList.toggle('hidden', quality !== 'Archival');
+        }
+      });
+    });
+
+    // Mackie Lines Chemical Diffusion Checkbox
+    const mackieCheck = this.dialogEl.querySelector(
+      '#export-check-mackie',
+    ) as HTMLInputElement;
+    const mackieHint = this.dialogEl.querySelector('#export-mackie-hint');
+    mackieCheck?.addEventListener('change', () => {
+      this.chemicalEdgeDiffusion = mackieCheck.checked;
+      mackieHint?.classList.toggle('hidden', !this.chemicalEdgeDiffusion);
+    });
+
     // Sizing Select
     const sizeSelect = this.dialogEl.querySelector(
       '#export-size-select',
@@ -243,6 +279,39 @@ export class ExportModal {
     if (qualitySlider) qualitySlider.value = `${this.quality}`;
     if (qualityLabel) qualityLabel.textContent = `Quality: ${this.quality}%`;
 
+    // Render Fidelity & Demosaicing Parity
+    const demosaicButtons = this.dialogEl.querySelectorAll<HTMLButtonElement>(
+      '#export-demosaic-segmented button',
+    );
+    demosaicButtons.forEach((b) => {
+      b.classList.toggle(
+        'active',
+        b.getAttribute('data-quality') === this.demosaicQuality,
+      );
+    });
+    const demosaicHint = this.dialogEl.querySelector('#export-demosaic-hint');
+    demosaicHint?.classList.toggle(
+      'hidden',
+      this.demosaicQuality !== 'Archival',
+    );
+
+    const mackieContainer = this.dialogEl.querySelector(
+      '#export-mackie-container',
+    );
+    const mackieCheck = this.dialogEl.querySelector(
+      '#export-check-mackie',
+    ) as HTMLInputElement;
+    const mackieHint = this.dialogEl.querySelector('#export-mackie-hint');
+    if (mackieContainer) {
+      mackieContainer.classList.toggle('hidden', !this.hasActiveEmulsion);
+    }
+    if (mackieCheck) {
+      mackieCheck.checked = this.chemicalEdgeDiffusion;
+    }
+    if (mackieHint) {
+      mackieHint.classList.toggle('hidden', !this.chemicalEdgeDiffusion);
+    }
+
     const customDimRow = this.dialogEl.querySelector('#export-custom-dim-row');
     customDimRow?.classList.toggle('hidden', this.sizeOption !== 'Custom');
   }
@@ -325,6 +394,9 @@ export class ExportModal {
       sizeOption: this.sizeOption,
       customDimension: this.customDimension,
       destinationDirHandle: this.destinationDirHandle,
+      demosaicQuality: this.demosaicQuality,
+      chemicalEdgeDiffusion:
+        this.hasActiveEmulsion && this.chemicalEdgeDiffusion,
     };
 
     try {

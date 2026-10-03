@@ -5,6 +5,7 @@
  * against the reference CPU export pipeline.
  */
 
+import { areCurvesActive } from '../utils/edits';
 import {
   type EditSettingsPayload,
   type EvaluatedLut,
@@ -231,13 +232,7 @@ export class ParityHarness {
 
     // If test case has tone curves, evaluate and upload LUT to test renderer
     let curveLut: EvaluatedLut | undefined;
-    if (
-      test.edits.curves &&
-      (test.edits.curves.master?.length > 2 ||
-        test.edits.curves.red?.length > 2 ||
-        test.edits.curves.green?.length > 2 ||
-        test.edits.curves.blue?.length > 2)
-    ) {
+    if (test.edits.curves && areCurvesActive(test.edits.curves)) {
       try {
         const bridge = WasmBridge.getInstance();
         curveLut = bridge.evaluateCurves(test.edits.curves);

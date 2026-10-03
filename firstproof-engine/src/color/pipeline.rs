@@ -15,7 +15,7 @@ use crate::color::{
     agx_tone_map, agx_tone_map_vivid, apply_print_media, apply_recording_emulsion,
     built_in_landscape_tone_curve, built_in_portrait_tone_curve, built_in_standard_tone_curve,
     built_in_vivid_tone_curve, evaluate_tone_curve, hsv_to_rgb, linear_rgb_to_srgb8,
-    srgb_gamma_to_linear, Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB,
+    linear_to_srgb_gamma, srgb_gamma_to_linear, Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB,
 };
 use crate::curve::AllCurvesLutRecord;
 use crate::modes::{ColorProfileMode, EmulsionArchetype, EmulsionGrainMode, PrintMediaMode};
@@ -825,4 +825,445 @@ pub fn develop_frame_pipeline(
     }
 
     out_rgba
+}
+
+/// Photochemical Lateral Chemical Diffusion (Mackie Lines / Developer Exhaustion)
+///
+/// Models 2D spatial diffusion of development inhibitor by-products (bromide ions)
+/// across contrasting density borders in Linear Rec.2020 space.
+pub fn apply_lateral_chemical_diffusion(
+    data: &mut [f32],
+    width: usize,
+    height: usize,
+    strength: f32,
+) {
+    if strength <= 0.0 || width < 5 || height < 5 || data.len() < width * height * 3 {
+        return;
+    }
+
+    let total_pixels = width * height;
+    let mut luma = Vec::with_capacity(total_pixels);
+    for i in 0..total_pixels {
+        let idx = i * 3;
+        let y = 0.2627 * data[idx] + 0.6780 * data[idx + 1] + 0.0593 * data[idx + 2];
+        luma.push(y);
+    }
+
+    let mut h_blur = vec![0.0f32; total_pixels];
+    let w = width;
+    let h = height;
+
+    // Horizontal pass: 5-tap binomial [1, 4, 6, 4, 1] / 16
+    for y in 0..h {
+        let row_start = y * w;
+        for x in 0..w {
+            let x0 = x.saturating_sub(2);
+            let x1 = x.saturating_sub(1);
+            let x2 = x;
+            let x3 = (x + 1).min(w - 1);
+            let x4 = (x + 2).min(w - 1);
+
+            let v = (luma[row_start + x0]
+                + 4.0 * luma[row_start + x1]
+                + 6.0 * luma[row_start + x2]
+                + 4.0 * luma[row_start + x3]
+                + luma[row_start + x4])
+                / 16.0;
+            h_blur[row_start + x] = v;
+        }
+    }
+
+    let mut diff_luma = vec![0.0f32; total_pixels];
+    for y in 0..h {
+        let y0 = y.saturating_sub(2);
+        let y1 = y.saturating_sub(1);
+        let y2 = y;
+        let y3 = (y + 1).min(h - 1);
+        let y4 = (y + 2).min(h - 1);
+
+        let row_start = y * w;
+        for x in 0..w {
+            let v = (h_blur[y0 * w + x]
+                + 4.0 * h_blur[y1 * w + x]
+                + 6.0 * h_blur[y2 * w + x]
+                + 4.0 * h_blur[y3 * w + x]
+                + h_blur[y4 * w + x])
+                / 16.0;
+            diff_luma[row_start + x] = v;
+        }
+    }
+
+    let kappa = strength.clamp(0.0, 0.35);
+    for y in 0..h {
+        let row_start = y * w;
+        for x in 0..w {
+            let p_idx = row_start + x;
+            let y_c = luma[p_idx];
+            let y_diff = diff_luma[p_idx];
+
+            let contrast_diff = y_c - y_diff;
+            let denom = y_diff + 0.18;
+            let factor = (1.0 + kappa * (contrast_diff / denom)).clamp(0.70, 1.35);
+
+            let out_idx = p_idx * 3;
+            data[out_idx] = (data[out_idx] * factor).max(0.0);
+            data[out_idx + 1] = (data[out_idx + 1] * factor).max(0.0);
+            data[out_idx + 2] = (data[out_idx + 2] * factor).max(0.0);
+        }
+    }
+}
+
+/// Develops a RAW sensor frame using the full multi-pass archival pipeline into 16-bit RGB pixels ($0\dots65,535$).
+pub fn develop_raw_sensor_frame_archival(
+    frame: &crate::raw::RawSensorFrame,
+    edits: &EditSettings,
+    quality: crate::modes::DemosaicQuality,
+    chemical_edge_diffusion: bool,
+) -> (usize, usize, Vec<u16>) {
+    let full_w = frame.full_width;
+    let full_h = frame.full_height;
+    let active_w = frame.active_width;
+    let active_h = frame.active_height;
+
+    let mut norm_pixels = Vec::with_capacity(full_w * full_h);
+    for y in 0..full_h {
+        for x in 0..full_w {
+            norm_pixels.push(frame.sample_normalized(x, y));
+        }
+    }
+
+    // Pre-demosaicing CFA white balance
+    let (wb_r, wb_b) = frame.as_shot_wb();
+    for y in 0..full_h {
+        let row_start = y * full_w;
+        for x in 0..full_w {
+            let c = frame.color_at(y, x);
+            if c == crate::raw::CFA_COLOR_RED {
+                norm_pixels[row_start + x] *= wb_r;
+            } else if c == crate::raw::CFA_COLOR_BLUE {
+                norm_pixels[row_start + x] *= wb_b;
+            }
+        }
+    }
+
+    // Demosaicing
+    let mut demosaiced_rgb = match quality {
+        crate::modes::DemosaicQuality::Archival => crate::color::demosaic::rcd_archival_demosaic(
+            &norm_pixels, full_w, full_h, frame.active_x, frame.active_y, active_w, active_h, frame,
+        ),
+        crate::modes::DemosaicQuality::Standard => crate::color::demosaic::soft_adaptive_demosaic(
+            &norm_pixels, full_w, full_h, frame.active_x, frame.active_y, active_w, active_h, frame,
+        ),
+    };
+
+    let median_passes = match quality {
+        crate::modes::DemosaicQuality::Archival => 4,
+        crate::modes::DemosaicQuality::Standard => 2,
+    };
+    crate::color::demosaic::apply_chromatic_median_filter(&mut demosaiced_rgb, active_w, active_h, median_passes);
+
+    // Map Sensor to Linear Rec.2020 using Planckian-interpolated sensor-to-Rec.2020 matrix
+    let sensor_to_rec2020 = frame.compute_sensor_to_rec2020();
+    let m_sensor_to_rec2020 = crate::color::Matrix3x3(sensor_to_rec2020);
+    let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
+
+    let total_pixels = active_w * active_h;
+    let mut rec2020_data = vec![0.0f32; total_pixels * 3];
+    for i in 0..total_pixels {
+        let [r_wb, g_wb, b_wb] = demosaiced_rgb[i];
+        let r_raw = if wb_r > 0.001 { r_wb / wb_r } else { r_wb };
+        let g_raw = g_wb;
+        let b_raw = if wb_b > 0.001 { b_wb / wb_b } else { b_wb };
+        let (r_clean, g_clean, b_clean) =
+            crate::raw::blend_sensor_highlights(r_raw, g_raw, b_raw, wb_r, wb_b);
+        let c_sensor = Color3::new(r_clean, g_clean, b_clean);
+        let c_rec = m_sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);
+        let idx = i * 3;
+        rec2020_data[idx] = c_rec.r().max(0.0);
+        rec2020_data[idx + 1] = c_rec.g().max(0.0);
+        rec2020_data[idx + 2] = c_rec.b().max(0.0);
+    }
+
+    // Edits setup
+    let total_exposure = edits.exposure;
+    let exposure_gain = 2.0f32.powf(total_exposure);
+    let contrast_gain = if edits.contrast >= 0.0 {
+        1.0 + (edits.contrast / 100.0)
+    } else {
+        1.0 + (edits.contrast / 100.0) * 0.60
+    };
+
+    let temp_norm = (edits.temperature / 5500.0).clamp(0.25, 4.0);
+    let mut r_scale = temp_norm.powf(0.75);
+    let mut b_scale = (1.0 / temp_norm).powf(0.75);
+    let tint_factor = edits.tint * 0.002;
+    let g_scale = (1.0 - tint_factor).max(0.01);
+    r_scale = (r_scale + tint_factor * 0.5).max(0.01);
+    b_scale = (b_scale + tint_factor * 0.5).max(0.01);
+
+    let curve_lut = crate::curve::evaluate_all_curves_lut(&edits.curves);
+    let has_master_curve = crate::curve::is_curve_active(&edits.curves.master);
+    let has_red_curve = crate::curve::is_curve_active(&edits.curves.red);
+    let has_green_curve = crate::curve::is_curve_active(&edits.curves.green);
+    let has_blue_curve = crate::curve::is_curve_active(&edits.curves.blue);
+    let has_any_curve = has_master_curve || has_red_curve || has_green_curve || has_blue_curve;
+
+    let has_tone_recovery = edits.highlights != 0.0 || edits.shadows != 0.0 || edits.whites != 0.0 || edits.blacks != 0.0;
+    let luma_plane = if has_tone_recovery {
+        let mut plane = Vec::with_capacity(total_pixels);
+        for i in 0..total_pixels {
+            let idx = i * 3;
+            let r = rec2020_data[idx] * r_scale * exposure_gain;
+            let g = rec2020_data[idx + 1] * g_scale * exposure_gain;
+            let b = rec2020_data[idx + 2] * b_scale * exposure_gain;
+            plane.push(0.2627 * r + 0.6780 * g + 0.0593 * b);
+        }
+        Some(plane)
+    } else {
+        None
+    };
+
+    // Pass 1: Upstream optical exposure, WB, bilateral tone recovery, recording emulsion
+    for i in 0..total_pixels {
+        let idx = i * 3;
+        let mut r = rec2020_data[idx] * r_scale * exposure_gain;
+        let mut g = rec2020_data[idx + 1] * g_scale * exposure_gain;
+        let mut b = rec2020_data[idx + 2] * b_scale * exposure_gain;
+
+        if let Some(ref luma) = luma_plane {
+            let x = i % active_w;
+            let y = i / active_w;
+            let x_l = x.saturating_sub(2);
+            let x_r = (x + 2).min(active_w - 1);
+            let y_t = y.saturating_sub(2);
+            let y_b = (y + 2).min(active_h - 1);
+
+            let y_c = luma[i];
+            let y_neighbors = [
+                luma[y * active_w + x_l],
+                luma[y * active_w + x_r],
+                luma[y_t * active_w + x],
+                luma[y_b * active_w + x],
+                luma[y_t * active_w + x_l],
+                luma[y_t * active_w + x_r],
+                luma[y_b * active_w + x_l],
+                luma[y_b * active_w + x_r],
+            ];
+
+            let (r_rec, g_rec, b_rec) = apply_bilateral_tone_recovery_rgb(
+                r, g, b, y_c, &y_neighbors, edits.highlights, edits.shadows, edits.whites, edits.blacks,
+            );
+            r = r_rec;
+            g = g_rec;
+            b = b_rec;
+        }
+
+        if edits.emulsion_archetype != EmulsionArchetype::None {
+            let (r_em, g_em, b_em) = apply_recording_emulsion(
+                r, g, b, edits.emulsion_archetype, edits.emulsion_exposure, edits.enlarger_filter,
+            );
+            r = r_em;
+            g = g_em;
+            b = b_em;
+        }
+
+        rec2020_data[idx] = r;
+        rec2020_data[idx + 1] = g;
+        rec2020_data[idx + 2] = b;
+    }
+
+    // Pass 2: 2D Spatial Chemical Diffusion (Mackie Lines)
+    if chemical_edge_diffusion && edits.emulsion_archetype != EmulsionArchetype::None {
+        apply_lateral_chemical_diffusion(&mut rec2020_data, active_w, active_h, 0.15);
+    }
+
+    // Pass 3: Curves, Color adjustments, Split toning, Tone mapping, Print media, Gamma -> 16-bit
+    let mut out_u16 = Vec::with_capacity(total_pixels * 3);
+    for i in 0..total_pixels {
+        let idx = i * 3;
+        let mut r = rec2020_data[idx];
+        let mut g = rec2020_data[idx + 1];
+        let mut b = rec2020_data[idx + 2];
+
+        if has_any_curve {
+            if has_master_curve {
+                r = sample_curve_lut(&curve_lut.master, r);
+                g = sample_curve_lut(&curve_lut.master, g);
+                b = sample_curve_lut(&curve_lut.master, b);
+            }
+            if has_red_curve {
+                r = sample_curve_lut(&curve_lut.red, r);
+            }
+            if has_green_curve {
+                g = sample_curve_lut(&curve_lut.green, g);
+            }
+            if has_blue_curve {
+                b = sample_curve_lut(&curve_lut.blue, b);
+            }
+        }
+
+        let (r_adj, g_adj, b_adj) = apply_color_adjustments(
+            r, g, b, edits.vibrance, edits.saturation, edits.deep_blue, edits.foliage,
+        );
+        r = r_adj;
+        g = g_adj;
+        b = b_adj;
+
+        let (r_st, g_st, b_st) = apply_split_toning(
+            r, g, b,
+            edits.split_toning_shadow_hue, edits.split_toning_shadow_sat,
+            edits.split_toning_highlight_hue, edits.split_toning_highlight_sat,
+            edits.split_toning_balance,
+        );
+        r = r_st;
+        g = g_st;
+        b = b_st;
+
+        // Terminal tone mapping
+        match edits.tone_profile {
+            ColorProfileMode::AgxVivid => {
+                let c_srgb = agx_tone_map_vivid(Color3::new(r, g, b), contrast_gain);
+                r = c_srgb.r();
+                g = c_srgb.g();
+                b = c_srgb.b();
+            }
+            ColorProfileMode::AgxFilmic => {
+                let c_srgb = agx_tone_map(Color3::new(r, g, b), contrast_gain);
+                r = c_srgb.r();
+                g = c_srgb.g();
+                b = c_srgb.b();
+            }
+            mode => {
+                let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r, g, b));
+                let curve = match mode {
+                    ColorProfileMode::CameraPortrait => built_in_portrait_tone_curve(),
+                    ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
+                    ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
+                    _ => built_in_standard_tone_curve(),
+                };
+                let apply_curve = |v: f32| -> f32 {
+                    let curved = evaluate_tone_curve(v, &curve);
+                    if (contrast_gain - 1.0).abs() > 0.001 {
+                        ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
+                    } else {
+                        curved.clamp(0.0, 1.0)
+                    }
+                };
+                r = apply_curve(c_srgb.r().max(0.0));
+                g = apply_curve(c_srgb.g().max(0.0));
+                b = apply_curve(c_srgb.b().max(0.0));
+            }
+        }
+
+        if edits.print_media != PrintMediaMode::None {
+            let (r_p, g_p, b_p) = apply_print_media(
+                r, g, b, edits.print_media, edits.enlarger_filter,
+                edits.print_paper_grade, edits.print_base_warmth, edits.print_process_depth,
+            );
+            r = r_p;
+            g = g_p;
+            b = b_p;
+        }
+
+        let r_disp = linear_to_srgb_gamma(r).clamp(0.0, 1.0);
+        let g_disp = linear_to_srgb_gamma(g).clamp(0.0, 1.0);
+        let b_disp = linear_to_srgb_gamma(b).clamp(0.0, 1.0);
+
+        out_u16.push((r_disp * 65535.0).round().clamp(0.0, 65535.0) as u16);
+        out_u16.push((g_disp * 65535.0).round().clamp(0.0, 65535.0) as u16);
+        out_u16.push((b_disp * 65535.0).round().clamp(0.0, 65535.0) as u16);
+    }
+
+    (active_w, active_h, out_u16)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::raw::{RawSensorFrame, CfaPattern};
+    use crate::modes::DemosaicQuality;
+    use crate::EditSettings;
+
+    #[test]
+    fn test_develop_raw_sensor_frame_archival_neutral_balance() {
+        let w = 16;
+        let h = 16;
+        let frame = RawSensorFrame {
+            full_width: w,
+            full_height: h,
+            active_x: 0,
+            active_y: 0,
+            active_width: w,
+            active_height: h,
+            cfa_pattern: CfaPattern::Rggb,
+            black_levels: [0.0; 4],
+            white_levels: [1000.0; 4],
+            wb_coeffs: [1.0, 1.0, 1.0, 1.0],
+            color_matrix: Some([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+            color_matrix_tungsten: None,
+            forward_matrix_tungsten: None,
+            forward_matrix_daylight: None,
+            camera_model: "Neutral Test".to_string(),
+            baseline_exposure: 0.0,
+            noise_profile: None,
+            sensor_data: vec![500u16; w * h],
+        };
+
+        let edits = EditSettings::default();
+        let (out_w, out_h, u16_data) = develop_raw_sensor_frame_archival(&frame, &edits, DemosaicQuality::Archival, false);
+        assert_eq!(out_w, w);
+        assert_eq!(out_h, h);
+
+        // Center pixel should be neutral (R == G == B)
+        let mid_idx = (h / 2 * w + w / 2) * 3;
+        let r = u16_data[mid_idx];
+        let g = u16_data[mid_idx + 1];
+        let b = u16_data[mid_idx + 2];
+        assert!(r > 0 && g > 0 && b > 0);
+        assert_eq!(r, g, "Neutral grey input must yield equal R and G");
+        assert_eq!(g, b, "Neutral grey input must yield equal G and B");
+    }
+
+    #[test]
+    fn test_develop_raw_sensor_frame_archival_highlight_clipping_no_magenta_cast() {
+        // Test saturated photosites (1000 out of 1000) with realistic asymmetric WB multipliers (e.g. R=2.14, B=1.48)
+        let w = 16;
+        let h = 16;
+        let frame = RawSensorFrame {
+            full_width: w,
+            full_height: h,
+            active_x: 0,
+            active_y: 0,
+            active_width: w,
+            active_height: h,
+            cfa_pattern: CfaPattern::Rggb,
+            black_levels: [0.0; 4],
+            white_levels: [1000.0; 4],
+            wb_coeffs: [2.14, 1.0, 1.48, 1.0],
+            color_matrix: Some([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+            color_matrix_tungsten: None,
+            forward_matrix_tungsten: None,
+            forward_matrix_daylight: None,
+            camera_model: "Saturated Highlight Test".to_string(),
+            baseline_exposure: 0.0,
+            noise_profile: None,
+            sensor_data: vec![1000u16; w * h], // Saturated photosites (cloud highlight)
+        };
+
+        let edits = EditSettings::default();
+        let (out_w, out_h, u16_data) = develop_raw_sensor_frame_archival(&frame, &edits, DemosaicQuality::Archival, false);
+        assert_eq!(out_w, w);
+        assert_eq!(out_h, h);
+
+        let mid_idx = (h / 2 * w + w / 2) * 3;
+        let r = u16_data[mid_idx];
+        let g = u16_data[mid_idx + 1];
+        let b = u16_data[mid_idx + 2];
+        
+        // Saturated highlights must desaturate to clean neutral specular white (zero magenta cast)
+        let rg_ratio = r as f32 / g as f32;
+        let bg_ratio = b as f32 / g as f32;
+        assert!((rg_ratio - 1.0).abs() < 0.02, "R/G ratio in clipped cloud highlights must remain neutral (~1.0), got {}", rg_ratio);
+        assert!((bg_ratio - 1.0).abs() < 0.02, "B/G ratio in clipped cloud highlights must remain neutral (~1.0), got {}", bg_ratio);
+    }
 }

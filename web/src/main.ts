@@ -1080,7 +1080,10 @@ class DarkroomApp {
   private openExportModal() {
     const photos = this.filmstripController.getSelectedPhotos();
     if (photos.length === 0) return;
-    this.exportModal.open(photos);
+    const hasActiveEmulsion =
+      this.edits.emulsion_archetype !== undefined &&
+      this.edits.emulsion_archetype !== 'None';
+    this.exportModal.open(photos, hasActiveEmulsion);
   }
 
   private async handleExport(
