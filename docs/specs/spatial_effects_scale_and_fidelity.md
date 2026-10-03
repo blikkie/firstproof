@@ -30,25 +30,25 @@ To achieve physical authenticity without compromising First Proof's fluid 60–1
 
 ### Physical Phenomenon
 In silver halide films lacking an Anti-Halation Undercoat (AHU) or with thin rem-jet backing (e.g. `BaodingSilver100` / Lucky SHD 100, CineStill 800T, vintage panchromatic stocks):
-1. Incident scene photons from specular highlights ($Y > 0.80$) pass completely through the emulsion layers without being absorbed.
-2. At the acetate/polyester film base and air boundary, light undergoes **specular Fresnel internal reflection and lateral scatter**.
-3. Reflected photons re-enter the emulsion layer from behind, exposing neighboring silver grains in a concentric point-spread halo around the highlight source.
+1. Incident scene photons from highlights entering the film shoulder ($Y > 0.55$, Zone VII+, $+1.6\text{ EV}$ above $18\%$ middle gray) saturate primary silver grains and pass through the emulsion layers without being absorbed.
+2. At the acetate/polyester film base ($120\text{–}140\,\mu\text{m}$ thick) and air boundary, light undergoes **specular Fresnel internal reflection and lateral scatter** beyond the critical angle $\theta_c = \arcsin(1/1.50) \approx 41.8^\circ$.
+3. Reflected photons re-enter the emulsion layer from behind, exposing neighboring silver grains in a concentric point-spread halo around the highlight source. On a physical 35mm film negative ($36\text{ mm} \times 24\text{ mm}$), the halo spans $\approx 0.35\text{–}0.50\text{ mm}$, which corresponds to a format-invariant ratio of $\approx 1.0\%\text{–}1.5\%$ of the frame long edge ($R_{\text{norm}} \approx 0.012$).
 
 ### Mathematical Formulation
 Point-spread lateral scatter follows an exponential decay function:
 
 $$I_{\text{scatter}}(d) = I_{\text{highlight}} \cdot e^{-d / \lambda_{\text{scatter}}}$$
 
-Where $d$ is spatial Euclidean distance from the highlight source and $\lambda_{\text{scatter}}$ is the optical diffusion length (typically $15\text{–}30\,\mu\text{m}$ in physical film).
+Where $d$ is spatial Euclidean distance from the highlight source and $\lambda_{\text{scatter}}$ is the optical diffusion length ($\approx 1.2\%$ of the 35mm canvas frame).
 
 ### Two-Tier Implementation
 1. **Viewport (Metal & WebGL 2)**:
-   - 13-tap sparse Poisson disk kernel centered on the current fragment with radius $r \approx 8\text{–}12\text{ texels}$.
-   - Samples surrounding highlight excess luminance $Y_{\text{excess}} = \max(Y - 0.80, 0.0)$.
+   - 12-tap Poisson disk sparse convolution kernel scaled format-invariantly to $1.2\%$ of the canvas frame: $R = (0.012 / A, 0.012)$ in normalized UV space, where $A$ is the aspect ratio.
+   - Samples surrounding highlight excess luminance $Y_{\text{excess}} = (Y - 0.55)^2 / (0.25 + (Y - 0.55))$ for $Y > 0.55$ ($C^1$ smooth onset, zero clipping knee).
    - Injects diffused scatter into the center fragment's linear Rec.2020 optical density.
 2. **Export Render (`pipeline.rs`, `encoders.rs`)**:
-   - 2-pass separable exponential blur on the highlight threshold mask ($Y > 0.80$) with radius $r \approx 20\text{–}40\text{ pixels}$ at native resolution.
-   - For color emulsions, models the spectral red-shift of halation (red light scatters furthest through the emulsion stack).
+   - 2-pass separable exponential blur on the highlight threshold mask ($Y > 0.55$) with radius scaled to $1.2\%$ of the image diagonal ($r = \text{round}(0.012 \times \max(W, H))$) at native resolution.
+   - For color emulsions (Rochester Cinema 500 Stripped), models the spectral red-shift of halation (red light scatters furthest through the emulsion stack: $0.50 R, 0.12 G, 0.02 B$).
 
 ---
 

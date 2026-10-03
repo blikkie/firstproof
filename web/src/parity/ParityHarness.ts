@@ -123,6 +123,7 @@ export function createDefaultEdits(): EditSettingsPayload {
     emulsion_archetype: 'None',
     emulsion_format: 'Format35mm',
     emulsion_exposure: 0.0,
+    remjet_backing: 'Intact',
     emulsion_grain_mode: 'Off',
     grain_scale: 1.0,
     print_media: 'None',

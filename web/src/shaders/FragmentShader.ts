@@ -29,6 +29,7 @@ uniform int u_emulsionArchetype;
 uniform float u_emulsionExposure;
 uniform int u_emulsionGrainMode;
 uniform float u_grainScale;
+uniform int u_halationMode;
 
 uniform int u_printMediaMode;
 uniform float u_printPaperGrade;
@@ -69,6 +70,13 @@ uniform int u_hasRgbCurves;
 
 ${COLOR_SCIENCE_GLSL}
 ${DETAIL_GLSL}
+
+// Interleaved Gradient Noise (Jorge Jimenez, Next Generation Post Processing)
+// Extremely fast, zero texture lookups, optimal blue-noise-like properties for sample jitter and dithering
+float ign(vec2 p) {
+    vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
+    return fract(magic.z * fract(dot(p, magic.xy)));
+}
 
 // Tone Curve Coordinate Mapping (Half-texel offset for exact 256-sample 1D LUT)
 vec2 sampleCurveCoord(float val) {
@@ -240,7 +248,8 @@ void main() {
     if (u_isOriginal != 0) {
         if (u_isLinearRec2020 != 0) {
             vec3 srgbLinearOut = agxToneMap(sampled.rgb, 1.0);
-            fragColor = vec4(linearToSrgbGamma3(clamp(srgbLinearOut, 0.0, 1.0)), 1.0);
+            float dither = (ign(gl_FragCoord.xy) - 0.5) / 255.0;
+            fragColor = vec4(clamp(linearToSrgbGamma3(clamp(srgbLinearOut, 0.0, 1.0)) + vec3(dither), 0.0, 1.0), 1.0);
         } else {
             fragColor = sampled;
         }
@@ -262,6 +271,7 @@ void main() {
         (abs(u_temperature - 5500.0) < 1.0) &&
         (abs(u_tint) < 0.001) &&
         (u_emulsionArchetype == 0) &&
+        (u_halationMode == 0) &&
         (u_emulsionGrainMode == 0) &&
         (u_printMediaMode == 0) &&
         (u_splitShadowSat < 0.001) &&
@@ -301,6 +311,77 @@ void main() {
     // 4. Photochemical Recording Emulsion in Linear Rec.2020
     if (u_emulsionArchetype != 0) {
         rec2020Color = applyRecordingEmulsion(rec2020Color, u_emulsionArchetype, u_emulsionExposure, u_enlargerFilterMode);
+    }
+
+    // 4c. Physical Optical Halation Scatter (Point-Spread Emulsion Diffusion)
+    if (u_isOriginal == 0 && u_halationMode > 0) {
+        float aspect = max(u_aspectRatio, 0.01);
+        vec2 halationRadius;
+        if (u_rotation == 90 || u_rotation == 270) {
+            halationRadius = vec2(0.012 * aspect, 0.012);
+        } else {
+            halationRadius = vec2(0.012 / aspect, 0.012);
+        }
+
+        // Stochastic rotation per fragment via Interleaved Gradient Noise
+        // Smooths out discrete Poisson disk tap rings into a continuous, band-free spatial point-spread function
+        float jitter = ign(gl_FragCoord.xy) * 6.2831853;
+        float cosJ = cos(jitter);
+        float sinJ = sin(jitter);
+        mat2 rot = mat2(cosJ, -sinJ, sinJ, cosJ);
+
+        // 16-tap Fermat golden spiral with exponential distance weighting
+        const vec2 fermatDisk[16] = vec2[16](
+            vec2( 0.1768,  0.0000), vec2(-0.2258,  0.2068), vec2( 0.0346, -0.3938), vec2( 0.2846,  0.3712),
+            vec2(-0.5222, -0.0924), vec2( 0.4947, -0.3147), vec2(-0.1655,  0.6155), vec2(-0.3156, -0.6076),
+            vec2( 0.6846,  0.2500), vec2(-0.7123,  0.2940), vec2( 0.3434, -0.7337), vec2( 0.2537,  0.8089),
+            vec2(-0.7647, -0.4432), vec2( 0.8971, -0.1972), vec2(-0.5475,  0.7788), vec2(-0.1265, -0.9761)
+        );
+        const float fermatWeights[16] = float[16](
+            0.6428, 0.4651, 0.3722, 0.3106,
+            0.2656, 0.2309, 0.2032, 0.1806,
+            0.1617, 0.1457, 0.1320, 0.1201,
+            0.1097, 0.1006, 0.0926, 0.0854
+        );
+
+        float tempNorm = clamp(u_temperature / 5500.0, 0.25, 4.0);
+        float rScale = pow(tempNorm, 0.75);
+        float bScale = pow(1.0 / tempNorm, 0.75);
+        float tintFactor = u_tint * 0.002;
+        float gScale = max(1.0 - tintFactor, 0.01);
+        rScale = max(rScale + tintFactor * 0.5, 0.01);
+        bScale = max(bScale + tintFactor * 0.5, 0.01);
+        vec3 wbExposure = vec3(rScale, gScale, bScale) * pow(2.0, u_exposure);
+
+        float scatterAcc = 0.0;
+        for (int i = 0; i < 16; ++i) {
+            vec2 rotatedOffset = (rot * fermatDisk[i]) * halationRadius;
+            vec4 s = texture(u_texture, uv + rotatedOffset);
+            vec3 c;
+            if (u_isLinearRec2020 != 0) {
+                c = s.rgb;
+            } else {
+                c = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(s.rgb);
+            }
+            c *= wbExposure;
+            float y_tap = dot(c, vec3(0.2627, 0.6780, 0.0593));
+            if (y_tap > 0.55) {
+                float diff = y_tap - 0.55;
+                float excess = (diff * diff) / (0.25 + diff);
+                scatterAcc += excess * fermatWeights[i];
+            }
+        }
+
+        float halo = scatterAcc / 3.6187;
+        if (halo > 1e-5) {
+            if (u_halationMode == 1) {
+                // Baoding Silver 100: Neutral panchromatic silver glow
+                rec2020Color += vec3(halo * 0.35);
+            } else if (u_halationMode == 2) {
+                // Rochester Cinema 500 (Stripped Rem-Jet / CineStill): Red-shifted halation
+                rec2020Color += vec3(halo * 0.50, halo * 0.12, halo * 0.02);
+            }
+        }
     }
 
     vec3 rec2020PreCurve = rec2020Color;
@@ -401,7 +482,9 @@ void main() {
         srgbLinearOut = applyPrintMedia(srgbLinearOut, u_printMediaMode, u_enlargerFilterMode, u_printPaperGrade, u_printBaseWarmth, u_printProcessDepth);
     }
 
-    // 12. Final Display Output: Display Gamma (The VERY LAST step!)
-    fragColor = vec4(linearToSrgbGamma3(clamp(srgbLinearOut, 0.0, 1.0)), 1.0);
+    // 12. Final Display Output: Display Gamma with 8-bit TPDF dither (The VERY LAST step!)
+    // Completely eliminates 8-bit display quantization banding on smooth gradients
+    float dither = (ign(gl_FragCoord.xy) - 0.5) / 255.0;
+    fragColor = vec4(linearToSrgbGamma3(clamp(srgbLinearOut, 0.0, 1.0)) + vec3(dither), 1.0);
 }
 `;

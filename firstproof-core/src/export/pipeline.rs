@@ -66,9 +66,13 @@ pub fn apply_edits_with_tier(
         None
     };
 
+    let has_halation = edits.emulsion_archetype == crate::EmulsionArchetype::BaodingSilver100
+        || (edits.emulsion_archetype == crate::EmulsionArchetype::RochesterCinema500
+            && edits.remjet_backing == crate::RemjetBackingMode::Stripped);
     let needs_spatial_chem_diffusion = chemical_edge_diffusion && edits.emulsion_archetype != crate::EmulsionArchetype::None;
+    let needs_spatial_pass = needs_spatial_chem_diffusion || has_halation;
 
-    if needs_spatial_chem_diffusion {
+    if needs_spatial_pass {
         // Pass 1: Upstream optical exposure, WB, bilateral tone recovery, and recording emulsion
         for i in 0..total_pixels {
             let idx = i * 3;
@@ -123,7 +127,20 @@ pub fn apply_edits_with_tier(
         }
 
         // Pass 2: 2D Spatial Lateral Chemical Diffusion (Mackie Lines / Developer Exhaustion)
-        apply_lateral_chemical_diffusion(&mut image.data, image.width, image.height, 0.15);
+        if needs_spatial_chem_diffusion {
+            apply_lateral_chemical_diffusion(&mut image.data, image.width, image.height, 0.15);
+        }
+
+        // Pass 2b: 2D Spatial Optical Halation Point-Spread Scatter
+        if has_halation {
+            crate::color::apply_point_spread_halation(
+                &mut image.data,
+                image.width,
+                image.height,
+                edits.emulsion_archetype,
+                edits.remjet_backing,
+            );
+        }
 
         // Pass 3: Downstream Curves, Color Grading, Tone Mapping, and Print Media
         for i in 0..total_pixels {

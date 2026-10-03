@@ -70,6 +70,14 @@ extension MetalRenderer {
             uniforms.emulsionArchetype = 11
         }
 
+        if edits.emulsionArchetype == .baodingSilver100 {
+            uniforms.halationMode = 1
+        } else if edits.emulsionArchetype == .rochesterCinema500 && edits.remjetBacking == .stripped {
+            uniforms.halationMode = 2
+        } else {
+            uniforms.halationMode = 0
+        }
+
         switch edits.emulsionFormat {
         case .format35mm:
             uniforms.emulsionFormat = 0

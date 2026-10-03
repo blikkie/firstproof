@@ -35,6 +35,7 @@ export function getDefaultEdits(isRaw: boolean = false): EditSettingsPayload {
     emulsion_archetype: 'None',
     emulsion_format: 'Format35mm',
     emulsion_exposure: 0.0,
+    remjet_backing: 'Intact',
     emulsion_grain_mode: 'Off',
     grain_scale: 1.0,
     curves: {
@@ -128,6 +129,7 @@ export function hasModifications(
   if (Math.abs(edits.foliage) > 1e-4) return true;
   if (edits.tone_profile !== 'AgxVivid') return true;
   if (edits.emulsion_archetype !== 'None') return true;
+  if (edits.remjet_backing === 'Stripped') return true;
   if (edits.emulsion_grain_mode && edits.emulsion_grain_mode !== 'Off')
     return true;
   if (

@@ -9,6 +9,7 @@ public struct EmulsionWorkspaceView: View {
     private var hasActiveEmulsionEdits: Bool {
         viewModel.emulsionArchetype != .none ||
         viewModel.emulsionExposure != 0.0 ||
+        viewModel.remjetBacking != .intact ||
         viewModel.emulsionGrainMode != .off ||
         viewModel.grainScale != 1.0
     }
@@ -127,6 +128,25 @@ public struct EmulsionWorkspaceView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
+                    }
+                    
+                    // Carbon Rem-Jet Anti-Halation Layer (Rochester Cinema 500)
+                    if viewModel.emulsionArchetype == .rochesterCinema500 {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Carbon Rem-Jet Backing")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                            
+                            Picker("", selection: Binding<RemjetBackingMode>(
+                                get: { viewModel.remjetBacking },
+                                set: { viewModel.setRemjetBacking($0) }
+                            )) {
+                                Text("Intact (Studio ECN-2)").tag(RemjetBackingMode.intact)
+                                Text("Stripped (Halation Scatter)").tag(RemjetBackingMode.stripped)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                        }
                     }
                     
                     // Push / Pull Exposure Compensation

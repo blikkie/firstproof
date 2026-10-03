@@ -43,6 +43,7 @@ extension AppViewModel {
             emulsionArchetype: self.emulsionArchetype,
             emulsionFormat: self.emulsionFormat,
             emulsionExposure: self.emulsionExposure,
+            remjetBacking: self.remjetBacking,
             curves: self.curves,
             splitToningShadowHue: self.splitToningShadowHue,
             splitToningShadowSat: self.splitToningShadowSat,
@@ -96,6 +97,7 @@ extension EditSettings {
             emulsionArchetype: .none,
             emulsionFormat: .format35mm,
             emulsionExposure: 0.0,
+            remjetBacking: .intact,
             curves: ToneCurvesRecord.defaultIdentity,
             splitToningShadowHue: 215.0,
             splitToningShadowSat: 0.0,
@@ -148,6 +150,7 @@ extension AppViewModel {
         self.emulsionArchetype = edits.emulsionArchetype
         self.emulsionFormat = edits.emulsionFormat
         self.emulsionExposure = edits.emulsionExposure
+        self.remjetBacking = edits.remjetBacking
         self.curves = edits.curves
         self.splitToningShadowHue = edits.splitToningShadowHue
         self.splitToningShadowSat = edits.splitToningShadowSat
@@ -789,6 +792,7 @@ extension AppViewModel {
         isCropToolActive = false
         cropAspectRatioPreset = .original
         rotationDegrees = defaultExifRotation
+        remjetBacking = .intact
         flipHorizontal = defaultExifFlipH
         flipVertical = defaultExifFlipV
         toneProfile = .agxVivid
@@ -1049,11 +1053,25 @@ extension AppViewModel {
         notifyThumbnailChanged()
     }
     
+    public func setRemjetBacking(_ mode: RemjetBackingMode) {
+        guard self.remjetBacking != mode else { return }
+        let before = currentEdits
+        self.remjetBacking = mode
+        let title: String
+        switch mode {
+        case .intact: title = "Rem-Jet: Intact (Studio ECN-2)"
+        case .stripped: title = "Rem-Jet: Stripped (Halation)"
+        }
+        registerDiscreteEdit(title: title, before: before)
+        notifyThumbnailChanged()
+    }
+    
     public func resetEmulsion() {
         let before = currentEdits
         self.emulsionArchetype = .none
         self.emulsionFormat = .format35mm
         self.emulsionExposure = 0.0
+        self.remjetBacking = .intact
         self.emulsionGrainMode = .off
         self.grainScale = 1.0
         registerDiscreteEdit(title: "Reset Film Emulsion", before: before)

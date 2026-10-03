@@ -18,7 +18,9 @@ use crate::color::{
     linear_to_srgb_gamma, srgb_gamma_to_linear, Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB,
 };
 use crate::curve::AllCurvesLutRecord;
-use crate::modes::{ColorProfileMode, EmulsionArchetype, EmulsionGrainMode, PrintMediaMode};
+use crate::modes::{
+    ColorProfileMode, EmulsionArchetype, EmulsionGrainMode, PrintMediaMode, RemjetBackingMode,
+};
 use crate::raw::f16_to_f32;
 use crate::settings::EditSettings;
 
@@ -913,6 +915,108 @@ pub fn apply_lateral_chemical_diffusion(
     }
 }
 
+/// Physical Optical Halation Scatter & Point-Spread Emulsion Diffusion
+///
+/// Models Fresnel internal reflection and lateral photon scatter off the film base
+/// for unbacked or stripped emulsions (BaodingSilver100 and stripped RochesterCinema500).
+pub fn apply_point_spread_halation(
+    data: &mut [f32],
+    width: usize,
+    height: usize,
+    archetype: EmulsionArchetype,
+    remjet: RemjetBackingMode,
+) {
+    let (is_mono, red_scale, green_scale, blue_scale) = match archetype {
+        EmulsionArchetype::BaodingSilver100 => (true, 0.35, 0.35, 0.35),
+        EmulsionArchetype::RochesterCinema500 if remjet == RemjetBackingMode::Stripped => {
+            (false, 0.50, 0.12, 0.02)
+        }
+        _ => return,
+    };
+
+    if width < 5 || height < 5 || data.len() < width * height * 3 {
+        return;
+    }
+
+    let total_pixels = width * height;
+    let mut excess = vec![0.0f32; total_pixels];
+
+    // Pass 0: Extract continuous C^1 highlight excess entering film shoulder (Zone VII+, Y > 0.55)
+    for i in 0..total_pixels {
+        let idx = i * 3;
+        let r = data[idx];
+        let g = data[idx + 1];
+        let b = data[idx + 2];
+        let y = 0.2627 * r + 0.6780 * g + 0.0593 * b;
+        if y > 0.55 {
+            let diff = y - 0.55;
+            excess[i] = (diff * diff) / (0.25 + diff);
+        }
+    }
+
+    // 1D Exponential decay kernel scaled to 35mm canvas frame (1.2% of frame long edge)
+    let max_dim = width.max(height);
+    let radius = ((max_dim as f32) * 0.012).round().clamp(4.0, 48.0) as usize;
+    let lambda = (radius as f32) / 3.0;
+
+    let mut kernel = vec![0.0f32; radius * 2 + 1];
+    let mut k_sum = 0.0f32;
+    for k in 0..=radius * 2 {
+        let dist = (k as isize - radius as isize).abs() as f32;
+        let w = (-dist / lambda).exp();
+        kernel[k] = w;
+        k_sum += w;
+    }
+    for k in 0..=radius * 2 {
+        kernel[k] /= k_sum;
+    }
+
+    // Pass 1: Horizontal 1D separable convolution
+    let mut h_blur = vec![0.0f32; total_pixels];
+    let w = width;
+    let h = height;
+
+    for y in 0..h {
+        let row_start = y * w;
+        for x in 0..w {
+            let mut acc = 0.0f32;
+            for k in 0..=radius * 2 {
+                let offset = k as isize - radius as isize;
+                let sx = (x as isize + offset).clamp(0, (w - 1) as isize) as usize;
+                acc += excess[row_start + sx] * kernel[k];
+            }
+            h_blur[row_start + x] = acc;
+        }
+    }
+
+    // Pass 2: Vertical 1D separable convolution and composite back into data
+    for y in 0..h {
+        let row_start = y * w;
+        for x in 0..w {
+            let mut acc = 0.0f32;
+            for k in 0..=radius * 2 {
+                let offset = k as isize - radius as isize;
+                let sy = (y as isize + offset).clamp(0, (h - 1) as isize) as usize;
+                acc += h_blur[sy * w + x] * kernel[k];
+            }
+
+            if acc > 1e-5 {
+                let out_idx = (row_start + x) * 3;
+                if is_mono {
+                    let mono_val = (data[out_idx] + acc * red_scale).max(0.0);
+                    data[out_idx] = mono_val;
+                    data[out_idx + 1] = mono_val;
+                    data[out_idx + 2] = mono_val;
+                } else {
+                    data[out_idx] = (data[out_idx] + acc * red_scale).max(0.0);
+                    data[out_idx + 1] = (data[out_idx + 1] + acc * green_scale).max(0.0);
+                    data[out_idx + 2] = (data[out_idx + 2] + acc * blue_scale).max(0.0);
+                }
+            }
+        }
+    }
+}
+
 /// Develops a RAW sensor frame using the full multi-pass archival pipeline into 16-bit RGB pixels ($0\dots65,535$).
 pub fn develop_raw_sensor_frame_archival(
     frame: &crate::raw::RawSensorFrame,
@@ -1076,6 +1180,15 @@ pub fn develop_raw_sensor_frame_archival(
     if chemical_edge_diffusion && edits.emulsion_archetype != EmulsionArchetype::None {
         apply_lateral_chemical_diffusion(&mut rec2020_data, active_w, active_h, 0.15);
     }
+
+    // Pass 2b: 2D Spatial Optical Halation Point-Spread Scatter
+    apply_point_spread_halation(
+        &mut rec2020_data,
+        active_w,
+        active_h,
+        edits.emulsion_archetype,
+        edits.remjet_backing,
+    );
 
     // Pass 3: Curves, Color adjustments, Split toning, Tone mapping, Print media, Gamma -> 16-bit
     let mut out_u16 = Vec::with_capacity(total_pixels * 3);
@@ -1265,5 +1378,79 @@ mod tests {
         let bg_ratio = b as f32 / g as f32;
         assert!((rg_ratio - 1.0).abs() < 0.02, "R/G ratio in clipped cloud highlights must remain neutral (~1.0), got {}", rg_ratio);
         assert!((bg_ratio - 1.0).abs() < 0.02, "B/G ratio in clipped cloud highlights must remain neutral (~1.0), got {}", bg_ratio);
+    }
+
+    #[test]
+    fn test_point_spread_halation_inactive_cases() {
+        let w = 32;
+        let h = 32;
+        let mut data = vec![0.5f32; w * h * 3];
+        let original = data.clone();
+
+        // Archetype None -> no change
+        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::None, RemjetBackingMode::Intact);
+        assert_eq!(data, original);
+
+        // RochesterCinema500 with Intact rem-jet -> no change
+        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::RochesterCinema500, RemjetBackingMode::Intact);
+        assert_eq!(data, original);
+
+        // Sub-threshold highlights (Y = 0.40 <= 0.55) with BaodingSilver100 -> no change
+        let mut sub_data = vec![0.4f32; w * h * 3];
+        let sub_original = sub_data.clone();
+        apply_point_spread_halation(&mut sub_data, w, h, EmulsionArchetype::BaodingSilver100, RemjetBackingMode::Intact);
+        assert_eq!(sub_data, sub_original);
+    }
+
+    #[test]
+    fn test_point_spread_halation_baoding_silver_glow() {
+        let w = 32;
+        let h = 32;
+        let mut data = vec![0.1f32; w * h * 3];
+
+        // Put a bright specular spot at center (16, 16) with Y = 1.5
+        let center_idx = (16 * w + 16) * 3;
+        data[center_idx] = 1.5;
+        data[center_idx + 1] = 1.5;
+        data[center_idx + 2] = 1.5;
+
+        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::BaodingSilver100, RemjetBackingMode::Intact);
+
+        // Pixel 2 steps away should have received scattered light
+        let near_idx = (16 * w + 18) * 3;
+        let far_idx = (16 * w + 24) * 3;
+
+        let r_near = data[near_idx];
+        let g_near = data[near_idx + 1];
+        let b_near = data[near_idx + 2];
+        let r_far = data[far_idx];
+
+        assert!(r_near > 0.1, "Scattered light must reach neighbor pixel");
+        assert_eq!(r_near, g_near, "Baoding Silver halation must be neutral panchromatic R == G");
+        assert_eq!(g_near, b_near, "Baoding Silver halation must be neutral panchromatic G == B");
+        assert!(r_near > r_far, "Point-spread scatter must decay monotonically with distance");
+    }
+
+    #[test]
+    fn test_point_spread_halation_cinema_stripped_red_shift() {
+        let w = 32;
+        let h = 32;
+        let mut data = vec![0.1f32; w * h * 3];
+
+        let center_idx = (16 * w + 16) * 3;
+        data[center_idx] = 1.5;
+        data[center_idx + 1] = 1.5;
+        data[center_idx + 2] = 1.5;
+
+        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::RochesterCinema500, RemjetBackingMode::Stripped);
+
+        let near_idx = (16 * w + 18) * 3;
+        let delta_r = data[near_idx] - 0.1;
+        let delta_g = data[near_idx + 1] - 0.1;
+        let delta_b = data[near_idx + 2] - 0.1;
+
+        assert!(delta_r > 0.0, "Red channel must receive halation scatter");
+        assert!(delta_r > delta_g, "Cinema halation must be red-shifted (R > G)");
+        assert!(delta_g > delta_b, "Cinema halation must be red-shifted (G > B)");
     }
 }

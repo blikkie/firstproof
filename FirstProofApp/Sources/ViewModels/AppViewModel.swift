@@ -290,6 +290,7 @@ public final class AppViewModel {
     public var emulsionArchetype: EmulsionArchetype = .none
     public var emulsionFormat: EmulsionFormat = .format35mm
     public var emulsionExposure: Float = 0.0          // -2.0 .. +2.0 EV
+    public var remjetBacking: RemjetBackingMode = .intact
     public var defaultEmulsionExposure: Float { 0.0 }
     public var emulsionGrainMode: EmulsionGrainMode = .off
     public var grainScale: Float = 1.0                // 0.5 .. 2.0

@@ -28,6 +28,13 @@ vertex VertexOutput vertexShader(
     return out;
 }
 
+// Interleaved Gradient Noise (Jorge Jimenez, Next Generation Post Processing)
+// Extremely fast, zero texture lookups, optimal blue-noise-like properties for sample jitter and dithering
+inline float ign(float2 p) {
+    float3 magic = float3(0.06711056f, 0.00583715f, 52.9829189f);
+    return fract(magic.z * fract(dot(p, magic.xy)));
+}
+
 // MARK: - Fragment Shader (Linear RAW Pipeline)
 fragment float4 fragmentShader(
     VertexOutput in [[stage_in]],
@@ -85,6 +92,7 @@ fragment float4 fragmentShader(
                           (uniforms.sharpeningAmount == 0.0) &&
                           (uniforms.noiseReduction == 0.0) &&
                           (uniforms.emulsionArchetype == 0) &&
+                          (uniforms.halationMode == 0) &&
                           (uniforms.emulsionGrainMode == 0) &&
                           (uniforms.printMediaMode == 0);
     
@@ -194,6 +202,70 @@ fragment float4 fragmentShader(
             uniforms.emulsionExposure,
             uniforms.enlargerFilterMode
         );
+    }
+    
+    // 4c. Physical Optical Halation Scatter (Point-Spread Emulsion Diffusion)
+    if (uniforms.isOriginal < 0.5 && uniforms.halationMode > 0) {
+        float aspect = max(uniforms.aspectRatio, 0.01f);
+        float2 halationRadius;
+        if (uniforms.rotation == 90 || uniforms.rotation == 270) {
+            halationRadius = float2(0.012f * aspect, 0.012f);
+        } else {
+            halationRadius = float2(0.012f / aspect, 0.012f);
+        }
+        float3 wbExposure = float3(rScale, gScale, bScale) * exposureGain;
+        
+        // Stochastic rotation per fragment via Interleaved Gradient Noise
+        // Smooths out discrete Poisson disk tap rings into a continuous, band-free spatial point-spread function
+        float jitter = ign(in.position.xy) * 6.2831853f;
+        float cosJ = cos(jitter);
+        float sinJ = sin(jitter);
+        float2x2 rot = float2x2(float2(cosJ, sinJ), float2(-sinJ, cosJ));
+
+        // 16-tap Fermat golden spiral with exponential distance weighting
+        constexpr float2 fermatDisk[16] = {
+            float2( 0.1768,  0.0000), float2(-0.2258,  0.2068), float2( 0.0346, -0.3938), float2( 0.2846,  0.3712),
+            float2(-0.5222, -0.0924), float2( 0.4947, -0.3147), float2(-0.1655,  0.6155), float2(-0.3156, -0.6076),
+            float2( 0.6846,  0.2500), float2(-0.7123,  0.2940), float2( 0.3434, -0.7337), float2( 0.2537,  0.8089),
+            float2(-0.7647, -0.4432), float2( 0.8971, -0.1972), float2(-0.5475,  0.7788), float2(-0.1265, -0.9761)
+        };
+        constexpr float fermatWeights[16] = {
+            0.6428, 0.4651, 0.3722, 0.3106,
+            0.2656, 0.2309, 0.2032, 0.1806,
+            0.1617, 0.1457, 0.1320, 0.1201,
+            0.1097, 0.1006, 0.0926, 0.0854
+        };
+        
+        float scatterAcc = 0.0;
+        for (int i = 0; i < 16; ++i) {
+            float2 rotatedOffset = (rot * fermatDisk[i]) * halationRadius;
+            float4 s = texture.sample(textureSampler, uv + rotatedOffset);
+            float3 c;
+            if (uniforms.isLinearRaw == 1) {
+                c = s.rgb;
+            } else {
+                float3 srgbLinear = srgbGammaToLinear3(s.rgb);
+                c = LINEAR_SRGB_TO_REC2020 * srgbLinear;
+            }
+            c *= wbExposure;
+            float y_tap = dot(c, float3(0.2627, 0.6780, 0.0593));
+            if (y_tap > 0.55f) {
+                float diff = y_tap - 0.55f;
+                float excess = (diff * diff) / (0.25f + diff);
+                scatterAcc += excess * fermatWeights[i];
+            }
+        }
+        
+        float halo = scatterAcc / 3.6187f;
+        if (halo > 1e-5f) {
+            if (uniforms.halationMode == 1) {
+                // Baoding Silver 100: Neutral panchromatic silver glow
+                rec2020Color += float3(halo * 0.35f);
+            } else if (uniforms.halationMode == 2) {
+                // Rochester Cinema 500 (Stripped Rem-Jet / CineStill): Red-shifted halation
+                rec2020Color += float3(halo * 0.50f, halo * 0.12f, halo * 0.02f);
+            }
+        }
     }
     
     // 5. RGB Tone Curves (Master + R + G + B) in Linear Rec.2020 Working Space
@@ -396,7 +468,8 @@ fragment float4 fragmentShader(
         // Standard Dynamic Range (SDR) / Thumbnail mode
         finalColor = clamp(finalColor, 0.0, 1.0);
         
-        // Match standard display target transform for sRGB layer and thumbnail capture
-        return float4(linearToSrgbGamma3(finalColor), sampledColor.a);
+        // Match standard display target transform for sRGB layer and thumbnail capture with 8-bit TPDF dither
+        float dither = (ign(in.position.xy) - 0.5f) / 255.0f;
+        return float4(clamp(linearToSrgbGamma3(finalColor) + float3(dither), 0.0f, 1.0f), sampledColor.a);
     }
 }

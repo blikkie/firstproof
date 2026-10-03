@@ -23,7 +23,7 @@ pub use firstproof_engine::{
     evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, ColorProfileMode,
     CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat,
     EmulsionGrainMode, EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace,
-    ExportRenderingIntent, PrintMediaMode, RenderTier, ToneCurvesRecord, WhiteBalanceResult,
+    ExportRenderingIntent, PrintMediaMode, RemjetBackingMode, RenderTier, ToneCurvesRecord, WhiteBalanceResult,
 };
 
 pub use lensfun::LensCorrectionCoefficients;

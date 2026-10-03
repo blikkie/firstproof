@@ -43,6 +43,7 @@ export class IntermediateTextureCache {
       edits.saturation?.toFixed(1) ?? '0',
       edits.tone_profile ?? 'AgxVivid',
       edits.emulsion_archetype ?? 'None',
+      edits.remjet_backing ?? 'Intact',
       edits.print_media ?? 'None',
       edits.rotation ?? '0',
       edits.flip_horizontal ? '1' : '0',

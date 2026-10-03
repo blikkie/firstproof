@@ -85,6 +85,31 @@ impl EmulsionGrainMode {
 }
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum RemjetBackingMode {
+    #[default]
+    Intact,
+    Stripped,
+}
+
+impl RemjetBackingMode {
+    #[inline]
+    pub fn id_number(&self) -> i32 {
+        match self {
+            Self::Intact => 0,
+            Self::Stripped => 1,
+        }
+    }
+
+    pub fn from_id(id: i32) -> Self {
+        match id {
+            1 => Self::Stripped,
+            _ => Self::Intact,
+        }
+    }
+}
+
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[derive(Default)]
 pub enum EmulsionArchetype {

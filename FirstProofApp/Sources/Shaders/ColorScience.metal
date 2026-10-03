@@ -760,9 +760,7 @@ inline float3 applyRecordingEmulsion(
         case 11: { // BaodingSilver100 - Ref: China Lucky Film Corp Spec (Lucky SHD 100, GB/T 13982)
             float3 w = getEnlargerFilterWeights(filterMode);
             float panLum = dot(curRgb, w);
-            float baseMono = applyEmulsionSCurve(panLum, 0.18, 0.10);
-            float bloom = (panLum > 0.85) ? (0.08 * pow((panLum - 0.85) / 0.15, 2.0)) : 0.0;
-            float mono = min(baseMono + bloom, 1.0);
+            float mono = applyEmulsionSCurve(panLum, 0.18, 0.10);
             return float3(mono);
         }
         default:

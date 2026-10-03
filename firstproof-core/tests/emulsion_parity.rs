@@ -194,14 +194,7 @@ fn metal_shader_emulsion_sim(
                 _ => (0.2627f32, 0.6780f32, 0.0593f32),
             };
             let pan_lum = filter_weights.0 * cur_r + filter_weights.1 * cur_g + filter_weights.2 * cur_b;
-            let base_mono = metal_emulsion_s_curve(pan_lum, 0.18, 0.10);
-            let bloom = if pan_lum > 0.85 {
-                let u = (pan_lum - 0.85) / 0.15;
-                0.08 * u * u
-            } else {
-                0.0
-            };
-            let mono = (base_mono + bloom).min(1.0);
+            let mono = metal_emulsion_s_curve(pan_lum, 0.18, 0.10);
             (mono, mono, mono)
         }
         _ => (r, g, b),

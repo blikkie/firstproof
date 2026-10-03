@@ -193,6 +193,7 @@ export class WebGLRenderer {
       'u_isLinearRec2020',
       'u_hasMasterCurve',
       'u_hasRgbCurves',
+      'u_halationMode',
     ];
     for (const u of uniforms) {
       this.uLocs[u] = this.gl.getUniformLocation(prog, u);
@@ -734,6 +735,17 @@ export class WebGLRenderer {
       edits.sharpening_masking ?? 0.0,
     );
     gl.uniform1f(this.uLocs['u_noiseReduction'], edits.noise_reduction ?? 0.0);
+
+    const isStrippedCinema =
+      edits.emulsion_archetype === 'RochesterCinema500' &&
+      edits.remjet_backing === 'Stripped';
+    let halationMode = 0;
+    if (edits.emulsion_archetype === 'BaodingSilver100') {
+      halationMode = 1;
+    } else if (isStrippedCinema) {
+      halationMode = 2;
+    }
+    gl.uniform1i(this.uLocs['u_halationMode'], halationMode);
 
     gl.uniform1i(this.uLocs['u_isOriginal'], isOriginal ? 1 : 0);
     gl.uniform1i(this.uLocs['u_isLinearRec2020'], this.isLinearRec2020 ? 1 : 0);

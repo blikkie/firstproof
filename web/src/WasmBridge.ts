@@ -16,6 +16,7 @@ import type {
   PreviewResultRecord,
   PrintMediaMode,
   RawLinearResultRecord,
+  RemjetBackingMode,
   ToneCurvesRecord,
   XmpData,
 } from 'firstproof-wasm';
@@ -39,6 +40,7 @@ export type {
   PreviewResultRecord,
   PrintMediaMode,
   RawLinearResultRecord,
+  RemjetBackingMode,
   ToneCurvesRecord,
   XmpData,
 };

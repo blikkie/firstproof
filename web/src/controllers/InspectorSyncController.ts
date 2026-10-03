@@ -18,6 +18,7 @@ import type {
   EditSettingsPayload,
   EmulsionArchetype,
   PrintMediaMode,
+  RemjetBackingMode,
 } from '../WasmBridge';
 
 export interface ActiveSliderScrub {
@@ -187,7 +188,14 @@ export class InspectorSyncController {
       rowEmulsionExp.classList.toggle('hidden', !hasEmulsion);
     }
 
-    // 2. Grain scale slider only visible when grain resynthesis mode is enabled
+    // 2. Carbon Rem-Jet backing only visible when RochesterCinema500 is selected
+    const hasRemjet = edits.emulsion_archetype === 'RochesterCinema500';
+    const rowRemjet = document.getElementById('row-remjet-backing');
+    if (rowRemjet) {
+      rowRemjet.classList.toggle('hidden', !hasRemjet);
+    }
+
+    // 3. Grain scale slider only visible when grain resynthesis mode is enabled
     const hasGrain =
       edits.emulsion_grain_mode && edits.emulsion_grain_mode !== 'Off';
     const rowGrainScale = document.getElementById('row-grain-scale');
@@ -323,6 +331,12 @@ export class InspectorSyncController {
     ) as HTMLSelectElement | null;
     if (selectEmulsion && edits.emulsion_archetype) {
       selectEmulsion.value = edits.emulsion_archetype;
+    }
+    const selectRemjet = document.getElementById(
+      'select-remjet-backing',
+    ) as HTMLSelectElement | null;
+    if (selectRemjet && edits.remjet_backing) {
+      selectRemjet.value = edits.remjet_backing;
     }
     const selectGrainMode = document.getElementById(
       'select-emulsion-grain-mode',
@@ -701,6 +715,17 @@ export class InspectorSyncController {
       edits.emulsion_archetype = (e.target as HTMLSelectElement)
         .value as EmulsionArchetype;
       this.updateEmulsionWorkspaceVisibility();
+      this.delegate.renderCanvas();
+      this.delegate.autoSaveSidecar();
+    });
+
+    const selectRemjet = document.getElementById(
+      'select-remjet-backing',
+    ) as HTMLSelectElement | null;
+    selectRemjet?.addEventListener('change', (e) => {
+      const edits = this.delegate.getEdits();
+      edits.remjet_backing = (e.target as HTMLSelectElement)
+        .value as RemjetBackingMode;
       this.delegate.renderCanvas();
       this.delegate.autoSaveSidecar();
     });

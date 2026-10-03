@@ -305,15 +305,7 @@ pub fn apply_recording_emulsion(
         EmulsionArchetype::BaodingSilver100 => {
             let (wr, wg, wb) = filter_mode.spectral_weights();
             let pan_lum = wr * cur_r + wg * cur_g + wb * cur_b;
-            let base_mono = apply_emulsion_s_curve(pan_lum, 0.18, 0.10);
-            let bloom = if pan_lum > 0.85 {
-                let u = (pan_lum - 0.85) / 0.15;
-                0.08 * u * u
-            } else {
-                0.0
-            };
-            let mono = (base_mono + bloom).min(1.0);
-
+            let mono = apply_emulsion_s_curve(pan_lum, 0.18, 0.10);
             (mono, mono, mono)
         }
     }

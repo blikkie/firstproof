@@ -481,9 +481,7 @@ vec3 applyRecordingEmulsion(vec3 rgb, int archetype, float pushPullEv, int filte
     } else if (archetype == 11) { // Baoding Silver 100 (Lucky SHD 100, Baoding, China)
         vec3 w = getEnlargerFilterWeights(filterMode);
         float panLum = dot(cur, w);
-        float baseMono = applyEmulsionSCurve(panLum, 0.18, 0.10);
-        float bloom = (panLum > 0.85) ? (0.08 * pow((panLum - 0.85) / 0.15, 2.0)) : 0.0;
-        float mono = min(baseMono + bloom, 1.0);
+        float mono = applyEmulsionSCurve(panLum, 0.18, 0.10);
         return vec3(mono);
     }
     return cur;

@@ -82,6 +82,7 @@ struct ShaderUniforms {
     float printPaperGrade;         // -2.0 .. +2.0 (default 0.0)
     float printBaseWarmth;         // -100.0 .. +100.0 (default 0.0)
     float printProcessDepth;       // 0.0 .. 100.0 (default 100.0)
+    int32_t halationMode;          // 0 = Off, 1 = Monochrome (BaodingSilver100), 2 = Red-shifted (RochesterCinema500 stripped)
 };
 
 #endif /* ShaderTypes_h */

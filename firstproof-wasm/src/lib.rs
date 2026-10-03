@@ -9,7 +9,7 @@ pub use firstproof_engine::{
     AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode, CurvePointRecord,
     DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode,
     ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent, f16_to_f32, ImageMetadataRecord,
-    PreviewResultRecord, PrintMediaMode, RawLinearResultRecord, RawSensorFrame, RenderTier,
+    PreviewResultRecord, PrintMediaMode, RawLinearResultRecord, RawSensorFrame, RemjetBackingMode, RenderTier,
     ScaleMode, ToneCurvesRecord, WorkspaceCategory, XmpData,
 };
 use scratchpad::with_scratchpad;
@@ -639,6 +639,10 @@ export type EmulsionGrainMode =
     | 'SeedFromSensor'
     | 'SynthesizePhysical';
 
+export type RemjetBackingMode =
+    | 'Intact'
+    | 'Stripped';
+
 export type PrintMediaMode =
     | 'None'
     | 'ChromogenicTypeC'
@@ -692,6 +696,7 @@ export interface EditSettings {
     emulsion_archetype: EmulsionArchetype;
     emulsion_format: EmulsionFormat;
     emulsion_exposure: number;
+    remjet_backing: RemjetBackingMode;
     emulsion_grain_mode: EmulsionGrainMode;
     grain_scale: number;
     curves: ToneCurvesRecord;

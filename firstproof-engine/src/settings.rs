@@ -1,7 +1,7 @@
 use crate::curve::ToneCurvesRecord;
 use crate::modes::{
     ColorProfileMode, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode,
-    PrintMediaMode,
+    PrintMediaMode, RemjetBackingMode,
 };
 use serde::{Deserialize, Serialize};
 
@@ -51,6 +51,7 @@ pub struct EditSettings {
     pub emulsion_archetype: EmulsionArchetype,
     pub emulsion_format: EmulsionFormat,
     pub emulsion_exposure: f32,
+    pub remjet_backing: RemjetBackingMode,
     pub curves: ToneCurvesRecord,
     pub split_toning_shadow_hue: f32,
     pub split_toning_shadow_sat: f32,
@@ -102,6 +103,7 @@ impl Default for EditSettings {
             emulsion_archetype: EmulsionArchetype::None,
             emulsion_format: EmulsionFormat::Format35mm,
             emulsion_exposure: 0.0,
+            remjet_backing: RemjetBackingMode::Intact,
             curves: ToneCurvesRecord::default(),
             split_toning_shadow_hue: 215.0,
             split_toning_shadow_sat: 0.0,

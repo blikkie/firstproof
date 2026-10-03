@@ -7,11 +7,11 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.17: Physical Optical Halation Scatter & Point-Spread Emulsion Diffusion** (P2)
-2. **Story 3.18: Multi-Scale Hierarchical Bilateral Tone Recovery** (P2)
-3. **Story 3.19: Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling** (P2)
-4. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
-5. **Story 3.4: ColorSync Soft Proofing** (P2)
+1. **Story 3.18: Multi-Scale Hierarchical Bilateral Tone Recovery** (P2)
+2. **Story 3.19: Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling** (P2)
+3. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+4. **Story 3.4: ColorSync Soft Proofing** (P2)
+5. **Story 3.7: Color Space Tagging & ICC Profile Embedding** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -115,14 +115,6 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
     - Zero-OLPF sensors (e.g. Sony A7R IV, Nikon D850, Leica M10): Constrains radius to prevent digital over-sharpening, ringing halos, and edge brittle-ness.
 - **Multi-Engine Parity**:
   - Harmonize adaptive kernel scaling identically across `Detail.metal`, `FragmentShader.ts`, and `pipeline.rs`.
-
-### 3.17 Physical Optical Halation Scatter & Point-Spread Emulsion Diffusion (P2)
-- **Physical Context & Specification**: See [spatial_effects_scale_and_fidelity.md](../specs/spatial_effects_scale_and_fidelity.md).
-- **Two-Tier Halation Scatter Architecture**:
-  - *Tier 1: Viewport Approximation (Metal & WebGL 2)*: 13-tap sparse Poisson disk kernel ($r \approx 8\text{–}12\text{ texels}$) sampling highlight excess luminance ($Y > 0.80$) and scattering light into adjacent shadow pixels at 60–120fps.
-  - *Tier 2: Full-Resolution Export (`pipeline.rs`, `encoders.rs`)*: 2-pass separable exponential point-spread function ($r \approx 20\text{–}40\text{ pixels}$) modeling genuine optical Fresnel reflection and red-weighted halation halos for color emulsions.
-- **Integration**:
-  - Wire into `BaodingSilver100` and analog color/monochrome emulsions without anti-halation undercoats.
 
 ### 3.18 Multi-Scale Hierarchical Bilateral Tone Recovery (P2)
 - **Physical Context & Specification**: See [spatial_effects_scale_and_fidelity.md](../specs/spatial_effects_scale_and_fidelity.md).

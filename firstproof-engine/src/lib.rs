@@ -33,7 +33,8 @@ pub use curve::{
 };
 pub use modes::{
     ColorProfileMode, DemosaicQuality, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode,
-    EnlargerFilterMode, ExportColorSpace, ExportRenderingIntent, PrintMediaMode, RenderTier,
+    EnlargerFilterMode, ExportColorSpace, ExportRenderingIntent, PrintMediaMode, RemjetBackingMode,
+    RenderTier,
 };
 pub use preview::{
     decode_exif_orientation, extract_metadata_from_bytes, extract_preview_slice,
