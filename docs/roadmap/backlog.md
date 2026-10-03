@@ -7,9 +7,11 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
-2. **Story 3.6: Monochromatic Physical Split Toning & Enlarger Chemistry** (P2)
-3. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
+1. **Story 3.5: Archival High-Precision Multi-Pass Export & Differential Rendering Engine** (P1)
+2. **Story 3.17: Physical Optical Halation Scatter & Point-Spread Emulsion Diffusion** (P2)
+3. **Story 3.18: Multi-Scale Hierarchical Bilateral Tone Recovery** (P2)
+4. **Story 3.19: Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling** (P2)
+5. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -43,7 +45,10 @@ This document strictly tracks pending and deferred features calibrated against o
   - Canvas toolbar mode simulating sRGB and standard print gamut clipping (e.g., ISO Coated v2 / US Web Coated SWOP) on wide-gamut displays.
   - Gamut warning overlay highlighting out-of-gamut pixels in high-contrast overlay color.
 
-### 3.5 Archival High-Precision Multi-Pass Export Engine (P2)
+### 3.5 Archival High-Precision Multi-Pass Export & Differential Rendering Engine (P1 - Pulled Forward)
+- **Differential Rendering Framework (`RenderTier`)**:
+  - Establish a formal execution contract between **Real-Time Viewport** (`RenderTier::Viewport`, 60–120fps GPU canvas) and **Archival Export** (`RenderTier::ArchivalExport`, high-precision offline CPU/WASM render pipeline).
+  - Provides the structural harness for upcoming spatial physics (Stories 3.17 Halation, 3.18 Bilateral Illumination, 3.19 Grain Clusters), allowing fast sparse approximations on screen while executing full multi-pass, separable 2D convolutions in export.
 - **Decoupled Quality Controls in Export Sheet**:
   - Cleanly separate general optical RAW demosaicing precision from spatial chemical edge diffusion in `ExportSheetView.swift`:
     1. *RAW Demosaicing Precision*: `Standard (PPG Demosaic)` vs. `Archival (Edge-Adaptive AMaZE / RCD with Chromatic Median Filtering)`.
@@ -129,6 +134,27 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
     - Zero-OLPF sensors (e.g. Sony A7R IV, Nikon D850, Leica M10): Constrains radius to prevent digital over-sharpening, ringing halos, and edge brittle-ness.
 - **Multi-Engine Parity**:
   - Harmonize adaptive kernel scaling identically across `Detail.metal`, `FragmentShader.ts`, and `pipeline.rs`.
+
+### 3.17 Physical Optical Halation Scatter & Point-Spread Emulsion Diffusion (P2)
+- **Physical Context & Specification**: See [spatial_effects_scale_and_fidelity.md](../specs/spatial_effects_scale_and_fidelity.md).
+- **Two-Tier Halation Scatter Architecture**:
+  - *Tier 1: Viewport Approximation (Metal & WebGL 2)*: 13-tap sparse Poisson disk kernel ($r \approx 8\text{–}12\text{ texels}$) sampling highlight excess luminance ($Y > 0.80$) and scattering light into adjacent shadow pixels at 60–120fps.
+  - *Tier 2: Full-Resolution Export (`pipeline.rs`, `encoders.rs`)*: 2-pass separable exponential point-spread function ($r \approx 20\text{–}40\text{ pixels}$) modeling genuine optical Fresnel reflection and red-weighted halation halos for color emulsions.
+- **Integration**:
+  - Wire into `BaodingSilver100` and analog color/monochrome emulsions without anti-halation undercoats.
+
+### 3.18 Multi-Scale Hierarchical Bilateral Tone Recovery (P2)
+- **Physical Context & Specification**: See [spatial_effects_scale_and_fidelity.md](../specs/spatial_effects_scale_and_fidelity.md).
+- **Two-Tier Macro Illumination Separation**:
+  - *Tier 1: Viewport Approximation (Metal & WebGL 2)*: Dual-concentric ring stencil (16 taps: inner ring $r_1=2\text{ px}$ for edge preservation, outer ring $r_2=16\text{ px}$ for broad ambient lighting) or $1/8\times$ mipmap base sampling. Elevates WebGL 2 from pointwise fallback to full parity with Metal.
+  - *Tier 2: Full-Resolution Export (`pipeline.rs`)*: Multi-scale bilateral grid / Gaussian pyramid decomposition ($\sigma_s \approx 2\%\text{–}5\%$ of image diagonal) cleanly separating scene illumination from fine textures without microcontrast flattening or boundary haloing.
+
+### 3.19 Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling (P2)
+- **Physical Context & Specification**: See [spatial_effects_scale_and_fidelity.md](../specs/spatial_effects_scale_and_fidelity.md).
+- **Rotational Invariance & Grain Cluster Physics**:
+  - *8-Tap Isotropic Discrete Laplacian*: Replace 4-tap Manhattan cross with 8-tap ($4\text{ orthogonal} + 4\text{ diagonal}$) discrete Laplacian, eliminating directional cross-hatching artifacts along $45^\circ$ edges and preserving circular optical acutance.
+  - *Proportional Grain Clumping Radius*: Dynamically scale sensor noise extraction low-pass radius proportionally to `texelSize * max(grainScale, 0.5)`, capturing multi-pixel silver halide clumps ($15\text{–}30\,\mu\text{m}$) for coarse-grained films and medium format.
+  - *Shared Memory Bandwidth*: Consolidate USM and grain seeding into a single 8-neighbor texture fetch ring in `Detail.metal` and `FragmentShader.ts`, adding zero extra memory bandwidth.
 
 ---
 
