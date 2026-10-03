@@ -47,7 +47,7 @@ During catalog scanning or single-photo load:
 
 ## 3. Two-Way Asynchronous Sync & Debouncing
 
-When the photographer edits metadata in [`MetadataSidebarView.swift`](file:///Users/blikkie/src/LumenBox/FirstProofApp/Sources/Views/MetadataSidebarView.swift):
+When the photographer edits metadata in [`MetadataSidebarView.swift`](../../FirstProofApp/Sources/Views/MetadataSidebarView.swift):
 1. **Debounce (400ms)**: Typing in text fields is debounced to prevent hammering disk I/O on every keystroke.
 2. **SQLite Update**: Batch or single update via `db.updatePhotoMetadata(...)`.
 3. **Sidecar Write**: Dispatched to background utility queue `syncXmp(...)`, serializing Dublin Core, Photoshop, Adobe, and First Proof namespaces (`https://firstproof.photo/ns/pm/1.0/`) in XML UTF-8.

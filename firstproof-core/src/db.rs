@@ -1448,7 +1448,7 @@ mod tests {
         let path = Database::resolve_catalog_path(external, false);
         assert_eq!(path, external.join(".firstproof").join("catalog.db"));
 
-        let internal = Path::new("/Users/test/Pictures");
+        let internal = Path::new("/dummy/internal/Pictures");
         let path_portable = Database::resolve_catalog_path(internal, true);
         assert_eq!(path_portable, internal.join(".firstproof").join("catalog.db"));
     }

@@ -16,7 +16,12 @@ use firstproof_core::export::decode::f16_to_f32;
 #[test]
 #[ignore = "Slow real RAW disk decode"]
 fn test_high_iso_viewport_chroma_parity_real_file() {
-    let dng_path = Path::new("/home/remco/Pictures/Lightroom/from laptop/2015/2015-07-18/_MG_2565.dng");
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let fixture_dng = manifest_dir.join("tests/fixtures/_MG_2651.dng");
+    let dng_path_buf = std::env::var("FIRSTPROOF_TEST_RAW_DIR")
+        .map(|d| Path::new(&d).join("_MG_2565.dng"))
+        .unwrap_or(fixture_dng);
+    let dng_path = dng_path_buf.as_path();
     if !dng_path.exists() {
         eprintln!("Test file {:?} not found, skipping real file test", dng_path);
         return;

@@ -7,10 +7,9 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
-2. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
-3. **Story 3.6: Monochromatic Physical Split Toning & Enlarger Chemistry** (P2)
-4. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
+1. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+2. **Story 3.6: Monochromatic Physical Split Toning & Enlarger Chemistry** (P2)
+3. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -151,12 +150,9 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 - **Memory Safety & Undefined Behavior (`cargo miri`)**:
   - Validate unsafe FFI pointer conversions and raw byte slicing in `raw_decoder` and `export` modules under Miri.
 
-### 4.2 Active Codebase Path Sanitization & History Scrubbing
-- **Active Codebase Path Sanitization**:
-  - Purge hardcoded `/Users/<username>/...` paths from `FirstProofApp.swift`, `calibrate.rs`, and test files (`camera_profiles_parity.rs`). Replace with dynamic `Bundle` lookups and `TEST_FIXTURES_DIR` / environment variables.
-- **Committed Test Scratch Cleanup**:
-  - Delete committed scratch debugging blocks in `camera_profiles_parity.rs` (lines 408–480) referencing local desktop paths and IDE attachment folders (`.user_uploaded/media_...`).
+### 4.2 Pre-Release Git History Scrubbing Pass
 - **Git History Rewrite & Scrubbing Pass (`git-filter-repo` / BFG)**:
+  - *(Note: Active codebase path sanitization and test scratch cleanup completed; see completed.md)*
   - Perform an automated history rewrite prior to public release to scrub local paths, developer usernames, private emails, and transient binary blobs from git commit history.
   - Followed by aggressive reflog expiration and garbage collection (`git reflog expire --expire=now --all && git gc --prune=now --aggressive`).
 
@@ -184,10 +180,9 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
   - While developing in the Linux environment, this track is held in place. It will be executed upon returning to a macOS environment or wired into a dedicated `macos-14` / `macos-15` GitHub Actions packaging runner.
   - Direct download links will be posted openly when binaries are ready—no email gates or signups.
 
-### 4.5 Swift Desktop Parameter Schema & Behavioral Interaction Parity (P1 - macOS Environment)
-- **UniFFI Schema Bridge**:
-  - Expose `AdjustmentDescriptor`, `all_adjustments()`, and Mired conversion math from `firstproof-types` via `firstproof-core` UniFFI scaffolding.
+### 4.5 Swift Desktop Parameter Schema & Behavioral Interaction Parity (Deferred - macOS Milestone)
 - **Swift View & Model Schema Consumption**:
+  - *(Note: Rust core UniFFI & WASM parameter schema bridge completed; see completed.md)*
   - Refactor `SliderRow.swift`, `DevelopInspectorView.swift`, and `AppViewModel.swift` to derive slider ranges, steps, defaults, and formatters directly from the canonical Rust descriptors rather than hardcoding values in Swift views.
 - **Unified Interaction Behavioral Contracts**:
   - Implement the identical interaction state machine in native AppKit / SwiftUI matching [ui_architecture.md](../architecture/ui_architecture.md):

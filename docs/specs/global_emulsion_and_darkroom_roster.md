@@ -80,14 +80,14 @@ $$f(x) = x + \alpha \cdot x(1-x)(2x-1) + \beta \cdot x(1-x)$$
 ## 5. Architectural Integration
 
 ### Data Models (`firstproof-engine`)
-- [`modes.rs`](file:///home/remco/src/firstproof/firstproof-engine/src/modes.rs):
+- [`modes.rs`](../../firstproof-engine/src/modes.rs):
   - Update `EmulsionArchetype` enum:
     - Retain `RochesterPortrait400`, `AshigaraChrome50`, `RochesterK14Chrome64`, `RochesterCinema500`, `MobberleySilver400`, `CambridgeDiffusion100`.
     - Deprecate/merge `RochesterDaylight200` $\to$ `RochesterPortrait400`.
     - Add `LeverkusenPortrait160`, `AshigaraPortrait400`, `LiguriaCinema80`, `BaodingSilver100`.
   - Update `PrintMediaMode` enum:
     - Add `BamakoSilverContact`.
-- [`xmp.rs`](file:///home/remco/src/firstproof/firstproof-engine/src/xmp.rs):
+- [`xmp.rs`](../../firstproof-engine/src/xmp.rs):
   - Serialization/deserialization for new enum variants with backward-compatibility aliases.
 
 ### Shader & Pipeline Parity

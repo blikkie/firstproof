@@ -139,7 +139,9 @@ fn test_xmp_tone_profile_roundtrip() {
 fn test_cr2_portrait_cheek_and_helmet_fidelity() {
     use std::path::Path;
     use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
-    let path = Path::new("/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0073.CR2");
+    let Some(raw_dir) = std::env::var("FIRSTPROOF_TEST_RAW_DIR").ok() else { return; };
+    let path_buf = Path::new(&raw_dir).join("20250409_0073.CR2");
+    let path = path_buf.as_path();
     if !path.exists() { return; }
     let Ok(_frame) = RawlerDecoder.decode(path) else { return; };
     
@@ -228,7 +230,9 @@ fn test_gpu_preview_vs_export_parity() {
     use firstproof_core::color::{Color3, agx_tone_map_vivid};
     use firstproof_core::EditSettings;
     
-    let path = Path::new("/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0073.CR2");
+    let Some(raw_dir) = std::env::var("FIRSTPROOF_TEST_RAW_DIR").ok() else { return; };
+    let path_buf = Path::new(&raw_dir).join("20250409_0073.CR2");
+    let path = path_buf.as_path();
     if !path.exists() { return; }
     let Ok(_frame) = RawlerDecoder.decode(path) else { return; };
     
@@ -277,7 +281,9 @@ fn test_cr2_0058_binned_vs_export() {
     use firstproof_core::export::{decode_image, decode_raw_preview_binned_buffer, apply_edits};
     use firstproof_core::xmp::read_xmp_file;
 
-    let path = Path::new("/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0058.CR2");
+    let Some(raw_dir) = std::env::var("FIRSTPROOF_TEST_RAW_DIR").ok() else { return; };
+    let path_buf = Path::new(&raw_dir).join("20250409_0058.CR2");
+    let path = path_buf.as_path();
     if !path.exists() {
         println!("File does not exist: {:?}", path);
         return;
@@ -385,100 +391,6 @@ fn test_cr2_0058_binned_vs_export() {
             export_8bit[2] as i16 - binned_8bit[2] as i16,
         );
     }
-
-    let ldb = firstproof_core::lensfun::LensfunDatabase::new();
-    let meta = firstproof_core::raw::extract_metadata(path).ok();
-    let lens_coeffs = meta.as_ref().map(|m| {
-        ldb.resolve_coefficients(
-            m.camera_make.as_deref().unwrap_or(""),
-            m.camera_model.as_deref().unwrap_or(""),
-            m.lens_model.as_deref().unwrap_or(""),
-            m.focal_length.unwrap_or(0.0),
-            m.aperture,
-        )
-    });
-    let dist_tuple = lens_coeffs.as_ref().and_then(|c| {
-        if c.has_distortion {
-            Some((c.distortion.as_slice(), c.distortion_model.as_str()))
-        } else {
-            None
-        }
-    });
-
-    let new_desktop_jpg = Path::new("/Users/blikkie/Desktop/20250409_0058_FirstProof_New.jpg");
-    firstproof_core::export::export_photo_file(
-        path,
-        new_desktop_jpg,
-        &xmp.edits,
-        dist_tuple,
-        95,
-        None,
-        firstproof_core::ExportColorSpace::Srgb,
-        firstproof_core::ExportRenderingIntent::RelativeColorimetric,
-        true,
-    ).expect("Failed to export new photo");
-
-    let screenshot_jpg = Path::new("/Users/blikkie/.gemini/antigravity-ide/brain/be942130-01a3-4c51-a22d-2126d19f7aee/.user_uploaded/media_1789332136643.jpg");
-    let desktop_jpg = Path::new("/Users/blikkie/Desktop/20250409_0058_FirstProof.jpg");
-
-    if screenshot_jpg.exists() && new_desktop_jpg.exists() {
-        let shot_img = image::open(screenshot_jpg).unwrap().to_rgb8();
-        let old_desk_img = if desktop_jpg.exists() { Some(image::open(desktop_jpg).unwrap().to_rgb8()) } else { None };
-        let new_desk_img = image::open(new_desktop_jpg).unwrap().to_rgb8();
-
-        println!("\n=== FACE REGION SCAN: SCREENSHOT vs OLD EXPORT vs NEW EXPORT ===");
-        let mut total_shot_r = 0u64;
-        let mut total_shot_g = 0u64;
-        let mut total_shot_b = 0u64;
-        let mut total_old_r = 0u64;
-        let mut total_old_g = 0u64;
-        let mut total_old_b = 0u64;
-        let mut total_new_r = 0u64;
-        let mut total_new_g = 0u64;
-        let mut total_new_b = 0u64;
-        let mut count = 0u64;
-
-        for step_x in 0..10 {
-            for step_y in 0..10 {
-                let rx = 0.28 + (step_x as f32) * 0.015;
-                let ry = 0.42 + (step_y as f32) * 0.020;
-                let sx = ((shot_img.width() as f32) * rx) as u32;
-                let sy = ((shot_img.height() as f32) * ry) as u32;
-                let sp = shot_img.get_pixel(sx, sy);
-
-                let nx = ((new_desk_img.width() as f32) * rx) as u32;
-                let ny = ((new_desk_img.height() as f32) * ry) as u32;
-                let np = new_desk_img.get_pixel(nx, ny);
-
-                total_shot_r += sp.0[0] as u64;
-                total_shot_g += sp.0[1] as u64;
-                total_shot_b += sp.0[2] as u64;
-                total_new_r += np.0[0] as u64;
-                total_new_g += np.0[1] as u64;
-                total_new_b += np.0[2] as u64;
-
-                if let Some(ref old_desk) = old_desk_img {
-                    let ox = ((old_desk.width() as f32) * rx) as u32;
-                    let oy = ((old_desk.height() as f32) * ry) as u32;
-                    let op = old_desk.get_pixel(ox, oy);
-                    total_old_r += op.0[0] as u64;
-                    total_old_g += op.0[1] as u64;
-                    total_old_b += op.0[2] as u64;
-                }
-                count += 1;
-            }
-        }
-
-        let avg_shot = [total_shot_r / count, total_shot_g / count, total_shot_b / count];
-        let avg_new = [total_new_r / count, total_new_g / count, total_new_b / count];
-        println!("Face Region Average (100 sample points):");
-        println!("  Screenshot (Display): R={}, G={}, B={}  (G/R = {:.3})", avg_shot[0], avg_shot[1], avg_shot[2], avg_shot[1] as f64 / avg_shot[0] as f64);
-        if old_desk_img.is_some() {
-            let avg_old = [total_old_r / count, total_old_g / count, total_old_b / count];
-            println!("  Old Export (Pre-Fix): R={}, G={}, B={}  (G/R = {:.3})", avg_old[0], avg_old[1], avg_old[2], avg_old[1] as f64 / avg_old[0] as f64);
-        }
-        println!("  New Export (Post-Fix): R={}, G={}, B={}  (G/R = {:.3})", avg_new[0], avg_new[1], avg_new[2], avg_new[1] as f64 / avg_new[0] as f64);
-    }
 }
 
 #[test]
@@ -489,7 +401,9 @@ fn test_cr2_0194_full_pipeline_parity() {
     use firstproof_core::export::apply_color_adjustments;
     use firstproof_core::EditSettings;
     
-    let path = Path::new("/Users/blikkie/Pictures/Darktable/20250409_eos_pull/20250409_0194.CR2");
+    let Some(raw_dir) = std::env::var("FIRSTPROOF_TEST_RAW_DIR").ok() else { return; };
+    let path_buf = Path::new(&raw_dir).join("20250409_0194.CR2");
+    let path = path_buf.as_path();
     if !path.exists() { return; }
     
     let Ok(demosaiced) = firstproof_core::export::decode_image(path) else { return; };

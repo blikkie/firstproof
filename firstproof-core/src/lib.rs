@@ -202,6 +202,11 @@ pub fn get_all_adjustments() -> Vec<AdjustmentDescriptor> {
 }
 
 #[uniffi::export]
+pub fn get_adjustment_descriptor(id: String) -> Option<AdjustmentDescriptor> {
+    get_adjustment(&id)
+}
+
+#[uniffi::export]
 pub fn convert_kelvin_to_mired_norm(kelvin: f64) -> f64 {
     kelvin_to_mired_norm(kelvin)
 }

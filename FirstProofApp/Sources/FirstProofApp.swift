@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Dynamically apply custom First Proof icon to macOS Dock
         let iconCandidates = [
             Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-            URL(fileURLWithPath: "/Users/blikkie/src/LumenBox/FirstProofApp/Resources/AppIcon.icns")
+            ProcessInfo.processInfo.environment["FIRSTPROOF_RESOURCES_DIR"].map { URL(fileURLWithPath: $0).appendingPathComponent("AppIcon.icns") }
         ]
         for url in iconCandidates.compactMap({ $0 }) {
             if let image = NSImage(contentsOf: url) {

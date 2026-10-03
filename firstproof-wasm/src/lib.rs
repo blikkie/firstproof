@@ -3,12 +3,14 @@ use wasm_bindgen::prelude::*;
 pub mod scratchpad;
 
 pub use firstproof_engine::{
-    evaluate_all_curves_lut, evaluate_curve_lut, extract_preview_slice,
-    generate_xmp_sidecar, get_jpeg_dimensions, parse_xmp_sidecar, AllCurvesLutRecord,
+    all_adjustments, evaluate_all_curves_lut, evaluate_curve_lut, extract_preview_slice,
+    generate_xmp_sidecar, get_adjustment, get_jpeg_dimensions, kelvin_to_mired_norm,
+    mired_norm_to_kelvin, parse_xmp_sidecar, AdjustmentDescriptor, AllCurvesLutRecord,
     AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode, CurvePointRecord,
     EditSettings, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode, ExifOrientationRecord,
     ExportColorSpace, ExportRenderingIntent, f16_to_f32, ImageMetadataRecord, PreviewResultRecord,
-    PrintMediaMode, RawLinearResultRecord, RawSensorFrame, ToneCurvesRecord, XmpData,
+    PrintMediaMode, RawLinearResultRecord, RawSensorFrame, ScaleMode, ToneCurvesRecord,
+    WorkspaceCategory, XmpData,
 };
 use scratchpad::with_scratchpad;
 
@@ -450,6 +452,26 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> JsValue {
     serde_wasm_bindgen::to_value(&meta).unwrap_or(JsValue::NULL)
 }
 
+#[wasm_bindgen]
+pub fn get_all_adjustments() -> JsValue {
+    serde_wasm_bindgen::to_value(&all_adjustments()).unwrap_or(JsValue::NULL)
+}
+
+#[wasm_bindgen]
+pub fn get_adjustment_descriptor(id: &str) -> JsValue {
+    serde_wasm_bindgen::to_value(&get_adjustment(id)).unwrap_or(JsValue::NULL)
+}
+
+#[wasm_bindgen]
+pub fn convert_kelvin_to_mired_norm(kelvin: f64) -> f64 {
+    kelvin_to_mired_norm(kelvin)
+}
+
+#[wasm_bindgen]
+pub fn convert_mired_norm_to_kelvin(norm: f64) -> f64 {
+    mired_norm_to_kelvin(norm)
+}
+
 #[wasm_bindgen(typescript_custom_section)]
 const TS_DEFINITIONS: &'static str = r#"
 export interface ExifOrientationRecord {
@@ -640,6 +662,22 @@ export interface AutoWhiteBalanceResult {
     temperature: number;
     tint: number;
 }
+
+export type WorkspaceCategory = 'Light' | 'Color' | 'Detail' | 'Emulsion';
+export type ScaleMode = 'Linear' | 'Mired';
+
+export interface AdjustmentDescriptor {
+    id: string;
+    name: string;
+    category: WorkspaceCategory;
+    min: number;
+    max: number;
+    step: number;
+    default: number;
+    scale_mode: ScaleMode;
+    unit: string;
+    precision: number;
+}
 "#;
 
 #[cfg(test)]
@@ -775,5 +813,18 @@ mod tests {
         assert_eq!(frame_out[1], rgb_neutral[1]);
         assert_eq!(frame_out[2], rgb_neutral[2]);
         assert_eq!(frame_out[3], 255);
+    }
+
+    #[test]
+    fn test_schema_adjustments() {
+        let adjustments = all_adjustments();
+        assert!(!adjustments.is_empty());
+        let exp = get_adjustment("exposure").expect("exposure adjustment exists");
+        assert_eq!(exp.id, "exposure");
+        assert_eq!(exp.category, WorkspaceCategory::Light);
+        assert_eq!(exp.unit, "EV");
+
+        assert!((convert_kelvin_to_mired_norm(2000.0) - 0.0).abs() < 1e-4);
+        assert_eq!(convert_mired_norm_to_kelvin(0.0), 2000.0);
     }
 }
