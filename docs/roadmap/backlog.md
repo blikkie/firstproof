@@ -8,7 +8,7 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ## 🚀 Immediate Next Up
 1. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
-2. **Story 4.6.2: Automated Architecture Fitness Functions** (P2)
+2. **Story 4.6.3: Headless Web Behaviour Harness** (P2)
 3. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
 4. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
 
@@ -242,14 +242,6 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 
 ### 4.6 Harness Engineering & Computational Verification Suite (P1)
 *Translating Martin Fowler & Birgitta Böckeler's Harness Engineering mental model into automated, computational feedback sensors across First Proof.*
-
-#### 4.6.2 Automated Architecture Fitness Functions (P2)
-- **Dependency Purity Fitness Test**:
-  - Write an automated fitness test (`tests/architecture_fitness.rs`) verifying that `firstproof-engine` maintains zero platform OS, windowing, or C library dependencies (`rusqlite`, `kamadak-exif`, `lcms2`).
-- **Terminal Display Transform Invariant Sensor**:
-  - Computational validation verifying that output color transforms (sRGB/Display P3 gamma transfer, AgX 3D LUT) execute strictly as the final operation in both shader sources (`Shaders.metal`, `FragmentShader.ts`) and export pipeline stages (`pipeline.rs`).
-- **Sensitometric Anti-Magic Number Scanner**:
-  - Static AST or regex scanner ensuring develop adjustment functions do not introduce arbitrary unanchored piecewise if/else multipliers without references to standard sensitometric specifications.
 
 #### 4.6.3 Headless Web Behaviour Harness (P2)
 - **Headless Web Integration Battery (Vitest / Playwright)**:
