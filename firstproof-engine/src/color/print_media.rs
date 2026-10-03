@@ -31,7 +31,7 @@ pub fn apply_base_warmth(r: f32, g: f32, b: f32, warmth: f32) -> (f32, f32, f32)
     if warmth.abs() < 0.001 {
         return (r, g, b);
     }
-    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let lum = 0.2627 * r + 0.6780 * g + 0.0593 * b;
     let highlight_weight = lum.powf(0.6).clamp(0.0, 1.0);
     let factor = (warmth / 100.0) * highlight_weight;
 
@@ -93,7 +93,7 @@ pub fn apply_print_media(
             let b_p = compress(b_graded);
 
             // Natural coupled dye saturation: 0% = gentle pastel 0.70x -> 100% = rich archival 1.05x
-            let lum = 0.2126 * r_p + 0.7152 * g_p + 0.0722 * b_p;
+            let lum = 0.2627 * r_p + 0.6780 * g_p + 0.0593 * b_p;
             let sat_scale = 0.70 + 0.35 * depth;
             let mut r_out = (lum + (r_p - lum) * sat_scale).clamp(0.0, 1.0);
             let mut g_out = (lum + (g_p - lum) * sat_scale).clamp(0.0, 1.0);
@@ -122,7 +122,7 @@ pub fn apply_print_media(
             let b_p = b_graded.powf(shadow_pow);
 
             // Pure azo dye saturation: 0% = 0.80x, 100% = 1.10x
-            let lum = 0.2126 * r_p + 0.7152 * g_p + 0.0722 * b_p;
+            let lum = 0.2627 * r_p + 0.6780 * g_p + 0.0593 * b_p;
             let azo_sat = 0.80 + 0.30 * depth;
             let r_out = (lum + (r_p - lum) * azo_sat).clamp(0.0, 1.0);
             let g_out = (lum + (g_p - lum) * azo_sat).clamp(0.0, 1.0);
@@ -144,7 +144,7 @@ pub fn apply_print_media(
             let g_p = g_graded + matte_floor * (1.0 - g_graded) * (1.0 - g_graded);
             let b_p = b_graded + matte_floor * (1.0 - b_graded) * (1.0 - b_graded);
 
-            let lum = 0.2126 * r_p + 0.7152 * g_p + 0.0722 * b_p;
+            let lum = 0.2627 * r_p + 0.6780 * g_p + 0.0593 * b_p;
             let pigment_sat = 0.75 + 0.25 * depth;
             let r_out = (lum + (r_p - lum) * pigment_sat).clamp(0.0, 1.0);
             let g_out = (lum + (g_p - lum) * pigment_sat).clamp(0.0, 1.0);
@@ -232,6 +232,23 @@ pub fn apply_print_media(
             let b_toned = b_p.clamp(0.0, 1.0);
 
             apply_base_warmth(r_toned, g_toned, b_toned, base_warmth + 8.0 * depth)
+        }
+
+        // 8. Bamako Silver Contact (Seydou Keïta & Malick Sidibé, Bamako, Mali)
+        // High-Dmax ferrotype contact print; Zone III-V expansion on deep skin tones, crisp textile acutance.
+        PrintMediaMode::BamakoSilverContact => {
+            let (wr, wg, wb) = filter.spectral_weights();
+            let raw_lum = (wr * r + wg * g + wb * b).clamp(0.0, 1.0);
+            let graded = apply_paper_grade(raw_lum, paper_grade);
+
+            // Zone III-V expansion analytical S-curve (alpha = +0.22, beta = +0.14)
+            let s_lum = crate::color::emulsion::apply_emulsion_s_curve(graded, 0.22, 0.14);
+
+            // Ferrotype high-Dmax specular mirror black depth
+            let ferro = s_lum.powf(1.0 + 0.15 * depth);
+            let silver = (ferro * depth + graded * (1.0 - depth)).clamp(0.0, 1.0);
+
+            apply_base_warmth(silver, silver, silver, base_warmth)
         }
     }
 }

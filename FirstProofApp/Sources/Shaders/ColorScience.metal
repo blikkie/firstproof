@@ -494,7 +494,7 @@ inline float3 applyPrintMedia(
             float gP = compressShoulder(gG);
             float bP = compressShoulder(bG);
             
-            float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+            float lum = 0.2627 * rP + 0.6780 * gP + 0.0593 * bP;
             float satScale = 0.70 + 0.35 * depth;
             float rOut = clamp(lum + (rP - lum) * satScale, 0.0, 1.0);
             float gOut = clamp(lum + (gP - lum) * satScale, 0.0, 1.0);
@@ -517,7 +517,7 @@ inline float3 applyPrintMedia(
             float gP = pow(gG, shadowPow);
             float bP = pow(bG, shadowPow);
             
-            float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+            float lum = 0.2627 * rP + 0.6780 * gP + 0.0593 * bP;
             float azoSat = 0.80 + 0.30 * depth;
             float rOut = clamp(lum + (rP - lum) * azoSat, 0.0, 1.0);
             float gOut = clamp(lum + (gP - lum) * azoSat, 0.0, 1.0);
@@ -536,7 +536,7 @@ inline float3 applyPrintMedia(
             float gP = gG + matteFloor * (1.0 - gG) * (1.0 - gG);
             float bP = bG + matteFloor * (1.0 - bG) * (1.0 - bG);
             
-            float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+            float lum = 0.2627 * rP + 0.6780 * gP + 0.0593 * bP;
             float pigmentSat = 0.75 + 0.25 * depth;
             float rOut = clamp(lum + (rP - lum) * pigmentSat, 0.0, 1.0);
             float gOut = clamp(lum + (gP - lum) * pigmentSat, 0.0, 1.0);
@@ -602,6 +602,16 @@ inline float3 applyPrintMedia(
             float3 toned = clamp(float3(rP, gP, bP), 0.0, 1.0);
             return applyBaseWarmth(toned, baseWarmth + 8.0 * depth);
         }
+        case 8: { // BamakoSilverContact (Seydou Keïta & Malick Sidibé, Bamako, Mali)
+            float3 w = getEnlargerFilterWeights(filterMode);
+            float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
+            float graded = applyPaperGrade(rawLum, paperGrade);
+            float c = clamp(graded, 0.0, 1.0);
+            float sLum = clamp(c + 0.22 * c * (1.0 - c) * (2.0 * c - 1.0) + 0.14 * c * (1.0 - c), 0.0, 1.0);
+            float ferro = pow(sLum, 1.0 + 0.15 * depth);
+            float silver = clamp(ferro * depth + graded * (1.0 - depth), 0.0, 1.0);
+            return applyBaseWarmth(float3(silver), baseWarmth);
+        }
         default:
             return rgb;
     }
@@ -646,6 +656,12 @@ inline float3 applyDirChemicalCoupling(
     float d_b_out = c_br * d_r + c_bg * d_g + c_bb * d_b;
 
     return clamp(float3(pow(10.0, -d_r_out), pow(10.0, -d_g_out), pow(10.0, -d_b_out)), 0.0, 2.0);
+}
+
+inline float applyEmulsionSCurve(float x, float alpha, float beta) {
+    float c = clamp(x, 0.0, 1.0);
+    float poly = c + alpha * c * (1.0 - c) * (2.0 * c - 1.0) + beta * c * (1.0 - c);
+    return clamp(poly, 0.0, 1.0);
 }
 
 inline float3 applyRecordingEmulsion(
@@ -694,12 +710,12 @@ inline float3 applyRecordingEmulsion(
                 applyFilmCharacteristicCurve(dir.b, 0.82, 0.45, 0.08)
             );
         }
-        case 5: { // RochesterDaylight200 - Ref: Kodak Pub E-7022 (Gold 200), Status M Densitometry
-            float3 dir = applyDirChemicalCoupling(curRgb, -0.06, 0.03, -0.07, 0.02, 0.08, -0.10);
+        case 5: { // RochesterDaylight200 (Merged into RochesterPortrait400 per Story 3.11 spec)
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.04, 0.02, -0.08, 0.02, 0.02, -0.05);
             return float3(
-                applyFilmCharacteristicCurve(dir.r, 1.12, 0.20, 0.12),
-                applyFilmCharacteristicCurve(dir.g, 1.08, 0.22, 0.12),
-                applyFilmCharacteristicCurve(dir.b, 0.98, 0.26, 0.16)
+                applyFilmCharacteristicCurve(dir.r, 0.90, 0.38, 0.08),
+                applyFilmCharacteristicCurve(dir.g, 0.90, 0.38, 0.08),
+                applyFilmCharacteristicCurve(dir.b, 0.90, 0.38, 0.08)
             );
         }
         case 6: { // MobberleySilver400 - Ref: Ilford Technical Info Sheet (HP5 Plus), ID-11 Developer (1+1)
@@ -715,9 +731,39 @@ inline float3 applyRecordingEmulsion(
                 applyFilmCharacteristicCurve(dir.g, 0.98, 0.35, 0.12),
                 applyFilmCharacteristicCurve(dir.b, 0.98, 0.35, 0.12)
             );
-            float lum = 0.2126 * curv.r + 0.7152 * curv.g + 0.0722 * curv.b;
+            float lum = 0.2627 * curv.r + 0.6780 * curv.g + 0.0593 * curv.b;
             float baseRefl = 0.025 * max(1.0 - lum, 0.0);
             return min(curv + baseRefl * float3(1.02, 1.00, 0.94), 2.0);
+        }
+        case 8: { // LeverkusenPortrait160 (Agfa Agfacolor / Vista, Leverkusen, Germany)
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.05, 0.01, -0.06, 0.02, 0.02, -0.04);
+            return float3(
+                applyEmulsionSCurve(dir.r, 0.06, -0.02),
+                applyEmulsionSCurve(dir.g, 0.06, -0.02),
+                applyEmulsionSCurve(dir.b, 0.06, -0.02)
+            );
+        }
+        case 9: { // AshigaraPortrait400 (Fujicolor Pro 400H, Minamiashigara, Japan)
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.06, 0.02, -0.12, 0.04, 0.03, -0.08);
+            return float3(
+                applyEmulsionSCurve(dir.r, 0.08, 0.06),
+                applyEmulsionSCurve(dir.g, 0.08, 0.06),
+                applyEmulsionSCurve(dir.b, 0.08, 0.06)
+            );
+        }
+        case 10: { // LiguriaCinema80 (Ferrania P30, Cairo Montenotte, Italy)
+            float3 w = getEnlargerFilterWeights(filterMode);
+            float panLum = dot(curRgb, w);
+            float mono = applyEmulsionSCurve(panLum, 0.32, -0.08);
+            return float3(mono);
+        }
+        case 11: { // BaodingSilver100 (Lucky SHD 100, Baoding, China)
+            float3 w = getEnlargerFilterWeights(filterMode);
+            float panLum = dot(curRgb, w);
+            float baseMono = applyEmulsionSCurve(panLum, 0.18, 0.10);
+            float bloom = (panLum > 0.85) ? (0.08 * pow((panLum - 0.85) / 0.15, 2.0)) : 0.0;
+            float mono = min(baseMono + bloom, 1.0);
+            return float3(mono);
         }
         default:
             return rgb;

@@ -27,6 +27,8 @@ uniform float u_tint;
 uniform int u_toneProfileMode; // 0: AgxVivid, 1: AgxFilmic, 2: CamStandard, 3: CamPortrait, 4: CamLandscape, 5: CamVivid
 uniform int u_emulsionArchetype;
 uniform float u_emulsionExposure;
+uniform int u_emulsionGrainMode;
+uniform float u_grainScale;
 
 uniform int u_printMediaMode;
 uniform float u_printPaperGrade;
@@ -260,6 +262,7 @@ void main() {
         (abs(u_temperature - 5500.0) < 1.0) &&
         (abs(u_tint) < 0.001) &&
         (u_emulsionArchetype == 0) &&
+        (u_emulsionGrainMode == 0) &&
         (u_printMediaMode == 0) &&
         (u_splitShadowSat < 0.001) &&
         (u_splitHighlightSat < 0.001) &&
@@ -326,8 +329,8 @@ void main() {
     // 7. Split Toning in Linear Rec.2020
     rec2020Color = applySplitToning(rec2020Color, u_splitShadowHue, u_splitShadowSat, u_splitHighlightHue, u_splitHighlightSat, u_splitBalance);
 
-    // 8. Detail & Sharpening with Edge Masking in Linear Rec.2020
-    if (u_sharpeningAmount > 0.0 || u_noiseReduction > 0.0) {
+    // 8. Detail & Sharpening with Edge Masking & Stochastic Emulsion Resynthesis in Linear Rec.2020
+    if (u_sharpeningAmount > 0.0 || u_noiseReduction > 0.0 || u_emulsionGrainMode != 0) {
         vec2 texSize = vec2(textureSize(u_texture, 0));
         vec2 offset = vec2(max(u_sharpeningRadius, 0.5)) / texSize;
 
@@ -337,13 +340,30 @@ void main() {
         float y_t = sampleDisplayLuma(uv - vec2(0.0, offset.y));
         float y_b = sampleDisplayLuma(uv + vec2(0.0, offset.y));
 
-        rec2020Color = applyDetailAndSharpening(
-            rec2020Color,
-            y_c, y_l, y_r, y_t, y_b,
-            u_sharpeningAmount,
-            u_sharpeningMasking,
-            u_noiseReduction
-        );
+        if (u_sharpeningAmount > 0.0 || u_noiseReduction > 0.0) {
+            rec2020Color = applyDetailAndSharpening(
+                rec2020Color,
+                y_c, y_l, y_r, y_t, y_b,
+                u_sharpeningAmount,
+                u_sharpeningMasking,
+                u_noiseReduction
+            );
+        }
+
+        if (u_emulsionGrainMode != 0) {
+            rec2020Color = applyStochasticEmulsionGrain(
+                rec2020Color,
+                y_c,
+                y_l,
+                y_r,
+                y_t,
+                y_b,
+                uv,
+                u_emulsionGrainMode,
+                u_grainScale,
+                u_emulsionArchetype
+            );
+        }
     }
 
     // 10. TERMINAL STAGE: AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles -> Linear sRGB

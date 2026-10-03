@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
-2. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
-3. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
-4. **Story 3.6: Monochromatic Physical Split Toning & Enlarger Chemistry** (P2)
+1. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
+2. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+3. **Story 3.6: Monochromatic Physical Split Toning & Enlarger Chemistry** (P2)
+4. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -101,45 +101,6 @@ This document strictly tracks pending and deferred features calibrated against o
 ### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1) - COMPLETED
 All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](completed.md).
 
-
-### 3.11 Sensitometric Emulsion Balancing & Physical Optical Grain Engine (P2)
-> **Technical Mini Specs**:
-> - [Stochastic Emulsion Resynthesis Mini Spec](../specs/stochastic_emulsion_resynthesis.md)
-> - [Global Emulsion & Darkroom Print Roster Mini Spec](../specs/global_emulsion_and_darkroom_roster.md)
-- **Global Chemical & Sensitometric Roster Balancing**:
-  - Rationalize North American stocks: merge `RochesterDaylight200` into `RochesterPortrait400` (eliminating redundant C-41 variants in favor of pure exposure/saturation modulation).
-  - Add **`LeverkusenPortrait160`** (*Agfa Agfacolor / Vista* - Leverkusen, Germany): European substantive dye couplers, earthy ochre midtones, soft pastel greens, and gentle shadow saturation.
-  - Add **`AshigaraPortrait400`** (*Fujicolor Pro 400H* - Minamiashigara, Japan): Patented 4th color layer (cyan-sensitive inter-layer) delivering airy Japanese portrait pastels and fluorescent green suppression.
-  - Add **`LiguriaCinema80`** (*Ferrania P30* - Cairo Montenotte, Italy): Legendary 1960s Italian Neorealist high-silver cinema emulsion (Fellini, Pasolini), featuring deep velvety blacks, ultra-sharp acutance, and punchy microcontrast.
-  - Add **`BaodingSilver100`** (*Lucky SHD 100* - Baoding, China): Iconic domestic Chinese cubic silver halide featuring authentic optical halation bloom around specular highlights due to minimal anti-halation backing.
-- **Physical Grain Synthesis via Stochastic Emulsion Resynthesis**:
-  - **Sensitometric Domain Placement Invariant**: Grain is simulated in the optical scene domain *before* AgX tone mapping and print transfer, avoiding shadow noise floor amplification and non-linear gamma clipping.
-  - **Noise Transmutation (Zero Plastic Denoising)**: Repurpose high-ISO sensor noise as the latent nucleation seed for silver crystals or subtractive dye clouds via Chrominance Phase Consolidation and Nutting midtone density modulation ($4y(1-y)$).
-  - **Stock-Specific Crystal Morphology**:
-    1. *Metallic Silver Crystals* (`MobberleySilver400`, `LiguriaCinema80`, `BaodingSilver100`): Sharp, irregular crystalline silver grains with stock-calibrated acutance and density distribution.
-    2. *Organic Dye Clouds* (`RochesterPortrait400`, `AshigaraPortrait400`, `LeverkusenPortrait160`): Soft, overlapping microscopic dye clouds left behind after silver bleaching in C-41/E-6 processes.
-    3. *Optical Halation Scattering* (`BaodingSilver100`): Internal reflection and lateral light dispersion across the film base producing natural specular glow without digital bloom filters.
-  - **Real-Time GPU Performance Budget (< 0.1ms at 4K)**:
-    - Fold into existing 4-tap detail unsharp masking shader pass, requiring zero extra texture lookups and zero additional memory bandwidth.
-  - **Multi-Engine Mathematical Parity**:
-    - Procedural SIMD/hash-based grain synthesis matching bit-for-bit across Rust CPU export (`color/grain.rs`), Metal GPU shaders (`Shaders.metal`), and WebGL fragment shaders (`FragmentShader.ts`).
-  - **Verification**:
-    - Parity test suite verifying identical grain density across wedges $(-10\text{ EV}$ to $+6.5\text{ EV})$ in Rust, Metal, and WebGL.
-
-### 3.12 West African Studio Darkroom Chemistry & Deep-Tone Sensitometry (P2)
-> **Technical Mini Spec**: [Global Emulsion & Darkroom Print Roster Mini Spec](../specs/global_emulsion_and_darkroom_roster.md#3-darkroom-print-media-west-african-studio-chemistry)
-- **Honoring West African Studio Print Culture (`BamakoSilverContact`)**:
-  - Add **`BamakoSilverContact`** to `PrintMediaMode`, formalizing the darkroom printmaking tradition of Bamako, Mali (Seydou Keïta, Malick Sidibé) and Bobo-Dioulasso (Sanlé Sory).
-  - Modeled on large-format 1:1 contact printing onto high-silver bromide paper with high-concentration hydroquinone/metol developers and ferrotype gloss finishing.
-- **Sensitometric Characteristics**:
-  - **Zone III–V Microcontrast & Luminosity**: Expands tonal separation across rich dark skin tones and shadow textures, eliminating the muddy compression typical of Caucasian-biased historical paper curves.
-  - **High-Key Textile Acutance**: Retains brilliant, non-blooming edge contrast in Zone VII–VIII highlights for intricate patterned fabrics (Ankara wax prints, woven mudcloth, lace) and jewelry.
-  - **Ferrotype Mirror Dmax**: Deep, inky maximum black density ($D_{\max} \ge 2.25$) with neutral-to-cool specular silver reflectance.
-- **Deep-Tone Sensitometric Test Suite**:
-  - Implement a specialized synthetic reflectance wedge in `tests/print_media_parity.rs` auditing Zones II through VI across diverse skin reflectance models.
-  - Guarantees strictly monotonic derivative separation ($df/dx > 0$) without clipping, solarization, or plastic color flattening.
-- **Parity Across Engines**:
-  - Implement identical mathematical transfer functions across `firstproof-core/src/color/print_media.rs`, `Shaders.metal`, and `FragmentShader.ts`.
 
 ### 3.14 DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair (P2)
 - **DNG OpcodeList Bytecode Specification**:

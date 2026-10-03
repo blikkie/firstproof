@@ -32,8 +32,8 @@ pub use curve::{
     ToneCurvesRecord,
 };
 pub use modes::{
-    ColorProfileMode, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode, ExportColorSpace,
-    ExportRenderingIntent, PrintMediaMode,
+    ColorProfileMode, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode,
+    ExportColorSpace, ExportRenderingIntent, PrintMediaMode,
 };
 pub use preview::{
     decode_exif_orientation, extract_metadata_from_bytes, extract_preview_slice,

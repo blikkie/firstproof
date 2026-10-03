@@ -60,6 +60,14 @@ extension MetalRenderer {
             uniforms.emulsionArchetype = 6
         case .cambridgeDiffusion100:
             uniforms.emulsionArchetype = 7
+        case .leverkusenPortrait160:
+            uniforms.emulsionArchetype = 8
+        case .ashigaraPortrait400:
+            uniforms.emulsionArchetype = 9
+        case .liguriaCinema80:
+            uniforms.emulsionArchetype = 10
+        case .baodingSilver100:
+            uniforms.emulsionArchetype = 11
         }
 
         switch edits.emulsionFormat {
@@ -72,7 +80,15 @@ extension MetalRenderer {
         }
 
         uniforms.emulsionExposure = edits.emulsionExposure
-        uniforms._emulsionPadding = 0
+        switch edits.emulsionGrainMode {
+        case .off:
+            uniforms.emulsionGrainMode = 0
+        case .seedFromSensor:
+            uniforms.emulsionGrainMode = 1
+        case .synthesizePhysical:
+            uniforms.emulsionGrainMode = 2
+        }
+        uniforms.grainScale = edits.grainScale
         uniforms.splitToningShadowSat = edits.splitToningShadowSat
         uniforms.splitToningHighlightHue = edits.splitToningHighlightHue
         uniforms.splitToningHighlightSat = edits.splitToningHighlightSat
@@ -103,6 +119,8 @@ extension MetalRenderer {
             uniforms.printMediaMode = 6
         case .cyanotype:
             uniforms.printMediaMode = 7
+        case .bamakoSilverContact:
+            uniforms.printMediaMode = 8
         }
         
         switch edits.enlargerFilter {

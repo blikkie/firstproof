@@ -24,6 +24,8 @@ extension ShaderUniforms {
         u.splitToningHighlightHue = 45.0
         u.splitToningHighlightSat = 0.0
         u.splitToningBalance = 0.0
+        u.emulsionGrainMode = 0
+        u.grainScale = 1.0
         return u
     }
 }

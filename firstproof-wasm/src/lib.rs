@@ -534,22 +534,32 @@ export type EmulsionArchetype =
     | 'RochesterCinema500'
     | 'RochesterDaylight200'
     | 'MobberleySilver400'
-    | 'CambridgeDiffusion100';
+    | 'CambridgeDiffusion100'
+    | 'LeverkusenPortrait160'
+    | 'AshigaraPortrait400'
+    | 'LiguriaCinema80'
+    | 'BaodingSilver100';
 
 export type EmulsionFormat =
     | 'Format35mm'
     | 'MediumFormat'
     | 'LargeFormat4x5';
 
+export type EmulsionGrainMode =
+    | 'Off'
+    | 'SeedFromSensor'
+    | 'SynthesizePhysical';
+
 export type PrintMediaMode =
     | 'None'
     | 'ChromogenicTypeC'
     | 'SilverDyeBleach'
-    | 'CottonRagMatte'
+    | 'FineArtCottonRag'
     | 'BarytaSilverGelatin'
     | 'WarmtoneChlorobromide'
     | 'PlatinumPalladium'
-    | 'Cyanotype';
+    | 'Cyanotype'
+    | 'BamakoSilverContact';
 
 export type EnlargerFilterMode =
     | 'NeutralPanchromatic'
@@ -593,6 +603,8 @@ export interface EditSettings {
     emulsion_archetype: EmulsionArchetype;
     emulsion_format: EmulsionFormat;
     emulsion_exposure: number;
+    emulsion_grain_mode: EmulsionGrainMode;
+    grain_scale: number;
     curves: ToneCurvesRecord;
     split_toning_shadow_hue: number;
     split_toning_shadow_sat: number;

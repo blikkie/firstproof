@@ -71,7 +71,7 @@ describe('Edit Settings & Modification Invariants', () => {
       );
     });
 
-    it('detects analog emulsion and print media selection as modifications', () => {
+    it('detects analog emulsion, grain, and print media selection as modifications', () => {
       const edits = getDefaultEdits(false);
 
       expect(
@@ -84,7 +84,26 @@ describe('Edit Settings & Modification Invariants', () => {
       ).toBe(true);
       expect(
         hasModifications(
-          { ...edits, print_media: 'CottonRagMatte' },
+          { ...edits, emulsion_grain_mode: 'SynthesizePhysical' },
+          1,
+          0,
+          'Unflagged',
+        ),
+      ).toBe(true);
+      expect(
+        hasModifications({ ...edits, grain_scale: 1.5 }, 1, 0, 'Unflagged'),
+      ).toBe(true);
+      expect(
+        hasModifications(
+          { ...edits, print_media: 'FineArtCottonRag' },
+          1,
+          0,
+          'Unflagged',
+        ),
+      ).toBe(true);
+      expect(
+        hasModifications(
+          { ...edits, print_media: 'BamakoSilverContact' },
           1,
           0,
           'Unflagged',

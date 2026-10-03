@@ -45,6 +45,15 @@ pub fn apply_film_characteristic_curve(val: f32, gamma: f32, shoulder: f32, toe:
     (base - comp_s - comp_t).max(0.0)
 }
 
+/// Continuous $C^1$ analytical S-curve anchored at f(0.0) == 0.0 and f(1.0) == 1.0:
+/// f(x) = x + alpha * x(1-x)(2x-1) + beta * x(1-x)
+#[inline]
+pub fn apply_emulsion_s_curve(x: f32, alpha: f32, beta: f32) -> f32 {
+    let c = x.clamp(0.0, 1.0);
+    let poly = c + alpha * c * (1.0 - c) * (2.0 * c - 1.0) + beta * c * (1.0 - c);
+    poly.clamp(0.0, 1.0)
+}
+
 /// Active DIR Chemical Crosstalk Coupler Matrix in Optical Density Space:
 /// D = -log10(T)
 /// D_out = C_DIR * D_in
@@ -189,18 +198,18 @@ pub fn apply_recording_emulsion(
         // Technical Reference: Kodak Publication E-7022 / CIS-124 ("KODAK GOLD 200 Film"), Status M Densitometry.
         // Characteristics: Consumer daylight negative with punchier midtone slope (gamma 1.12 R / 1.08 G / 0.98 B),
         // yellow dye suppression of blue, and warm amber saturation in sunlit highlights and skin tones.
+        // 5. Rochester Daylight 200 (Merged into Rochester Portrait 400 per Story 3.11 spec)
         EmulsionArchetype::RochesterDaylight200 => {
             let (r_dir, g_dir, b_dir) = apply_dir_chemical_coupling(
                 cur_r, cur_g, cur_b,
-                -0.06, 0.03,
-                -0.07, 0.02,
-                0.08, -0.10,
+                -0.04, 0.02,
+                -0.08, 0.02,
+                0.02, -0.05,
             );
 
-            // Punchy daylight consumer gamma (1.12 R / 1.08 G / 0.98 B) with rich golden midtones
-            let r_curv = apply_film_characteristic_curve(r_dir, 1.12, 0.20, 0.12);
-            let g_curv = apply_film_characteristic_curve(g_dir, 1.08, 0.22, 0.12);
-            let b_curv = apply_film_characteristic_curve(b_dir, 0.98, 0.26, 0.16);
+            let r_curv = apply_film_characteristic_curve(r_dir, 0.90, 0.38, 0.08);
+            let g_curv = apply_film_characteristic_curve(g_dir, 0.90, 0.38, 0.08);
+            let b_curv = apply_film_characteristic_curve(b_dir, 0.90, 0.38, 0.08);
 
             (r_curv, g_curv, b_curv)
         }
@@ -233,14 +242,73 @@ pub fn apply_recording_emulsion(
             let g_curv = apply_film_characteristic_curve(g_dir, 0.98, 0.35, 0.12);
             let b_curv = apply_film_characteristic_curve(b_dir, 0.98, 0.35, 0.12);
 
-            // Reflective TiO2 base tone: gentle cream/pastel reflection in high densities
-            let lum = 0.2126 * r_curv + 0.7152 * g_curv + 0.0722 * b_curv;
+            // Reflective TiO2 base tone: gentle cream/pastel reflection in high densities (Linear Rec.2020 luma)
+            let lum = 0.2627 * r_curv + 0.6780 * g_curv + 0.0593 * b_curv;
             let base_refl = 0.025 * (1.0 - lum).max(0.0);
             let r_tio2 = (r_curv + base_refl * 1.02).min(2.0);
             let g_tio2 = (g_curv + base_refl * 1.00).min(2.0);
             let b_tio2 = (b_curv + base_refl * 0.94).min(2.0);
 
             (r_tio2, g_tio2, b_tio2)
+        }
+
+        // 8. Leverkusen Portrait 160 (Agfa Agfacolor / Vista, Leverkusen, Germany)
+        // Substantive European dye couplers, earthy ochre midtones, soft pastel greens.
+        EmulsionArchetype::LeverkusenPortrait160 => {
+            let (r_dir, g_dir, b_dir) = apply_dir_chemical_coupling(
+                cur_r, cur_g, cur_b,
+                -0.05, 0.01,
+                -0.06, 0.02,
+                0.02, -0.04,
+            );
+            let r_curv = apply_emulsion_s_curve(r_dir, 0.06, -0.02);
+            let g_curv = apply_emulsion_s_curve(g_dir, 0.06, -0.02);
+            let b_curv = apply_emulsion_s_curve(b_dir, 0.06, -0.02);
+
+            (r_curv, g_curv, b_curv)
+        }
+
+        // 9. Ashigara Portrait 400 (Fujicolor Pro 400H, Minamiashigara, Japan)
+        // Patented 4th color layer (cyan-sensitive inter-layer) suppressing fluorescent cast; airy skin tones.
+        EmulsionArchetype::AshigaraPortrait400 => {
+            let (r_dir, g_dir, b_dir) = apply_dir_chemical_coupling(
+                cur_r, cur_g, cur_b,
+                -0.06, 0.02,
+                -0.12, 0.04,
+                0.03, -0.08,
+            );
+            let r_curv = apply_emulsion_s_curve(r_dir, 0.08, 0.06);
+            let g_curv = apply_emulsion_s_curve(g_dir, 0.08, 0.06);
+            let b_curv = apply_emulsion_s_curve(b_dir, 0.08, 0.06);
+
+            (r_curv, g_curv, b_curv)
+        }
+
+        // 10. Liguria Cinema 80 (Ferrania P30, Cairo Montenotte, Italy)
+        // 1960s Italian Neorealist cinema stock; pure silver monochrome, punchy microcontrast.
+        EmulsionArchetype::LiguriaCinema80 => {
+            let (wr, wg, wb) = filter_mode.spectral_weights();
+            let pan_lum = wr * cur_r + wg * cur_g + wb * cur_b;
+            let mono = apply_emulsion_s_curve(pan_lum, 0.32, -0.08);
+
+            (mono, mono, mono)
+        }
+
+        // 11. Baoding Silver 100 (Lucky SHD 100, Baoding, China)
+        // Domestic cubic silver halide; absence of anti-halation undercoat produces specular halation bloom.
+        EmulsionArchetype::BaodingSilver100 => {
+            let (wr, wg, wb) = filter_mode.spectral_weights();
+            let pan_lum = wr * cur_r + wg * cur_g + wb * cur_b;
+            let base_mono = apply_emulsion_s_curve(pan_lum, 0.18, 0.10);
+            let bloom = if pan_lum > 0.85 {
+                let u = (pan_lum - 0.85) / 0.15;
+                0.08 * u * u
+            } else {
+                0.0
+            };
+            let mono = (base_mono + bloom).min(1.0);
+
+            (mono, mono, mono)
         }
     }
 }

@@ -40,7 +40,7 @@ fn metal_shader_print_media_sim(
         if warmth.abs() < 0.001 {
             return rgb;
         }
-        let lum = 0.2126 * rgb.0 + 0.7152 * rgb.1 + 0.0722 * rgb.2;
+        let lum = 0.2627 * rgb.0 + 0.6780 * rgb.1 + 0.0593 * rgb.2;
         let highlight_weight = lum.powf(0.6).clamp(0.0, 1.0);
         let factor = (warmth / 100.0) * highlight_weight;
 
@@ -89,7 +89,7 @@ fn metal_shader_print_media_sim(
                 b_g - 0.045 * depth * u * u * (3.0 - 2.0 * u)
             } else { b_g };
 
-            let lum = 0.2126 * r_p + 0.7152 * g_p + 0.0722 * b_p;
+            let lum = 0.2627 * r_p + 0.6780 * g_p + 0.0593 * b_p;
             let sat_scale = 0.70 + 0.35 * depth;
             let mut r_out = (lum + (r_p - lum) * sat_scale).clamp(0.0, 1.0);
             let mut g_out = (lum + (g_p - lum) * sat_scale).clamp(0.0, 1.0);
@@ -112,7 +112,7 @@ fn metal_shader_print_media_sim(
             let g_p = g_g.powf(shadow_pow);
             let b_p = b_g.powf(shadow_pow);
 
-            let lum = 0.2126 * r_p + 0.7152 * g_p + 0.0722 * b_p;
+            let lum = 0.2627 * r_p + 0.6780 * g_p + 0.0593 * b_p;
             let azo_sat = 0.80 + 0.30 * depth;
 
             let r_out = (lum + (r_p - lum) * azo_sat).clamp(0.0, 1.0);
@@ -131,7 +131,7 @@ fn metal_shader_print_media_sim(
             let g_p = g_g + matte_floor * (1.0 - g_g) * (1.0 - g_g);
             let b_p = b_g + matte_floor * (1.0 - b_g) * (1.0 - b_g);
 
-            let lum = 0.2126 * r_p + 0.7152 * g_p + 0.0722 * b_p;
+            let lum = 0.2627 * r_p + 0.6780 * g_p + 0.0593 * b_p;
             let pigment_sat = 0.75 + 0.25 * depth;
 
             let r_out = (lum + (r_p - lum) * pigment_sat).clamp(0.0, 1.0);
@@ -194,6 +194,15 @@ fn metal_shader_print_media_sim(
             let toned = (r_p.clamp(0.0, 1.0), g_p.clamp(0.0, 1.0), b_p.clamp(0.0, 1.0));
             metal_base_warmth(toned, base_warmth + 8.0 * depth)
         }
+        8 => { // BamakoSilverContact
+            let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
+            let graded = metal_paper_grade(raw_lum, paper_grade);
+            let c = graded.clamp(0.0, 1.0);
+            let s_lum = (c + 0.22 * c * (1.0 - c) * (2.0 * c - 1.0) + 0.14 * c * (1.0 - c)).clamp(0.0, 1.0);
+            let ferro = s_lum.powf(1.0 + 0.15 * depth);
+            let silver = (ferro * depth + graded * (1.0 - depth)).clamp(0.0, 1.0);
+            metal_base_warmth((silver, silver, silver), base_warmth)
+        }
         _ => (r, g, b),
     }
 }
@@ -243,6 +252,7 @@ fn test_dual_engine_parity_across_all_archetypes() {
         PrintMediaMode::WarmtoneChlorobromide,
         PrintMediaMode::PlatinumPalladium,
         PrintMediaMode::Cyanotype,
+        PrintMediaMode::BamakoSilverContact,
     ];
 
     let filter_modes = [
@@ -357,4 +367,34 @@ fn test_has_modifications_with_print_media() {
 
     edits.print_paper_grade = 0.5;
     assert!(edits_has_modifications(&edits, None, None));
+}
+
+#[test]
+fn test_bamako_silver_contact_deep_dmax_and_ferrotype_depth() {
+    // Bamako contact prints exhibit deep specular blacks and Zone III-V expansion
+    let (r, g, b) = apply_print_media(
+        0.18, 0.18, 0.18, // Mid gray
+        PrintMediaMode::BamakoSilverContact,
+        EnlargerFilterMode::NeutralPanchromatic,
+        0.0,
+        0.0,
+        100.0,
+    );
+    // Neutral axis must be preserved
+    assert_eq!(r, g);
+    assert_eq!(g, b);
+    assert!(r > 0.0 && r < 1.0);
+
+    // Deep shadow should have high Dmax
+    let (r_sh, g_sh, b_sh) = apply_print_media(
+        0.02, 0.02, 0.02,
+        PrintMediaMode::BamakoSilverContact,
+        EnlargerFilterMode::NeutralPanchromatic,
+        0.0,
+        0.0,
+        100.0,
+    );
+    assert_eq!(r_sh, g_sh);
+    assert_eq!(g_sh, b_sh);
+    assert!(r_sh < 0.02, "Ferrotype process must deepen maximum shadow density");
 }

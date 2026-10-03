@@ -54,6 +54,12 @@ fn metal_shader_emulsion_sim(
         }
     };
 
+    let metal_emulsion_s_curve = |x: f32, alpha: f32, beta: f32| -> f32 {
+        let c = x.clamp(0.0, 1.0);
+        let poly = c + alpha * c * (1.0 - c) * (2.0 * c - 1.0) + beta * c * (1.0 - c);
+        poly.clamp(0.0, 1.0)
+    };
+
     let metal_dir_coupling = |rgb: (f32, f32, f32),
                               c_rg: f32, c_rb: f32,
                               c_gr: f32, c_gb: f32,
@@ -116,12 +122,12 @@ fn metal_shader_emulsion_sim(
                 metal_film_curve(dir.2, 0.82, 0.45, 0.08),
             )
         }
-        5 => { // RochesterDaylight200
-            let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.06, 0.03, -0.07, 0.02, 0.08, -0.10);
+        5 => { // RochesterDaylight200 (Merged into RochesterPortrait400 per Story 3.11 spec)
+            let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.04, 0.02, -0.08, 0.02, 0.02, -0.05);
             (
-                metal_film_curve(dir.0, 1.12, 0.20, 0.12),
-                metal_film_curve(dir.1, 1.08, 0.22, 0.12),
-                metal_film_curve(dir.2, 0.98, 0.26, 0.16),
+                metal_film_curve(dir.0, 0.90, 0.38, 0.08),
+                metal_film_curve(dir.1, 0.90, 0.38, 0.08),
+                metal_film_curve(dir.2, 0.90, 0.38, 0.08),
             )
         }
         6 => { // MobberleySilver400
@@ -142,12 +148,61 @@ fn metal_shader_emulsion_sim(
             let c_r = metal_film_curve(dir.0, 0.98, 0.35, 0.12);
             let c_g = metal_film_curve(dir.1, 0.98, 0.35, 0.12);
             let c_b = metal_film_curve(dir.2, 0.98, 0.35, 0.12);
-            let lum = 0.2126 * c_r + 0.7152 * c_g + 0.0722 * c_b;
+            let lum = 0.2627 * c_r + 0.6780 * c_g + 0.0593 * c_b;
             let base_refl = 0.025 * (1.0 - lum).max(0.0);
             let tio2_r = (c_r + base_refl * 1.02).min(2.0);
             let tio2_g = (c_g + base_refl * 1.00).min(2.0);
             let tio2_b = (c_b + base_refl * 0.94).min(2.0);
             (tio2_r, tio2_g, tio2_b)
+        }
+        8 => { // LeverkusenPortrait160
+            let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.05, 0.01, -0.06, 0.02, 0.02, -0.04);
+            (
+                metal_emulsion_s_curve(dir.0, 0.06, -0.02),
+                metal_emulsion_s_curve(dir.1, 0.06, -0.02),
+                metal_emulsion_s_curve(dir.2, 0.06, -0.02),
+            )
+        }
+        9 => { // AshigaraPortrait400
+            let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.06, 0.02, -0.12, 0.04, 0.03, -0.08);
+            (
+                metal_emulsion_s_curve(dir.0, 0.08, 0.06),
+                metal_emulsion_s_curve(dir.1, 0.08, 0.06),
+                metal_emulsion_s_curve(dir.2, 0.08, 0.06),
+            )
+        }
+        10 => { // LiguriaCinema80
+            let filter_weights = match filter_mode {
+                1 => (0.35f32, 0.60f32, 0.05f32),
+                2 => (0.55f32, 0.42f32, 0.03f32),
+                3 => (0.85f32, 0.15f32, 0.00f32),
+                4 => (0.15f32, 0.80f32, 0.05f32),
+                5 => (0.00f32, 0.60f32, 0.40f32),
+                _ => (0.2627f32, 0.6780f32, 0.0593f32),
+            };
+            let pan_lum = filter_weights.0 * cur_r + filter_weights.1 * cur_g + filter_weights.2 * cur_b;
+            let mono = metal_emulsion_s_curve(pan_lum, 0.32, -0.08);
+            (mono, mono, mono)
+        }
+        11 => { // BaodingSilver100
+            let filter_weights = match filter_mode {
+                1 => (0.35f32, 0.60f32, 0.05f32),
+                2 => (0.55f32, 0.42f32, 0.03f32),
+                3 => (0.85f32, 0.15f32, 0.00f32),
+                4 => (0.15f32, 0.80f32, 0.05f32),
+                5 => (0.00f32, 0.60f32, 0.40f32),
+                _ => (0.2627f32, 0.6780f32, 0.0593f32),
+            };
+            let pan_lum = filter_weights.0 * cur_r + filter_weights.1 * cur_g + filter_weights.2 * cur_b;
+            let base_mono = metal_emulsion_s_curve(pan_lum, 0.18, 0.10);
+            let bloom = if pan_lum > 0.85 {
+                let u = (pan_lum - 0.85) / 0.15;
+                0.08 * u * u
+            } else {
+                0.0
+            };
+            let mono = (base_mono + bloom).min(1.0);
+            (mono, mono, mono)
         }
         _ => (r, g, b),
     }
@@ -256,6 +311,10 @@ fn test_dual_engine_parity_across_all_archetypes() {
         EmulsionArchetype::RochesterDaylight200,
         EmulsionArchetype::MobberleySilver400,
         EmulsionArchetype::CambridgeDiffusion100,
+        EmulsionArchetype::LeverkusenPortrait160,
+        EmulsionArchetype::AshigaraPortrait400,
+        EmulsionArchetype::LiguriaCinema80,
+        EmulsionArchetype::BaodingSilver100,
     ];
 
     let test_patches = [

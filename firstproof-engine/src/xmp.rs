@@ -1,6 +1,7 @@
 use crate::curve::CurvePointRecord;
 use crate::modes::{
-    ColorProfileMode, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode, PrintMediaMode,
+    ColorProfileMode, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode,
+    PrintMediaMode,
 };
 use crate::settings::EditSettings;
 use roxmltree::{Document, Node};
@@ -279,6 +280,16 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
     writer
         .element("noiseReduction", pm_ns.clone())
         .value(format!("{:.4}", data.edits.noise_reduction).as_str());
+    writer
+        .element("emulsionGrainMode", pm_ns.clone())
+        .value(match data.edits.emulsion_grain_mode {
+            EmulsionGrainMode::Off => "Off",
+            EmulsionGrainMode::SeedFromSensor => "SeedFromSensor",
+            EmulsionGrainMode::SynthesizePhysical => "SynthesizePhysical",
+        });
+    writer
+        .element("grainScale", pm_ns.clone())
+        .value(format!("{:.4}", data.edits.grain_scale).as_str());
 
     writer
         .element("emulsionArchetype", pm_ns.clone())
@@ -291,6 +302,10 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
             EmulsionArchetype::RochesterDaylight200 => "RochesterDaylight200",
             EmulsionArchetype::MobberleySilver400 => "MobberleySilver400",
             EmulsionArchetype::CambridgeDiffusion100 => "CambridgeDiffusion100",
+            EmulsionArchetype::LeverkusenPortrait160 => "LeverkusenPortrait160",
+            EmulsionArchetype::AshigaraPortrait400 => "AshigaraPortrait400",
+            EmulsionArchetype::LiguriaCinema80 => "LiguriaCinema80",
+            EmulsionArchetype::BaodingSilver100 => "BaodingSilver100",
         });
     writer
         .element("emulsionFormat", pm_ns.clone())
@@ -330,6 +345,7 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
             PrintMediaMode::WarmtoneChlorobromide => "WarmtoneChlorobromide",
             PrintMediaMode::PlatinumPalladium => "PlatinumPalladium",
             PrintMediaMode::Cyanotype => "Cyanotype",
+            PrintMediaMode::BamakoSilverContact => "BamakoSilverContact",
         });
     writer
         .element("enlargerFilter", pm_ns.clone())
@@ -565,15 +581,32 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
             data.edits.noise_reduction = val;
         }
     }
+    if let Some(gm_str) = get(pm, "emulsionGrainMode") {
+        data.edits.emulsion_grain_mode = match gm_str.trim() {
+            "SeedFromSensor" => EmulsionGrainMode::SeedFromSensor,
+            "SynthesizePhysical" => EmulsionGrainMode::SynthesizePhysical,
+            _ => EmulsionGrainMode::Off,
+        };
+    }
+    if let Some(gs_str) = get(pm, "grainScale") {
+        if let Ok(val) = gs_str.parse::<f32>() {
+            data.edits.grain_scale = val;
+        }
+    }
     if let Some(ea_str) = get(pm, "emulsionArchetype") {
         data.edits.emulsion_archetype = match ea_str.trim() {
             "RochesterPortrait400" => EmulsionArchetype::RochesterPortrait400,
             "AshigaraChrome50" => EmulsionArchetype::AshigaraChrome50,
             "RochesterK14Chrome64" => EmulsionArchetype::RochesterK14Chrome64,
             "RochesterCinema500" => EmulsionArchetype::RochesterCinema500,
-            "RochesterDaylight200" => EmulsionArchetype::RochesterDaylight200,
+            // RochesterDaylight200 merged into RochesterPortrait400
+            "RochesterDaylight200" => EmulsionArchetype::RochesterPortrait400,
             "MobberleySilver400" => EmulsionArchetype::MobberleySilver400,
             "CambridgeDiffusion100" => EmulsionArchetype::CambridgeDiffusion100,
+            "LeverkusenPortrait160" => EmulsionArchetype::LeverkusenPortrait160,
+            "AshigaraPortrait400" => EmulsionArchetype::AshigaraPortrait400,
+            "LiguriaCinema80" => EmulsionArchetype::LiguriaCinema80,
+            "BaodingSilver100" => EmulsionArchetype::BaodingSilver100,
             _ => EmulsionArchetype::None,
         };
     }
@@ -668,6 +701,7 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
             "WarmtoneChlorobromide" => PrintMediaMode::WarmtoneChlorobromide,
             "PlatinumPalladium" => PrintMediaMode::PlatinumPalladium,
             "Cyanotype" => PrintMediaMode::Cyanotype,
+            "BamakoSilverContact" => PrintMediaMode::BamakoSilverContact,
             _ => PrintMediaMode::None,
         };
     }

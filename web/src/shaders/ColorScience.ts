@@ -401,13 +401,18 @@ vec3 getEnlargerFilterWeights(int filterMode) {
     return vec3(0.2627, 0.6780, 0.0593); // NeutralPanchromatic (Linear Rec.2020 photopic luminance)
 }
 
+float applyEmulsionSCurve(float x, float alpha, float beta) {
+    float c = clamp(x, 0.0, 1.0);
+    return clamp(c + alpha * c * (1.0 - c) * (2.0 * c - 1.0) + beta * c * (1.0 - c), 0.0, 1.0);
+}
+
 vec3 applyRecordingEmulsion(vec3 rgb, int archetype, float pushPullEv, int filterMode) {
     if (archetype == 0) return rgb;
 
     float expGain = pow(2.0, clamp(pushPullEv, -2.0, 2.0));
     vec3 cur = max(rgb * expGain, vec3(0.0));
 
-    if (archetype == 1) { // Rochester Portrait 400
+    if (archetype == 1 || archetype == 5) { // Rochester Portrait 400 (Daylight 200 merged)
         vec3 dir = applyDirChemicalCoupling(cur, -0.04, 0.02, -0.08, 0.02, 0.02, -0.05);
         return vec3(
             applyFilmCharacteristicCurve(dir.r, 0.90, 0.38, 0.08),
@@ -435,13 +440,6 @@ vec3 applyRecordingEmulsion(vec3 rgb, int archetype, float pushPullEv, int filte
             applyFilmCharacteristicCurve(dir.g, 0.82, 0.45, 0.08),
             applyFilmCharacteristicCurve(dir.b, 0.82, 0.45, 0.08)
         );
-    } else if (archetype == 5) { // Rochester Daylight 200
-        vec3 dir = applyDirChemicalCoupling(cur, -0.06, 0.03, -0.07, 0.02, 0.08, -0.10);
-        return vec3(
-            applyFilmCharacteristicCurve(dir.r, 1.12, 0.20, 0.12),
-            applyFilmCharacteristicCurve(dir.g, 1.08, 0.22, 0.12),
-            applyFilmCharacteristicCurve(dir.b, 0.98, 0.26, 0.16)
-        );
     } else if (archetype == 6) { // Mobberley Silver 400 (B&W)
         vec3 w = getEnlargerFilterWeights(filterMode);
         float panLum = dot(cur, w);
@@ -454,13 +452,40 @@ vec3 applyRecordingEmulsion(vec3 rgb, int archetype, float pushPullEv, int filte
             applyFilmCharacteristicCurve(dir.g, 0.98, 0.35, 0.12),
             applyFilmCharacteristicCurve(dir.b, 0.98, 0.35, 0.12)
         );
-        float lum = dot(curv, vec3(0.2126, 0.7152, 0.0722));
+        float lum = dot(curv, vec3(0.2627, 0.6780, 0.0593));
         float baseRefl = 0.025 * max(1.0 - lum, 0.0);
         return vec3(
             min(curv.r + baseRefl * 1.02, 2.0),
             min(curv.g + baseRefl * 1.00, 2.0),
             min(curv.b + baseRefl * 0.94, 2.0)
         );
+    } else if (archetype == 8) { // Leverkusen Portrait 160
+        vec3 dir = applyDirChemicalCoupling(cur, 0.02, 0.03, -0.06, 0.01, 0.03, -0.04);
+        return vec3(
+            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.r, 0.88, 0.32, 0.10), 0.12, 0.08),
+            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.g, 0.90, 0.30, 0.09), 0.10, 0.07),
+            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.b, 0.92, 0.28, 0.08), 0.08, 0.06)
+        );
+    } else if (archetype == 9) { // Ashigara Portrait 400
+        vec3 dir = applyDirChemicalCoupling(cur, -0.06, 0.01, -0.08, 0.02, 0.01, -0.06);
+        return vec3(
+            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.r, 0.94, 0.24, 0.14), 0.16, 0.10),
+            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.g, 0.94, 0.24, 0.14), 0.16, 0.10),
+            applyEmulsionSCurve(applyFilmCharacteristicCurve(dir.b, 0.92, 0.26, 0.15), 0.14, 0.09)
+        );
+    } else if (archetype == 10) { // Liguria Cinema 80 (B&W)
+        vec3 w = getEnlargerFilterWeights(filterMode);
+        float rawLum = dot(cur, w);
+        float silver = applyFilmCharacteristicCurve(rawLum, 1.15, 0.16, 0.22);
+        float sLum = applyEmulsionSCurve(silver, 0.18, -0.06);
+        return vec3(sLum);
+    } else if (archetype == 11) { // Baoding Silver 100 (B&W Halation)
+        vec3 w = getEnlargerFilterWeights(filterMode);
+        float rawLum = dot(cur, w);
+        float silver = applyFilmCharacteristicCurve(rawLum, 0.92, 0.36, 0.12);
+        float bloom = 0.06 * pow(max(silver - 0.70, 0.0) / 0.30, 2.0);
+        float sLum = clamp(applyEmulsionSCurve(silver, 0.10, 0.12) + bloom, 0.0, 1.0);
+        return vec3(sLum);
     }
     return cur;
 }
@@ -478,7 +503,7 @@ vec3 applyBaseWarmth(vec3 rgb, float warmth) {
     if (abs(warmth) < 0.001) {
         return rgb;
     }
-    float lum = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+    float lum = 0.2627 * rgb.r + 0.6780 * rgb.g + 0.0593 * rgb.b;
     float highlightWeight = clamp(pow(lum, 0.6), 0.0, 1.0);
     float factor = (warmth / 100.0) * highlightWeight;
 
@@ -521,7 +546,7 @@ vec3 applyPrintMedia(vec3 rgb, int mediaMode, int filterMode, float paperGrade, 
         float uB = clamp((bG - 0.70) / 0.30, 0.0, 1.0);
         float bP = bG - 0.045 * depth * uB * uB * (3.0 - 2.0 * uB);
 
-        float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+        float lum = 0.2627 * rP + 0.6780 * gP + 0.0593 * bP;
         float satScale = 0.70 + 0.35 * depth;
         float rOut = clamp(lum + (rP - lum) * satScale, 0.0, 1.0);
         float gOut = clamp(lum + (gP - lum) * satScale, 0.0, 1.0);
@@ -543,7 +568,7 @@ vec3 applyPrintMedia(vec3 rgb, int mediaMode, int filterMode, float paperGrade, 
         float gP = pow(max(gG, 0.0), shadowPow);
         float bP = pow(max(bG, 0.0), shadowPow);
 
-        float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+        float lum = 0.2627 * rP + 0.6780 * gP + 0.0593 * bP;
         float azoSat = 0.80 + 0.30 * depth;
         float rOut = clamp(lum + (rP - lum) * azoSat, 0.0, 1.0);
         float gOut = clamp(lum + (gP - lum) * azoSat, 0.0, 1.0);
@@ -560,7 +585,7 @@ vec3 applyPrintMedia(vec3 rgb, int mediaMode, int filterMode, float paperGrade, 
         float gP = gG + matteFloor * (1.0 - gG) * (1.0 - gG);
         float bP = bG + matteFloor * (1.0 - bG) * (1.0 - bG);
 
-        float lum = 0.2126 * rP + 0.7152 * gP + 0.0722 * bP;
+        float lum = 0.2627 * rP + 0.6780 * gP + 0.0593 * bP;
         float pigmentSat = 0.75 + 0.25 * depth;
         float rOut = clamp(lum + (rP - lum) * pigmentSat, 0.0, 1.0);
         float gOut = clamp(lum + (gP - lum) * pigmentSat, 0.0, 1.0);
@@ -620,8 +645,89 @@ vec3 applyPrintMedia(vec3 rgb, int mediaMode, int filterMode, float paperGrade, 
 
         vec3 toned = clamp(vec3(rP, gP, bP), 0.0, 1.0);
         return applyBaseWarmth(toned, baseWarmth + 8.0 * depth);
+    } else if (mediaMode == 8) { // BamakoSilverContact (Seydou Keïta & Malick Sidibé)
+        vec3 w = getEnlargerFilterWeights(filterMode);
+        float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
+        float graded = applyPaperGrade(rawLum, paperGrade);
+        float c = clamp(graded, 0.0, 1.0);
+        float sLum = clamp(c + 0.22 * c * (1.0 - c) * (2.0 * c - 1.0) + 0.14 * c * (1.0 - c), 0.0, 1.0);
+        float ferro = pow(max(sLum, 0.0), 1.0 + 0.15 * depth);
+        float silver = clamp(ferro * depth + graded * (1.0 - depth), 0.0, 1.0);
+        return applyBaseWarmth(vec3(silver), baseWarmth);
     }
 
     return rgb;
+}
+
+// MARK: - Stochastic Emulsion Resynthesis & Physical Optical Grain Engine
+float proceduralGrainNoise(float u, float v) {
+    float p0 = u * 12.9898 + v * 78.233;
+    float sinVal = fract(sin(p0) * 43758.5453);
+    return sinVal * 2.0 - 1.0;
+}
+
+vec3 applyStochasticEmulsionGrain(
+    vec3 color,
+    float y_c,
+    float y_l,
+    float y_r,
+    float y_t,
+    float y_b,
+    vec2 uv,
+    int grainMode,
+    float grainScale,
+    int archetype
+) {
+    if (grainMode == 0) {
+        return color;
+    }
+
+    float scale = clamp(grainScale, 0.2, 3.0);
+    float yLowpass = 0.25 * (y_l + y_r + y_t + y_b);
+    float deltaSensor = y_c - yLowpass;
+
+    float gx = (y_r - y_l) * 0.5;
+    float gy = (y_b - y_t) * 0.5;
+    float gradMag = sqrt(gx * gx + gy * gy);
+
+    float edgeSuppress = 1.0 / (1.0 + 35.0 * gradMag);
+    float deltaNoise = deltaSensor * edgeSuppress;
+
+    float seedGain = 20.0;
+    float denom = max(sqrt(max(y_c, 0.0)), 0.05);
+    float sensorSeed = clamp((deltaNoise / denom) * seedGain, -1.0, 1.0);
+
+    float procNoise = proceduralGrainNoise(uv.x, uv.y);
+
+    float eta = 0.0;
+    if (grainMode == 1) { // SeedFromSensor
+        eta = clamp(procNoise * (0.45 + 0.55 * abs(sensorSeed)) + 0.45 * sensorSeed, -1.0, 1.0);
+    } else if (grainMode == 2) { // SynthesizePhysical
+        eta = clamp(0.75 * procNoise + 0.25 * sensorSeed, -1.0, 1.0);
+    }
+
+    float yClamped = clamp(y_c, 0.0, 1.0);
+    float nutting = 4.0 * yClamped * (1.0 - yClamped);
+
+    // Multiplicative optical transmittance modulation obeying Beer-Lambert law T = 10^(-D)
+    float delta = eta * nutting * 0.28 * scale;
+    float yPixel = dot(color, vec3(0.2627, 0.6780, 0.0593));
+
+    bool isMonochrome = (archetype == 6 || archetype == 10 || archetype == 11);
+    if (isMonochrome) {
+        float yRes = max(yPixel * (1.0 + delta), 0.0);
+        return vec3(yRes);
+    } else {
+        float chromaDamp = 1.0 - 0.10 * nutting;
+        float rC = yPixel + chromaDamp * (color.r - yPixel);
+        float gC = yPixel + chromaDamp * (color.g - yPixel);
+        float bC = yPixel + chromaDamp * (color.b - yPixel);
+
+        float rRes = max(rC * (1.0 + delta), 0.0);
+        float gRes = max(gC * (1.0 + delta), 0.0);
+        float bRes = max(bC * (1.0 + delta), 0.0);
+
+        return vec3(rRes, gRes, bRes);
+    }
 }
 `;

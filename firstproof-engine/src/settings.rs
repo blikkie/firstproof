@@ -1,6 +1,7 @@
 use crate::curve::ToneCurvesRecord;
 use crate::modes::{
-    ColorProfileMode, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode, PrintMediaMode,
+    ColorProfileMode, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode,
+    PrintMediaMode,
 };
 use serde::{Deserialize, Serialize};
 
@@ -45,6 +46,8 @@ pub struct EditSettings {
     pub sharpening_radius: f32,
     pub sharpening_masking: f32,
     pub noise_reduction: f32,
+    pub emulsion_grain_mode: EmulsionGrainMode,
+    pub grain_scale: f32,
     pub emulsion_archetype: EmulsionArchetype,
     pub emulsion_format: EmulsionFormat,
     pub emulsion_exposure: f32,
@@ -94,6 +97,8 @@ impl Default for EditSettings {
             sharpening_radius: 1.0,
             sharpening_masking: 0.0,
             noise_reduction: 0.0,
+            emulsion_grain_mode: EmulsionGrainMode::Off,
+            grain_scale: 1.0,
             emulsion_archetype: EmulsionArchetype::None,
             emulsion_format: EmulsionFormat::Format35mm,
             emulsion_exposure: 0.0,

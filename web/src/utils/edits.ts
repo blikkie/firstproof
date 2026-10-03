@@ -35,6 +35,8 @@ export function getDefaultEdits(isRaw: boolean = false): EditSettingsPayload {
     emulsion_archetype: 'None',
     emulsion_format: 'Format35mm',
     emulsion_exposure: 0.0,
+    emulsion_grain_mode: 'Off',
+    grain_scale: 1.0,
     curves: {
       master: [
         { x: 0, y: 0 },
@@ -103,6 +105,13 @@ export function hasModifications(
   if (Math.abs(edits.foliage) > 1e-4) return true;
   if (edits.tone_profile !== 'AgxVivid') return true;
   if (edits.emulsion_archetype !== 'None') return true;
+  if (edits.emulsion_grain_mode && edits.emulsion_grain_mode !== 'Off')
+    return true;
+  if (
+    edits.grain_scale !== undefined &&
+    Math.abs(edits.grain_scale - 1.0) > 1e-4
+  )
+    return true;
   if (edits.print_media !== 'None') return true;
   if (Math.abs(edits.split_toning_shadow_sat) > 1e-4) return true;
   if (Math.abs(edits.split_toning_highlight_sat) > 1e-4) return true;

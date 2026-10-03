@@ -182,8 +182,8 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                 }
             }
 
-            // 3b. Detail & Sharpening / Noise Reduction
-            if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
+            // 3b. Detail & Sharpening / Noise Reduction / Stochastic Emulsion Grain
+            if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 || edits.emulsion_grain_mode != crate::EmulsionGrainMode::Off {
                 let r_step = edits.sharpening_radius.max(0.5);
                 let (rl, gl, bl) = sample_bilinear(&image, sx - r_step, sy);
                 let (rr, gr, br) = sample_bilinear(&image, sx + r_step, sy);
@@ -194,16 +194,31 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
                 let y_r = 0.2126 * rr + 0.7152 * gr + 0.0722 * br;
                 let y_t = 0.2126 * rt + 0.7152 * gt + 0.0722 * bt;
                 let y_b = 0.2126 * rb + 0.7152 * gb + 0.0722 * bb;
-                let (r_sharp, g_sharp, b_sharp) = apply_detail_and_sharpening_rgb(
-                    r_lin, g_lin, b_lin,
-                    y_c, y_l, y_r, y_t, y_b,
-                    edits.sharpening_amount,
-                    edits.sharpening_masking,
-                    edits.noise_reduction,
-                );
-                r_lin = r_sharp;
-                g_lin = g_sharp;
-                b_lin = b_sharp;
+                if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
+                    let (r_sharp, g_sharp, b_sharp) = apply_detail_and_sharpening_rgb(
+                        r_lin, g_lin, b_lin,
+                        y_c, y_l, y_r, y_t, y_b,
+                        edits.sharpening_amount,
+                        edits.sharpening_masking,
+                        edits.noise_reduction,
+                    );
+                    r_lin = r_sharp;
+                    g_lin = g_sharp;
+                    b_lin = b_sharp;
+                }
+                if edits.emulsion_grain_mode != crate::EmulsionGrainMode::Off {
+                    let (gr, gg, gb) = firstproof_engine::color::grain::apply_stochastic_emulsion_grain(
+                        r_lin, g_lin, b_lin,
+                        y_c, y_l, y_r, y_t, y_b,
+                        tx as f32 / target_w as f32, ty as f32 / target_h as f32,
+                        edits.emulsion_grain_mode,
+                        edits.grain_scale,
+                        edits.emulsion_archetype,
+                    );
+                    r_lin = gr;
+                    g_lin = gg;
+                    b_lin = gb;
+                }
             }
 
             // TERMINAL STEP: Convert Linear to Display Gamma sRGB

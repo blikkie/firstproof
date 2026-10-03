@@ -38,6 +38,8 @@ extension AppViewModel {
             sharpeningRadius: self.sharpeningRadius,
             sharpeningMasking: self.sharpeningMasking,
             noiseReduction: self.noiseReduction,
+            emulsionGrainMode: self.emulsionGrainMode,
+            grainScale: self.grainScale,
             emulsionArchetype: self.emulsionArchetype,
             emulsionFormat: self.emulsionFormat,
             emulsionExposure: self.emulsionExposure,
@@ -89,6 +91,8 @@ extension EditSettings {
             sharpeningRadius: 1.0,
             sharpeningMasking: 0.0,
             noiseReduction: 0.0,
+            emulsionGrainMode: .off,
+            grainScale: 1.0,
             emulsionArchetype: .none,
             emulsionFormat: .format35mm,
             emulsionExposure: 0.0,
@@ -139,6 +143,8 @@ extension AppViewModel {
         self.sharpeningRadius = edits.sharpeningRadius
         self.sharpeningMasking = edits.sharpeningMasking
         self.noiseReduction = edits.noiseReduction
+        self.emulsionGrainMode = edits.emulsionGrainMode
+        self.grainScale = edits.grainScale
         self.emulsionArchetype = edits.emulsionArchetype
         self.emulsionFormat = edits.emulsionFormat
         self.emulsionExposure = edits.emulsionExposure
@@ -236,6 +242,8 @@ extension AppViewModel {
                 title = "Noise Reduction (\(Int(noiseReduction)))"
             case .emulsionExposure:
                 title = "Push/Pull (\(String(format: "%+.2f EV", emulsionExposure)))"
+            case .grainScale:
+                title = "Grain Scale (\(String(format: "%.1fx", grainScale)))"
             case .lutIntensity:
                 title = "LUT Intensity (\(Int(lutIntensity * 100))%)"
             case .splitToningShadowHue:
@@ -689,6 +697,8 @@ extension AppViewModel {
             noiseReduction = defaultNoiseReduction
         case .emulsionExposure:
             emulsionExposure = defaultEmulsionExposure
+        case .grainScale:
+            grainScale = defaultGrainScale
         case .temperature:
             temperature = asShotTemperature
         case .tint:
@@ -764,6 +774,8 @@ extension AppViewModel {
         emulsionArchetype = .none
         emulsionFormat = .format35mm
         emulsionExposure = defaultEmulsionExposure
+        emulsionGrainMode = .off
+        grainScale = defaultGrainScale
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0
@@ -945,6 +957,7 @@ extension AppViewModel {
         case .warmtoneChlorobromide: title = "Print Media: Warmtone Chlorobromide"
         case .platinumPalladium: title = "Print Media: Platinum/Palladium"
         case .cyanotype: title = "Print Media: Historic Cyanotype"
+        case .bamakoSilverContact: title = "Print Media: Bamako Silver Contact"
         }
         registerDiscreteEdit(title: title, before: before)
         notifyThumbnailChanged()
@@ -993,6 +1006,10 @@ extension AppViewModel {
         case .rochesterDaylight200: title = "Emulsion: Rochester Daylight 200"
         case .mobberleySilver400: title = "Emulsion: Mobberley Silver 400"
         case .cambridgeDiffusion100: title = "Emulsion: Cambridge Diffusion 100"
+        case .leverkusenPortrait160: title = "Emulsion: Leverkusen Portrait 160"
+        case .ashigaraPortrait400: title = "Emulsion: Ashigara Portrait 400"
+        case .liguriaCinema80: title = "Emulsion: Liguria Cinema 80"
+        case .baodingSilver100: title = "Emulsion: Baoding Silver 100"
         }
         registerDiscreteEdit(title: title, before: before)
         notifyThumbnailChanged()
@@ -1012,11 +1029,33 @@ extension AppViewModel {
         notifyThumbnailChanged()
     }
     
+    public func setEmulsionGrainMode(_ mode: EmulsionGrainMode) {
+        guard self.emulsionGrainMode != mode else { return }
+        let before = currentEdits
+        self.emulsionGrainMode = mode
+        let title: String
+        switch mode {
+        case .off: title = "Grain: Off (Sensor Passthrough)"
+        case .seedFromSensor: title = "Grain: Optical Transmutation"
+        case .synthesizePhysical: title = "Grain: Synthetic Granularity"
+        }
+        registerDiscreteEdit(title: title, before: before)
+        notifyThumbnailChanged()
+    }
+    
+    public func setGrainScale(_ scale: Float) {
+        self.grainScale = scale
+        saveCurrentEdits()
+        notifyThumbnailChanged()
+    }
+    
     public func resetEmulsion() {
         let before = currentEdits
         self.emulsionArchetype = .none
         self.emulsionFormat = .format35mm
         self.emulsionExposure = 0.0
+        self.emulsionGrainMode = .off
+        self.grainScale = 1.0
         registerDiscreteEdit(title: "Reset Film Emulsion", before: before)
         notifyThumbnailChanged()
     }

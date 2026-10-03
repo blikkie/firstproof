@@ -187,13 +187,24 @@ export class InspectorSyncController {
       rowEmulsionExp.classList.toggle('hidden', !hasEmulsion);
     }
 
-    // 2. Optical enlarger filter only visible when monochrome media/stock is selected
+    // 2. Grain scale slider only visible when grain resynthesis mode is enabled
+    const hasGrain =
+      edits.emulsion_grain_mode && edits.emulsion_grain_mode !== 'Off';
+    const rowGrainScale = document.getElementById('row-grain-scale');
+    if (rowGrainScale) {
+      rowGrainScale.classList.toggle('hidden', !hasGrain);
+    }
+
+    // 3. Optical enlarger filter only visible when monochrome media/stock is selected
     const isMonochrome =
       edits.print_media === 'BarytaSilverGelatin' ||
       edits.print_media === 'WarmtoneChlorobromide' ||
       edits.print_media === 'PlatinumPalladium' ||
       edits.print_media === 'Cyanotype' ||
-      edits.emulsion_archetype === 'MobberleySilver400';
+      edits.print_media === 'BamakoSilverContact' ||
+      edits.emulsion_archetype === 'MobberleySilver400' ||
+      edits.emulsion_archetype === 'LiguriaCinema80' ||
+      edits.emulsion_archetype === 'BaodingSilver100';
 
     const rowFilter = document.getElementById('row-enlarger-filter');
     if (rowFilter) {
@@ -248,6 +259,7 @@ export class InspectorSyncController {
     setVal('deep-blue', edits.deep_blue, (v) => `${Math.round(v)}`);
     setVal('foliage', edits.foliage, (v) => `${Math.round(v)}`);
     setVal('emulsion-exp', edits.emulsion_exposure, (v) => formatExposure(v));
+    setVal('grain-scale', edits.grain_scale, (v) => `${v.toFixed(2)}x`);
     setVal('paper-grade', edits.print_paper_grade, (v) => `${v.toFixed(1)}`);
     setVal('base-warmth', edits.print_base_warmth, (v) => `${Math.round(v)}`);
     setVal(
@@ -311,6 +323,12 @@ export class InspectorSyncController {
     ) as HTMLSelectElement | null;
     if (selectEmulsion && edits.emulsion_archetype) {
       selectEmulsion.value = edits.emulsion_archetype;
+    }
+    const selectGrainMode = document.getElementById(
+      'select-emulsion-grain-mode',
+    ) as HTMLSelectElement | null;
+    if (selectGrainMode && edits.emulsion_grain_mode) {
+      selectGrainMode.value = edits.emulsion_grain_mode;
     }
     const selectPrint = document.getElementById(
       'select-print-media',
@@ -496,6 +514,7 @@ export class InspectorSyncController {
       (v) => formatExposure(v),
       0.0,
     );
+    bindSlider('grain-scale', 'grain_scale', (v) => `${v.toFixed(2)}x`, 1.0);
     bindSlider(
       'paper-grade',
       'print_paper_grade',
@@ -681,6 +700,17 @@ export class InspectorSyncController {
       const edits = this.delegate.getEdits();
       edits.emulsion_archetype = (e.target as HTMLSelectElement)
         .value as EmulsionArchetype;
+      this.updateEmulsionWorkspaceVisibility();
+      this.delegate.renderCanvas();
+      this.delegate.autoSaveSidecar();
+    });
+
+    const selectGrainMode = document.getElementById(
+      'select-emulsion-grain-mode',
+    ) as HTMLSelectElement | null;
+    selectGrainMode?.addEventListener('change', (e) => {
+      const edits = this.delegate.getEdits();
+      edits.emulsion_grain_mode = (e.target as HTMLSelectElement).value as any;
       this.updateEmulsionWorkspaceVisibility();
       this.delegate.renderCanvas();
       this.delegate.autoSaveSidecar();

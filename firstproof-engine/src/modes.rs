@@ -37,6 +37,35 @@ pub enum ExportRenderingIntent {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[derive(Default)]
+pub enum EmulsionGrainMode {
+    #[default]
+    Off,
+    SeedFromSensor,
+    SynthesizePhysical,
+}
+
+impl EmulsionGrainMode {
+    #[inline]
+    pub fn id_number(&self) -> i32 {
+        match self {
+            Self::Off => 0,
+            Self::SeedFromSensor => 1,
+            Self::SynthesizePhysical => 2,
+        }
+    }
+
+    pub fn from_id(id: i32) -> Self {
+        match id {
+            1 => Self::SeedFromSensor,
+            2 => Self::SynthesizePhysical,
+            _ => Self::Off,
+        }
+    }
+}
+
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum EmulsionArchetype {
     #[default]
     None,
@@ -44,9 +73,13 @@ pub enum EmulsionArchetype {
     AshigaraChrome50,      // E-6 Color Reversal (Minamiashigara, Japan)
     RochesterK14Chrome64,  // K-14 Non-Substantive Reversal (Rochester NY)
     RochesterCinema500,    // ECN-2 Tungsten Cinema Negative (Rochester NY)
-    RochesterDaylight200,  // C-41 Golden Daylight Color Negative (Rochester NY)
+    RochesterDaylight200,  // [Deprecated/Merged into RochesterPortrait400]
     MobberleySilver400,    // Panchromatic Silver Halide B&W Negative (Mobberley, UK)
     CambridgeDiffusion100, // Instant Dye Diffusion Reversal (Cambridge MA)
+    LeverkusenPortrait160, // Substantive Ochre/Pastel Color Negative (Leverkusen, DE)
+    AshigaraPortrait400,   // 4th Color Layer Cyan-Sensitive Color Negative (Minamiashigara, JP)
+    LiguriaCinema80,       // 1960s Italian High-Acutance Cinema B&W (Cairo Montenotte, IT)
+    BaodingSilver100,      // Cubic Silver Halide with Halation Bloom B&W (Baoding, CN)
 }
 
 
@@ -62,6 +95,10 @@ impl EmulsionArchetype {
             Self::RochesterDaylight200 => 5,
             Self::MobberleySilver400 => 6,
             Self::CambridgeDiffusion100 => 7,
+            Self::LeverkusenPortrait160 => 8,
+            Self::AshigaraPortrait400 => 9,
+            Self::LiguriaCinema80 => 10,
+            Self::BaodingSilver100 => 11,
         }
     }
 
@@ -71,16 +108,24 @@ impl EmulsionArchetype {
             2 => Self::AshigaraChrome50,
             3 => Self::RochesterK14Chrome64,
             4 => Self::RochesterCinema500,
-            5 => Self::RochesterDaylight200,
+            // 5 was RochesterDaylight200, now merged into RochesterPortrait400 per spec
+            5 => Self::RochesterPortrait400,
             6 => Self::MobberleySilver400,
             7 => Self::CambridgeDiffusion100,
+            8 => Self::LeverkusenPortrait160,
+            9 => Self::AshigaraPortrait400,
+            10 => Self::LiguriaCinema80,
+            11 => Self::BaodingSilver100,
             _ => Self::None,
         }
     }
 
     #[inline]
     pub fn is_monochrome(&self) -> bool {
-        matches!(self, Self::MobberleySilver400)
+        matches!(
+            self,
+            Self::MobberleySilver400 | Self::LiguriaCinema80 | Self::BaodingSilver100
+        )
     }
 }
 
@@ -127,6 +172,7 @@ pub enum PrintMediaMode {
     WarmtoneChlorobromide,
     PlatinumPalladium,
     Cyanotype,
+    BamakoSilverContact,
 }
 
 
@@ -139,6 +185,7 @@ impl PrintMediaMode {
                 | Self::WarmtoneChlorobromide
                 | Self::PlatinumPalladium
                 | Self::Cyanotype
+                | Self::BamakoSilverContact
         )
     }
 
@@ -153,6 +200,7 @@ impl PrintMediaMode {
             Self::WarmtoneChlorobromide => 5,
             Self::PlatinumPalladium => 6,
             Self::Cyanotype => 7,
+            Self::BamakoSilverContact => 8,
         }
     }
 
@@ -165,6 +213,7 @@ impl PrintMediaMode {
             5 => Self::WarmtoneChlorobromide,
             6 => Self::PlatinumPalladium,
             7 => Self::Cyanotype,
+            8 => Self::BamakoSilverContact,
             _ => Self::None,
         }
     }

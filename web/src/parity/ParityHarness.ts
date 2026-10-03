@@ -122,6 +122,8 @@ export function createDefaultEdits(): EditSettingsPayload {
     emulsion_archetype: 'None',
     emulsion_format: 'Format35mm',
     emulsion_exposure: 0.0,
+    emulsion_grain_mode: 'Off',
+    grain_scale: 1.0,
     print_media: 'None',
     enlarger_filter: 'NeutralPanchromatic',
     print_paper_grade: 2.0,

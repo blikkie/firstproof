@@ -21,9 +21,9 @@ pub use firstproof_engine::{
     all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,
     AdjustmentDescriptor, ScaleMode, WorkspaceCategory,
     evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, ColorProfileMode,
-    CurvePointRecord, EditSettings, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode,
-    ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent, PrintMediaMode,
-    ToneCurvesRecord, WhiteBalanceResult,
+    CurvePointRecord, EditSettings, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode,
+    EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent,
+    PrintMediaMode, ToneCurvesRecord, WhiteBalanceResult,
 };
 
 pub use lensfun::LensCorrectionCoefficients;

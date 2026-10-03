@@ -27,6 +27,16 @@ const EMULSION_MAP: Record<string, number> = {
   RochesterDaylight200: 5,
   MobberleySilver400: 6,
   CambridgeDiffusion100: 7,
+  LeverkusenPortrait160: 8,
+  AshigaraPortrait400: 9,
+  LiguriaCinema80: 10,
+  BaodingSilver100: 11,
+};
+
+const GRAIN_MODE_MAP: Record<string, number> = {
+  Off: 0,
+  SeedFromSensor: 1,
+  SynthesizePhysical: 2,
 };
 
 const PRINT_MEDIA_MAP: Record<string, number> = {
@@ -39,6 +49,7 @@ const PRINT_MEDIA_MAP: Record<string, number> = {
   PlatinumPalladium: 6,
   Cyanotype: 7,
   PrussianCyanotype: 7,
+  BamakoSilverContact: 8,
 };
 
 export class WebGLRenderer {
@@ -144,6 +155,8 @@ export class WebGLRenderer {
       'u_toneProfileMode',
       'u_emulsionArchetype',
       'u_emulsionExposure',
+      'u_emulsionGrainMode',
+      'u_grainScale',
       'u_printMediaMode',
       'u_printPaperGrade',
       'u_printBaseWarmth',
@@ -666,6 +679,11 @@ export class WebGLRenderer {
       EMULSION_MAP[edits.emulsion_archetype] ?? 0,
     );
     gl.uniform1f(this.uLocs['u_emulsionExposure'], edits.emulsion_exposure);
+    gl.uniform1i(
+      this.uLocs['u_emulsionGrainMode'],
+      GRAIN_MODE_MAP[edits.emulsion_grain_mode] ?? 0,
+    );
+    gl.uniform1f(this.uLocs['u_grainScale'], edits.grain_scale ?? 1.0);
 
     gl.uniform1i(
       this.uLocs['u_printMediaMode'],

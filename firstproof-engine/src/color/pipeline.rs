@@ -18,7 +18,7 @@ use crate::color::{
     srgb_gamma_to_linear, Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB,
 };
 use crate::curve::AllCurvesLutRecord;
-use crate::modes::{ColorProfileMode, EmulsionArchetype, PrintMediaMode};
+use crate::modes::{ColorProfileMode, EmulsionArchetype, EmulsionGrainMode, PrintMediaMode};
 use crate::raw::f16_to_f32;
 use crate::settings::EditSettings;
 
@@ -37,6 +37,7 @@ pub fn is_neutral_edits(edits: &EditSettings) -> bool {
         && (edits.temperature - 5500.0).abs() < 1.0
         && edits.tint == 0.0
         && edits.emulsion_archetype == EmulsionArchetype::None
+        && edits.emulsion_grain_mode == EmulsionGrainMode::Off
         && edits.print_media == PrintMediaMode::None
         && edits.split_toning_shadow_sat == 0.0
         && edits.split_toning_highlight_sat == 0.0
@@ -606,7 +607,7 @@ pub fn develop_pixel_pipeline(
     );
     rec2020 = Color3::new(sr, sg, sb);
 
-    // 8. Detail, Sharpening & Noise Reduction
+    // 8. Detail, Sharpening & Stochastic Emulsion Resynthesis (Optical Domain)
     if let Some([y_c, y_l, y_r, y_t, y_b]) = neighbors {
         if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
             let (dr, dg, db) = apply_detail_and_sharpening_rgb(
@@ -623,6 +624,25 @@ pub fn develop_pixel_pipeline(
                 edits.noise_reduction,
             );
             rec2020 = Color3::new(dr, dg, db);
+        }
+
+        if edits.emulsion_grain_mode != EmulsionGrainMode::Off {
+            let (gr, gg, gb) = super::grain::apply_stochastic_emulsion_grain(
+                rec2020.r(),
+                rec2020.g(),
+                rec2020.b(),
+                y_c,
+                y_l,
+                y_r,
+                y_t,
+                y_b,
+                y_c,
+                y_l,
+                edits.emulsion_grain_mode,
+                edits.grain_scale,
+                edits.emulsion_archetype,
+            );
+            rec2020 = Color3::new(gr, gg, gb);
         }
     }
 
@@ -694,7 +714,9 @@ pub fn develop_frame_pipeline(
     let total_pixels = w * h;
     let mut out_rgba = vec![0u8; total_pixels * 4];
 
-    let needs_sharpening = edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0;
+    let needs_sharpening = edits.sharpening_amount > 0.0
+        || edits.noise_reduction > 0.0
+        || edits.emulsion_grain_mode != EmulsionGrainMode::Off;
 
     // Helper to extract a pixel in float [0..] from input buffer
     let get_input_pixel = |x: usize, y: usize| -> (f32, f32, f32) {

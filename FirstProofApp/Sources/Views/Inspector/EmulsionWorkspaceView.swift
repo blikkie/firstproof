@@ -8,15 +8,19 @@ public struct EmulsionWorkspaceView: View {
     
     private var hasActiveEmulsionEdits: Bool {
         viewModel.emulsionArchetype != .none ||
-        viewModel.emulsionExposure != 0.0
+        viewModel.emulsionExposure != 0.0 ||
+        viewModel.emulsionGrainMode != .off ||
+        viewModel.grainScale != 1.0
     }
     
     private var isMonochromeActive: Bool {
         switch viewModel.printMedia {
-        case .barytaSilverGelatin, .warmtoneChlorobromide, .platinumPalladium, .cyanotype:
+        case .barytaSilverGelatin, .warmtoneChlorobromide, .platinumPalladium, .cyanotype, .bamakoSilverContact:
             return true
         default:
-            return viewModel.emulsionArchetype == .mobberleySilver400
+            return viewModel.emulsionArchetype == .mobberleySilver400 ||
+                   viewModel.emulsionArchetype == .liguriaCinema80 ||
+                   viewModel.emulsionArchetype == .baodingSilver100
         }
     }
     
@@ -67,6 +71,8 @@ public struct EmulsionWorkspaceView: View {
                         
                         Section("Color Negative (C-41 & Cinema)") {
                             Text("Rochester Portrait 400 (C-41)").tag(EmulsionArchetype.rochesterPortrait400)
+                            Text("Leverkusen Portrait 160 (C-41)").tag(EmulsionArchetype.leverkusenPortrait160)
+                            Text("Ashigara Portrait 400 (4th-Layer C-41)").tag(EmulsionArchetype.ashigaraPortrait400)
                             Text("Rochester Cinema 500 (ECN-2)").tag(EmulsionArchetype.rochesterCinema500)
                             Text("Rochester Daylight 200 (C-41)").tag(EmulsionArchetype.rochesterDaylight200)
                         }
@@ -78,6 +84,8 @@ public struct EmulsionWorkspaceView: View {
                         
                         Section("Monochrome Silver & Diffusion") {
                             Text("Mobberley Silver 400 (Panchromatic)").tag(EmulsionArchetype.mobberleySilver400)
+                            Text("Liguria Cinema 80 (Cinema Monochrome)").tag(EmulsionArchetype.liguriaCinema80)
+                            Text("Baoding Silver 100 (Halation Bloom)").tag(EmulsionArchetype.baodingSilver100)
                             Text("Cambridge Diffusion 100 (Instant)").tag(EmulsionArchetype.cambridgeDiffusion100)
                         }
                     }
@@ -103,6 +111,24 @@ public struct EmulsionWorkspaceView: View {
                     .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
                     .cornerRadius(6)
                     
+                    // Film Format / Grain Size
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Film Emulsion Format")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
+                        
+                        Picker("", selection: Binding<EmulsionFormat>(
+                            get: { viewModel.emulsionFormat },
+                            set: { viewModel.setEmulsionFormat($0) }
+                        )) {
+                            Text("35mm Miniature (Standard)").tag(EmulsionFormat.format35mm)
+                            Text("120 Medium Format (0.45x)").tag(EmulsionFormat.format120)
+                            Text("4x5 Large Format (0.20x)").tag(EmulsionFormat.format4x5)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                    
                     // Push / Pull Exposure Compensation
                     VStack(alignment: .leading, spacing: 2) {
                         SliderRow(
@@ -123,6 +149,35 @@ public struct EmulsionWorkspaceView: View {
                         .font(.system(size: 9))
                         .foregroundColor(.secondary.opacity(0.7))
                     }
+                }
+                
+                // Physical Optical Grain & Stochastic Transmutation
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Optical Grain Resynthesis")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Picker("", selection: Binding<EmulsionGrainMode>(
+                        get: { viewModel.emulsionGrainMode },
+                        set: { viewModel.setEmulsionGrainMode($0) }
+                    )) {
+                        Text("Off (Sensor Passthrough)").tag(EmulsionGrainMode.off)
+                        Text("Optical Transmutation (Sensor Seeded)").tag(EmulsionGrainMode.seedFromSensor)
+                        Text("Synthetic Granularity (Procedural)").tag(EmulsionGrainMode.synthesizePhysical)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+                
+                if viewModel.emulsionGrainMode != .off {
+                    SliderRow(
+                        label: "Grain Scale",
+                        value: $viewModel.grainScale,
+                        range: 0.5...2.0,
+                        format: "%.2fx",
+                        onReset: { viewModel.resetSlider(.grainScale) },
+                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .grainScale) }
+                    )
                 }
             }
             
@@ -174,6 +229,7 @@ public struct EmulsionWorkspaceView: View {
                             Text("Warmtone Chlorobromide (Selenium Toned)").tag(PrintMediaMode.warmtoneChlorobromide)
                             Text("Platinum / Palladium (Hand-Coated Rag)").tag(PrintMediaMode.platinumPalladium)
                             Text("Historic Cyanotype (Prussian Blue)").tag(PrintMediaMode.cyanotype)
+                            Text("Bamako Silver Contact (Ferrotype)").tag(PrintMediaMode.bamakoSilverContact)
                         }
                     }
                     .labelsHidden()
@@ -338,6 +394,14 @@ public struct EmulsionWorkspaceView: View {
             return "Panchromatic Silver Halide: Pure monochromatic collapse in linear Rec.2020, linear midtone acutance, and rich shadow micro-contrast."
         case .cambridgeDiffusion100:
             return "Instant Dye Diffusion Reversal: Instant peel-apart chemistry, soft highlight roll-off, reflective TiO2 base tone, and pastel greens."
+        case .leverkusenPortrait160:
+            return "C-41 Color Negative: Earthy ochre skin tones, restrained saturation, pastel greens, and gentle highlight roll-off."
+        case .ashigaraPortrait400:
+            return "4th-Layer C-41 Color Negative: Patented cyan-sensitive inter-layer suppressing fluorescent green casts, airy pastels, and luminous skin tones."
+        case .liguriaCinema80:
+            return "1960s Neorealist Cinema Monochrome: Pure metallic silver high-acutance emulsion with deep Dmax and crisp edge acutance."
+        case .baodingSilver100:
+            return "Cubic Silver Halide Monochrome: Authentic domestic Chinese formulation with distinct specular halation bloom and gritty micro-contrast."
         }
     }
     
@@ -359,6 +423,8 @@ public struct EmulsionWorkspaceView: View {
             return "Noble metal hand-coated on cotton rag. Delicate long midtone graduation, soft non-clipping highlights, and matte charcoal Dmax ≈ 1.6."
         case .cyanotype:
             return "1842 Sir John Herschel Prussian blue iron-salt process. Rich cyan-blue shadow density and slight warm ivory highlight base."
+        case .bamakoSilverContact:
+            return "West African studio contact printing paper (Malick Sidibé / Seydou Keïta). High-silver emulsion ferrotyped onto glass: deep rich Zone III–V shadow separation on deep skin tones, crisp high-key textile acutance, and neutral silver blacks."
         }
     }
 }

@@ -452,17 +452,33 @@
                 <select id="select-emulsion" class="select-input">
                   <option value="None" selected>None (Sensor Capture)</option>
                   <option value="RochesterPortrait400">Rochester Portrait 400 (C-41 Negative)</option>
+                  <option value="LeverkusenPortrait160">Leverkusen Portrait 160 (C-41 Negative)</option>
+                  <option value="AshigaraPortrait400">Ashigara Portrait 400 (4th-Layer C-41)</option>
                   <option value="AshigaraChrome50">Ashigara Chrome 50 (E-6 Reversal)</option>
                   <option value="RochesterK14Chrome64">Rochester K-14 Chrome 64 (Reversal)</option>
                   <option value="RochesterCinema500">Rochester Cinema 500T (ECN-2 Negative)</option>
                   <option value="RochesterDaylight200">Rochester Daylight 200 (C-41 Color)</option>
                   <option value="MobberleySilver400">Mobberley Silver 400 (Panchromatic B&W)</option>
+                  <option value="LiguriaCinema80">Liguria Cinema 80 (Cinema Monochrome)</option>
+                  <option value="BaodingSilver100">Baoding Silver 100 (Halation Bloom B&W)</option>
                   <option value="CambridgeDiffusion100">Cambridge Instant Diffusion 100</option>
                 </select>
               </div>
               <div class="slider-row hidden" id="row-emulsion-exp">
                 <label>Push / Pull Exposure <span id="val-emulsion-exp" class="slider-val">0.00 EV</span></label>
                 <input type="range" id="slider-emulsion-exp" min="-2.0" max="2.0" step="0.1" value="0.0" />
+              </div>
+              <div class="control-row">
+                <label>Grain Resynthesis</label>
+                <select id="select-emulsion-grain-mode" class="select-input">
+                  <option value="Off" selected>Off (Sensor Passthrough)</option>
+                  <option value="SeedFromSensor">Optical Transmutation (Sensor Seeded)</option>
+                  <option value="SynthesizePhysical">Synthetic Granularity</option>
+                </select>
+              </div>
+              <div class="slider-row hidden" id="row-grain-scale">
+                <label>Grain Scale <span id="val-grain-scale" class="slider-val">1.00x</span></label>
+                <input type="range" id="slider-grain-scale" min="0.5" max="2.0" step="0.05" value="1.0" />
               </div>
             </div>
 
@@ -479,6 +495,7 @@
                   <option value="WarmtoneChlorobromide">Warmtone Selenium Toned B&W</option>
                   <option value="PlatinumPalladium">Platinum / Palladium Fine-Art</option>
                   <option value="Cyanotype">Prussian Blue Cyanotype</option>
+                  <option value="BamakoSilverContact">Bamako Silver Contact Print (Ferrotype)</option>
                 </select>
               </div>
               <div class="control-row hidden" id="row-enlarger-filter">

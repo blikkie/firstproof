@@ -44,6 +44,7 @@ public enum EditSliderType {
     case perspectiveHorizontal
     case lutIntensity
     case emulsionExposure
+    case grainScale
     case splitToningShadowHue
     case splitToningShadowSat
     case splitToningHighlightHue
@@ -76,6 +77,7 @@ public enum EditSliderType {
         case .perspectiveHorizontal: return "Perspective Horizontal"
         case .lutIntensity: return "LUT Intensity"
         case .emulsionExposure: return "Push / Pull Exposure"
+        case .grainScale: return "Grain Scale"
         case .splitToningShadowHue: return "Shadow Hue"
         case .splitToningShadowSat: return "Shadow Saturation"
         case .splitToningHighlightHue: return "Highlight Hue"
@@ -289,6 +291,9 @@ public final class AppViewModel {
     public var emulsionFormat: EmulsionFormat = .format35mm
     public var emulsionExposure: Float = 0.0          // -2.0 .. +2.0 EV
     public var defaultEmulsionExposure: Float { 0.0 }
+    public var emulsionGrainMode: EmulsionGrainMode = .off
+    public var grainScale: Float = 1.0                // 0.5 .. 2.0
+    public var defaultGrainScale: Float { 1.0 }
     
     public var splitToningShadowHue: Float = 215.0      // 0 .. 360
     public var splitToningShadowSat: Float = 0.0        // 0 .. 100

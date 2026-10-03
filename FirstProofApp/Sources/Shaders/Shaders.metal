@@ -83,7 +83,10 @@ fragment float4 fragmentShader(
                           (uniforms.splitToningHighlightSat == 0.0) &&
                           (uniforms.lutEnabled == 0) &&
                           (uniforms.sharpeningAmount == 0.0) &&
-                          (uniforms.noiseReduction == 0.0);
+                          (uniforms.noiseReduction == 0.0) &&
+                          (uniforms.emulsionArchetype == 0) &&
+                          (uniforms.emulsionGrainMode == 0) &&
+                          (uniforms.printMediaMode == 0);
     
     if (uniforms.isLinearRaw == 0 && isNeutralEdits && uniforms.hasGainMap == 0 && (uniforms.edrEnabled == 0 || uniforms.edrHeadroom <= 1.001)) {
         return sampledColor;
@@ -223,10 +226,11 @@ fragment float4 fragmentShader(
         uniforms.splitToningBalance
     );
 
-    // 8. Detail, Sharpening & Noise Reduction in Linear Rec.2020
+    // 8. Detail, Sharpening, Noise Reduction & Stochastic Emulsion Resynthesis in Linear Rec.2020
     float editSharpening = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.sharpeningAmount;
     float editNoiseReduction = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.noiseReduction;
-    if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
+    int editGrainMode = (uniforms.isOriginal > 0.5) ? 0 : uniforms.emulsionGrainMode;
+    if (editSharpening > 0.0 || editNoiseReduction > 0.0 || editGrainMode != 0) {
         float2 texelSize = 1.0 / float2(texture.get_width(), texture.get_height());
         float2 offset = texelSize * max(uniforms.sharpeningRadius, 0.5);
         float4 leftSample   = texture.sample(textureSampler, uv - float2(offset.x, 0.0));
@@ -257,13 +261,26 @@ fragment float4 fragmentShader(
             y_b = dot(cb, float3(0.2627, 0.6780, 0.0593));
         }
 
-        rec2020Color = applyDetailAndSharpening(
-            rec2020Color,
-            y_c, y_l, y_r, y_t, y_b,
-            editSharpening,
-            uniforms.sharpeningMasking,
-            editNoiseReduction
-        );
+        if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
+            rec2020Color = applyDetailAndSharpening(
+                rec2020Color,
+                y_c, y_l, y_r, y_t, y_b,
+                editSharpening,
+                uniforms.sharpeningMasking,
+                editNoiseReduction
+            );
+        }
+
+        if (editGrainMode != 0) {
+            rec2020Color = applyStochasticEmulsionGrain(
+                rec2020Color,
+                y_c, y_l, y_r, y_t, y_b,
+                uv,
+                editGrainMode,
+                uniforms.grainScale,
+                uniforms.emulsionArchetype
+            );
+        }
     }
 
     // 9. TERMINAL STAGE: AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles -> Linear sRGB
