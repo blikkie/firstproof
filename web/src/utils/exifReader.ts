@@ -5,10 +5,7 @@
  * without loading or decoding the entire RAW file.
  */
 
-import type {
-  ExifOrientationRecord,
-  ImageMetadataRecord,
-} from 'firstproof-wasm';
+import type { ImageMetadataRecord } from 'firstproof-wasm';
 import initWasm, {
   decode_exif_orientation,
   extract_metadata_from_bytes,
@@ -44,14 +41,60 @@ export function decodeExifOrientation(orientation?: number): {
   flip_horizontal: boolean;
   flip_vertical: boolean;
 } {
-  const rec: ExifOrientationRecord = orientation
-    ? decode_exif_orientation(orientation)
-    : { rotation: 0, flip_horizontal: false, flip_vertical: false };
+  try {
+    if (orientation) {
+      const rec = decode_exif_orientation(orientation);
+      if (rec) {
+        return {
+          rotation: rec.rotation,
+          flipH: rec.flip_horizontal,
+          flipV: rec.flip_vertical,
+          flip_horizontal: rec.flip_horizontal,
+          flip_vertical: rec.flip_vertical,
+        };
+      }
+    }
+  } catch (_) {
+    // Fall back to pure JS EXIF mapping if WASM runtime is not yet initialized
+  }
+
+  // Standard EXIF 1..8 orientation tag mapping fallback
+  let rotation = 0;
+  let flipH = false;
+  let flipV = false;
+  switch (orientation) {
+    case 2:
+      flipH = true;
+      break;
+    case 3:
+      rotation = 180;
+      break;
+    case 4:
+      flipV = true;
+      break;
+    case 5:
+      rotation = 270;
+      flipH = true;
+      break;
+    case 6:
+      rotation = 90;
+      break;
+    case 7:
+      rotation = 90;
+      flipH = true;
+      break;
+    case 8:
+      rotation = 270;
+      break;
+    default:
+      break;
+  }
+
   return {
-    rotation: rec.rotation,
-    flipH: rec.flip_horizontal,
-    flipV: rec.flip_vertical,
-    flip_horizontal: rec.flip_horizontal,
-    flip_vertical: rec.flip_vertical,
+    rotation,
+    flipH,
+    flipV,
+    flip_horizontal: flipH,
+    flip_vertical: flipV,
   };
 }

@@ -1,10 +1,15 @@
-import { defineConfig } from 'vite';
+/// <reference types="vitest" />
+import { defineConfig } from 'vitest/config';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import { resolve } from 'path';
 import { writeFileSync } from 'fs';
 
 export default defineConfig({
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+  },
   plugins: [
     wasm(),
     topLevelAwait(),

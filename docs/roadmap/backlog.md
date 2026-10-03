@@ -8,9 +8,9 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ## 🚀 Immediate Next Up
 1. **Story 3.11: Sensitometric Emulsion Balancing & Physical Optical Grain Engine** (P2)
-2. **Story 4.6.3: Headless Web Behaviour Harness** (P2)
-3. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
-4. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+2. **Story 4.2 & 4.5: Path Sanitization, Test Hygiene & Parameter Schema Bridge** (P2)
+3. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+4. **Story 3.6: Monochromatic Physical Split Toning & Enlarger Chemistry** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -239,16 +239,6 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
   - Adopt the web darkroom's fixed 4-badge EXIF summary element (`CAM`, `ISO`, `APERTURE`, `SHUTTER`) directly in macOS `PermanentHeaderCard` (`InspectorHeaderView.swift`) positioned above the segmented tabs, so essential capture parameters remain visible at a glance across every workspace tab.
 - **Cross-Platform Verification Gate**:
   - Verify 1:1 parameter boundaries, visual feedback, and keyboard/mouse interaction parity between native macOS and WebAssembly darkroom targets.
-
-### 4.6 Harness Engineering & Computational Verification Suite (P1)
-*Translating Martin Fowler & Birgitta Böckeler's Harness Engineering mental model into automated, computational feedback sensors across First Proof.*
-
-#### 4.6.3 Headless Web Behaviour Harness (P2)
-- **Headless Web Integration Battery (Vitest / Playwright)**:
-  - Add automated headless browser testing to `web/` to eliminate reliance on purely manual human verification for basic DOM wiring.
-  - Loads a test RAW/DNG file in headless Chromium.
-  - Simulates single-key shortcuts (`1`..`5` ratings, `P`/`X`/`U` flags, `C` crop, `Z` zoom, `\` original peek) and asserts first-responder text field shielding.
-  - Verifies that WebGL canvas renders non-zero pixel data and handles resize/zoom events without crashes.
 
 ---
 
