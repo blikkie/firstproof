@@ -112,22 +112,37 @@ public struct EmulsionWorkspaceView: View {
                     .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
                     .cornerRadius(6)
                     
-                    // Film Format / Grain Size
+                    // Film Format / Instant Print Format
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Film Emulsion Format")
+                        Text(viewModel.emulsionArchetype == .cambridgeDiffusion100 ? "Instant Print Format" : "Film Format Gate")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.secondary)
                         
-                        Picker("", selection: Binding<EmulsionFormat>(
-                            get: { viewModel.emulsionFormat },
-                            set: { viewModel.setEmulsionFormat($0) }
-                        )) {
-                            Text("35mm Miniature (Standard)").tag(EmulsionFormat.format35mm)
-                            Text("120 Medium Format (0.45x)").tag(EmulsionFormat.format120)
-                            Text("4x5 Large Format (0.20x)").tag(EmulsionFormat.format4x5)
+                        if viewModel.emulsionArchetype == .cambridgeDiffusion100 {
+                            Picker("", selection: Binding<EmulsionFormat>(
+                                get: { viewModel.emulsionFormat },
+                                set: { viewModel.setEmulsionFormat($0) }
+                            )) {
+                                Text("Standard Frame (SX-70 / 600 / Packfilm)").tag(EmulsionFormat.format35mm)
+                                Text("4x5 Large Format Sheet (Type 59)").tag(EmulsionFormat.format120)
+                                Text("8x10 Studio Sheet (Type 809)").tag(EmulsionFormat.format4x5)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        } else {
+                            Picker("", selection: Binding<EmulsionFormat>(
+                                get: { viewModel.emulsionFormat },
+                                set: { viewModel.setEmulsionFormat($0) }
+                            )) {
+                                Text("Super 8 (7.3x Magnification)").tag(EmulsionFormat.super8)
+                                Text("16mm Cinema (3.4x Magnification)").tag(EmulsionFormat.format16mm)
+                                Text("35mm Still Frame (1.0x Baseline)").tag(EmulsionFormat.format35mm)
+                                Text("120 Medium Format / 6x7 (0.48x)").tag(EmulsionFormat.format120)
+                                Text("4x5 Large Format Sheet (0.28x)").tag(EmulsionFormat.format4x5)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
                     }
                     
                     // Carbon Rem-Jet Anti-Halation Layer (Rochester Cinema 500)

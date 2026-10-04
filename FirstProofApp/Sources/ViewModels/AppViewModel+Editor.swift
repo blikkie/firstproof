@@ -148,7 +148,11 @@ extension AppViewModel {
         self.emulsionGrainMode = edits.emulsionGrainMode
         self.grainScale = edits.grainScale
         self.emulsionArchetype = edits.emulsionArchetype
-        self.emulsionFormat = edits.emulsionFormat
+        if edits.emulsionArchetype == .cambridgeDiffusion100 && (edits.emulsionFormat == .super8 || edits.emulsionFormat == .format16mm) {
+            self.emulsionFormat = .format35mm
+        } else {
+            self.emulsionFormat = edits.emulsionFormat
+        }
         self.emulsionExposure = edits.emulsionExposure
         self.remjetBacking = edits.remjetBacking
         self.curves = edits.curves
@@ -1000,6 +1004,9 @@ extension AppViewModel {
         guard self.emulsionArchetype != archetype else { return }
         let before = currentEdits
         self.emulsionArchetype = archetype
+        if archetype == .cambridgeDiffusion100 && (self.emulsionFormat == .super8 || self.emulsionFormat == .format16mm) {
+            self.emulsionFormat = .format35mm
+        }
         let title: String
         switch archetype {
         case .none: title = "Emulsion: Clean Sensor"
@@ -1025,9 +1032,22 @@ extension AppViewModel {
         self.emulsionFormat = format
         let title: String
         switch format {
-        case .format35mm: title = "Film Format: 35mm (1.0x Grain)"
-        case .format120: title = "Film Format: 120 (0.45x Grain)"
-        case .format4x5: title = "Film Format: 4x5 (0.20x Grain)"
+        case .super8:
+            title = "Film Format: Super 8 (7.3x Magnification)"
+        case .format16mm:
+            title = "Film Format: 16mm Cinema (3.4x Magnification)"
+        case .format35mm:
+            title = self.emulsionArchetype == .cambridgeDiffusion100
+                ? "Print Format: Standard Frame (SX-70 / 600 / Packfilm)"
+                : "Film Format: 35mm (1.0x Baseline)"
+        case .format120:
+            title = self.emulsionArchetype == .cambridgeDiffusion100
+                ? "Print Format: 4x5 Large Format Sheet (Type 59)"
+                : "Film Format: 120 (0.48x)"
+        case .format4x5:
+            title = self.emulsionArchetype == .cambridgeDiffusion100
+                ? "Print Format: 8x10 Studio Sheet (Type 809)"
+                : "Film Format: 4x5 (0.28x)"
         }
         registerDiscreteEdit(title: title, before: before)
         notifyThumbnailChanged()

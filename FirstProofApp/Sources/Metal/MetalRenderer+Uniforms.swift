@@ -85,6 +85,10 @@ extension MetalRenderer {
             uniforms.emulsionFormat = 1
         case .format4x5:
             uniforms.emulsionFormat = 2
+        case .super8:
+            uniforms.emulsionFormat = 3
+        case .format16mm:
+            uniforms.emulsionFormat = 4
         }
 
         uniforms.emulsionExposure = edits.emulsionExposure

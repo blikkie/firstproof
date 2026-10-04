@@ -251,6 +251,48 @@ export class InspectorSyncController {
     if (sectionPrintSliders) {
       sectionPrintSliders.classList.toggle('hidden', !hasPrintMedia);
     }
+
+    // 4. Contextual Film Format Gate vs Instant Print Format for Polaroid
+    const isInstant = edits.emulsion_archetype === 'CambridgeDiffusion100';
+    const labelFormat = document.getElementById('label-emulsion-format');
+    const selectFormat = document.getElementById(
+      'select-emulsion-format',
+    ) as HTMLSelectElement | null;
+    if (labelFormat) {
+      labelFormat.textContent = isInstant
+        ? 'Instant Print Format'
+        : 'Film Format Gate';
+    }
+    if (selectFormat) {
+      const isCurrentlyInstant =
+        selectFormat.getAttribute('data-mode') === 'instant';
+      if (isInstant && !isCurrentlyInstant) {
+        selectFormat.setAttribute('data-mode', 'instant');
+        selectFormat.innerHTML = `
+          <option value="Format35mm" selected>Standard Frame (SX-70 / 600 / Packfilm)</option>
+          <option value="Format120">4x5 Large Format Sheet (Type 59)</option>
+          <option value="Format4x5">8x10 Studio Sheet (Type 809)</option>
+        `;
+        if (
+          edits.emulsion_format === 'Super8' ||
+          edits.emulsion_format === 'Format16mm' ||
+          !edits.emulsion_format
+        ) {
+          edits.emulsion_format = 'Format35mm';
+        }
+        selectFormat.value = edits.emulsion_format;
+      } else if (!isInstant && isCurrentlyInstant) {
+        selectFormat.setAttribute('data-mode', 'film');
+        selectFormat.innerHTML = `
+          <option value="Super8">Super 8 (7.3x Magnification)</option>
+          <option value="Format16mm">16mm Cinema (3.4x Magnification)</option>
+          <option value="Format35mm" selected>35mm Still Frame (1.0x Baseline)</option>
+          <option value="Format120">120 Medium Format / 6x7 (0.48x)</option>
+          <option value="Format4x5">4x5 Large Format Sheet (0.28x)</option>
+        `;
+        selectFormat.value = edits.emulsion_format || 'Format35mm';
+      }
+    }
   }
 
   public syncSliderUI(): void {
@@ -358,6 +400,9 @@ export class InspectorSyncController {
     if (selectEmulsion && edits.emulsion_archetype) {
       selectEmulsion.value = edits.emulsion_archetype;
     }
+
+    this.updateEmulsionWorkspaceVisibility();
+
     const selectFormat = document.getElementById(
       'select-emulsion-format',
     ) as HTMLSelectElement | null;
@@ -388,8 +433,6 @@ export class InspectorSyncController {
     if (selectFilter) {
       selectFilter.value = edits.enlarger_filter ?? 'NeutralPanchromatic';
     }
-
-    this.updateEmulsionWorkspaceVisibility();
 
     if (edits.curves) {
       const widget = this.delegate.getCurveWidget();

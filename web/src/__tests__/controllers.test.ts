@@ -108,4 +108,79 @@ describe('Controller & First-Responder Architecture', () => {
       expect(actions.onSetRating).not.toHaveBeenCalledWith(4);
     });
   });
+
+  describe('InspectorSyncController Format Gate Contextualization', () => {
+    it('contextualizes format dropdown options and labels for Polaroid vs standard film', async () => {
+      const { InspectorSyncController } = await import(
+        '../controllers/InspectorSyncController'
+      );
+
+      // Set up DOM elements
+      document.body.innerHTML = `
+        <div id="row-remjet"></div>
+        <div id="row-enlarger-filter"></div>
+        <div id="section-print-media-sliders"></div>
+        <label id="label-emulsion-format">Film Format Gate</label>
+        <select id="select-emulsion-format" class="select-input">
+          <option value="Super8">Super 8 (7.3x Magnification)</option>
+          <option value="Format16mm">16mm Cinema (3.4x Magnification)</option>
+          <option value="Format35mm" selected>35mm Still Frame (1.0x Baseline)</option>
+          <option value="Format120">120 Medium Format / 6x7 (0.48x)</option>
+          <option value="Format4x5">4x5 Large Format Sheet (0.28x)</option>
+        </select>
+      `;
+
+      const edits: any = {
+        emulsion_archetype: 'CambridgeDiffusion100',
+        emulsion_format: 'Super8',
+        print_media: 'None',
+      };
+
+      const mockDelegate: any = {
+        getEdits: () => edits,
+        renderCanvas: vi.fn(),
+        autoSaveSidecar: vi.fn(),
+        isCurrentPhotoRaw: () => true,
+        getDefaultEdits: () => ({ ...edits }),
+        getCurveWidget: () => null,
+        getRating: () => 0,
+        getStatus: () => 'None',
+        getActiveIndex: () => 0,
+      };
+
+      const controller = new InspectorSyncController(mockDelegate);
+      controller.updateEmulsionWorkspaceVisibility();
+
+      const label = document.getElementById('label-emulsion-format')!;
+      const select = document.getElementById(
+        'select-emulsion-format',
+      ) as HTMLSelectElement;
+
+      // 1. Polaroid label
+      expect(label.textContent).toBe('Instant Print Format');
+
+      // 2. Only 3 instant format options
+      const options = Array.from(select.options).map((o) => o.value);
+      expect(options).toEqual(['Format35mm', 'Format120', 'Format4x5']);
+
+      // 3. Super8 coerced to Format35mm
+      expect(edits.emulsion_format).toBe('Format35mm');
+      expect(select.value).toBe('Format35mm');
+
+      // 4. Switching back to standard film restores all 5 options and Film Format Gate label
+      edits.emulsion_archetype = 'RochesterPortrait400';
+      controller.updateEmulsionWorkspaceVisibility();
+
+      expect(label.textContent).toBe('Film Format Gate');
+      const filmOptions = Array.from(select.options).map((o) => o.value);
+      expect(filmOptions).toEqual([
+        'Super8',
+        'Format16mm',
+        'Format35mm',
+        'Format120',
+        'Format4x5',
+      ]);
+      expect(select.value).toBe('Format35mm');
+    });
+  });
 });
