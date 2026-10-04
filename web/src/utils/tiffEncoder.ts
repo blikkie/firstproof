@@ -77,40 +77,41 @@ export function encodeTiff(
   // Pixel Raster data starting at offset 192
   // Note: WebGL gl.readPixels returns bottom-to-top raster (requires flipY = true).
   // TIFF expects top-to-bottom raster (row 0 is top).
-  let dst = 192;
   if (bitsPerSample === 16) {
+    const u16Dst = new Uint16Array(buf, 192, width * height * 3);
     if (data instanceof Uint16Array) {
       const channels = data.length >= width * height * 4 ? 4 : 3;
-      for (let y = 0; y < height; y++) {
-        const srcRow = flipY ? height - 1 - y : y;
-        const rowOffset = srcRow * width * channels;
-        for (let x = 0; x < width; x++) {
-          const srcIdx = rowOffset + x * channels;
-          view.setUint16(dst, data[srcIdx], true);
-          dst += 2;
-          view.setUint16(dst, data[srcIdx + 1], true);
-          dst += 2;
-          view.setUint16(dst, data[srcIdx + 2], true);
-          dst += 2;
+      if (!flipY && channels === 3) {
+        u16Dst.set(data.subarray(0, width * height * 3));
+      } else {
+        let dstIdx = 0;
+        for (let y = 0; y < height; y++) {
+          const srcRow = flipY ? height - 1 - y : y;
+          const rowOffset = srcRow * width * channels;
+          for (let x = 0; x < width; x++) {
+            const srcIdx = rowOffset + x * channels;
+            u16Dst[dstIdx++] = data[srcIdx];
+            u16Dst[dstIdx++] = data[srcIdx + 1];
+            u16Dst[dstIdx++] = data[srcIdx + 2];
+          }
         }
       }
     } else {
+      let dstIdx = 0;
       for (let y = 0; y < height; y++) {
         const srcRow = flipY ? height - 1 - y : y;
         const rowOffset = srcRow * width * 4;
         for (let x = 0; x < width; x++) {
           const srcIdx = rowOffset + x * 4;
-          view.setUint16(dst, data[srcIdx] * 257, true);
-          dst += 2;
-          view.setUint16(dst, data[srcIdx + 1] * 257, true);
-          dst += 2;
-          view.setUint16(dst, data[srcIdx + 2] * 257, true);
-          dst += 2;
+          u16Dst[dstIdx++] = data[srcIdx] * 257;
+          u16Dst[dstIdx++] = data[srcIdx + 1] * 257;
+          u16Dst[dstIdx++] = data[srcIdx + 2] * 257;
         }
       }
     }
   } else {
     const u8Data = data as Uint8Array;
+    let dst = 192;
     for (let y = 0; y < height; y++) {
       const srcRow = flipY ? height - 1 - y : y;
       const rowOffset = srcRow * width * 4;

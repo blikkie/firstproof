@@ -9,6 +9,7 @@ pub mod curve;
 pub mod modes;
 pub mod preview;
 pub mod raw;
+pub mod resample;
 pub mod schema;
 pub mod settings;
 pub mod xmp;
@@ -53,6 +54,7 @@ pub use xmp::{
     format_gps_xmp, generate_xmp_sidecar, parse_curve_points, parse_gps_xmp, parse_xmp_sidecar,
     serialize_curve_points, XmpData,
 };
+pub use resample::resample_rgb16;
 pub use color::{
     develop_frame_pipeline, develop_pixel_pipeline,
     develop_raw_sensor_frame_archival, evaluate_display_luma, is_neutral_edits,

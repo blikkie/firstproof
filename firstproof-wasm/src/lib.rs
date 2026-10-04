@@ -1,4 +1,5 @@
 use wasm_bindgen::prelude::*;
+use image::ImageEncoder;
 
 pub mod scratchpad;
 
@@ -254,6 +255,155 @@ pub fn develop_raw_archival_from_scratchpad(
             linear_len: bytes_needed as u64,
             width: w as u32,
             height: h as u32,
+        };
+
+        serde_wasm_bindgen::to_value(&res).map_err(|e| JsValue::from_str(&e.to_string()))
+    })
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ExportResultRecord {
+    pub output_offset: u64,
+    pub output_len: u64,
+    pub width: u32,
+    pub height: u32,
+    pub format: String,
+}
+
+#[wasm_bindgen]
+pub fn export_raw_from_scratchpad(
+    input_len: usize,
+    edits_json: &str,
+    format_str: &str,
+    quality: u32,
+    size_option: &str,
+    custom_dim: u32,
+    demosaic_quality: u32,
+) -> Result<JsValue, JsValue> {
+    let edits: EditSettings = serde_json::from_str(edits_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid edits JSON: {}", e)))?;
+
+    let quality_mode = if demosaic_quality == 1 {
+        DemosaicQuality::Archival
+    } else {
+        DemosaicQuality::Standard
+    };
+
+    with_scratchpad(|buf| {
+        // 1. Decode RawSensorFrame from scratchpad
+        let frame = {
+            let slice = buf
+                .slice(0, input_len)
+                .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
+            RawSensorFrame::decode_from_bytes(slice)
+                .ok_or_else(|| JsValue::from_str("Failed to decode RawSensorFrame from bytes"))?
+        };
+
+        // 2. Multi-pass archival development
+        let (dev_w, dev_h, dev_u16) = firstproof_engine::develop_raw_sensor_frame_archival(
+            &frame,
+            &edits,
+            quality_mode,
+        );
+
+        // 3. Compute geometry & target dimensions
+        let rot = edits.rotation.rem_euclid(360);
+        let is_orthogonal = rot == 90 || rot == 270;
+        let base_w = if is_orthogonal { dev_h } else { dev_w };
+        let base_h = if is_orthogonal { dev_w } else { dev_h };
+
+        let crop_l = edits.crop_left.clamp(0.0, 0.99);
+        let crop_t = edits.crop_top.clamp(0.0, 0.99);
+        let crop_r = edits.crop_right.clamp(crop_l + 0.01, 1.0);
+        let crop_b = edits.crop_bottom.clamp(crop_t + 0.01, 1.0);
+
+        let effective_w = ((base_w as f32) * (crop_r - crop_l)).round().max(1.0) as usize;
+        let effective_h = ((base_h as f32) * (crop_b - crop_t)).round().max(1.0) as usize;
+
+        let max_dim: Option<usize> = match size_option {
+            "2048" => Some(2048),
+            "3840" => Some(3840),
+            "Custom" if custom_dim > 0 => Some(custom_dim as usize),
+            _ => None,
+        };
+
+        let (target_w, target_h) = if let Some(max_d) = max_dim {
+            if effective_w > max_d || effective_h > max_d {
+                if effective_w >= effective_h {
+                    let tw = max_d;
+                    let th = ((effective_h * max_d) as f32 / effective_w as f32).round().max(1.0) as usize;
+                    (tw, th)
+                } else {
+                    let th = max_d;
+                    let tw = ((effective_w * max_d) as f32 / effective_h as f32).round().max(1.0) as usize;
+                    (tw, th)
+                }
+            } else {
+                (effective_w, effective_h)
+            }
+        } else {
+            (effective_w, effective_h)
+        };
+
+        // 4. Bilinear geometry resampling in Rust
+        let resampled_u16 = firstproof_engine::resample_rgb16(
+            dev_w,
+            dev_h,
+            &dev_u16,
+            rot,
+            crop_l,
+            crop_t,
+            crop_r,
+            crop_b,
+            edits.flip_horizontal,
+            edits.flip_vertical,
+            target_w,
+            target_h,
+        );
+
+        // 5. Encode output file (JPEG or TIFF)
+        let is_tiff = format_str.eq_ignore_ascii_case("TIFF");
+        let encoded_bytes = if is_tiff {
+            let mut bytes = Vec::with_capacity(resampled_u16.len() * 2);
+            for &val in &resampled_u16 {
+                bytes.extend_from_slice(&val.to_le_bytes());
+            }
+            let mut out = Vec::new();
+            let encoder = image::codecs::tiff::TiffEncoder::new(std::io::Cursor::new(&mut out));
+            encoder
+                .write_image(&bytes, target_w as u32, target_h as u32, image::ColorType::Rgb16)
+                .map_err(|e| JsValue::from_str(&format!("Failed to encode TIFF: {}", e)))?;
+            out
+        } else {
+            let mut rgb8 = Vec::with_capacity(target_w * target_h * 3);
+            for &val in &resampled_u16 {
+                rgb8.push((val >> 8) as u8);
+            }
+            let mut out = Vec::new();
+            let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, quality.clamp(1, 100) as u8);
+            encoder
+                .encode(&rgb8, target_w as u32, target_h as u32, image::ColorType::Rgb8)
+                .map_err(|e| JsValue::from_str(&format!("Failed to encode JPEG: {}", e)))?;
+            out
+        };
+
+        // 6. Write output into scratchpad
+        let bytes_needed = encoded_bytes.len();
+        let aligned_offset = (input_len + 15) & !15;
+        let scratch_len = buf.len();
+        if aligned_offset + bytes_needed > scratch_len {
+            buf.resize(aligned_offset + bytes_needed);
+        }
+        if let Some(target_slice) = buf.slice_mut(aligned_offset, bytes_needed) {
+            target_slice.copy_from_slice(&encoded_bytes);
+        }
+
+        let res = ExportResultRecord {
+            output_offset: aligned_offset as u64,
+            output_len: bytes_needed as u64,
+            width: target_w as u32,
+            height: target_h as u32,
+            format: if is_tiff { "TIFF".to_string() } else { "JPEG".to_string() },
         };
 
         serde_wasm_bindgen::to_value(&res).map_err(|e| JsValue::from_str(&e.to_string()))

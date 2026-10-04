@@ -270,6 +270,65 @@ export class WasmBridge {
     return { width: res.width, height: res.height, linearData };
   }
 
+  public exportRaw(
+    bytes: Uint8Array,
+    edits: EditSettingsPayload,
+    format: 'JPEG' | 'TIFF',
+    quality: number,
+    sizeOption: 'Original' | '2048' | '3840' | 'Custom',
+    customDimension: number,
+    demosaicQuality: 'Standard' | 'Archival' = 'Standard',
+  ): Uint8Array {
+    const liveBuf = this.getWasmMemoryBuffer();
+    const ptr = wasm.get_scratchpad_ptr();
+    if (liveBuf && ptr + bytes.length <= liveBuf.byteLength) {
+      new Uint8Array(liveBuf, ptr, bytes.length).set(bytes);
+    } else {
+      wasm.copy_into_scratchpad(0, bytes);
+    }
+
+    const editsJson = JSON.stringify(edits);
+    const qualityCode = demosaicQuality === 'Archival' ? 1 : 0;
+    const resVal = (wasm as any).export_raw_from_scratchpad(
+      bytes.length,
+      editsJson,
+      format,
+      quality,
+      sizeOption,
+      customDimension,
+      qualityCode,
+    );
+    const res = resVal as {
+      output_offset: number;
+      output_len: number;
+      width: number;
+      height: number;
+      format: string;
+    };
+
+    let outputBytes: Uint8Array;
+    if (typeof (wasm as any).get_scratchpad_u8_slice === 'function') {
+      outputBytes = (wasm as any).get_scratchpad_u8_slice(
+        res.output_offset,
+        res.output_len,
+      );
+    } else {
+      const freshBuf = this.getWasmMemoryBuffer();
+      const absOffset = ptr + res.output_offset;
+      if (freshBuf && absOffset + res.output_len <= freshBuf.byteLength) {
+        outputBytes = new Uint8Array(
+          freshBuf,
+          absOffset,
+          res.output_len,
+        ).slice();
+      } else {
+        throw new Error(`WASM scratchpad buffer bounds error`);
+      }
+    }
+
+    return outputBytes;
+  }
+
   public evaluateCurves(curves: ToneCurvesPayload): EvaluatedLut {
     const jsonStr = JSON.stringify(curves);
     const res = wasm.evaluate_curves(jsonStr);

@@ -6,6 +6,7 @@ import {
   getDefaultEdits,
   hasModifications,
 } from '../utils/edits';
+import { yieldToMain } from '../utils/scheduler';
 import { encodeTiff } from '../utils/tiffEncoder';
 import type {
   EditSettingsPayload,
@@ -175,6 +176,57 @@ export class PhotoLoaderService {
       const workerBuffer = arrayBuffer.slice(0);
       this.rawWorker!.postMessage(
         { id, arrayBuffer: workerBuffer, fileName, fullResolution },
+        [workerBuffer],
+      );
+    });
+  }
+
+  public async exportInWorker(
+    arrayBuffer: ArrayBuffer,
+    fileName: string,
+    edits: EditSettingsPayload,
+    format: 'JPEG' | 'TIFF',
+    quality: number,
+    sizeOption: 'Original' | '2048' | '3840' | 'Custom',
+    customDimension: number,
+    demosaicQuality: 'Standard' | 'Archival',
+  ): Promise<Uint8Array> {
+    if (!this.rawWorker) {
+      const rawBytes = new Uint8Array(arrayBuffer);
+      return this.bridge.exportRaw(
+        rawBytes,
+        edits,
+        format,
+        quality,
+        sizeOption,
+        customDimension,
+        demosaicQuality,
+      );
+    }
+
+    const id = ++this.workerMsgId;
+    return new Promise((resolve, reject) => {
+      this.workerPendingMap.set(id, (res) => {
+        if (res.success && res.outputBytes) {
+          resolve(res.outputBytes);
+        } else {
+          reject(new Error(res.error || 'Worker export failed'));
+        }
+      });
+      const workerBuffer = arrayBuffer.slice(0);
+      this.rawWorker!.postMessage(
+        {
+          type: 'export',
+          id,
+          arrayBuffer: workerBuffer,
+          fileName,
+          editsJson: JSON.stringify(edits),
+          format,
+          quality,
+          sizeOption,
+          customDimension,
+          demosaicQuality: demosaicQuality === 'Archival' ? 1 : 0,
+        },
         [workerBuffer],
       );
     });
@@ -558,11 +610,10 @@ export class PhotoLoaderService {
 
     for (let i = 0; i < photos.length; i++) {
       const entry = photos[i];
-      onProgress(
-        `Exporting ${i + 1} of ${photos.length}...`,
-        i + 1,
-        photos.length,
-      );
+      const prefix = photos.length > 1 ? `[${i + 1}/${photos.length}] ` : '';
+
+      onProgress(`${prefix}Preparing ${entry.name}...`, i + 1, photos.length);
+      await yieldToMain();
 
       const fileExt = entry.name.split('.').pop()?.toLowerCase() || '';
       const isRawFile = [
@@ -599,112 +650,32 @@ export class PhotoLoaderService {
       let fileBlob: Blob;
 
       if (isRawFile) {
+        onProgress(
+          `${prefix}Exporting ${entry.name} (${options.format})...`,
+          i + 1,
+          photos.length,
+        );
+        await yieldToMain();
+
         const arrayBuffer = await entry.file.arrayBuffer();
-        const rawBytes = new Uint8Array(arrayBuffer);
-        const quality = options.demosaicQuality ?? 'Standard';
-
-        const developed = this.bridge.developRawArchival(
-          rawBytes,
+        const outputBytes = await this.exportInWorker(
+          arrayBuffer,
+          entry.name,
           photoEdits,
-          quality,
+          options.format,
+          options.quality,
+          options.sizeOption,
+          options.customDimension,
+          options.demosaicQuality ?? 'Standard',
         );
 
-        const rot = (photoEdits.rotation ?? 0) % 360;
-        const isOrthogonal = rot === 90 || rot === 270;
-        const baseW = isOrthogonal ? developed.height : developed.width;
-        const baseH = isOrthogonal ? developed.width : developed.height;
-
-        const cropL = Math.max(
-          0.0,
-          Math.min(0.99, photoEdits.crop_left ?? 0.0),
-        );
-        const cropT = Math.max(0.0, Math.min(0.99, photoEdits.crop_top ?? 0.0));
-        const cropR = Math.max(
-          cropL + 0.01,
-          Math.min(1.0, photoEdits.crop_right ?? 1.0),
-        );
-        const cropB = Math.max(
-          cropT + 0.01,
-          Math.min(1.0, photoEdits.crop_bottom ?? 1.0),
-        );
-
-        const effectiveW = Math.max(1, Math.round(baseW * (cropR - cropL)));
-        const effectiveH = Math.max(1, Math.round(baseH * (cropB - cropT)));
-
-        let targetW = effectiveW;
-        let targetH = effectiveH;
-        let maxDim: number | null = null;
-        if (options.sizeOption === '2048') maxDim = 2048;
-        else if (options.sizeOption === '3840') maxDim = 3840;
-        else if (options.sizeOption === 'Custom')
-          maxDim = options.customDimension;
-
-        if (maxDim && (effectiveW > maxDim || effectiveH > maxDim)) {
-          if (effectiveW >= effectiveH) {
-            targetW = maxDim;
-            targetH = Math.max(
-              1,
-              Math.round((effectiveH * maxDim) / effectiveW),
-            );
-          } else {
-            targetH = maxDim;
-            targetW = Math.max(
-              1,
-              Math.round((effectiveW * maxDim) / effectiveH),
-            );
-          }
-        }
-
-        const resampledU16 = this.resampleRgb16(
-          developed.width,
-          developed.height,
-          developed.linearData,
-          rot,
-          cropL,
-          cropT,
-          cropR,
-          cropB,
-          !!photoEdits.flip_horizontal,
-          !!photoEdits.flip_vertical,
-          targetW,
-          targetH,
-        );
-
-        if (options.format === 'TIFF') {
-          const tiffBytes = encodeTiff(
-            targetW,
-            targetH,
-            resampledU16,
-            16,
-            false,
-          );
-          fileBlob = new Blob([tiffBytes.buffer as ArrayBuffer], {
-            type: 'image/tiff',
-          });
-        } else {
-          const offCanvas = document.createElement('canvas');
-          offCanvas.width = targetW;
-          offCanvas.height = targetH;
-          const ctx = offCanvas.getContext('2d');
-          if (!ctx) throw new Error('Could not create 2d canvas context');
-          const imgData = ctx.createImageData(targetW, targetH);
-          for (let p = 0; p < targetW * targetH; p++) {
-            imgData.data[p * 4] = resampledU16[p * 3] >> 8;
-            imgData.data[p * 4 + 1] = resampledU16[p * 3 + 1] >> 8;
-            imgData.data[p * 4 + 2] = resampledU16[p * 3 + 2] >> 8;
-            imgData.data[p * 4 + 3] = 255;
-          }
-          ctx.putImageData(imgData, 0, 0);
-          fileBlob = await new Promise<Blob>((resolve, reject) => {
-            offCanvas.toBlob(
-              (b) =>
-                b ? resolve(b) : reject(new Error('Canvas toBlob failed')),
-              'image/jpeg',
-              options.quality / 100,
-            );
-          });
-        }
+        fileBlob = new Blob([outputBytes.buffer as ArrayBuffer], {
+          type: options.format === 'TIFF' ? 'image/tiff' : 'image/jpeg',
+        });
       } else {
+        onProgress(`${prefix}Decoding ${entry.name}...`, i + 1, photos.length);
+        await yieldToMain();
+
         const arrayBuffer = await entry.file.arrayBuffer();
         const res = await this.decodeInWorker(arrayBuffer, entry.name, false);
         const blob = new Blob([new Uint8Array(res.imageSlice)], {
@@ -782,9 +753,23 @@ export class PhotoLoaderService {
           targetH = Math.max(1, Math.round(targetH * scale));
         }
 
+        onProgress(
+          `${prefix}Rendering WebGL canvas (${targetW}×${targetH})...`,
+          i + 1,
+          photos.length,
+        );
+        await yieldToMain();
+
         expCanvas.width = targetW;
         expCanvas.height = targetH;
         expRenderer.render(photoEdits, false, 1.0, { x: 0, y: 0 }, false);
+
+        onProgress(
+          `${prefix}Encoding ${options.format}...`,
+          i + 1,
+          photos.length,
+        );
+        await yieldToMain();
 
         if (options.format === 'TIFF') {
           const pixels = expRenderer.readRgbaPixels(targetW, targetH);
@@ -802,7 +787,11 @@ export class PhotoLoaderService {
             );
           });
         }
+        await yieldToMain();
       }
+
+      onProgress(`${prefix}Saving ${filename}...`, i + 1, photos.length);
+      await yieldToMain();
 
       if (options.destinationDirHandle) {
         try {
@@ -824,6 +813,7 @@ export class PhotoLoaderService {
         this.triggerDownload(fileBlob, filename);
       }
 
+      await yieldToMain();
       successCount++;
     }
 
@@ -843,106 +833,6 @@ export class PhotoLoaderService {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   }
-
-  private resampleRgb16(
-    srcW: number,
-    srcH: number,
-    srcData: Uint16Array,
-    rot: number,
-    cropL: number,
-    cropT: number,
-    cropR: number,
-    cropB: number,
-    flipH: boolean,
-    flipV: boolean,
-    targetW: number,
-    targetH: number,
-  ): Uint16Array {
-    if (
-      targetW === srcW &&
-      targetH === srcH &&
-      rot === 0 &&
-      cropL <= 0.001 &&
-      cropT <= 0.001 &&
-      cropR >= 0.999 &&
-      cropB >= 0.999 &&
-      !flipH &&
-      !flipV
-    ) {
-      return srcData;
-    }
-
-    const out = new Uint16Array(targetW * targetH * 3);
-    for (let dy = 0; dy < targetH; dy++) {
-      let inY = (dy + 0.5) / targetH;
-      if (flipV) inY = 1.0 - inY;
-
-      for (let dx = 0; dx < targetW; dx++) {
-        let inX = (dx + 0.5) / targetW;
-        if (flipH) inX = 1.0 - inX;
-
-        let orientedX = inX;
-        let orientedY = inY;
-        if (rot === 90) {
-          orientedX = inY;
-          orientedY = 1.0 - inX;
-        } else if (rot === 180) {
-          orientedX = 1.0 - inX;
-          orientedY = 1.0 - inY;
-        } else if (rot === 270) {
-          orientedX = 1.0 - inY;
-          orientedY = inX;
-        }
-
-        const finalU = cropL + orientedX * (cropR - cropL);
-        const finalV = cropT + orientedY * (cropB - cropT);
-
-        const sx = Math.max(0, Math.min(srcW - 1, finalU * srcW - 0.5));
-        const sy = Math.max(0, Math.min(srcH - 1, finalV * srcH - 0.5));
-        const x0 = Math.floor(sx);
-        const y0 = Math.floor(sy);
-        const x1 = Math.min(srcW - 1, x0 + 1);
-        const y1 = Math.min(srcH - 1, y0 + 1);
-        const fx = sx - x0;
-        const fy = sy - y0;
-        const w00 = (1 - fx) * (1 - fy);
-        const w10 = fx * (1 - fy);
-        const w01 = (1 - fx) * fy;
-        const w11 = fx * fy;
-
-        const idx00 = (y0 * srcW + x0) * 3;
-        const idx10 = (y0 * srcW + x1) * 3;
-        const idx01 = (y1 * srcW + x0) * 3;
-        const idx11 = (y1 * srcW + x1) * 3;
-
-        const r = Math.round(
-          w00 * srcData[idx00] +
-            w10 * srcData[idx10] +
-            w01 * srcData[idx01] +
-            w11 * srcData[idx11],
-        );
-        const g = Math.round(
-          w00 * srcData[idx00 + 1] +
-            w10 * srcData[idx10 + 1] +
-            w01 * srcData[idx01 + 1] +
-            w11 * srcData[idx11 + 1],
-        );
-        const b = Math.round(
-          w00 * srcData[idx00 + 2] +
-            w10 * srcData[idx10 + 2] +
-            w01 * srcData[idx01 + 2] +
-            w11 * srcData[idx11 + 2],
-        );
-
-        const dstIdx = (dy * targetW + dx) * 3;
-        out[dstIdx] = Math.max(0, Math.min(65535, r));
-        out[dstIdx + 1] = Math.max(0, Math.min(65535, g));
-        out[dstIdx + 2] = Math.max(0, Math.min(65535, b));
-      }
-    }
-    return out;
-  }
-
   public dispose(): void {
     if (this.rawWorker) {
       this.rawWorker.terminate();
