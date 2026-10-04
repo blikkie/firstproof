@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.20: Sensitometric Chemical Push/Pull Development Engine** (P2)
-2. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
-3. **Story 3.22: Sensitometric Paper Base ($L^*a^*b^*$) & ISO(R) Enlarger Grade Calibration** (P2)
-4. **Story 4.1: Open Source IP, Security & Code Cleanliness Auditing** (P2)
+1. **Story 3.22: Sensitometric Paper Base ($L^*a^*b^*$) & ISO(R) Enlarger Grade Calibration** (P2)
+2. **Story 4.1: Open Source IP, Security & Code Cleanliness Auditing** (P2)
+3. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P2)
+4. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -56,18 +56,6 @@ This document strictly tracks pending and deferred features calibrated against o
 ### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1) - COMPLETED
 All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](completed.md).
 
-
-### 3.20 Sensitometric Chemical Push/Pull Development Engine (P2)
-- **Authentic Chemical Development Modeling Over Exposure Multipliers**:
-  - Replace naive pre-curve exposure scalar multipliers with authentic physical darkroom tank development time modeling ($N-1$ Pull, $N$ Normal Box Speed, $N+1$ Push 1, $N+2$ Push 2).
-- **Sensitometric Gamma Slope ($\Delta\gamma$) & Toe Modulation**:
-  - Pushing film steepens the characteristic D-log E gamma slope ($\gamma$) because highlight silver/dye centers develop exponentially faster than shadow grains.
-  - Pulling film contracts scene dynamic range, softening midtone contrast and lifting shadow density.
-- **Silver Halide & Dye-Cloud Crystal Clumping**:
-  - Extended development time allows silver crystal growth and dye cloud agglomeration to accelerate, naturally coarsening optical grain in pushed emulsions.
-- **Physical Boundary Anchoring & Tri-Engine Parity**:
-  - Ground parameters in published manufacturer sensitometry data sheets (Kodak D-76 / T-Max / C-41, Ilford ID-11).
-  - Verify smooth $C^1$ monotonicity and 21-step wedge integrity identically across Metal, WebGL, and Rust CPU export pipelines.
 
 ### 3.21 Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration (P2)
 - **Physical Context & Anti-Bloat Scope**:
