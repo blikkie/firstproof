@@ -340,7 +340,8 @@ fragment float4 fragmentShader(
         float3 wbExposureScale = float3(rScale, gScale, bScale) * exposureGain;
 
         if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
-            float2 sharpenOffset = texelSize * max(uniforms.sharpeningRadius, 0.5f);
+            float effectiveRadius = max(uniforms.sharpeningRadius * uniforms.baselineSharpness, 0.5f);
+            float2 sharpenOffset = texelSize * effectiveRadius;
             float4 leftSample   = texture.sample(textureSampler, uv - float2(sharpenOffset.x, 0.0));
             float4 rightSample  = texture.sample(textureSampler, uv + float2(sharpenOffset.x, 0.0));
             float4 topSample    = texture.sample(textureSampler, uv - float2(0.0, sharpenOffset.y));

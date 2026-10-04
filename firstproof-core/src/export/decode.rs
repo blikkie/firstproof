@@ -10,6 +10,7 @@ pub struct DemosaicedImage {
     pub height: usize,
     pub data: Vec<f32>, // Width * Height * 3 (Linear RGB in range 0.0 .. 1.0)
     pub is_raw: bool,
+    pub baseline_sharpness: f32,
 }
 
 impl DemosaicedImage {
@@ -19,6 +20,7 @@ impl DemosaicedImage {
             height,
             data: vec![0.0; width * height * 3],
             is_raw,
+            baseline_sharpness: 1.0,
         }
     }
 }
@@ -41,6 +43,7 @@ pub fn decode_image_with_quality<P: AsRef<Path>>(
         let active_w = frame.active_width;
         let active_h = frame.active_height;
         let mut demosaiced = DemosaicedImage::new(active_w, active_h, true);
+        demosaiced.baseline_sharpness = frame.baseline_sharpness;
         let (wb_r, wb_b) = frame.as_shot_wb();
         
         // Derive Camera -> Linear Rec.2020 matrix dynamically interpolated

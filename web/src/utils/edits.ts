@@ -1,7 +1,7 @@
 import type { EditSettingsPayload } from '../WasmBridge';
 import { decodeExifOrientation } from './exifReader';
 
-export function getDefaultEdits(isRaw: boolean = false): EditSettingsPayload {
+export function getDefaultEdits(_isRaw: boolean = false): EditSettingsPayload {
   return {
     exposure: 0.0,
     contrast: 0.0,
@@ -28,9 +28,9 @@ export function getDefaultEdits(isRaw: boolean = false): EditSettingsPayload {
     flip_vertical: false,
     tone_profile: 'AgxVivid',
     lut_intensity: 1.0,
-    sharpening_amount: isRaw ? 20.0 : 0.0,
+    sharpening_amount: 0.0,
     sharpening_radius: 1.0,
-    sharpening_masking: isRaw ? 15.0 : 0.0,
+    sharpening_masking: 0.0,
     noise_reduction: 0.0,
     emulsion_archetype: 'None',
     emulsion_format: 'Format35mm',
@@ -159,6 +159,8 @@ export function hasModifications(
   if (Math.abs((edits.crop_top ?? 0.0) - 0.0) > 1e-4) return true;
   if (Math.abs((edits.crop_right ?? 1.0) - 1.0) > 1e-4) return true;
   if (Math.abs((edits.crop_bottom ?? 1.0) - 1.0) > 1e-4) return true;
+  if (Math.abs(edits.sharpening_amount ?? 0.0) > 1e-4) return true;
+  if (Math.abs(edits.noise_reduction ?? 0.0) > 1e-4) return true;
   if (areCurvesActive(edits.curves)) return true;
 
   const exifOri = decodeExifOrientation(orientation);

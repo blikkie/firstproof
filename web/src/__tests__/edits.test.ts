@@ -25,12 +25,14 @@ describe('Edit Settings & Modification Invariants', () => {
       expect(edits.crop_bottom).toBe(1.0);
     });
 
-    it('sets default sharpening for RAW but zero for JPEG', () => {
+    it('initializes zero sharpening for pristine capture across RAW and JPEG', () => {
       const rawEdits = getDefaultEdits(true);
       const jpegEdits = getDefaultEdits(false);
 
-      expect(rawEdits.sharpening_amount).toBe(20.0);
+      expect(rawEdits.sharpening_amount).toBe(0.0);
+      expect(rawEdits.sharpening_masking).toBe(0.0);
       expect(jpegEdits.sharpening_amount).toBe(0.0);
+      expect(jpegEdits.sharpening_masking).toBe(0.0);
     });
   });
 

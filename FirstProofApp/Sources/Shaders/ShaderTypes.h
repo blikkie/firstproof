@@ -48,6 +48,7 @@ struct ShaderUniforms {
     float sharpeningRadius;  // 0.5 .. 3.0 (default 1.0)
     float sharpeningMasking; // 0.0 .. 100.0 (default 0.0)
     float noiseReduction;    // 0.0 .. 100.0 (default 0.0)
+    float baselineSharpness; // 0.5 .. 2.0 (default 1.0, calibrated from DNG Tag 50732 or CameraCalibrationRegistry)
     float cropLeft;          // 0.0 .. 1.0 (default 0.0)
     float cropTop;           // 0.0 .. 1.0 (default 0.0)
     float cropRight;         // 0.0 .. 1.0 (default 1.0)

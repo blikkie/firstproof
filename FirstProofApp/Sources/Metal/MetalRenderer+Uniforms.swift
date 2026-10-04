@@ -16,9 +16,11 @@ extension MetalRenderer {
         lensCoefficients: LensCorrectionCoefficientsRecord? = nil,
         edrHeadroom: Float = 1.0,
         edrEnabled: Bool = true,
-        isIntermediate: Bool = false
+        isIntermediate: Bool = false,
+        baselineSharpness: Float = 1.0
     ) {
         uniforms.isIntermediate = isIntermediate ? 1 : 0
+        uniforms.baselineSharpness = baselineSharpness
         uniforms.exposure = edits.exposure
         uniforms.temperature = edits.temperature
         uniforms.tint = edits.tint

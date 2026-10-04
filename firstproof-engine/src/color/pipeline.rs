@@ -1227,7 +1227,7 @@ pub fn develop_raw_sensor_frame_archival(
         }
 
         let r_step = if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
-            edits.sharpening_radius.max(0.5)
+            (edits.sharpening_radius * frame.baseline_sharpness).max(0.5)
         } else {
             1.0
         };
@@ -1408,6 +1408,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Neutral Test".to_string(),
             baseline_exposure: 0.0,
+            baseline_sharpness: 1.0,
             linear_response_limit: 0.96,
             noise_profile: None,
             sensor_data: vec![500u16; w * h],
@@ -1450,6 +1451,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Saturated Highlight Test".to_string(),
             baseline_exposure: 0.0,
+            baseline_sharpness: 1.0,
             linear_response_limit: 0.96,
             noise_profile: None,
             sensor_data: vec![1000u16; w * h], // Saturated photosites (cloud highlight)
@@ -1571,6 +1573,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Archival Grain Test".to_string(),
             baseline_exposure: 0.0,
+            baseline_sharpness: 1.0,
             linear_response_limit: 0.96,
             noise_profile: None,
             sensor_data: vec![500u16; w * h],

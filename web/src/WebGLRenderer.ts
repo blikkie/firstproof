@@ -61,9 +61,14 @@ export class WebGLRenderer {
   private rgbLutTex: WebGLTexture | null = null;
   private isIntermediate: boolean = false;
   private isLinearRec2020: boolean = false;
+  private baselineSharpness: number = 1.0;
   private vbo: WebGLBuffer | null = null;
   private texWidth: number = 1920;
   private texHeight: number = 1080;
+
+  public setBaselineSharpness(val: number): void {
+    this.baselineSharpness = val;
+  }
 
   public get textureWidth(): number {
     return this.texWidth;
@@ -175,6 +180,7 @@ export class WebGLRenderer {
       'u_sharpeningRadius',
       'u_sharpeningMasking',
       'u_noiseReduction',
+      'u_baselineSharpness',
       'u_fitScale',
       'u_zoomScale',
       'u_panOffset',
@@ -753,6 +759,7 @@ export class WebGLRenderer {
       edits.sharpening_masking ?? 0.0,
     );
     gl.uniform1f(this.uLocs['u_noiseReduction'], edits.noise_reduction ?? 0.0);
+    gl.uniform1f(this.uLocs['u_baselineSharpness'], this.baselineSharpness);
 
     const isStrippedCinema =
       edits.emulsion_archetype === 'RochesterCinema500' &&

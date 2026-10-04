@@ -37,6 +37,7 @@ fn test_binned_quad_patterns_math() {
             forward_matrix_daylight: None,
             camera_model: "Synthetic Test".to_string(),
             baseline_exposure: 0.0,
+            baseline_sharpness: 1.0,
             linear_response_limit: 0.96,
             noise_profile: None,
             sensor_data,

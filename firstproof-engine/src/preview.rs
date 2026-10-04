@@ -50,6 +50,7 @@ pub struct ImageMetadataRecord {
     pub orientation: Option<u32>,
     pub raw_width: Option<u32>,
     pub raw_height: Option<u32>,
+    pub baseline_sharpness: Option<f32>,
 }
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -792,6 +793,12 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
         if max_tiff_h > 0 { raw_height = Some(max_tiff_h); }
     }
 
+    let baseline_sharpness = Some(crate::raw::resolve_baseline_sharpness(
+        bytes,
+        camera_make.as_deref().unwrap_or(""),
+        camera_model.as_deref().unwrap_or(""),
+    ));
+
     ImageMetadataRecord {
         camera_make,
         camera_model,
@@ -809,5 +816,6 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
         orientation,
         raw_width,
         raw_height,
+        baseline_sharpness,
     }
 }

@@ -71,12 +71,13 @@ pub const NIKON_COLOR_MATRIX_DAYLIGHT: [[f32; 3]; 3] = [
     [-0.0091, -0.0811, 0.9152],
 ];
 
-// Family Fallback Calibrations
+// Family Fallback Calibrations (DNG spec Tag 50732 neutral baseline = 1.00)
 pub static CANON_FAMILY_FALLBACK: CameraCalibration = CameraCalibration {
     make: "Canon",
     model: "EOS Family",
     clean_name: "Canon EOS Standard",
     baseline_exposure: 0.00,
+    baseline_sharpness: 1.00,
     linear_response_limit: 0.96,
     cfa_pattern: CfaPattern::Rggb,
     black_levels: [2048.0, 2048.0, 2048.0, 2048.0],
@@ -92,6 +93,7 @@ pub static SONY_FAMILY_FALLBACK: CameraCalibration = CameraCalibration {
     model: "Alpha Family",
     clean_name: "Sony Alpha Standard",
     baseline_exposure: 0.50,
+    baseline_sharpness: 1.00,
     linear_response_limit: 0.95,
     cfa_pattern: CfaPattern::Rggb,
     black_levels: [512.0, 512.0, 512.0, 512.0],
@@ -107,6 +109,7 @@ pub static NIKON_FAMILY_FALLBACK: CameraCalibration = CameraCalibration {
     model: "Z/D Family",
     clean_name: "Nikon Standard",
     baseline_exposure: 0.50,
+    baseline_sharpness: 1.00,
     linear_response_limit: 0.98,
     cfa_pattern: CfaPattern::Rggb,
     black_levels: [600.0, 600.0, 600.0, 600.0],
@@ -122,6 +125,7 @@ pub static FUJIFILM_FAMILY_FALLBACK: CameraCalibration = CameraCalibration {
     model: "X Family",
     clean_name: "Fujifilm X Standard",
     baseline_exposure: 0.72,
+    baseline_sharpness: 1.00,
     linear_response_limit: 0.96,
     cfa_pattern: CfaPattern::Rggb,
     black_levels: [1024.0, 1024.0, 1024.0, 1024.0],
@@ -137,6 +141,7 @@ pub static PANASONIC_FAMILY_FALLBACK: CameraCalibration = CameraCalibration {
     model: "Lumix Family",
     clean_name: "Panasonic Lumix Standard",
     baseline_exposure: 0.45,
+    baseline_sharpness: 1.00,
     linear_response_limit: 0.96,
     cfa_pattern: CfaPattern::Rggb,
     black_levels: [143.0, 143.0, 143.0, 143.0],
@@ -152,6 +157,7 @@ pub static LEICA_FAMILY_FALLBACK: CameraCalibration = CameraCalibration {
     model: "M/Q/SL Family",
     clean_name: "Leica Standard",
     baseline_exposure: 0.00,
+    baseline_sharpness: 1.00,
     linear_response_limit: 0.96,
     cfa_pattern: CfaPattern::Rggb,
     black_levels: [0.0, 0.0, 0.0, 0.0],
@@ -167,6 +173,7 @@ pub static GENERIC_FALLBACK: CameraCalibration = CameraCalibration {
     model: "Standard",
     clean_name: "Generic Rec.2020 Standard",
     baseline_exposure: 0.00,
+    baseline_sharpness: 1.00,
     linear_response_limit: 0.96,
     cfa_pattern: CfaPattern::Rggb,
     black_levels: [0.0, 0.0, 0.0, 0.0],
@@ -179,12 +186,13 @@ pub static GENERIC_FALLBACK: CameraCalibration = CameraCalibration {
 
 // Authoritative Exact Model Registry
 pub static CAMERA_CALIBRATIONS: &[CameraCalibration] = &[
-    // Canon EOS 60D (Photometrically verified against reference CR2/DNG)
+    // Canon EOS 60D (Photometrically verified against reference CR2/DNG _MG_2651: Tag 50732 = 125/100)
     CameraCalibration {
         make: "Canon",
         model: "EOS 60D",
         clean_name: "Canon EOS 60D",
         baseline_exposure: 0.00,
+        baseline_sharpness: 1.25,
         linear_response_limit: 0.96,
         cfa_pattern: CfaPattern::Gbrg, // 60D active crop Bayer layout
         black_levels: [2045.0, 2045.0, 2050.0, 2050.0],
@@ -200,6 +208,7 @@ pub static CAMERA_CALIBRATIONS: &[CameraCalibration] = &[
         model: "EOS 5D Mark II",
         clean_name: "Canon EOS 5D Mark II",
         baseline_exposure: 0.00,
+        baseline_sharpness: 1.00,
         linear_response_limit: 0.96,
         cfa_pattern: CfaPattern::Rggb,
         black_levels: [1024.0, 1024.0, 1024.0, 1024.0],
@@ -215,6 +224,7 @@ pub static CAMERA_CALIBRATIONS: &[CameraCalibration] = &[
         model: "EOS 5D Mark III",
         clean_name: "Canon EOS 5D Mark III",
         baseline_exposure: 0.00,
+        baseline_sharpness: 1.00,
         linear_response_limit: 0.96,
         cfa_pattern: CfaPattern::Rggb,
         black_levels: [2048.0, 2048.0, 2048.0, 2048.0],
@@ -230,6 +240,7 @@ pub static CAMERA_CALIBRATIONS: &[CameraCalibration] = &[
         model: "EOS 5D Mark IV",
         clean_name: "Canon EOS 5D Mark IV",
         baseline_exposure: 0.00,
+        baseline_sharpness: 1.00,
         linear_response_limit: 0.96,
         cfa_pattern: CfaPattern::Rggb,
         black_levels: [2048.0, 2048.0, 2048.0, 2048.0],
@@ -245,6 +256,7 @@ pub static CAMERA_CALIBRATIONS: &[CameraCalibration] = &[
         model: "EOS R5",
         clean_name: "Canon EOS R5",
         baseline_exposure: 0.00,
+        baseline_sharpness: 1.00,
         linear_response_limit: 0.96,
         cfa_pattern: CfaPattern::Rggb,
         black_levels: [2048.0, 2048.0, 2048.0, 2048.0],
@@ -260,6 +272,7 @@ pub static CAMERA_CALIBRATIONS: &[CameraCalibration] = &[
         model: "ILCE-7M3",
         clean_name: "Sony Alpha 7 III",
         baseline_exposure: 0.50,
+        baseline_sharpness: 1.00,
         linear_response_limit: 0.95,
         cfa_pattern: CfaPattern::Rggb,
         black_levels: [512.0, 512.0, 512.0, 512.0],
@@ -275,6 +288,7 @@ pub static CAMERA_CALIBRATIONS: &[CameraCalibration] = &[
         model: "ILCE-7M4",
         clean_name: "Sony Alpha 7 IV",
         baseline_exposure: 0.50,
+        baseline_sharpness: 1.00,
         linear_response_limit: 0.95,
         cfa_pattern: CfaPattern::Rggb,
         black_levels: [512.0, 512.0, 512.0, 512.0],
@@ -290,6 +304,7 @@ pub static CAMERA_CALIBRATIONS: &[CameraCalibration] = &[
         model: "D850",
         clean_name: "Nikon D850",
         baseline_exposure: 0.50,
+        baseline_sharpness: 1.00,
         linear_response_limit: 0.98,
         cfa_pattern: CfaPattern::Rggb,
         black_levels: [600.0, 600.0, 600.0, 600.0],
@@ -305,6 +320,7 @@ pub static CAMERA_CALIBRATIONS: &[CameraCalibration] = &[
         model: "Z 6",
         clean_name: "Nikon Z 6",
         baseline_exposure: 0.50,
+        baseline_sharpness: 1.00,
         linear_response_limit: 0.98,
         cfa_pattern: CfaPattern::Rggb,
         black_levels: [600.0, 600.0, 600.0, 600.0],

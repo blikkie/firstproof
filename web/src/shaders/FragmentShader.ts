@@ -50,6 +50,7 @@ uniform float u_sharpeningAmount;
 uniform float u_sharpeningRadius;
 uniform float u_sharpeningMasking;
 uniform float u_noiseReduction;
+uniform float u_baselineSharpness;
 
 uniform float u_cropLeft;
 uniform float u_cropTop;
@@ -482,7 +483,8 @@ void main() {
         float y_c = computeDisplayLuma(rec2020PreCurve);
 
         if (u_sharpeningAmount > 0.0 || u_noiseReduction > 0.0) {
-            vec2 sharpenOffset = vec2(max(u_sharpeningRadius, 0.5)) / texSize;
+            float effectiveRadius = max(u_sharpeningRadius * u_baselineSharpness, 0.5);
+            vec2 sharpenOffset = vec2(effectiveRadius) / texSize;
             float y_l = sampleDisplayLuma(uv - vec2(sharpenOffset.x, 0.0));
             float y_r = sampleDisplayLuma(uv + vec2(sharpenOffset.x, 0.0));
             float y_t = sampleDisplayLuma(uv - vec2(0.0, sharpenOffset.y));

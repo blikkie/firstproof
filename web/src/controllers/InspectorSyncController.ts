@@ -643,7 +643,7 @@ export class InspectorSyncController {
       'sharpen-amount',
       'sharpening_amount',
       (v) => `${Math.round(v)}`,
-      () => (this.delegate.isCurrentPhotoRaw() ? 20.0 : 0.0),
+      0.0,
     );
     bindSlider(
       'sharpen-radius',
@@ -655,7 +655,7 @@ export class InspectorSyncController {
       'sharpen-masking',
       'sharpening_masking',
       (v) => `${Math.round(v)}`,
-      () => (this.delegate.isCurrentPhotoRaw() ? 15.0 : 0.0),
+      0.0,
     );
     bindSlider(
       'noise-reduction',

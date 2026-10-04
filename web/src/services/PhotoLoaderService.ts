@@ -683,6 +683,9 @@ export class PhotoLoaderService {
         });
         const imgBitmap = await createImageBitmap(blob);
         expRenderer.uploadImage(imgBitmap);
+        expRenderer.setBaselineSharpness(
+          res.preview?.metadata?.baseline_sharpness ?? 1.0,
+        );
         let texW = imgBitmap.width;
         let texH = imgBitmap.height;
 

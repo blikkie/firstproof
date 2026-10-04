@@ -14,6 +14,7 @@ extension ShaderUniforms {
         u.lutIntensity = 1.0
         u.lutSize = 33.0
         u.sharpeningRadius = 1.0
+        u.baselineSharpness = 1.0
         u.cropRight = 1.0
         u.cropBottom = 1.0
         u.cropConstrain = 1

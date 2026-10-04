@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.16: Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`)** (P2)
-2. **Story 3.20: Sensitometric Chemical Push/Pull Development Engine** (P2)
-3. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
-4. **Story 3.22: Sensitometric Paper Base ($L^*a^*b^*$) & ISO(R) Enlarger Grade Calibration** (P2)
+1. **Story 3.20: Sensitometric Chemical Push/Pull Development Engine** (P2)
+2. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
+3. **Story 3.22: Sensitometric Paper Base ($L^*a^*b^*$) & ISO(R) Enlarger Grade Calibration** (P2)
+4. **Story 4.1: Open Source IP, Security & Code Cleanliness Auditing** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -56,16 +56,6 @@ This document strictly tracks pending and deferred features calibrated against o
 ### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1) - COMPLETED
 All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](completed.md).
 
-
-### 3.16 Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`) (P2)
-- **Optical Low-Pass Filter Calibration**:
-  - Ingest DNG Tag 50731 (`BaselineSharpness`) via `RawContainerManifest`, encoding the physical presence and relative spatial MTF attenuation of the camera body's Optical Low-Pass Filter (OLPF / anti-aliasing filter).
-- **Auto-Tuned Detail Kernel Radius**:
-  - Dynamically scale the default unsharp masking and micro-contrast deconvolution radius based on `BaselineSharpness`:
-    - Heavy OLPF sensors (e.g. Canon EOS 5D Mark III, 60D): Scales radius appropriately to reverse physical birefringent crystal blur and recover crisp optical MTF.
-    - Zero-OLPF sensors (e.g. Sony A7R IV, Nikon D850, Leica M10): Constrains radius to prevent digital over-sharpening, ringing halos, and edge brittle-ness.
-- **Multi-Engine Parity**:
-  - Harmonize adaptive kernel scaling identically across `Detail.metal`, `FragmentShader.ts`, and `pipeline.rs`.
 
 ### 3.20 Sensitometric Chemical Push/Pull Development Engine (P2)
 - **Authentic Chemical Development Modeling Over Exposure Multipliers**:

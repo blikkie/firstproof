@@ -47,7 +47,9 @@ pub use preview::{
     PreviewResultRecord, RawLinearResultRecord,
 };
 pub use raw::{
-    blend_sensor_highlights, f16_to_f32, f32_to_f16, read_dng_baseline_exposure, resolve_baseline_exposure, CfaPattern, RawSensorFrame, CFA_COLOR_BLUE, CFA_COLOR_GREEN, CFA_COLOR_RED,
+    blend_sensor_highlights, f16_to_f32, f32_to_f16, read_dng_baseline_exposure,
+    read_dng_baseline_sharpness, resolve_baseline_exposure, resolve_baseline_sharpness,
+    CfaPattern, RawSensorFrame, CFA_COLOR_BLUE, CFA_COLOR_GREEN, CFA_COLOR_RED,
 };
 pub use settings::{EditSettings, WhiteBalanceResult};
 pub use xmp::{
@@ -264,6 +266,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Canon EOS 60D".to_string(),
             baseline_exposure: 0.0,
+            baseline_sharpness: 1.25,
             linear_response_limit: 0.96,
             noise_profile: None,
             sensor_data: vec![2046; 100],
@@ -294,6 +297,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Canon EOS 60D".to_string(),
             baseline_exposure: 0.0,
+            baseline_sharpness: 1.25,
             linear_response_limit: 0.96,
             noise_profile: None,
             sensor_data: vec![2046; 100],

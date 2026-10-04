@@ -707,6 +707,7 @@ export interface ImageMetadataRecord {
     orientation?: number;
     raw_width?: number;
     raw_height?: number;
+    baseline_sharpness?: number;
 }
 
 export interface PreviewResultRecord {

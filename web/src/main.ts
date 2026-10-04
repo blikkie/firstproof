@@ -754,6 +754,9 @@ class DarkroomApp {
         if (requestId !== this.selectRequestId) return;
 
         this.currentMetadata = frame.preview.metadata;
+        const baselineSharpness =
+          frame.preview.metadata?.baseline_sharpness ?? 1.0;
+        this.renderer.setBaselineSharpness(baselineSharpness);
         updateMetadataHeaderElements(this.elements, frame.preview, entry.name);
 
         const orientation = frame.preview.metadata?.orientation ?? 1;

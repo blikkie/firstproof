@@ -442,6 +442,7 @@ fn test_cr2_0194_full_pipeline_parity() {
         height: demosaiced.height,
         data: demosaiced.data.clone(),
         is_raw: demosaiced.is_raw,
+        baseline_sharpness: demosaiced.baseline_sharpness,
     };
     firstproof_core::export::apply_edits(&mut export_img, &edits);
     
@@ -650,6 +651,7 @@ fn test_sliders_dual_engine_parity_sweep() {
                 height: 1,
                 data: vec![c_rec2020.r(), c_rec2020.g(), c_rec2020.b()],
                 is_raw: true,
+                baseline_sharpness: 1.0,
             };
             let edits = firstproof_core::EditSettings {
                 exposure: exp,

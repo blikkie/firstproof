@@ -113,6 +113,7 @@ pub struct RawSensorFrame {
     pub forward_matrix_daylight: Option<[[f32; 3]; 3]>,
     pub camera_model: String,
     pub baseline_exposure: f32,
+    pub baseline_sharpness: f32,
     pub linear_response_limit: f32,
     pub noise_profile: Option<[f64; 2]>,
     pub sensor_data: Vec<u16>,
@@ -134,6 +135,24 @@ pub fn resolve_baseline_exposure(bytes: &[u8], camera_model: &str) -> f32 {
     }
     let cal = crate::calibration::CameraCalibrationRegistry::lookup_or_fallback("", camera_model);
     cal.baseline_exposure
+}
+
+/// Extracts Tag 50732 (BaselineSharpness) from a DNG / TIFF byte buffer (IFD0).
+/// Returns relative sharpness scaling factor (e.g. 1.15 for heavy OLPF, 0.80 for zero-OLPF).
+pub fn read_dng_baseline_sharpness(bytes: &[u8]) -> Option<f32> {
+    crate::container::RawContainerManifest::parse(bytes).and_then(|m| m.baseline_sharpness)
+}
+
+/// Resolves calibrated camera baseline sharpness factor for adaptive OLPF deconvolution.
+/// First attempts to read embedded DNG BaselineSharpness (Tag 50732).
+/// If not present (e.g. proprietary Canon CR2/CR3, Sony ARW, Nikon NEF),
+/// falls back to the authoritative CameraCalibrationRegistry.
+pub fn resolve_baseline_sharpness(bytes: &[u8], camera_make: &str, camera_model: &str) -> f32 {
+    if let Some(sharpness) = read_dng_baseline_sharpness(bytes) {
+        return sharpness;
+    }
+    let cal = crate::calibration::CameraCalibrationRegistry::lookup_or_fallback(camera_make, camera_model);
+    cal.baseline_sharpness
 }
 
 
@@ -267,6 +286,11 @@ impl RawSensorFrame {
             .and_then(|m| m.baseline_exposure)
             .unwrap_or(cal.baseline_exposure);
 
+        let baseline_sharpness = manifest
+            .as_ref()
+            .and_then(|m| m.baseline_sharpness)
+            .unwrap_or(cal.baseline_sharpness);
+
         let linear_response_limit = manifest
             .as_ref()
             .and_then(|m| m.linear_response_limit)
@@ -315,6 +339,7 @@ impl RawSensorFrame {
             forward_matrix_daylight,
             camera_model,
             baseline_exposure,
+            baseline_sharpness,
             linear_response_limit,
             noise_profile,
             sensor_data,

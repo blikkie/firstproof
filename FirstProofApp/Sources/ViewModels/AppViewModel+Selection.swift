@@ -249,8 +249,6 @@ extension AppViewModel {
             defaultEdits.rotation = Int32(exifRotation)
             defaultEdits.flipHorizontal = exifFlipH
             defaultEdits.flipVertical = exifFlipV
-            defaultEdits.sharpeningAmount = photo.isRaw ? 20.0 : 0.0
-            defaultEdits.sharpeningMasking = photo.isRaw ? 15.0 : 0.0
             targetEdits = defaultEdits
         }
         

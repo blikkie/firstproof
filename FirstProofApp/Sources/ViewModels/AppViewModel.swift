@@ -308,13 +308,9 @@ public final class AppViewModel {
     public var printBaseWarmth: Float = 0.0     // -100 .. +100
     public var printProcessDepth: Float = 100.0 // 0 .. 100
 
-    public var defaultSharpeningAmount: Float {
-        (selectedPhoto?.isRaw ?? false) ? 20.0 : 0.0
-    }
+    public var defaultSharpeningAmount: Float { 0.0 }
     public var defaultSharpeningRadius: Float { 1.0 }
-    public var defaultSharpeningMasking: Float {
-        (selectedPhoto?.isRaw ?? false) ? 15.0 : 0.0
-    }
+    public var defaultSharpeningMasking: Float { 0.0 }
     public var defaultNoiseReduction: Float { 0.0 }
 
     public var isEyedropperActive: Bool = false

@@ -39,6 +39,8 @@ fn test_cr2_vs_dng_real_file_parity() {
         "DNG baseline exposure mismatch: expected -0.34 EV, got {} EV",
         dng_frame.baseline_exposure
     );
+    assert_eq!(cr2_frame.baseline_sharpness, 1.25);
+    assert_eq!(dng_frame.baseline_sharpness, 1.25);
 
     // 2. Active Sensor Area & CFA Geometry Parity
     assert_eq!(cr2_frame.active_width, dng_frame.active_width);
@@ -153,21 +155,27 @@ fn test_synthetic_dual_format_container_parity() {
     assert_eq!(cal_sony.clean_name, "Sony Alpha Standard");
     assert_eq!(cal_sony.baseline_exposure, 0.50);
 
-    // 2. Synthetic DNG container with BaselineExposure tag 50730 overrides fallback
+    // 2. Synthetic DNG container with BaselineExposure (tag 50730) and BaselineSharpness (tag 50732)
     let mut fake_dng = vec![
         b'I', b'I', 42, 0, 8, 0, 0, 0, // Header
-        2, 0, // 2 IFD entries
+        3, 0, // 3 IFD entries
         // Tag 50706 (DNGVersion): BYTE count 4
         0x12, 0xC6, 1, 0, 4, 0, 0, 0, 1, 4, 0, 0,
-        // Tag 50730 (BaselineExposure): SRATIONAL count 1, offset 38
-        0x2A, 0xC6, 10, 0, 1, 0, 0, 0, 38, 0, 0, 0,
+        // Tag 50730 (BaselineExposure): SRATIONAL count 1, offset 50
+        0x2A, 0xC6, 10, 0, 1, 0, 0, 0, 50, 0, 0, 0,
+        // Tag 50732 (BaselineSharpness): RATIONAL count 1, offset 58
+        0x2C, 0xC6, 5, 0, 1, 0, 0, 0, 58, 0, 0, 0,
         0, 0, 0, 0, // Next IFD offset
     ];
-    // Rational at offset 38: num=35, den=100 (+0.35 EV)
+    // Rational at offset 50: num=35, den=100 (+0.35 EV)
     fake_dng.extend_from_slice(&35i32.to_le_bytes());
     fake_dng.extend_from_slice(&100i32.to_le_bytes());
+    // Rational at offset 58: num=125, den=100 (1.25x sharpness)
+    fake_dng.extend_from_slice(&125u32.to_le_bytes());
+    fake_dng.extend_from_slice(&100u32.to_le_bytes());
 
     let manifest = RawContainerManifest::parse(&fake_dng).expect("Parse synthetic DNG");
     assert!(manifest.is_dng);
     assert!((manifest.baseline_exposure.unwrap() - 0.35).abs() < 1e-4);
+    assert!((manifest.baseline_sharpness.unwrap() - 1.25).abs() < 1e-4);
 }

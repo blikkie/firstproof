@@ -222,7 +222,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
             // 3b. Detail & Sharpening / Noise Reduction / Stochastic Emulsion Grain
             if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 || edits.emulsion_grain_mode != crate::EmulsionGrainMode::Off {
                 let r_step = if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
-                    edits.sharpening_radius.max(0.5)
+                    (edits.sharpening_radius * image.baseline_sharpness).max(0.5)
                 } else {
                     1.0
                 };
