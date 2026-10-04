@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
-2. **Story 3.15: Sensor Non-Linearity & Anti-Blooming Knee Engine (`LinearResponseLimit`)** (P2)
-3. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
-4. **Story 3.16: Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`)** (P2)
+1. **Story 3.15: Sensor Non-Linearity & Anti-Blooming Knee Engine (`LinearResponseLimit`)** (P2)
+2. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
+3. **Story 3.16: Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`)** (P2)
+4. **Story 3.20: Sensitometric Chemical Push/Pull Development Engine** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -27,22 +27,6 @@ This document strictly tracks pending and deferred features calibrated against o
 >
 > **Roadmap Reconsideration: Physical Film Grain in Wide-Gamut Linear Space**  
 > Previous attempts at simulating film grain recoiled because grain was evaluated post-tone-mapping in narrow gamma-encoded sRGB, artificially amplifying shadow noise floors and clipping non-linearly. In real physical film, silver halide crystals and dye clouds react to incident scene photons in the optical domain before optical tone-mapping and print transfer. When re-evaluating grain down the roadmap, it must strictly execute inside the Wide-Gamut Linear Rec.2020 domain using physical sensitometric optical density ($D = \log_{10}(1/T)$) prior to the terminal display transform.
-
-### 3.3 Archival Open DNG Converter & Lossless Compression Engine (P2)
-- **Opinionated Zero-Configuration Architecture**:
-  - Eliminates Adobe DNG Converter-style preference dialogs, preview dropdowns, and settings bloat.
-  - Hardened for CLI (`firstproof-cli dng`) and desktop batch processing; strictly avoids heavy batch transcoding inside web browser tabs.
-- **Lossless Bayer CFA Transcoding & Deflate Tile Compression**:
-  - Convert proprietary camera RAWs (`.cr2`, `.nef`, `.arw`, `.rw2`) into open standard Adobe DNG (1.4+ / TIFF-EP).
-  - Encapsulate raw Bayer mosaic unaltered, preserving exact sensor CFA layout, active sensor crop, black/white saturation levels, and daylight/tungsten color calibration matrices.
-  - Apply lossless Deflate / ZIP tile compression (`flate2`) across raw sensor data, reclaiming 20–35% disk storage with mathematically identical (zero-loss) reconstruction.
-- **Embedded First Proof Authentic Previews (Zero Camera-JPEG Plastic)**:
-  - **SubIFD High-Res Retina Preview ($2560\,\text{px}$ Long Edge)**: Rendered sub-$15\,\text{ms}$ directly from First Proof's 2×2 Bayer box-binning engine (`decodeRawPreviewBinned`) through Linear Rec.2020 $\to$ AgX filmic tone mapping. File size is compact ($\approx 500\text{--}700\,\text{KB}$), preserving $>90\%$ of archive storage savings while ensuring the DNG displays honest, filmic skin tones and highlight rolloff across macOS QuickLook, Finder, and Linux file managers.
-  - **IFD 0 Icon Thumbnail ($256\times170\,\text{px}$)**: Standard uncompressed or JPEG thumbnail for instant OS file icon grid caching.
-- **Bit-for-Bit Verification Safeguard**:
-  - Validate decompressed CFA sensor payload against the original proprietary RAW via SHA-256 / CRC32 before committing conversion, ensuring zero risk of archive corruption.
-- **Metadata & Sidecar Integration**:
-  - Embed existing First Proof XMP edits, color adjustments, IPTC tags, and ratings into the DNG IFDs, or preserve adjacent `.xmp` according to catalog preferences.
 
 ### 3.4 ColorSync Soft Proofing (P2)
 - **Canvas Soft Proofing Mode**:
@@ -190,6 +174,17 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
   - Adopt the web darkroom's fixed 4-badge EXIF summary element (`CAM`, `ISO`, `APERTURE`, `SHUTTER`) directly in macOS `PermanentHeaderCard` (`InspectorHeaderView.swift`) positioned above the segmented tabs, so essential capture parameters remain visible at a glance across every workspace tab.
 - **Cross-Platform Verification Gate**:
   - Verify 1:1 parameter boundaries, visual feedback, and keyboard/mouse interaction parity between native macOS and WebAssembly darkroom targets.
+
+### 4.7 Native macOS Desktop Archival DNG Ingest & Batch Action (Deferred - macOS Milestone)
+- **Ingest Flow Integration (`ImportSheetView.swift`, `AppViewModel.swift`)**:
+  - Add "Convert to Archival DNG on Ingest" toggle in the intake dialog.
+  - Streams copied photos through `firstproof_core::dng::convert_raw_to_dng` with post-write disk read-back verification before adding to catalog SQLite.
+- **Multi-Selection Batch Action**:
+  - Context menu and `Photo -> Convert to Archival DNG` menu action on selected filmstrip thumbnails.
+  - Smart filtering: Silently ignores JPEGs, PNGs, TIFFs, and already-DNG files; processes strictly proprietary camera RAWs (`.cr2`, `.nef`, `.arw`, etc.).
+  - Non-blocking background worker with progress sheet and cancel safety.
+- **Sidecar & Catalog Sync**:
+  - Automatically updates catalog database records (`catalog.db`) pointing photo paths to the new `.dng` file without dropping user ratings, flags, or undo history.
 
 ---
 

@@ -16,6 +16,7 @@ pub mod curve;
 pub mod gainmap;
 pub mod synthetic;
 pub mod checksum;
+pub mod dng;
 
 pub use firstproof_engine::{
     all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,

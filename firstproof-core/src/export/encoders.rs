@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use image::{ColorType, ImageBuffer, Rgb, RgbImage};
+use image::{ColorType, ImageBuffer, ImageEncoder, Rgb, RgbImage};
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::tiff::TiffEncoder;
 
@@ -358,7 +358,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
         let mut writer = BufWriter::new(file);
         let encoder = TiffEncoder::new(&mut writer);
         encoder
-            .encode(&tiff_bytes, final_w, final_h, ColorType::Rgb16)
+            .write_image(&tiff_bytes, final_w, final_h, ColorType::Rgb16.into())
             .map_err(|e| format!("Failed to encode 16-bit TIFF: {}", e))?;
 
         return Ok(());
@@ -415,7 +415,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     let mut jpeg_buf = Vec::new();
     let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_buf, quality.clamp(1, 100));
     encoder
-        .encode(&target_rgb_bytes, final_w, final_h, ColorType::Rgb8)
+        .encode(&target_rgb_bytes, final_w, final_h, ColorType::Rgb8.into())
         .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
         
     let tagged_jpeg = inject_icc_profile_into_jpeg(&jpeg_buf, &icc_to_embed);

@@ -72,7 +72,7 @@ pub fn generate_gain_map(
         gm_img.as_raw(),
         gm_w as u32,
         gm_h as u32,
-        image::ColorType::L8,
+        image::ColorType::L8.into(),
     );
     
     (gm_img, jpeg_bytes)
@@ -283,7 +283,7 @@ mod tests {
         let mut primary_jpeg = Vec::new();
         let mut encoder = JpegEncoder::new_with_quality(&mut primary_jpeg, 90);
         let dummy_rgb = vec![128u8; width * height * 3];
-        encoder.encode(&dummy_rgb, width as u32, height as u32, image::ColorType::Rgb8).unwrap();
+        encoder.encode(&dummy_rgb, width as u32, height as u32, image::ColorType::Rgb8.into()).unwrap();
         
         // Package into Ultra HDR JPEG
         let packaged = package_ultra_hdr_jpeg(&primary_jpeg, &gm_jpeg, &meta).unwrap();
