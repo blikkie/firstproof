@@ -631,8 +631,12 @@ export type EmulsionArchetype =
 
 export type EmulsionFormat =
     | 'Format35mm'
+    | 'Format120'
     | 'MediumFormat'
-    | 'LargeFormat4x5';
+    | 'Format4x5'
+    | 'LargeFormat4x5'
+    | 'Super8'
+    | 'Format16mm';
 
 export type EmulsionGrainMode =
     | 'Off'
@@ -699,6 +703,8 @@ export interface EditSettings {
     remjet_backing: RemjetBackingMode;
     emulsion_grain_mode: EmulsionGrainMode;
     grain_scale: number;
+    grain_size?: number;
+    grain_amount?: number;
     curves: ToneCurvesRecord;
     split_toning_shadow_hue: number;
     split_toning_shadow_sat: number;

@@ -4,11 +4,12 @@
 #include <metal_stdlib>
 using namespace metal;
 
-// MARK: - Detail, Sharpening & Noise Reduction (Luminance USM with Edge Masking)
+// MARK: - Detail, Sharpening & Noise Reduction (8-Tap Isotropic Discrete Laplacian)
 inline float3 applyDetailAndSharpening(
     float3 color,
     float y_c,
     float y_l, float y_r, float y_t, float y_b,
+    float y_tl, float y_tr, float y_bl, float y_br,
     float amount,
     float masking,
     float noiseReduction
@@ -17,13 +18,15 @@ inline float3 applyDetailAndSharpening(
         return color;
     }
 
-    // Unsharp mask: Laplacian high-frequency detail
-    float y_neighbors = 0.25 * (y_l + y_r + y_t + y_b);
+    // Isotropic 9-point discrete Laplacian:
+    // Orthogonal taps (dist 1) weighted at 1/6 each, diagonal taps (dist sqrt(2)) weighted at 1/12 each.
+    float y_neighbors = (1.0 / 6.0) * (y_l + y_r + y_t + y_b)
+        + (1.0 / 12.0) * (y_tl + y_tr + y_bl + y_br);
     float delta_y = y_c - y_neighbors;
 
-    // Sobel gradient magnitude
-    float gx = (y_r - y_l) * 0.5;
-    float gy = (y_b - y_t) * 0.5;
+    // Sobel-Feldman 8-neighbor gradient magnitude (isotropic edge acutance)
+    float gx = ((y_tr + 2.0 * y_r + y_br) - (y_tl + 2.0 * y_l + y_bl)) * 0.125;
+    float gy = ((y_bl + 2.0 * y_b + y_br) - (y_tl + 2.0 * y_t + y_tr)) * 0.125;
     float grad_mag = sqrt(gx * gx + gy * gy);
 
     // Edge masking weight:
@@ -47,9 +50,21 @@ inline float3 applyDetailAndSharpening(
 
 // MARK: - Stochastic Emulsion Resynthesis & Physical Optical Grain Engine
 inline float proceduralGrainNoise(float u, float v) {
-    float p0 = u * 12.9898 + v * 78.233;
-    float sin_val = fract(sin(p0) * 43758.5453);
-    return sin_val * 2.0 - 1.0;
+    float2 p = 50.0f * fract(float2(u, v) * 0.3183099f + float2(0.71f, 0.113f));
+    return -1.0f + 2.0f * fract(p.x * p.y * (p.x + p.y));
+}
+
+inline float clusteredGrainNoise(float2 p) {
+    float2 i = floor(p);
+    float2 f = fract(p);
+    float2 u = f * f * (3.0 - 2.0 * f);
+
+    float a = proceduralGrainNoise(i.x, i.y);
+    float b = proceduralGrainNoise(i.x + 1.0, i.y);
+    float c = proceduralGrainNoise(i.x, i.y + 1.0);
+    float d = proceduralGrainNoise(i.x + 1.0, i.y + 1.0);
+
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
 inline float3 applyStochasticEmulsionGrain(
@@ -59,21 +74,28 @@ inline float3 applyStochasticEmulsionGrain(
     float y_r,
     float y_t,
     float y_b,
-    float2 uv,
+    float y_tl,
+    float y_tr,
+    float y_bl,
+    float y_br,
+    float2 p,
     int grain_mode,
-    float grain_scale,
+    float cluster_size,
+    float grain_amount,
     int archetype
 ) {
     if (grain_mode == 0) {
         return color;
     }
 
-    float scale = clamp(grain_scale, 0.2, 3.0);
-    float y_lowpass = 0.25 * (y_l + y_r + y_t + y_b);
+    // 1. Isotropic 9-point lowpass luminance (evaluated at 1-pixel pitch to isolate sensor read noise)
+    float y_lowpass = (1.0 / 6.0) * (y_l + y_r + y_t + y_b)
+        + (1.0 / 12.0) * (y_tl + y_tr + y_bl + y_br);
     float delta_sensor = y_c - y_lowpass;
 
-    float gx = (y_r - y_l) * 0.5;
-    float gy = (y_b - y_t) * 0.5;
+    // Sobel-Feldman 8-neighbor gradient magnitude
+    float gx = ((y_tr + 2.0 * y_r + y_br) - (y_tl + 2.0 * y_l + y_bl)) * 0.125;
+    float gy = ((y_bl + 2.0 * y_b + y_br) - (y_tl + 2.0 * y_t + y_tr)) * 0.125;
     float grad_mag = sqrt(gx * gx + gy * gy);
 
     float edge_suppress = 1.0 / (1.0 + 35.0 * grad_mag);
@@ -83,20 +105,44 @@ inline float3 applyStochasticEmulsionGrain(
     float denom = max(sqrt(max(y_c, 0.0)), 0.05);
     float sensor_seed = clamp((delta_noise / denom) * seed_gain, -1.0, 1.0);
 
-    float proc_noise = proceduralGrainNoise(uv.x, uv.y);
+    // 2. Stochastic carrier: Polaroid DDT dye diffusion mottling vs silver crystal lattice
+    bool is_instant = (archetype == 7);
+    float s = max(cluster_size, 0.25);
+    float proc_noise = 0.0;
+    if (is_instant) {
+        proc_noise = 0.60 * clusteredGrainNoise(p / s)
+            + 0.40 * clusteredGrainNoise(p / (s * 1.8) + float2(17.3, 31.7));
+    } else if (s > 1.0) {
+        float t_cluster = clamp((s - 1.0) / 2.0, 0.0, 1.0);
+        float cluster = clusteredGrainNoise(p / s);
+        float micro = proceduralGrainNoise(p.x, p.y);
+        float clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
+        proc_noise = mix(micro, clumped, t_cluster);
+    } else {
+        proc_noise = proceduralGrainNoise(p.x, p.y);
+    }
 
     float eta = 0.0;
     if (grain_mode == 1) { // SeedFromSensor
-        eta = clamp(proc_noise * (0.45 + 0.55 * abs(sensor_seed)) + 0.45 * sensor_seed, -1.0, 1.0);
+        if (is_instant) {
+            eta = clamp(0.55 * proc_noise + 0.20 * sensor_seed, -1.0, 1.0);
+        } else {
+            eta = clamp(proc_noise * (0.45 + 0.55 * abs(sensor_seed)) + 0.45 * sensor_seed, -1.0, 1.0);
+        }
     } else if (grain_mode == 2) { // SynthesizePhysical
-        eta = clamp(0.75 * proc_noise + 0.25 * sensor_seed, -1.0, 1.0);
+        if (is_instant) {
+            eta = clamp(0.85 * proc_noise + 0.05 * sensor_seed, -1.0, 1.0);
+        } else {
+            eta = clamp(0.90 * proc_noise + 0.10 * sensor_seed, -1.0, 1.0);
+        }
     }
 
     float y_clamped = clamp(y_c, 0.0, 1.0);
     float nutting = 4.0 * y_clamped * (1.0 - y_clamped);
 
     // Multiplicative optical transmittance modulation obeying Beer-Lambert law T = 10^(-D)
-    float delta = eta * nutting * 0.28 * scale;
+    float amount = clamp(grain_amount, 0.0, 2.0);
+    float delta = eta * nutting * 0.28 * amount;
     float y_pixel = dot(color, float3(0.2627, 0.6780, 0.0593));
 
     bool is_monochrome = (archetype == 6 || archetype == 10 || archetype == 11);

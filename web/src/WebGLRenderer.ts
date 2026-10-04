@@ -158,6 +158,9 @@ export class WebGLRenderer {
       'u_emulsionExposure',
       'u_emulsionGrainMode',
       'u_grainScale',
+      'u_grainSize',
+      'u_grainAmount',
+      'u_formatMagnification',
       'u_printMediaMode',
       'u_printPaperGrade',
       'u_printBaseWarmth',
@@ -685,7 +688,22 @@ export class WebGLRenderer {
       this.uLocs['u_emulsionGrainMode'],
       GRAIN_MODE_MAP[edits.emulsion_grain_mode] ?? 0,
     );
-    gl.uniform1f(this.uLocs['u_grainScale'], edits.grain_scale ?? 1.0);
+    const formatMagMap: Record<string, number> = {
+      Format35mm: 1.0,
+      Format120: 0.48,
+      MediumFormat: 0.48,
+      Format4x5: 0.28,
+      LargeFormat4x5: 0.28,
+      Super8: 7.3,
+      Format16mm: 3.4,
+    };
+    const formatMag = formatMagMap[edits.emulsion_format] ?? 1.0;
+    gl.uniform1f(this.uLocs['u_formatMagnification'], formatMag);
+    const grainSize = (edits as any).grain_size ?? edits.grain_scale ?? 1.0;
+    const grainAmount = (edits as any).grain_amount ?? 1.0;
+    gl.uniform1f(this.uLocs['u_grainScale'], grainSize);
+    gl.uniform1f(this.uLocs['u_grainSize'], grainSize);
+    gl.uniform1f(this.uLocs['u_grainAmount'], grainAmount);
 
     gl.uniform1i(
       this.uLocs['u_printMediaMode'],

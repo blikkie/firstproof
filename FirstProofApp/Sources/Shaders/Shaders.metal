@@ -223,13 +223,19 @@ fragment float4 fragmentShader(
     }
     
     // 4c. Physical Optical Halation Scatter (Point-Spread Emulsion Diffusion)
-    if (uniforms.isOriginal < 0.5 && uniforms.halationMode > 0) {
+    if (uniforms.isOriginal < 0.5 && uniforms.halationMode > 0 && uniforms.emulsionArchetype != 7) {
+        float formatMag = 1.0f;
+        if (uniforms.emulsionFormat == 1) formatMag = 0.48f;
+        else if (uniforms.emulsionFormat == 2) formatMag = 0.28f;
+        else if (uniforms.emulsionFormat == 3) formatMag = 7.3f;
+        else if (uniforms.emulsionFormat == 4) formatMag = 3.4f;
+
         float aspect = max(uniforms.aspectRatio, 0.01f);
         float2 halationRadius;
         if (uniforms.rotation == 90 || uniforms.rotation == 270) {
-            halationRadius = float2(0.012f * aspect, 0.012f);
+            halationRadius = float2(0.012f * aspect * formatMag, 0.012f * formatMag);
         } else {
-            halationRadius = float2(0.012f / aspect, 0.012f);
+            halationRadius = float2((0.012f / aspect) * formatMag, 0.012f * formatMag);
         }
         float3 wbExposure = float3(rScale, gScale, bScale) * exposureGain;
         
@@ -321,40 +327,53 @@ fragment float4 fragmentShader(
     float editNoiseReduction = (uniforms.isOriginal > 0.5) ? 0.0 : uniforms.noiseReduction;
     int editGrainMode = (uniforms.isOriginal > 0.5) ? 0 : uniforms.emulsionGrainMode;
     if (editSharpening > 0.0 || editNoiseReduction > 0.0 || editGrainMode != 0) {
-        float2 texelSize = 1.0 / float2(texture.get_width(), texture.get_height());
-        float2 offset = texelSize * max(uniforms.sharpeningRadius, 0.5);
-        float4 leftSample   = texture.sample(textureSampler, uv - float2(offset.x, 0.0));
-        float4 rightSample  = texture.sample(textureSampler, uv + float2(offset.x, 0.0));
-        float4 topSample    = texture.sample(textureSampler, uv - float2(0.0, offset.y));
-        float4 bottomSample = texture.sample(textureSampler, uv + float2(0.0, offset.y));
+        float formatMag = 1.0f;
+        if (uniforms.emulsionFormat == 1) formatMag = 0.48f;
+        else if (uniforms.emulsionFormat == 2) formatMag = 0.28f;
+        else if (uniforms.emulsionFormat == 3) formatMag = 7.3f;
+        else if (uniforms.emulsionFormat == 4) formatMag = 3.4f;
 
+        float2 texSize = float2(texture.get_width(), texture.get_height());
+        float2 texelSize = 1.0 / texSize;
+        float2 pixelCoord = uv * texSize;
         float y_c = dot(rec2020Color, float3(0.2627, 0.6780, 0.0593));
-        float y_l, y_r, y_t, y_b;
-        if (uniforms.isLinearRaw == 0) {
-            float3 cl = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(leftSample.rgb);
-            float3 cr = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(rightSample.rgb);
-            float3 ct = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(topSample.rgb);
-            float3 cb = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(bottomSample.rgb);
-            y_l = dot(cl, float3(0.2627, 0.6780, 0.0593));
-            y_r = dot(cr, float3(0.2627, 0.6780, 0.0593));
-            y_t = dot(ct, float3(0.2627, 0.6780, 0.0593));
-            y_b = dot(cb, float3(0.2627, 0.6780, 0.0593));
-        } else {
-            float3 wbExposureScale = float3(rScale, gScale, bScale) * exposureGain;
-            float3 cl = leftSample.rgb * wbExposureScale;
-            float3 cr = rightSample.rgb * wbExposureScale;
-            float3 ct = topSample.rgb * wbExposureScale;
-            float3 cb = bottomSample.rgb * wbExposureScale;
-            y_l = dot(cl, float3(0.2627, 0.6780, 0.0593));
-            y_r = dot(cr, float3(0.2627, 0.6780, 0.0593));
-            y_t = dot(ct, float3(0.2627, 0.6780, 0.0593));
-            y_b = dot(cb, float3(0.2627, 0.6780, 0.0593));
-        }
+        float3 wbExposureScale = float3(rScale, gScale, bScale) * exposureGain;
 
         if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
+            float2 sharpenOffset = texelSize * max(uniforms.sharpeningRadius, 0.5f);
+            float4 leftSample   = texture.sample(textureSampler, uv - float2(sharpenOffset.x, 0.0));
+            float4 rightSample  = texture.sample(textureSampler, uv + float2(sharpenOffset.x, 0.0));
+            float4 topSample    = texture.sample(textureSampler, uv - float2(0.0, sharpenOffset.y));
+            float4 bottomSample = texture.sample(textureSampler, uv + float2(0.0, sharpenOffset.y));
+            float4 tlSample     = texture.sample(textureSampler, uv - sharpenOffset);
+            float4 trSample     = texture.sample(textureSampler, uv + float2(sharpenOffset.x, -sharpenOffset.y));
+            float4 blSample     = texture.sample(textureSampler, uv + float2(-sharpenOffset.x, sharpenOffset.y));
+            float4 brSample     = texture.sample(textureSampler, uv + sharpenOffset);
+
+            float y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br;
+            if (uniforms.isLinearRaw == 0) {
+                y_l  = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(leftSample.rgb),   float3(0.2627, 0.6780, 0.0593));
+                y_r  = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(rightSample.rgb),  float3(0.2627, 0.6780, 0.0593));
+                y_t  = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(topSample.rgb),    float3(0.2627, 0.6780, 0.0593));
+                y_b  = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(bottomSample.rgb), float3(0.2627, 0.6780, 0.0593));
+                y_tl = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(tlSample.rgb),     float3(0.2627, 0.6780, 0.0593));
+                y_tr = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(trSample.rgb),     float3(0.2627, 0.6780, 0.0593));
+                y_bl = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(blSample.rgb),     float3(0.2627, 0.6780, 0.0593));
+                y_br = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(brSample.rgb),     float3(0.2627, 0.6780, 0.0593));
+            } else {
+                y_l  = dot(leftSample.rgb   * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                y_r  = dot(rightSample.rgb  * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                y_t  = dot(topSample.rgb    * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                y_b  = dot(bottomSample.rgb * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                y_tl = dot(tlSample.rgb     * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                y_tr = dot(trSample.rgb     * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                y_bl = dot(blSample.rgb     * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                y_br = dot(brSample.rgb     * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+            }
+
             rec2020Color = applyDetailAndSharpening(
                 rec2020Color,
-                y_c, y_l, y_r, y_t, y_b,
+                y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br,
                 editSharpening,
                 uniforms.sharpeningMasking,
                 editNoiseReduction
@@ -362,12 +381,48 @@ fragment float4 fragmentShader(
         }
 
         if (editGrainMode != 0) {
+            float2 grainOffset = texelSize;
+            float4 leftSample   = texture.sample(textureSampler, uv - float2(grainOffset.x, 0.0));
+            float4 rightSample  = texture.sample(textureSampler, uv + float2(grainOffset.x, 0.0));
+            float4 topSample    = texture.sample(textureSampler, uv - float2(0.0, grainOffset.y));
+            float4 bottomSample = texture.sample(textureSampler, uv + float2(0.0, grainOffset.y));
+            float4 tlSample     = texture.sample(textureSampler, uv - grainOffset);
+            float4 trSample     = texture.sample(textureSampler, uv + float2(grainOffset.x, -grainOffset.y));
+            float4 blSample     = texture.sample(textureSampler, uv + float2(-grainOffset.x, grainOffset.y));
+            float4 brSample     = texture.sample(textureSampler, uv + grainOffset);
+
+            float gy_l, gy_r, gy_t, gy_b, gy_tl, gy_tr, gy_bl, gy_br;
+            if (uniforms.isLinearRaw == 0) {
+                gy_l  = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(leftSample.rgb),   float3(0.2627, 0.6780, 0.0593));
+                gy_r  = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(rightSample.rgb),  float3(0.2627, 0.6780, 0.0593));
+                gy_t  = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(topSample.rgb),    float3(0.2627, 0.6780, 0.0593));
+                gy_b  = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(bottomSample.rgb), float3(0.2627, 0.6780, 0.0593));
+                gy_tl = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(tlSample.rgb),     float3(0.2627, 0.6780, 0.0593));
+                gy_tr = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(trSample.rgb),     float3(0.2627, 0.6780, 0.0593));
+                gy_bl = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(blSample.rgb),     float3(0.2627, 0.6780, 0.0593));
+                gy_br = dot(LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(brSample.rgb),     float3(0.2627, 0.6780, 0.0593));
+            } else {
+                gy_l  = dot(leftSample.rgb   * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                gy_r  = dot(rightSample.rgb  * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                gy_t  = dot(topSample.rgb    * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                gy_b  = dot(bottomSample.rgb * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                gy_tl = dot(tlSample.rgb     * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                gy_tr = dot(trSample.rgb     * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                gy_bl = dot(blSample.rgb     * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+                gy_br = dot(brSample.rgb     * wbExposureScale, float3(0.2627, 0.6780, 0.0593));
+            }
+
+            float s_format = sqrt(max(formatMag, 0.1f));
+            float clusterSize = clamp(uniforms.grainSize * s_format, 0.5f, 3.5f);
+            float effectiveAmount = uniforms.grainAmount * pow(max(formatMag, 0.1f), 0.25f);
+
             rec2020Color = applyStochasticEmulsionGrain(
                 rec2020Color,
-                y_c, y_l, y_r, y_t, y_b,
-                uv,
+                y_c, gy_l, gy_r, gy_t, gy_b, gy_tl, gy_tr, gy_bl, gy_br,
+                pixelCoord,
                 editGrainMode,
-                uniforms.grainScale,
+                clusterSize,
+                effectiveAmount,
                 uniforms.emulsionArchetype
             );
         }

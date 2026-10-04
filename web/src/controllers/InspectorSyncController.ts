@@ -21,6 +21,22 @@ import type {
   RemjetBackingMode,
 } from '../WasmBridge';
 
+export const CALIBRATED_GRAIN_DEFAULTS: Record<
+  string,
+  { size: number; amount: number }
+> = {
+  AshigaraChrome50: { size: 0.55, amount: 0.45 },
+  RochesterK14Chrome64: { size: 0.7, amount: 0.6 },
+  LiguriaCinema80: { size: 0.75, amount: 0.65 },
+  LeverkusenPortrait160: { size: 0.8, amount: 0.7 },
+  CambridgeDiffusion100: { size: 0.85, amount: 0.5 },
+  AshigaraPortrait400: { size: 0.95, amount: 0.75 },
+  RochesterPortrait400: { size: 1.0, amount: 0.8 },
+  BaodingSilver100: { size: 1.05, amount: 1.0 },
+  RochesterCinema500: { size: 1.25, amount: 1.1 },
+  MobberleySilver400: { size: 1.35, amount: 1.2 },
+};
+
 export interface ActiveSliderScrub {
   id: string;
   prop?: keyof EditSettingsPayload;
@@ -195,12 +211,20 @@ export class InspectorSyncController {
       rowRemjet.classList.toggle('hidden', !hasRemjet);
     }
 
-    // 3. Grain scale slider only visible when grain resynthesis mode is enabled
+    // 3. Grain sliders only visible when grain resynthesis mode is enabled
     const hasGrain =
       edits.emulsion_grain_mode && edits.emulsion_grain_mode !== 'Off';
     const rowGrainScale = document.getElementById('row-grain-scale');
     if (rowGrainScale) {
       rowGrainScale.classList.toggle('hidden', !hasGrain);
+    }
+    const rowGrainSize = document.getElementById('row-grain-size');
+    if (rowGrainSize) {
+      rowGrainSize.classList.toggle('hidden', !hasGrain);
+    }
+    const rowGrainAmount = document.getElementById('row-grain-amount');
+    if (rowGrainAmount) {
+      rowGrainAmount.classList.toggle('hidden', !hasGrain);
     }
 
     // 3. Optical enlarger filter only visible when monochrome media/stock is selected
@@ -268,6 +292,8 @@ export class InspectorSyncController {
     setVal('foliage', edits.foliage, (v) => `${Math.round(v)}`);
     setVal('emulsion-exp', edits.emulsion_exposure, (v) => formatExposure(v));
     setVal('grain-scale', edits.grain_scale, (v) => `${v.toFixed(2)}x`);
+    setVal('grain-size', edits.grain_size, (v) => `${v.toFixed(2)}x`);
+    setVal('grain-amount', edits.grain_amount, (v) => `${v.toFixed(2)}x`);
     setVal('paper-grade', edits.print_paper_grade, (v) => `${v.toFixed(1)}`);
     setVal('base-warmth', edits.print_base_warmth, (v) => `${Math.round(v)}`);
     setVal(
@@ -331,6 +357,12 @@ export class InspectorSyncController {
     ) as HTMLSelectElement | null;
     if (selectEmulsion && edits.emulsion_archetype) {
       selectEmulsion.value = edits.emulsion_archetype;
+    }
+    const selectFormat = document.getElementById(
+      'select-emulsion-format',
+    ) as HTMLSelectElement | null;
+    if (selectFormat && edits.emulsion_format) {
+      selectFormat.value = edits.emulsion_format;
     }
     const selectRemjet = document.getElementById(
       'select-remjet-backing',
@@ -530,6 +562,30 @@ export class InspectorSyncController {
     );
     bindSlider('grain-scale', 'grain_scale', (v) => `${v.toFixed(2)}x`, 1.0);
     bindSlider(
+      'grain-size',
+      'grain_size',
+      (v) => `${v.toFixed(2)}x`,
+      () => {
+        const edits = this.delegate.getEdits();
+        const def = edits.emulsion_archetype
+          ? CALIBRATED_GRAIN_DEFAULTS[edits.emulsion_archetype]
+          : null;
+        return def ? def.size : 1.0;
+      },
+    );
+    bindSlider(
+      'grain-amount',
+      'grain_amount',
+      (v) => `${v.toFixed(2)}x`,
+      () => {
+        const edits = this.delegate.getEdits();
+        const def = edits.emulsion_archetype
+          ? CALIBRATED_GRAIN_DEFAULTS[edits.emulsion_archetype]
+          : null;
+        return def ? def.amount : 1.0;
+      },
+    );
+    bindSlider(
       'paper-grade',
       'print_paper_grade',
       (v) => `${v.toFixed(1)}`,
@@ -712,9 +768,44 @@ export class InspectorSyncController {
     ) as HTMLSelectElement | null;
     selectEmulsion?.addEventListener('change', (e) => {
       const edits = this.delegate.getEdits();
-      edits.emulsion_archetype = (e.target as HTMLSelectElement)
+      const archetype = (e.target as HTMLSelectElement)
         .value as EmulsionArchetype;
+      edits.emulsion_archetype = archetype;
+
+      // Auto-initialize grain_size and grain_amount from calibrated defaults
+      const defaults = CALIBRATED_GRAIN_DEFAULTS[archetype];
+      if (defaults) {
+        edits.grain_size = defaults.size;
+        edits.grain_amount = defaults.amount;
+        const inputSize = document.getElementById(
+          'slider-grain-size',
+        ) as HTMLInputElement | null;
+        const valSize = document.getElementById('val-grain-size');
+        if (inputSize && valSize) {
+          inputSize.value = `${defaults.size}`;
+          valSize.innerText = `${defaults.size.toFixed(2)}x`;
+        }
+        const inputAmount = document.getElementById(
+          'slider-grain-amount',
+        ) as HTMLInputElement | null;
+        const valAmount = document.getElementById('val-grain-amount');
+        if (inputAmount && valAmount) {
+          inputAmount.value = `${defaults.amount}`;
+          valAmount.innerText = `${defaults.amount.toFixed(2)}x`;
+        }
+      }
+
       this.updateEmulsionWorkspaceVisibility();
+      this.delegate.renderCanvas();
+      this.delegate.autoSaveSidecar();
+    });
+
+    const selectFormat = document.getElementById(
+      'select-emulsion-format',
+    ) as HTMLSelectElement | null;
+    selectFormat?.addEventListener('change', (e) => {
+      const edits = this.delegate.getEdits();
+      edits.emulsion_format = (e.target as HTMLSelectElement).value as any;
       this.delegate.renderCanvas();
       this.delegate.autoSaveSidecar();
     });
@@ -735,7 +826,39 @@ export class InspectorSyncController {
     ) as HTMLSelectElement | null;
     selectGrainMode?.addEventListener('change', (e) => {
       const edits = this.delegate.getEdits();
-      edits.emulsion_grain_mode = (e.target as HTMLSelectElement).value as any;
+      const mode = (e.target as HTMLSelectElement).value as any;
+      edits.emulsion_grain_mode = mode;
+      if (
+        mode !== 'Off' &&
+        edits.emulsion_archetype &&
+        edits.emulsion_archetype !== 'None'
+      ) {
+        const defaults = CALIBRATED_GRAIN_DEFAULTS[edits.emulsion_archetype];
+        if (
+          defaults &&
+          (edits.grain_size === 1.0 || edits.grain_size === undefined) &&
+          (edits.grain_amount === 1.0 || edits.grain_amount === undefined)
+        ) {
+          edits.grain_size = defaults.size;
+          edits.grain_amount = defaults.amount;
+          const inputSize = document.getElementById(
+            'slider-grain-size',
+          ) as HTMLInputElement | null;
+          const valSize = document.getElementById('val-grain-size');
+          if (inputSize && valSize) {
+            inputSize.value = `${defaults.size}`;
+            valSize.innerText = `${defaults.size.toFixed(2)}x`;
+          }
+          const inputAmount = document.getElementById(
+            'slider-grain-amount',
+          ) as HTMLInputElement | null;
+          const valAmount = document.getElementById('val-grain-amount');
+          if (inputAmount && valAmount) {
+            inputAmount.value = `${defaults.amount}`;
+            valAmount.innerText = `${defaults.amount.toFixed(2)}x`;
+          }
+        }
+      }
       this.updateEmulsionWorkspaceVisibility();
       this.delegate.renderCanvas();
       this.delegate.autoSaveSidecar();

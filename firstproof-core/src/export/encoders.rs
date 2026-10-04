@@ -223,20 +223,32 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
 
             // 3b. Detail & Sharpening / Noise Reduction / Stochastic Emulsion Grain
             if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 || edits.emulsion_grain_mode != crate::EmulsionGrainMode::Off {
-                let r_step = edits.sharpening_radius.max(0.5);
+                let r_step = if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
+                    edits.sharpening_radius.max(0.5)
+                } else {
+                    1.0
+                };
                 let (rl, gl, bl) = sample_bilinear(&image, sx - r_step, sy);
                 let (rr, gr, br) = sample_bilinear(&image, sx + r_step, sy);
                 let (rt, gt, bt) = sample_bilinear(&image, sx, sy - r_step);
                 let (rb, gb, bb) = sample_bilinear(&image, sx, sy + r_step);
+                let (rtl, gtl, btl) = sample_bilinear(&image, sx - r_step, sy - r_step);
+                let (rtr, gtr, btr) = sample_bilinear(&image, sx + r_step, sy - r_step);
+                let (rbl, gbl, bbl) = sample_bilinear(&image, sx - r_step, sy + r_step);
+                let (rbr, gbr, bbr) = sample_bilinear(&image, sx + r_step, sy + r_step);
                 let y_c = 0.2627 * r_lin + 0.6780 * g_lin + 0.0593 * b_lin;
                 let y_l = 0.2627 * rl + 0.6780 * gl + 0.0593 * bl;
                 let y_r = 0.2627 * rr + 0.6780 * gr + 0.0593 * br;
                 let y_t = 0.2627 * rt + 0.6780 * gt + 0.0593 * bt;
                 let y_b = 0.2627 * rb + 0.6780 * gb + 0.0593 * bb;
+                let y_tl = 0.2627 * rtl + 0.6780 * gtl + 0.0593 * btl;
+                let y_tr = 0.2627 * rtr + 0.6780 * gtr + 0.0593 * btr;
+                let y_bl = 0.2627 * rbl + 0.6780 * gbl + 0.0593 * bbl;
+                let y_br = 0.2627 * rbr + 0.6780 * gbr + 0.0593 * bbr;
                 if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
                     let (r_sharp, g_sharp, b_sharp) = apply_detail_and_sharpening_rgb(
                         r_lin, g_lin, b_lin,
-                        y_c, y_l, y_r, y_t, y_b,
+                        y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br,
                         edits.sharpening_amount,
                         edits.sharpening_masking,
                         edits.noise_reduction,
@@ -246,12 +258,17 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
                     b_lin = b_sharp;
                 }
                 if edits.emulsion_grain_mode != crate::EmulsionGrainMode::Off {
+                    let grain_mag = edits.emulsion_format.magnification_factor();
+                    let s_format = grain_mag.sqrt();
+                    let cluster_size = (edits.grain_size * s_format).clamp(0.5, 3.5);
+                    let effective_grain_amount = edits.grain_amount * grain_mag.powf(0.25);
                     let (gr, gg, gb) = firstproof_engine::color::grain::apply_stochastic_emulsion_grain(
                         r_lin, g_lin, b_lin,
-                        y_c, y_l, y_r, y_t, y_b,
-                        tx as f32 / target_w as f32, ty as f32 / target_h as f32,
+                        y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br,
+                        tx as f32, ty as f32,
                         edits.emulsion_grain_mode,
-                        edits.grain_scale,
+                        cluster_size,
+                        effective_grain_amount,
                         edits.emulsion_archetype,
                     );
                     r_lin = gr;

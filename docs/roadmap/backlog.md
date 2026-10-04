@@ -7,11 +7,11 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.19: Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling** (P2)
-2. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
-3. **Story 3.4: ColorSync Soft Proofing** (P2)
-4. **Story 3.7: Color Space Tagging & ICC Profile Embedding** (P2)
-5. **Story 3.12: Dual-Pass Spatial Lateral Chemical Diffusion (Mackie Lines)** (P2)
+1. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+2. **Story 3.4: ColorSync Soft Proofing** (P2)
+3. **Story 3.7: Color Space Tagging & ICC Profile Embedding** (P2)
+4. **Story 3.12: Dual-Pass Spatial Lateral Chemical Diffusion (Mackie Lines)** (P2)
+5. **Story 3.5: Comprehensive EXIF/IPTC/XMP Ingestion & SQLite Caching Engine** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -116,12 +116,16 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 - **Multi-Engine Parity**:
   - Harmonize adaptive kernel scaling identically across `Detail.metal`, `FragmentShader.ts`, and `pipeline.rs`.
 
-### 3.19 Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling (P2)
-- **Physical Context & Specification**: See [spatial_effects_scale_and_fidelity.md](../specs/spatial_effects_scale_and_fidelity.md).
-- **Rotational Invariance & Grain Cluster Physics**:
-  - *8-Tap Isotropic Discrete Laplacian*: Replace 4-tap Manhattan cross with 8-tap ($4\text{ orthogonal} + 4\text{ diagonal}$) discrete Laplacian, eliminating directional cross-hatching artifacts along $45^\circ$ edges and preserving circular optical acutance.
-  - *Proportional Grain Clumping Radius*: Dynamically scale sensor noise extraction low-pass radius proportionally to `texelSize * max(grainScale, 0.5)`, capturing multi-pixel silver halide clumps ($15\text{–}30\,\mu\text{m}$) for coarse-grained films and medium format.
-  - *Shared Memory Bandwidth*: Consolidate USM and grain seeding into a single 8-neighbor texture fetch ring in `Detail.metal` and `FragmentShader.ts`, adding zero extra memory bandwidth.
+### 3.12 Dual-Pass Spatial Lateral Chemical Diffusion (Mackie Lines) (P2)
+- **Physical Developer Exhaustion & Bromide Restraining**:
+  - Simulates the physical chemical diffusion of developer and bromide reaction byproducts across high-contrast gelatin boundaries ($0.1\text{–}0.3\,\text{mm}$) in diluted developers (Rodinal 1:100, D-76 1:1, stand development).
+  - Produces authentic density borders along highlight boundaries and dark fringe lines (Mackie lines) along shadow boundaries.
+- **Format-Proportional Diffusion Radius**:
+  - Scales diffusion length directly by the `EmulsionFormat` magnification factor: $\Delta_{\text{diffusion}} = 0.2\,\text{mm} \times M$.
+  - 35mm exhibits legendary high-acutance edge bite; 4×5 large format exhibits creamy, continuous micro-tonal gradations.
+- **Two-Tier Engine Parity**:
+  - Viewport: Lateral chemical diffusion evaluated within the dual-ring bilateral/detail stencil.
+  - Export: Full-resolution separable 2D diffusion kernel evaluated on linear Rec.2020 optical density.
 
 ---
 

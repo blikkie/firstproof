@@ -367,6 +367,10 @@ pub fn apply_detail_and_sharpening_rgb(
     y_r: f32,
     y_t: f32,
     y_b: f32,
+    y_tl: f32,
+    y_tr: f32,
+    y_bl: f32,
+    y_br: f32,
     amount: f32,
     masking: f32,
     noise_reduction: f32,
@@ -375,11 +379,15 @@ pub fn apply_detail_and_sharpening_rgb(
         return (r, g, b);
     }
 
-    let y_neighbors = 0.25 * (y_l + y_r + y_t + y_b);
+    // Isotropic 9-point discrete Laplacian:
+    // Orthogonal taps (dist 1) weighted at 1/6 each, diagonal taps (dist sqrt(2)) weighted at 1/12 each.
+    let y_neighbors = (1.0 / 6.0) * (y_l + y_r + y_t + y_b)
+        + (1.0 / 12.0) * (y_tl + y_tr + y_bl + y_br);
     let delta_y = y_c - y_neighbors;
 
-    let gx = (y_r - y_l) * 0.5;
-    let gy = (y_b - y_t) * 0.5;
+    // Sobel-Feldman 8-neighbor gradient magnitude (isotropic edge acutance)
+    let gx = ((y_tr + 2.0 * y_r + y_br) - (y_tl + 2.0 * y_l + y_bl)) * 0.125;
+    let gy = ((y_bl + 2.0 * y_b + y_br) - (y_tl + 2.0 * y_t + y_tr)) * 0.125;
     let grad_mag = (gx * gx + gy * gy).sqrt();
 
     let w_edge = if masking <= 0.0 {
@@ -515,7 +523,7 @@ pub fn develop_pixel_pipeline(
     is_linear_rec2020: bool,
     edits: &EditSettings,
     curve_lut: Option<&AllCurvesLutRecord>,
-    neighbors: Option<[f32; 5]>, // [y_c, y_l, y_r, y_t, y_b]
+    neighbors: Option<[f32; 9]>, // [y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br]
 ) -> [u8; 3] {
     // 1. Scene-Referred Working Space
     let mut rec2020 = if is_linear_rec2020 {
@@ -634,7 +642,7 @@ pub fn develop_pixel_pipeline(
     rec2020 = Color3::new(sr, sg, sb);
 
     // 8. Detail, Sharpening & Stochastic Emulsion Resynthesis (Optical Domain)
-    if let Some([y_c, y_l, y_r, y_t, y_b]) = neighbors {
+    if let Some([y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br]) = neighbors {
         if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
             let (dr, dg, db) = apply_detail_and_sharpening_rgb(
                 rec2020.r(),
@@ -645,6 +653,10 @@ pub fn develop_pixel_pipeline(
                 y_r,
                 y_t,
                 y_b,
+                y_tl,
+                y_tr,
+                y_bl,
+                y_br,
                 edits.sharpening_amount,
                 edits.sharpening_masking,
                 edits.noise_reduction,
@@ -653,6 +665,10 @@ pub fn develop_pixel_pipeline(
         }
 
         if edits.emulsion_grain_mode != EmulsionGrainMode::Off {
+            let grain_mag = edits.emulsion_format.magnification_factor();
+            let s_format = grain_mag.sqrt();
+            let cluster_size = (edits.grain_size * s_format).clamp(0.5, 3.5);
+            let effective_grain_amount = edits.grain_amount * grain_mag.powf(0.25);
             let (gr, gg, gb) = super::grain::apply_stochastic_emulsion_grain(
                 rec2020.r(),
                 rec2020.g(),
@@ -662,10 +678,15 @@ pub fn develop_pixel_pipeline(
                 y_r,
                 y_t,
                 y_b,
-                y_c,
-                y_l,
+                y_tl,
+                y_tr,
+                y_bl,
+                y_br,
+                y_c * 1000.0,
+                y_l * 1000.0,
                 edits.emulsion_grain_mode,
-                edits.grain_scale,
+                cluster_size,
+                effective_grain_amount,
                 edits.emulsion_archetype,
             );
             rec2020 = Color3::new(gr, gg, gb);
@@ -822,7 +843,11 @@ pub fn develop_frame_pipeline(
         top * (1.0 - fy) + bottom * fy
     };
 
-    let r_step = edits.sharpening_radius.max(0.5);
+    let r_step = if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
+        edits.sharpening_radius.max(0.5)
+    } else {
+        1.0
+    };
 
     for y in 0..h {
         for x in 0..w {
@@ -832,6 +857,10 @@ pub fn develop_frame_pipeline(
             let y_r = sample_lum_bilinear(x as f32 + r_step, y as f32);
             let y_t = sample_lum_bilinear(x as f32, y as f32 - r_step);
             let y_b = sample_lum_bilinear(x as f32, y as f32 + r_step);
+            let y_tl = sample_lum_bilinear(x as f32 - r_step, y as f32 - r_step);
+            let y_tr = sample_lum_bilinear(x as f32 + r_step, y as f32 - r_step);
+            let y_bl = sample_lum_bilinear(x as f32 - r_step, y as f32 + r_step);
+            let y_br = sample_lum_bilinear(x as f32 + r_step, y as f32 + r_step);
 
             let rgb = develop_pixel_pipeline(
                 r,
@@ -840,7 +869,7 @@ pub fn develop_frame_pipeline(
                 is_linear_rec2020,
                 edits,
                 curve_lut,
-                Some([y_c, y_l, y_r, y_t, y_b]),
+                Some([y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br]),
             );
             let dst_idx = (y * w + x) * 4;
             out_rgba[dst_idx] = rgb[0];
@@ -949,7 +978,11 @@ pub fn apply_point_spread_halation(
     height: usize,
     archetype: EmulsionArchetype,
     remjet: RemjetBackingMode,
+    format: crate::modes::EmulsionFormat,
 ) {
+    if archetype == EmulsionArchetype::CambridgeDiffusion100 {
+        return; // Zero halation: opaque TiO2 reflective / carbon black backing blocks specular reflections
+    }
     let (is_mono, red_scale, green_scale, blue_scale) = match archetype {
         EmulsionArchetype::BaodingSilver100 => (true, 0.35, 0.35, 0.35),
         EmulsionArchetype::RochesterCinema500 if remjet == RemjetBackingMode::Stripped => {
@@ -978,9 +1011,11 @@ pub fn apply_point_spread_halation(
         }
     }
 
-    // 1D Exponential decay kernel scaled to 35mm canvas frame (1.2% of frame long edge)
+    // 1D Exponential decay kernel scaled to frame gate magnification
     let max_dim = width.max(height);
-    let radius = ((max_dim as f32) * 0.012).round().clamp(4.0, 48.0) as usize;
+    let radius = ((max_dim as f32) * 0.012 * format.magnification_factor())
+        .round()
+        .clamp(2.0, 64.0) as usize;
     let lambda = (radius as f32) / 3.0;
 
     let mut kernel = vec![0.0f32; radius * 2 + 1];
@@ -1231,10 +1266,10 @@ pub fn develop_raw_sensor_frame_archival(
         active_h,
         edits.emulsion_archetype,
         edits.remjet_backing,
+        edits.emulsion_format,
     );
 
-    // Pass 3: Curves, Color adjustments, Split toning, Tone mapping, Print media, Gamma -> 16-bit
-    let mut out_u16 = Vec::with_capacity(total_pixels * 3);
+    // Pass 3: Curves, Color adjustments, Split toning in Linear Rec.2020
     for i in 0..total_pixels {
         let idx = i * 3;
         let mut r = rec2020_data[idx];
@@ -1261,19 +1296,123 @@ pub fn develop_raw_sensor_frame_archival(
         let (r_adj, g_adj, b_adj) = apply_color_adjustments(
             r, g, b, edits.vibrance, edits.saturation, edits.deep_blue, edits.foliage,
         );
-        r = r_adj;
-        g = g_adj;
-        b = b_adj;
-
         let (r_st, g_st, b_st) = apply_split_toning(
-            r, g, b,
+            r_adj, g_adj, b_adj,
             edits.split_toning_shadow_hue, edits.split_toning_shadow_sat,
             edits.split_toning_highlight_hue, edits.split_toning_highlight_sat,
             edits.split_toning_balance,
         );
-        r = r_st;
-        g = g_st;
-        b = b_st;
+        rec2020_data[idx] = r_st;
+        rec2020_data[idx + 1] = g_st;
+        rec2020_data[idx + 2] = b_st;
+    }
+
+    // Pass 4: Detail Sharpening & Stochastic Emulsion Grain in Linear Rec.2020
+    if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 || edits.emulsion_grain_mode != EmulsionGrainMode::Off {
+        let mut luma_plane = Vec::with_capacity(total_pixels);
+        for i in 0..total_pixels {
+            let idx = i * 3;
+            let r = rec2020_data[idx];
+            let g = rec2020_data[idx + 1];
+            let b = rec2020_data[idx + 2];
+            luma_plane.push(evaluate_display_luma(r, g, b, true, edits));
+        }
+
+        let r_step = if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
+            edits.sharpening_radius.max(0.5)
+        } else {
+            1.0
+        };
+
+        let grain_mag = edits.emulsion_format.magnification_factor();
+        let s_format = grain_mag.sqrt();
+        let cluster_size = (edits.grain_size * s_format).clamp(0.5, 3.5);
+        let effective_grain_amount = edits.grain_amount * grain_mag.powf(0.25);
+
+        let mut processed_rec2020 = rec2020_data.clone();
+
+        for y in 0..active_h {
+            let y_start = y * active_w;
+            for x in 0..active_w {
+                let idx = (y_start + x) * 3;
+                let mut r = rec2020_data[idx];
+                let mut g = rec2020_data[idx + 1];
+                let mut b = rec2020_data[idx + 2];
+
+                let y_c = luma_plane[y_start + x];
+
+                // 1-pixel pitch isotropic 8-tap stencil for sensor seed extraction
+                let xl = x.saturating_sub(1);
+                let xr = (x + 1).min(active_w - 1);
+                let yt = y.saturating_sub(1);
+                let yb = (y + 1).min(active_h - 1);
+
+                let gy_l = luma_plane[y_start + xl];
+                let gy_r = luma_plane[y_start + xr];
+                let gy_t = luma_plane[yt * active_w + x];
+                let gy_b = luma_plane[yb * active_w + x];
+                let gy_tl = luma_plane[yt * active_w + xl];
+                let gy_tr = luma_plane[yt * active_w + xr];
+                let gy_bl = luma_plane[yb * active_w + xl];
+                let gy_br = luma_plane[yb * active_w + xr];
+
+                if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
+                    let s_xl = (x as f32 - r_step).round().clamp(0.0, (active_w - 1) as f32) as usize;
+                    let s_xr = (x as f32 + r_step).round().clamp(0.0, (active_w - 1) as f32) as usize;
+                    let s_yt = (y as f32 - r_step).round().clamp(0.0, (active_h - 1) as f32) as usize;
+                    let s_yb = (y as f32 + r_step).round().clamp(0.0, (active_h - 1) as f32) as usize;
+
+                    let sy_l = luma_plane[y_start + s_xl];
+                    let sy_r = luma_plane[y_start + s_xr];
+                    let sy_t = luma_plane[s_yt * active_w + x];
+                    let sy_b = luma_plane[s_yb * active_w + x];
+                    let sy_tl = luma_plane[s_yt * active_w + s_xl];
+                    let sy_tr = luma_plane[s_yt * active_w + s_xr];
+                    let sy_bl = luma_plane[s_yb * active_w + s_xl];
+                    let sy_br = luma_plane[s_yb * active_w + s_xr];
+
+                    let (dr, dg, db) = apply_detail_and_sharpening_rgb(
+                        r, g, b, y_c,
+                        sy_l, sy_r, sy_t, sy_b, sy_tl, sy_tr, sy_bl, sy_br,
+                        edits.sharpening_amount,
+                        edits.sharpening_masking,
+                        edits.noise_reduction,
+                    );
+                    r = dr;
+                    g = dg;
+                    b = db;
+                }
+
+                if edits.emulsion_grain_mode != EmulsionGrainMode::Off {
+                    let (gr, gg, gb) = crate::color::grain::apply_stochastic_emulsion_grain(
+                        r, g, b, y_c,
+                        gy_l, gy_r, gy_t, gy_b, gy_tl, gy_tr, gy_bl, gy_br,
+                        x as f32, y as f32,
+                        edits.emulsion_grain_mode,
+                        cluster_size,
+                        effective_grain_amount,
+                        edits.emulsion_archetype,
+                    );
+                    r = gr;
+                    g = gg;
+                    b = gb;
+                }
+
+                processed_rec2020[idx] = r;
+                processed_rec2020[idx + 1] = g;
+                processed_rec2020[idx + 2] = b;
+            }
+        }
+        rec2020_data = processed_rec2020;
+    }
+
+    // Pass 5: Tone mapping, Print media, Gamma -> 16-bit
+    let mut out_u16 = Vec::with_capacity(total_pixels * 3);
+    for i in 0..total_pixels {
+        let idx = i * 3;
+        let mut r = rec2020_data[idx];
+        let mut g = rec2020_data[idx + 1];
+        let mut b = rec2020_data[idx + 2];
 
         // Terminal tone mapping
         match edits.tone_profile {
@@ -1431,17 +1570,21 @@ mod tests {
         let original = data.clone();
 
         // Archetype None -> no change
-        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::None, RemjetBackingMode::Intact);
+        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::None, RemjetBackingMode::Intact, crate::modes::EmulsionFormat::Format35mm);
         assert_eq!(data, original);
 
         // RochesterCinema500 with Intact rem-jet -> no change
-        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::RochesterCinema500, RemjetBackingMode::Intact);
+        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::RochesterCinema500, RemjetBackingMode::Intact, crate::modes::EmulsionFormat::Format35mm);
         assert_eq!(data, original);
+
+        // CambridgeDiffusion100 (Instant) -> zero halation bypass
+        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::CambridgeDiffusion100, RemjetBackingMode::Stripped, crate::modes::EmulsionFormat::Format35mm);
+        assert_eq!(data, original, "Instant film must bypass halation entirely");
 
         // Sub-threshold highlights (Y = 0.40 <= 0.55) with BaodingSilver100 -> no change
         let mut sub_data = vec![0.4f32; w * h * 3];
         let sub_original = sub_data.clone();
-        apply_point_spread_halation(&mut sub_data, w, h, EmulsionArchetype::BaodingSilver100, RemjetBackingMode::Intact);
+        apply_point_spread_halation(&mut sub_data, w, h, EmulsionArchetype::BaodingSilver100, RemjetBackingMode::Intact, crate::modes::EmulsionFormat::Format35mm);
         assert_eq!(sub_data, sub_original);
     }
 
@@ -1457,7 +1600,7 @@ mod tests {
         data[center_idx + 1] = 1.5;
         data[center_idx + 2] = 1.5;
 
-        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::BaodingSilver100, RemjetBackingMode::Intact);
+        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::BaodingSilver100, RemjetBackingMode::Intact, crate::modes::EmulsionFormat::Format35mm);
 
         // Pixel 2 steps away should have received scattered light
         let near_idx = (16 * w + 18) * 3;
@@ -1485,7 +1628,7 @@ mod tests {
         data[center_idx + 1] = 1.5;
         data[center_idx + 2] = 1.5;
 
-        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::RochesterCinema500, RemjetBackingMode::Stripped);
+        apply_point_spread_halation(&mut data, w, h, EmulsionArchetype::RochesterCinema500, RemjetBackingMode::Stripped, crate::modes::EmulsionFormat::Format35mm);
 
         let near_idx = (16 * w + 18) * 3;
         let delta_r = data[near_idx] - 0.1;
@@ -1496,4 +1639,64 @@ mod tests {
         assert!(delta_r > delta_g, "Cinema halation must be red-shifted (R > G)");
         assert!(delta_g > delta_b, "Cinema halation must be red-shifted (G > B)");
     }
+
+    #[test]
+    fn test_develop_raw_sensor_frame_archival_grain_format_difference() {
+        let w = 32;
+        let h = 32;
+        let frame = RawSensorFrame {
+            full_width: w,
+            full_height: h,
+            active_x: 0,
+            active_y: 0,
+            active_width: w,
+            active_height: h,
+            cfa_pattern: CfaPattern::Rggb,
+            black_levels: [0.0; 4],
+            white_levels: [1000.0; 4],
+            wb_coeffs: [1.0; 4],
+            color_matrix: Some([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+            color_matrix_tungsten: None,
+            forward_matrix_tungsten: None,
+            forward_matrix_daylight: None,
+            camera_model: "Archival Grain Test".to_string(),
+            baseline_exposure: 0.0,
+            noise_profile: None,
+            sensor_data: vec![500u16; w * h],
+        };
+
+        // 1. Off: 35mm and Super8 yield identical output when grain is off
+        let mut edits_off = EditSettings::default();
+        edits_off.emulsion_grain_mode = EmulsionGrainMode::Off;
+        edits_off.emulsion_format = crate::modes::EmulsionFormat::Format35mm;
+        let (_, _, out_35_off) = develop_raw_sensor_frame_archival(&frame, &edits_off, DemosaicQuality::Archival, false);
+
+        edits_off.emulsion_format = crate::modes::EmulsionFormat::Super8;
+        let (_, _, out_8_off) = develop_raw_sensor_frame_archival(&frame, &edits_off, DemosaicQuality::Archival, false);
+        assert_eq!(out_35_off, out_8_off, "When grain is off, format must not alter pixel output");
+
+        // 2. Active Grain: Rochester Cinema 500 with Super8 vs 35mm
+        let mut edits_grain_35 = EditSettings::default();
+        edits_grain_35.emulsion_archetype = EmulsionArchetype::RochesterCinema500;
+        edits_grain_35.emulsion_grain_mode = EmulsionGrainMode::SynthesizePhysical;
+        edits_grain_35.grain_size = 1.35;
+        edits_grain_35.grain_amount = 0.55;
+        edits_grain_35.emulsion_format = crate::modes::EmulsionFormat::Format35mm;
+        let (_, _, out_35_grain) = develop_raw_sensor_frame_archival(&frame, &edits_grain_35, DemosaicQuality::Archival, false);
+
+        let mut edits_grain_8 = edits_grain_35.clone();
+        edits_grain_8.emulsion_format = crate::modes::EmulsionFormat::Super8;
+        let (_, _, out_8_grain) = develop_raw_sensor_frame_archival(&frame, &edits_grain_8, DemosaicQuality::Archival, false);
+
+        // Archival export MUST reflect grain format differences
+        assert_ne!(
+            out_35_grain, out_8_grain,
+            "Archival export must reflect grain format scaling between 35mm and Super 8"
+        );
+
+        // Both must differ from the grain-off baseline
+        assert_ne!(out_35_grain, out_35_off, "35mm grain export must modify pixels from grain-off");
+        assert_ne!(out_8_grain, out_8_off, "Super 8 grain export must modify pixels from grain-off");
+    }
 }
+

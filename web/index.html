@@ -476,6 +476,16 @@
                 <input type="range" id="slider-emulsion-exp" min="-2.0" max="2.0" step="0.1" value="0.0" />
               </div>
               <div class="control-row">
+                <label>Film Format Gate</label>
+                <select id="select-emulsion-format" class="select-input">
+                  <option value="Super8">Super 8 (7.3x Magnification)</option>
+                  <option value="Format16mm">16mm Cinema (3.4x Magnification)</option>
+                  <option value="Format35mm" selected>35mm Still Frame (1.0x Baseline)</option>
+                  <option value="Format120">120 Medium Format / 6x7 (0.48x)</option>
+                  <option value="Format4x5">4x5 Large Format Sheet (0.28x)</option>
+                </select>
+              </div>
+              <div class="control-row">
                 <label>Grain Resynthesis</label>
                 <select id="select-emulsion-grain-mode" class="select-input">
                   <option value="Off" selected>Off (Sensor Passthrough)</option>
@@ -483,7 +493,15 @@
                   <option value="SynthesizePhysical">Synthetic Granularity</option>
                 </select>
               </div>
-              <div class="slider-row hidden" id="row-grain-scale">
+              <div class="slider-row hidden" id="row-grain-size">
+                <label>Grain Size (ISO Speed) <span id="val-grain-size" class="slider-val">1.00x</span></label>
+                <input type="range" id="slider-grain-size" min="0.2" max="3.0" step="0.05" value="1.0" />
+              </div>
+              <div class="slider-row hidden" id="row-grain-amount">
+                <label>Grain Amount (Contrast) <span id="val-grain-amount" class="slider-val">1.00x</span></label>
+                <input type="range" id="slider-grain-amount" min="0.0" max="2.0" step="0.05" value="1.0" />
+              </div>
+              <div class="slider-row hidden" id="row-grain-scale" style="display:none;">
                 <label>Grain Scale <span id="val-grain-scale" class="slider-val">1.00x</span></label>
                 <input type="range" id="slider-grain-scale" min="0.5" max="2.0" step="0.05" value="1.0" />
               </div>

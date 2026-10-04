@@ -158,6 +158,7 @@ pub fn apply_edits_with_tier(
                 image.height,
                 edits.emulsion_archetype,
                 edits.remjet_backing,
+                edits.emulsion_format,
             );
         }
 

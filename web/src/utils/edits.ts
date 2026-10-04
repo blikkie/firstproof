@@ -38,6 +38,8 @@ export function getDefaultEdits(isRaw: boolean = false): EditSettingsPayload {
     remjet_backing: 'Intact',
     emulsion_grain_mode: 'Off',
     grain_scale: 1.0,
+    grain_size: 1.0,
+    grain_amount: 1.0,
     curves: {
       master: [
         { x: 0, y: 0 },
@@ -135,6 +137,18 @@ export function hasModifications(
   if (
     edits.grain_scale !== undefined &&
     Math.abs(edits.grain_scale - 1.0) > 1e-4
+  )
+    return true;
+  if (edits.grain_size !== undefined && Math.abs(edits.grain_size - 1.0) > 1e-4)
+    return true;
+  if (
+    edits.grain_amount !== undefined &&
+    Math.abs(edits.grain_amount - 1.0) > 1e-4
+  )
+    return true;
+  if (
+    edits.emulsion_format !== undefined &&
+    edits.emulsion_format !== 'Format35mm'
   )
     return true;
   if (edits.print_media !== 'None') return true;

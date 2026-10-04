@@ -739,11 +739,22 @@ vec3 applyPrintMedia(vec3 rgb, int mediaMode, int filterMode, float paperGrade, 
     return rgb;
 }
 
-// MARK: - Stochastic Emulsion Resynthesis & Physical Optical Grain Engine
 float proceduralGrainNoise(float u, float v) {
-    float p0 = u * 12.9898 + v * 78.233;
-    float sinVal = fract(sin(p0) * 43758.5453);
-    return sinVal * 2.0 - 1.0;
+    vec2 p = 50.0 * fract(vec2(u, v) * 0.3183099 + vec2(0.71, 0.113));
+    return -1.0 + 2.0 * fract(p.x * p.y * (p.x + p.y));
+}
+
+float clusteredGrainNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+
+    float a = proceduralGrainNoise(i.x, i.y);
+    float b = proceduralGrainNoise(i.x + 1.0, i.y);
+    float c = proceduralGrainNoise(i.x, i.y + 1.0);
+    float d = proceduralGrainNoise(i.x + 1.0, i.y + 1.0);
+
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
 vec3 applyStochasticEmulsionGrain(
@@ -753,21 +764,28 @@ vec3 applyStochasticEmulsionGrain(
     float y_r,
     float y_t,
     float y_b,
-    vec2 uv,
+    float y_tl,
+    float y_tr,
+    float y_bl,
+    float y_br,
+    vec2 p,
     int grainMode,
-    float grainScale,
+    float clusterSize,
+    float grainAmount,
     int archetype
 ) {
     if (grainMode == 0) {
         return color;
     }
 
-    float scale = clamp(grainScale, 0.2, 3.0);
-    float yLowpass = 0.25 * (y_l + y_r + y_t + y_b);
+    // 1. Isotropic 9-point lowpass luminance (evaluated at strictly 1-pixel pitch to isolate sensor read noise)
+    float yLowpass = (1.0 / 6.0) * (y_l + y_r + y_t + y_b)
+        + (1.0 / 12.0) * (y_tl + y_tr + y_bl + y_br);
     float deltaSensor = y_c - yLowpass;
 
-    float gx = (y_r - y_l) * 0.5;
-    float gy = (y_b - y_t) * 0.5;
+    // Sobel-Feldman 8-neighbor gradient magnitude
+    float gx = ((y_tr + 2.0 * y_r + y_br) - (y_tl + 2.0 * y_l + y_bl)) * 0.125;
+    float gy = ((y_bl + 2.0 * y_b + y_br) - (y_tl + 2.0 * y_t + y_tr)) * 0.125;
     float gradMag = sqrt(gx * gx + gy * gy);
 
     float edgeSuppress = 1.0 / (1.0 + 35.0 * gradMag);
@@ -777,20 +795,44 @@ vec3 applyStochasticEmulsionGrain(
     float denom = max(sqrt(max(y_c, 0.0)), 0.05);
     float sensorSeed = clamp((deltaNoise / denom) * seedGain, -1.0, 1.0);
 
-    float procNoise = proceduralGrainNoise(uv.x, uv.y);
+    // 2. Stochastic carrier: Polaroid DDT dye diffusion mottling vs silver crystal lattice
+    bool isInstant = (archetype == 7);
+    float s = max(clusterSize, 0.25);
+    float procNoise = 0.0;
+    if (isInstant) {
+        procNoise = 0.60 * clusteredGrainNoise(p / s)
+            + 0.40 * clusteredGrainNoise(p / (s * 1.8) + vec2(17.3, 31.7));
+    } else if (s > 1.0) {
+        float t_cluster = clamp((s - 1.0) / 2.0, 0.0, 1.0);
+        float cluster = clusteredGrainNoise(p / s);
+        float micro = proceduralGrainNoise(p.x, p.y);
+        float clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
+        procNoise = mix(micro, clumped, t_cluster);
+    } else {
+        procNoise = proceduralGrainNoise(p.x, p.y);
+    }
 
     float eta = 0.0;
     if (grainMode == 1) { // SeedFromSensor
-        eta = clamp(procNoise * (0.45 + 0.55 * abs(sensorSeed)) + 0.45 * sensorSeed, -1.0, 1.0);
+        if (isInstant) {
+            eta = clamp(0.55 * procNoise + 0.20 * sensorSeed, -1.0, 1.0);
+        } else {
+            eta = clamp(procNoise * (0.45 + 0.55 * abs(sensorSeed)) + 0.45 * sensorSeed, -1.0, 1.0);
+        }
     } else if (grainMode == 2) { // SynthesizePhysical
-        eta = clamp(0.75 * procNoise + 0.25 * sensorSeed, -1.0, 1.0);
+        if (isInstant) {
+            eta = clamp(0.85 * procNoise + 0.05 * sensorSeed, -1.0, 1.0);
+        } else {
+            eta = clamp(0.90 * procNoise + 0.10 * sensorSeed, -1.0, 1.0);
+        }
     }
 
     float yClamped = clamp(y_c, 0.0, 1.0);
     float nutting = 4.0 * yClamped * (1.0 - yClamped);
 
     // Multiplicative optical transmittance modulation obeying Beer-Lambert law T = 10^(-D)
-    float delta = eta * nutting * 0.28 * scale;
+    float amount = clamp(grainAmount, 0.0, 2.0);
+    float delta = eta * nutting * 0.28 * amount;
     float yPixel = dot(color, vec3(0.2627, 0.6780, 0.0593));
 
     bool isMonochrome = (archetype == 6 || archetype == 10 || archetype == 11);

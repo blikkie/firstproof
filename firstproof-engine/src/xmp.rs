@@ -290,6 +290,12 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
     writer
         .element("grainScale", pm_ns.clone())
         .value(format!("{:.4}", data.edits.grain_scale).as_str());
+    writer
+        .element("grainSize", pm_ns.clone())
+        .value(format!("{:.4}", data.edits.grain_size).as_str());
+    writer
+        .element("grainAmount", pm_ns.clone())
+        .value(format!("{:.4}", data.edits.grain_amount).as_str());
 
     writer
         .element("emulsionArchetype", pm_ns.clone())
@@ -313,6 +319,8 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
             EmulsionFormat::Format35mm => "Format35mm",
             EmulsionFormat::Format120 => "Format120",
             EmulsionFormat::Format4x5 => "Format4x5",
+            EmulsionFormat::Super8 => "Super8",
+            EmulsionFormat::Format16mm => "Format16mm",
         });
     writer
         .element("emulsionExposure", pm_ns.clone())
@@ -591,6 +599,17 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
     if let Some(gs_str) = get(pm, "grainScale") {
         if let Ok(val) = gs_str.parse::<f32>() {
             data.edits.grain_scale = val;
+            data.edits.grain_size = val;
+        }
+    }
+    if let Some(gs_str) = get(pm, "grainSize") {
+        if let Ok(val) = gs_str.parse::<f32>() {
+            data.edits.grain_size = val;
+        }
+    }
+    if let Some(ga_str) = get(pm, "grainAmount") {
+        if let Ok(val) = ga_str.parse::<f32>() {
+            data.edits.grain_amount = val;
         }
     }
     if let Some(ea_str) = get(pm, "emulsionArchetype") {
@@ -614,6 +633,8 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
         data.edits.emulsion_format = match ef_str.trim() {
             "Format120" => EmulsionFormat::Format120,
             "Format4x5" => EmulsionFormat::Format4x5,
+            "Super8" => EmulsionFormat::Super8,
+            "Format16mm" => EmulsionFormat::Format16mm,
             _ => EmulsionFormat::Format35mm,
         };
     }

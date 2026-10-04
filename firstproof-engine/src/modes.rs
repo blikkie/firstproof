@@ -173,6 +173,25 @@ impl EmulsionArchetype {
             Self::MobberleySilver400 | Self::LiguriaCinema80 | Self::BaodingSilver100
         )
     }
+
+    /// Returns the science-calibrated default `(grain_size, grain_amount)` for this emulsion archetype,
+    /// derived from published ANSI/ISO 10505 diffuse RMS granularity measurements at D = 1.0.
+    #[inline]
+    pub fn calibrated_grain_defaults(&self) -> (f32, f32) {
+        match self {
+            Self::AshigaraChrome50 => (0.55, 0.45),        // RMS 9 (Extremely fine reversal dye clouds)
+            Self::RochesterK14Chrome64 => (0.70, 0.60),    // RMS 11 (Non-substantive thin layer)
+            Self::LiguriaCinema80 => (0.75, 0.65),         // ISO 80 High-silver cinema B&W
+            Self::LeverkusenPortrait160 => (0.80, 0.70),   // RMS 10 (Fine color negative)
+            Self::CambridgeDiffusion100 => (0.85, 0.50),   // Instant dye diffusion transfer (DDT)
+            Self::AshigaraPortrait400 => (0.95, 0.75),     // RMS 11 (Sigma-crystal 4th layer)
+            Self::RochesterPortrait400 => (1.00, 0.80),    // RMS 11 (T-Grain tabular portrait)
+            Self::BaodingSilver100 => (1.05, 1.00),        // RMS 14 (Cubic domestic silver)
+            Self::RochesterCinema500 => (1.25, 1.10),      // RMS 13 (ECN-2 500T Cinema grain)
+            Self::MobberleySilver400 => (1.35, 1.20),      // RMS 14 (Classic British documentary cubic)
+            _ => (1.00, 1.00),
+        }
+    }
 }
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
@@ -183,6 +202,8 @@ pub enum EmulsionFormat {
     Format35mm,
     Format120,
     Format4x5,
+    Super8,
+    Format16mm,
 }
 
 
@@ -193,6 +214,8 @@ impl EmulsionFormat {
             Self::Format35mm => 0,
             Self::Format120 => 1,
             Self::Format4x5 => 2,
+            Self::Super8 => 3,
+            Self::Format16mm => 4,
         }
     }
 
@@ -200,7 +223,21 @@ impl EmulsionFormat {
         match id {
             1 => Self::Format120,
             2 => Self::Format4x5,
+            3 => Self::Super8,
+            4 => Self::Format16mm,
             _ => Self::Format35mm,
+        }
+    }
+
+    /// Optical enlargement magnification factor relative to 35mm still frame ($36 \times 24\,\text{mm}$, diag $\approx 43.3\,\text{mm}$).
+    #[inline]
+    pub fn magnification_factor(&self) -> f32 {
+        match self {
+            Self::Super8 => 7.3,
+            Self::Format16mm => 3.4,
+            Self::Format35mm => 1.0,
+            Self::Format120 => 0.48,
+            Self::Format4x5 => 0.28,
         }
     }
 }

@@ -505,22 +505,49 @@ mod tests {
 
     #[test]
     fn test_detail_and_sharpening_math() {
-        let (r0, g0, b0) = apply_detail_and_sharpening_rgb(0.5, 0.4, 0.3, 0.4, 0.3, 0.5, 0.3, 0.5, 0.0, 0.0, 0.0);
+        let (r0, g0, b0) = apply_detail_and_sharpening_rgb(
+            0.5, 0.4, 0.3,
+            0.4, 0.3, 0.5, 0.3, 0.5,
+            0.35, 0.45, 0.35, 0.45,
+            0.0, 0.0, 0.0,
+        );
         assert_eq!((r0, g0, b0), (0.5, 0.4, 0.3));
 
         let y_c = 0.8;
         let (y_l, y_r, y_t, y_b) = (0.2, 0.8, 0.5, 0.5);
-        let (r_sharp, _g_sharp, _b_sharp) = apply_detail_and_sharpening_rgb(0.8, 0.8, 0.8, y_c, y_l, y_r, y_t, y_b, 50.0, 0.0, 0.0);
+        let (y_tl, y_tr, y_bl, y_br) = (0.35, 0.65, 0.35, 0.65);
+        let (r_sharp, _g_sharp, _b_sharp) = apply_detail_and_sharpening_rgb(
+            0.8, 0.8, 0.8,
+            y_c, y_l, y_r, y_t, y_b,
+            y_tl, y_tr, y_bl, y_br,
+            50.0, 0.0, 0.0,
+        );
         assert!(r_sharp > 0.8);
 
         let y_flat_c = 0.505;
         let (y_flat_l, y_flat_r, y_flat_t, y_flat_b) = (0.500, 0.500, 0.500, 0.500);
-        let (r_unmasked, _, _) = apply_detail_and_sharpening_rgb(0.505, 0.505, 0.505, y_flat_c, y_flat_l, y_flat_r, y_flat_t, y_flat_b, 50.0, 0.0, 0.0);
-        let (r_masked, _, _) = apply_detail_and_sharpening_rgb(0.505, 0.505, 0.505, y_flat_c, y_flat_l, y_flat_r, y_flat_t, y_flat_b, 50.0, 30.0, 0.0);
+        let (y_flat_tl, y_flat_tr, y_flat_bl, y_flat_br) = (0.500, 0.500, 0.500, 0.500);
+        let (r_unmasked, _, _) = apply_detail_and_sharpening_rgb(
+            0.505, 0.505, 0.505,
+            y_flat_c, y_flat_l, y_flat_r, y_flat_t, y_flat_b,
+            y_flat_tl, y_flat_tr, y_flat_bl, y_flat_br,
+            50.0, 0.0, 0.0,
+        );
+        let (r_masked, _, _) = apply_detail_and_sharpening_rgb(
+            0.505, 0.505, 0.505,
+            y_flat_c, y_flat_l, y_flat_r, y_flat_t, y_flat_b,
+            y_flat_tl, y_flat_tr, y_flat_bl, y_flat_br,
+            50.0, 30.0, 0.0,
+        );
         assert!(r_unmasked > 0.505);
         assert_eq!(r_masked, 0.505);
 
-        let (r_nr, _, _) = apply_detail_and_sharpening_rgb(0.505, 0.505, 0.505, y_flat_c, y_flat_l, y_flat_r, y_flat_t, y_flat_b, 0.0, 30.0, 80.0);
+        let (r_nr, _, _) = apply_detail_and_sharpening_rgb(
+            0.505, 0.505, 0.505,
+            y_flat_c, y_flat_l, y_flat_r, y_flat_t, y_flat_b,
+            y_flat_tl, y_flat_tr, y_flat_bl, y_flat_br,
+            0.0, 30.0, 80.0,
+        );
         assert!(r_nr < 0.505);
     }
 

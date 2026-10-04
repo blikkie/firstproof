@@ -738,16 +738,27 @@ fn test_sharpening_and_masking_parity() {
     // Metal shader detail function simulation
     fn metal_apply_detail(
         color: (f32, f32, f32),
-        y_c: f32, y_l: f32, y_r: f32, y_t: f32, y_b: f32,
-        amount: f32, masking: f32, nr: f32,
+        y_c: f32,
+        y_l: f32,
+        y_r: f32,
+        y_t: f32,
+        y_b: f32,
+        y_tl: f32,
+        y_tr: f32,
+        y_bl: f32,
+        y_br: f32,
+        amount: f32,
+        masking: f32,
+        nr: f32,
     ) -> (f32, f32, f32) {
         if amount <= 0.0 && nr <= 0.0 {
             return color;
         }
-        let y_neighbors = 0.25 * (y_l + y_r + y_t + y_b);
-        let delta_y = y_c - y_neighbors;
-        let gx = (y_r - y_l) * 0.5;
-        let gy = (y_b - y_t) * 0.5;
+        let y_lowpass = (1.0 / 6.0) * (y_l + y_r + y_t + y_b)
+            + (1.0 / 12.0) * (y_tl + y_tr + y_bl + y_br);
+        let delta_y = y_c - y_lowpass;
+        let gx = ((y_tr + 2.0 * y_r + y_br) - (y_tl + 2.0 * y_l + y_bl)) * 0.125;
+        let gy = ((y_bl + 2.0 * y_b + y_br) - (y_tl + 2.0 * y_t + y_tr)) * 0.125;
         let grad_mag = (gx * gx + gy * gy).sqrt();
         let w_edge = if masking <= 0.0 {
             1.0
@@ -770,25 +781,83 @@ fn test_sharpening_and_masking_parity() {
 
     // Test a sweep of detail scenarios
     let scenarios = [
-        // (name, c_rgb, y_c, (y_l, y_r, y_t, y_b), amount, masking, nr)
-        ("neutral", (0.5, 0.4, 0.3), 0.4, (0.3, 0.5, 0.3, 0.5), 0.0, 0.0, 0.0),
-        ("step_edge_unmasked", (0.8, 0.8, 0.8), 0.8, (0.2, 0.8, 0.5, 0.5), 50.0, 0.0, 0.0),
-        ("step_edge_masked", (0.8, 0.8, 0.8), 0.8, (0.2, 0.8, 0.5, 0.5), 50.0, 30.0, 0.0),
-        ("flat_noise_unmasked", (0.505, 0.505, 0.505), 0.505, (0.5, 0.5, 0.5, 0.5), 50.0, 0.0, 0.0),
-        ("flat_noise_masked", (0.505, 0.505, 0.505), 0.505, (0.5, 0.5, 0.5, 0.5), 50.0, 30.0, 0.0),
-        ("flat_noise_nr", (0.505, 0.505, 0.505), 0.505, (0.5, 0.5, 0.5, 0.5), 0.0, 30.0, 80.0),
-        ("edge_with_nr", (0.8, 0.8, 0.8), 0.8, (0.2, 0.8, 0.5, 0.5), 40.0, 20.0, 60.0),
+        // (name, c_rgb, y_c, (y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br), amount, masking, nr)
+        (
+            "neutral",
+            (0.5, 0.4, 0.3),
+            0.4,
+            (0.3, 0.5, 0.3, 0.5, 0.35, 0.45, 0.35, 0.45),
+            0.0,
+            0.0,
+            0.0,
+        ),
+        (
+            "step_edge_unmasked",
+            (0.8, 0.8, 0.8),
+            0.8,
+            (0.2, 0.8, 0.5, 0.5, 0.2, 0.8, 0.2, 0.8),
+            50.0,
+            0.0,
+            0.0,
+        ),
+        (
+            "step_edge_masked",
+            (0.8, 0.8, 0.8),
+            0.8,
+            (0.2, 0.8, 0.5, 0.5, 0.2, 0.8, 0.2, 0.8),
+            50.0,
+            30.0,
+            0.0,
+        ),
+        (
+            "flat_noise_unmasked",
+            (0.505, 0.505, 0.505),
+            0.505,
+            (0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5),
+            50.0,
+            0.0,
+            0.0,
+        ),
+        (
+            "flat_noise_masked",
+            (0.505, 0.505, 0.505),
+            0.505,
+            (0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5),
+            50.0,
+            30.0,
+            0.0,
+        ),
+        (
+            "flat_noise_nr",
+            (0.505, 0.505, 0.505),
+            0.505,
+            (0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5),
+            0.0,
+            30.0,
+            80.0,
+        ),
+        (
+            "edge_with_nr",
+            (0.8, 0.8, 0.8),
+            0.8,
+            (0.2, 0.8, 0.5, 0.5, 0.2, 0.8, 0.2, 0.8),
+            40.0,
+            20.0,
+            60.0,
+        ),
     ];
 
-    for (name, color, y_c, (y_l, y_r, y_t, y_b), amount, masking, nr) in scenarios {
+    for (name, color, y_c, (y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br), amount, masking, nr) in scenarios {
         let rust_res = firstproof_core::export::apply_detail_and_sharpening_rgb(
             color.0, color.1, color.2,
             y_c, y_l, y_r, y_t, y_b,
+            y_tl, y_tr, y_bl, y_br,
             amount, masking, nr,
         );
         let metal_res = metal_apply_detail(
             color,
             y_c, y_l, y_r, y_t, y_b,
+            y_tl, y_tr, y_bl, y_br,
             amount, masking, nr,
         );
 

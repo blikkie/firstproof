@@ -83,23 +83,57 @@ Where spatial variance $\sigma_s \gg 2\text{ pixels}$ and range variance $\sigma
 
 ---
 
-## 4. Spatial Effect 3: Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling (Story 3.19)
+## 4. Spatial Effect 3: Isotropic 8-Tap Detail Stencil, Decoupled Grain & Film Format Scaling (Story 3.19)
 
 ### Physical Phenomenon
 1. **Rotational Invariance**: Optical lenses produce circularly symmetric point-spread functions (Airy disks). A 4-tap Manhattan cross $(\Delta x, \Delta y)$ is non-isotropic: diagonal edges at $45^\circ$ receive $\sqrt{2}\times$ less Laplacian sharpening than orthogonal edges, creating star/cross artifacts.
-2. **Physical Grain Grain Clumping**: Film grain is not single-pixel noise. Silver halide crystals form statistical clumps (agglomerates) whose physical diameter ranges from $12\,\mu\text{m}$ (fine tabular grain, ISO 100) to $35\,\mu\text{m}$ (pushed cubic grain, ISO 1600+).
+2. **Decoupled Grain Physics (Crystal Size vs. Development Contrast)**:
+   - **Grain Size (Cluster Diameter)**: Determined by physical crystal morphology (tabular T-grain vs coarse cubic silver halide, ISO 25 to ISO 3200) multiplied by optical enlargement magnification $M$.
+   - **Grain Amount (RMS Granularity / Contrast $\Delta D$)**: Governed by development chemistry (agitation, dilution, push/pull processing, and developer acutance). Coupling them into a single scalar artificially forces coarse grain to blow out or fine grain to be invisible.
+3. **Film Gate Magnification Factor ($M$)**:
+   - In optical enlargement, apparent grain cluster diameter and halation bloom scale inversely with gate size relative to 35mm ($36 \times 24\,\text{mm}$, diag $\approx 43.3\,\text{mm}$):
+     - **Super 8** ($4.8 \times 3.5\,\text{mm}$): $M \approx 7.3\times$ (heavy, coarse grain clumps; massive highlight halation spill across adjacent subjects).
+     - **16mm** ($10.3 \times 7.5\,\text{mm}$): $M \approx 3.4\times$ (classic vintage cinema texture).
+     - **35mm Still Frame** ($36 \times 24\,\text{mm}$): $M \equiv 1.0\times$ (baseline reference).
+     - **Medium Format / 120** ($56 \times 70\,\text{mm}$): $M \approx 0.48\times$ (silky, ultra-fine micro-grain; tight, crisp halation perimeter).
+     - **Large Format / 4×5** ($95 \times 120\,\text{mm}$): $M \approx 0.28\times$ (virtually imperceptible grain at standard viewing; razor-thin, delicate halation rim).
+4. **The Polaroid / Instant Invariant (Direct Positive Contact Scale)**:
+   - Integral instant film (SX-70, 600, `CambridgeDiffusion100`) has **no negative and no enlarger lens**:
+     - Image formation is Dye Diffusion Transfer (DDT) through reagent pods at direct $1:1$ contact scale ($M \equiv 1.0$).
+     - Replaces silver halide crystal clumping with microscopic chemical dye cloud diffusion and subtle reagent mottling.
+     - **Zero Halation**: Emulsion sandwich contains an opaque white titanium dioxide ($\text{TiO}_2$) reflective layer and carbon black opacifying layers, preventing internal Fresnel specular reflections. Halation scatter is physically zero.
+5. **Format-Proportional Halation Scaling**:
+   - Film base thickness ($t \approx 120\text{–}140\,\mu\text{m}$) is nearly constant across roll formats; hence, absolute physical halo width on film is $\sim 0.4\,\text{mm}$.
+   - Relative to the frame, halation scatter radius $\lambda_{\text{scatter}}$ scales proportionally with format magnification: $\lambda_{\text{scatter}}(M) = \lambda_{35} \times M$.
 
 ### Mathematical Formulation
 Isotropic 9-point discrete Laplacian stencil:
 
 $$\nabla^2 Y(p) = \frac{1}{6} \sum_{i \in \text{ortho}} Y(q_i) + \frac{1}{12} \sum_{j \in \text{diag}} Y(q_j) - \frac{1}{2} Y(p)$$
 
-Low-pass filter radius for sensor noise seeding:
+Low-pass filter radius for sensor noise seeding & grain cluster sampling:
 
-$$R_{\text{sample}} = \max\left(\text{texelSize} \cdot \text{grainScale} \cdot 1.5, \, \text{texelSize}\right)$$
+$$R_{\text{sample}} = \max\left(\text{texelSize} \cdot \text{grainSize} \cdot M_{\text{format}} \cdot 1.5, \, \text{texelSize}\right)$$
+
+RMS density modulation (Nutting's Law):
+
+$$\Delta D = \eta \cdot 4Y(1-Y) \cdot \text{grainAmount}$$
 
 ### Two-Tier Implementation
 1. **Viewport & Export Engine Parity**:
    - Consolidate USM sharpening and grain seeding into a unified 8-tap isotropic fetch ring $(y_{\text{ortho}}, y_{\text{diag}})$.
-   - Dynamic stride linked to `grainScale`, ensuring medium format and coarse-grain simulations capture genuine multi-pixel variance.
+   - Dynamic stride linked to `grain_size * M_format`, ensuring medium/large format and coarse-grain simulations capture genuine multi-pixel variance.
    - Zero added texture bandwidth: USM and grain share the exact same 8 neighbor fetches in `Detail.metal` and `FragmentShader.ts`.
+   - Scale halation blur radius dynamically by $M_{\text{format}}$, with instant film (`CambridgeDiffusion100`) bypassing halation scatter entirely.
+
+---
+
+## 5. Downstream Spatial Effects (Stories 3.12 & 3.16)
+
+1. **Story 3.12: Dual-Pass Spatial Lateral Chemical Diffusion (Mackie Lines)**:
+   - Simulates physical developer and bromide ion exhaustion across high-contrast gelatin boundaries ($0.1\text{–}0.3\,\text{mm}$).
+   - Inherits `EmulsionFormat` magnification factor: $\Delta_{\text{diffusion}} = 0.2\,\text{mm} \times M$.
+   - 35mm exhibits prominent edge acutance borders; 4×5 exhibits creamy, continuous tonal gradations.
+2. **Story 3.16: Adaptive OLPF Deconvolution & Optical Sharpness Tuning**:
+   - Consumes the 8-tap isotropic stencil and format MTF scaling to reverse birefringent sensor anti-aliasing filters while preventing diffraction-induced ringing.
+

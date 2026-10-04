@@ -29,6 +29,9 @@ uniform int u_emulsionArchetype;
 uniform float u_emulsionExposure;
 uniform int u_emulsionGrainMode;
 uniform float u_grainScale;
+uniform float u_grainSize;
+uniform float u_grainAmount;
+uniform float u_formatMagnification;
 uniform int u_halationMode;
 
 uniform int u_printMediaMode;
@@ -376,13 +379,13 @@ void main() {
     }
 
     // 4c. Physical Optical Halation Scatter (Point-Spread Emulsion Diffusion)
-    if (u_isOriginal == 0 && u_halationMode > 0) {
+    if (u_isOriginal == 0 && u_halationMode > 0 && u_emulsionArchetype != 7) {
         float aspect = max(u_aspectRatio, 0.01);
         vec2 halationRadius;
         if (u_rotation == 90 || u_rotation == 270) {
-            halationRadius = vec2(0.012 * aspect, 0.012);
+            halationRadius = vec2(0.012 * aspect * u_formatMagnification, 0.012 * u_formatMagnification);
         } else {
-            halationRadius = vec2(0.012 / aspect, 0.012);
+            halationRadius = vec2((0.012 / aspect) * u_formatMagnification, 0.012 * u_formatMagnification);
         }
 
         // Stochastic rotation per fragment via Interleaved Gradient Noise
@@ -475,18 +478,23 @@ void main() {
     // 8. Detail & Sharpening with Edge Masking & Stochastic Emulsion Resynthesis in Linear Rec.2020
     if (u_sharpeningAmount > 0.0 || u_noiseReduction > 0.0 || u_emulsionGrainMode != 0) {
         vec2 texSize = vec2(textureSize(u_texture, 0));
-        vec2 offset = vec2(max(u_sharpeningRadius, 0.5)) / texSize;
-
+        vec2 pixelCoord = uv * texSize;
         float y_c = computeDisplayLuma(rec2020PreCurve);
-        float y_l = sampleDisplayLuma(uv - vec2(offset.x, 0.0));
-        float y_r = sampleDisplayLuma(uv + vec2(offset.x, 0.0));
-        float y_t = sampleDisplayLuma(uv - vec2(0.0, offset.y));
-        float y_b = sampleDisplayLuma(uv + vec2(0.0, offset.y));
 
         if (u_sharpeningAmount > 0.0 || u_noiseReduction > 0.0) {
+            vec2 sharpenOffset = vec2(max(u_sharpeningRadius, 0.5)) / texSize;
+            float y_l = sampleDisplayLuma(uv - vec2(sharpenOffset.x, 0.0));
+            float y_r = sampleDisplayLuma(uv + vec2(sharpenOffset.x, 0.0));
+            float y_t = sampleDisplayLuma(uv - vec2(0.0, sharpenOffset.y));
+            float y_b = sampleDisplayLuma(uv + vec2(0.0, sharpenOffset.y));
+            float y_tl = sampleDisplayLuma(uv - sharpenOffset);
+            float y_tr = sampleDisplayLuma(uv + vec2(sharpenOffset.x, -sharpenOffset.y));
+            float y_bl = sampleDisplayLuma(uv + vec2(-sharpenOffset.x, sharpenOffset.y));
+            float y_br = sampleDisplayLuma(uv + sharpenOffset);
+
             rec2020Color = applyDetailAndSharpening(
                 rec2020Color,
-                y_c, y_l, y_r, y_t, y_b,
+                y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br,
                 u_sharpeningAmount,
                 u_sharpeningMasking,
                 u_noiseReduction
@@ -494,16 +502,35 @@ void main() {
         }
 
         if (u_emulsionGrainMode != 0) {
+            vec2 grainOffset = 1.0 / texSize;
+            float gy_l = sampleDisplayLuma(uv - vec2(grainOffset.x, 0.0));
+            float gy_r = sampleDisplayLuma(uv + vec2(grainOffset.x, 0.0));
+            float gy_t = sampleDisplayLuma(uv - vec2(0.0, grainOffset.y));
+            float gy_b = sampleDisplayLuma(uv + vec2(0.0, grainOffset.y));
+            float gy_tl = sampleDisplayLuma(uv - grainOffset);
+            float gy_tr = sampleDisplayLuma(uv + vec2(grainOffset.x, -grainOffset.y));
+            float gy_bl = sampleDisplayLuma(uv + vec2(-grainOffset.x, grainOffset.y));
+            float gy_br = sampleDisplayLuma(uv + grainOffset);
+
+            float s_format = sqrt(max(u_formatMagnification, 0.1));
+            float clusterSize = clamp(u_grainSize * s_format, 0.5, 3.5);
+            float effectiveAmount = u_grainAmount * pow(max(u_formatMagnification, 0.1), 0.25);
+
             rec2020Color = applyStochasticEmulsionGrain(
                 rec2020Color,
                 y_c,
-                y_l,
-                y_r,
-                y_t,
-                y_b,
-                uv,
+                gy_l,
+                gy_r,
+                gy_t,
+                gy_b,
+                gy_tl,
+                gy_tr,
+                gy_bl,
+                gy_br,
+                pixelCoord,
                 u_emulsionGrainMode,
-                u_grainScale,
+                clusterSize,
+                effectiveAmount,
                 u_emulsionArchetype
             );
         }
