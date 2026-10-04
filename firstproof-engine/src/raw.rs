@@ -63,21 +63,29 @@ pub fn f16_to_f32(val: u16) -> f32 {
 
 /// Sensitometrically blends raw white-balanced color towards neutral white as photosites approach saturation.
 /// Eliminates asymmetric highlight blowout (e.g. tungsten blue channel amplification)
-/// along a smooth C^1 Hermite curve while preserving full highlight luminance headroom.
+/// along a smooth C^1 Hermite curve anchored to the sensor's linear response limit while preserving full highlight luminance headroom.
 #[inline]
-pub fn blend_sensor_highlights(r: f32, g: f32, b: f32, wb_r: f32, wb_b: f32) -> (f32, f32, f32) {
+pub fn blend_sensor_highlights(
+    r: f32,
+    g: f32,
+    b: f32,
+    wb_r: f32,
+    wb_b: f32,
+    linear_response_limit: f32,
+) -> (f32, f32, f32) {
+    let limit = linear_response_limit.clamp(0.90, 0.99);
     let s_max = r.max(g).max(b);
     let p_r = r * wb_r;
     let p_g = g;
     let p_b = b * wb_b;
-    if s_max > 0.97 {
-        let t = ((s_max - 0.97) / 0.03).clamp(0.0, 1.0);
+    if s_max > limit {
+        let t = ((s_max - limit) / (1.0 - limit)).clamp(0.0, 1.0);
         let alpha = t * t * (3.0 - 2.0 * t);
-        let l_est = (0.25 * p_r + 0.65 * p_g + 0.10 * p_b).max(p_r.min(p_g));
+        let l_target = p_r.max(p_g).max(p_b);
         (
-            (1.0 - alpha) * p_r + alpha * l_est,
-            (1.0 - alpha) * p_g + alpha * l_est,
-            (1.0 - alpha) * p_b + alpha * l_est,
+            (1.0 - alpha) * p_r + alpha * l_target,
+            (1.0 - alpha) * p_g + alpha * l_target,
+            (1.0 - alpha) * p_b + alpha * l_target,
         )
     } else {
         (p_r, p_g, p_b)
@@ -105,6 +113,7 @@ pub struct RawSensorFrame {
     pub forward_matrix_daylight: Option<[[f32; 3]; 3]>,
     pub camera_model: String,
     pub baseline_exposure: f32,
+    pub linear_response_limit: f32,
     pub noise_profile: Option<[f64; 2]>,
     pub sensor_data: Vec<u16>,
 }
@@ -258,6 +267,11 @@ impl RawSensorFrame {
             .and_then(|m| m.baseline_exposure)
             .unwrap_or(cal.baseline_exposure);
 
+        let linear_response_limit = manifest
+            .as_ref()
+            .and_then(|m| m.linear_response_limit)
+            .unwrap_or(cal.linear_response_limit);
+
         let forward_matrix_tungsten = manifest
             .as_ref()
             .and_then(|m| m.forward_matrix_1)
@@ -301,6 +315,7 @@ impl RawSensorFrame {
             forward_matrix_daylight,
             camera_model,
             baseline_exposure,
+            linear_response_limit,
             noise_profile,
             sensor_data,
         })
@@ -618,7 +633,8 @@ impl RawSensorFrame {
                         _ => (norm_00, (norm_01 + norm_10) * 0.5, norm_11),
                     };
 
-                    let (r_wb, g_wb, b_wb) = blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
+                    let (r_wb, g_wb, b_wb) =
+                        blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b, self.linear_response_limit);
                     binned_rgb.push([r_wb, g_wb, b_wb]);
                 }
             } else {
@@ -751,7 +767,7 @@ impl RawSensorFrame {
                 let g_raw = g_wb;
                 let b_raw = if wb_b > 0.001 { b_wb / wb_b } else { b_wb };
                 let (r_clean, g_clean, b_clean) =
-                    blend_sensor_highlights(r_raw, g_raw, b_raw, wb_r, wb_b);
+                    blend_sensor_highlights(r_raw, g_raw, b_raw, wb_r, wb_b, self.linear_response_limit);
                 let r_lin = (m00 * r_clean + m01 * g_clean + m02 * b_clean).max(0.0);
                 let g_lin = (m10 * r_clean + m11 * g_clean + m12 * b_clean).max(0.0);
                 let b_lin = (m20 * r_clean + m21 * g_clean + m22 * b_clean).max(0.0);

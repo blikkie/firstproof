@@ -1051,7 +1051,7 @@ pub fn develop_raw_sensor_frame_archival(
         let g_raw = g_wb;
         let b_raw = if wb_b > 0.001 { b_wb / wb_b } else { b_wb };
         let (r_clean, g_clean, b_clean) =
-            crate::raw::blend_sensor_highlights(r_raw, g_raw, b_raw, wb_r, wb_b);
+            crate::raw::blend_sensor_highlights(r_raw, g_raw, b_raw, wb_r, wb_b, frame.linear_response_limit);
         let c_sensor = Color3::new(r_clean, g_clean, b_clean);
         let c_rec = m_sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);
         let idx = i * 3;
@@ -1408,6 +1408,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Neutral Test".to_string(),
             baseline_exposure: 0.0,
+            linear_response_limit: 0.96,
             noise_profile: None,
             sensor_data: vec![500u16; w * h],
         };
@@ -1449,6 +1450,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Saturated Highlight Test".to_string(),
             baseline_exposure: 0.0,
+            linear_response_limit: 0.96,
             noise_profile: None,
             sensor_data: vec![1000u16; w * h], // Saturated photosites (cloud highlight)
         };
@@ -1569,6 +1571,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Archival Grain Test".to_string(),
             baseline_exposure: 0.0,
+            linear_response_limit: 0.96,
             noise_profile: None,
             sensor_data: vec![500u16; w * h],
         };

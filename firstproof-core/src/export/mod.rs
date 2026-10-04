@@ -835,6 +835,7 @@ mod tests {
             forward_matrix_daylight: None,
             camera_model: "Synthetic Test".to_string(),
             baseline_exposure: 0.0,
+            linear_response_limit: 0.96,
             noise_profile: None,
             sensor_data: vec![1000u16; w * h],
         };

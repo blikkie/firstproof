@@ -238,7 +238,9 @@ fn main() {
                 let g_norm = if g_cnt > 0.0 { g_sum / g_cnt } else { 0.0 };
                 let b_norm = if b_cnt > 0.0 { b_sum / b_cnt } else { 0.0 };
 
-                let (r_wb, g_wb, b_wb) = firstproof_engine::blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b);
+                let (r_wb, g_wb, b_wb) = firstproof_engine::blend_sensor_highlights(
+                    r_norm, g_norm, b_norm, wb_r, wb_b, frame.linear_response_limit,
+                );
                 println!("Raw Norm: R={:.5}, G={:.5}, B={:.5}", r_norm, g_norm, b_norm);
                 println!("WB Signal: R={:.5}, G={:.5}, B={:.5}", r_wb, g_wb, b_wb);
 
@@ -529,6 +531,7 @@ fn cmd_inspect_photo(path_str: &str) {
         println!("🎨 Frame as_shot_wb: {:?}", frame.as_shot_wb());
         println!("🎨 Frame as_shot_temperature: {:.1}K", frame.as_shot_temperature());
         println!("🎨 Frame baseline_exposure: {:.3} EV (gain: {:.3}x)", frame.baseline_exposure, 2.0f32.powf(frame.baseline_exposure));
+        println!("🎨 Frame linear_response_limit: {:.3} (anti-blooming knee: {:.1}%)", frame.linear_response_limit, frame.linear_response_limit * 100.0);
         let m = frame.compute_sensor_to_rec2020();
         println!("🎨 Sensor to Rec.2020: {:?}", m);
     }

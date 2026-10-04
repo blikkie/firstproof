@@ -127,7 +127,8 @@ pub fn decode_image_with_quality<P: AsRef<Path>>(
                             let r_raw = if wb_r > 0.001 { r_wb / wb_r } else { r_wb };
                             let g_raw = g_wb;
                             let b_raw = if wb_b > 0.001 { b_wb / wb_b } else { b_wb };
-                            let (r_clean, g_clean, b_clean) = firstproof_engine::blend_sensor_highlights(r_raw, g_raw, b_raw, wb_r, wb_b);
+                            let (r_clean, g_clean, b_clean) =
+                                firstproof_engine::blend_sensor_highlights(r_raw, g_raw, b_raw, wb_r, wb_b, frame.linear_response_limit);
                             let c_sensor = Color3::new(r_clean, g_clean, b_clean);
                             let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
                             let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);
@@ -170,7 +171,8 @@ pub fn decode_image_with_quality<P: AsRef<Path>>(
                             b = 0.5 * (frame.sample_normalized(full_x - 1, full_y) + frame.sample_normalized(full_x + 1, full_y));
                         }
                     }
-                    let (r_wb, g_wb, b_wb) = firstproof_engine::blend_sensor_highlights(r, g, b, wb_r, wb_b);
+                    let (r_wb, g_wb, b_wb) =
+                        firstproof_engine::blend_sensor_highlights(r, g, b, wb_r, wb_b, frame.linear_response_limit);
                     let c_sensor = Color3::new(r_wb, g_wb, b_wb);
                     let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
                     let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);

@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.15: Sensor Non-Linearity & Anti-Blooming Knee Engine (`LinearResponseLimit`)** (P2)
-2. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
-3. **Story 3.16: Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`)** (P2)
-4. **Story 3.20: Sensitometric Chemical Push/Pull Development Engine** (P2)
+1. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
+2. **Story 3.16: Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`)** (P2)
+3. **Story 3.20: Sensitometric Chemical Push/Pull Development Engine** (P2)
+4. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -67,14 +67,6 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 - **Geometric Rectification (`WarpRectilinear`)**:
   - Execute manufacturer-provided radial distortion polynomials directly within `firstproof-engine`, complementing Lensfun for mirrorless lens systems.
 
-### 3.15 Sensor Non-Linearity & Anti-Blooming Knee Engine (`LinearResponseLimit`) (P2)
-- **Photosite Charge Saturation Modeling**:
-  - Consume DNG Tag 50734 (`LinearResponseLimit`) extracted by `RawContainerManifest`, specifying the physical ceiling (typically $0.95\dots0.98$ of white level) where photosite anti-blooming drain begins non-linear charge compression.
-- **Continuous $C^1$ Highlight Rolloff Knee**:
-  - Formulate a smooth Hermite spline transition that smoothly blends sensor highlight reconstruction beginning at `LinearResponseLimit` rather than abruptly clipping at 1.0.
-  - Permanently eliminates harsh plastic highlight clipping knees and false-color fringing along specular transitions (e.g. chrome reflections, cloud edges, tungsten lamp filaments).
-- **Parity & Verification**:
-  - Verified across 21-step synthetic photometric grey wedge ($-10\text{ EV}$ to $+6.5\text{ EV}$) ensuring strict monotonicity ($df/dx > 0$) across Metal, WebGL, and Rust CPU export pipelines.
 
 ### 3.16 Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`) (P2)
 - **Optical Low-Pass Filter Calibration**:
