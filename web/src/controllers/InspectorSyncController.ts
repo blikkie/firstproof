@@ -332,7 +332,6 @@ export class InspectorSyncController {
     setVal('saturation', edits.saturation, (v) => `${Math.round(v)}`);
     setVal('deep-blue', edits.deep_blue, (v) => `${Math.round(v)}`);
     setVal('foliage', edits.foliage, (v) => `${Math.round(v)}`);
-    setVal('emulsion-exp', edits.emulsion_exposure, (v) => formatExposure(v));
     setVal('grain-scale', edits.grain_scale, (v) => `${v.toFixed(2)}x`);
     setVal('grain-size', edits.grain_size, (v) => `${v.toFixed(2)}x`);
     setVal('grain-amount', edits.grain_amount, (v) => `${v.toFixed(2)}x`);
@@ -597,12 +596,6 @@ export class InspectorSyncController {
     bindSlider('saturation', 'saturation', (v) => `${Math.round(v)}`, 0.0);
     bindSlider('deep-blue', 'deep_blue', (v) => `${Math.round(v)}`, 0.0);
     bindSlider('foliage', 'foliage', (v) => `${Math.round(v)}`, 0.0);
-    bindSlider(
-      'emulsion-exp',
-      'emulsion_exposure',
-      (v) => formatExposure(v),
-      0.0,
-    );
     bindSlider('grain-scale', 'grain_scale', (v) => `${v.toFixed(2)}x`, 1.0);
     bindSlider(
       'grain-size',

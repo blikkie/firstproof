@@ -247,8 +247,6 @@ extension AppViewModel {
                 title = "Sharpening Masking (\(Int(sharpeningMasking)))"
             case .noiseReduction:
                 title = "Noise Reduction (\(Int(noiseReduction)))"
-            case .emulsionExposure:
-                title = "Push/Pull (\(String(format: "%+.2f EV", emulsionExposure)))"
             case .grainScale:
                 title = "Grain Scale (\(String(format: "%.1fx", grainScale)))"
             case .lutIntensity:
@@ -702,8 +700,6 @@ extension AppViewModel {
             sharpeningMasking = defaultSharpeningMasking
         case .noiseReduction:
             noiseReduction = defaultNoiseReduction
-        case .emulsionExposure:
-            emulsionExposure = defaultEmulsionExposure
         case .grainScale:
             grainScale = defaultGrainScale
         case .temperature:

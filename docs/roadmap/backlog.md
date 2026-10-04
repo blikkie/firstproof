@@ -114,6 +114,19 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
     - Zero-OLPF sensors (e.g. Sony A7R IV, Nikon D850, Leica M10): Constrains radius to prevent digital over-sharpening, ringing halos, and edge brittle-ness.
 - **Multi-Engine Parity**:
   - Harmonize adaptive kernel scaling identically across `Detail.metal`, `FragmentShader.ts`, and `pipeline.rs`.
+
+### 3.20 Sensitometric Chemical Push/Pull Development Engine (P2)
+- **Authentic Chemical Development Modeling Over Exposure Multipliers**:
+  - Replace naive pre-curve exposure scalar multipliers with authentic physical darkroom tank development time modeling ($N-1$ Pull, $N$ Normal Box Speed, $N+1$ Push 1, $N+2$ Push 2).
+- **Sensitometric Gamma Slope ($\Delta\gamma$) & Toe Modulation**:
+  - Pushing film steepens the characteristic D-log E gamma slope ($\gamma$) because highlight silver/dye centers develop exponentially faster than shadow grains.
+  - Pulling film contracts scene dynamic range, softening midtone contrast and lifting shadow density.
+- **Silver Halide & Dye-Cloud Crystal Clumping**:
+  - Extended development time allows silver crystal growth and dye cloud agglomeration to accelerate, naturally coarsening optical grain in pushed emulsions.
+- **Physical Boundary Anchoring & Tri-Engine Parity**:
+  - Ground parameters in published manufacturer sensitometry data sheets (Kodak D-76 / T-Max / C-41, Ilford ID-11).
+  - Verify smooth $C^1$ monotonicity and 21-step wedge integrity identically across Metal, WebGL, and Rust CPU export pipelines.
+
 ---
 
 

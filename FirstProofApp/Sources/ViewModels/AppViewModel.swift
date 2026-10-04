@@ -43,7 +43,6 @@ public enum EditSliderType {
     case perspectiveVertical
     case perspectiveHorizontal
     case lutIntensity
-    case emulsionExposure
     case grainScale
     case splitToningShadowHue
     case splitToningShadowSat
@@ -76,7 +75,6 @@ public enum EditSliderType {
         case .perspectiveVertical: return "Perspective Vertical"
         case .perspectiveHorizontal: return "Perspective Horizontal"
         case .lutIntensity: return "LUT Intensity"
-        case .emulsionExposure: return "Push / Pull Exposure"
         case .grainScale: return "Grain Scale"
         case .splitToningShadowHue: return "Shadow Hue"
         case .splitToningShadowSat: return "Shadow Saturation"
