@@ -180,6 +180,19 @@
               <div class="empty-actions">
                 <button id="btn-empty-open" class="btn btn-primary btn-lg">Open Local Folder</button>
               </div>
+              <div id="browser-folder-access-hint" class="browser-access-hint hidden">
+                <div class="hint-header">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="16" x2="12" y2="12"/>
+                    <line x1="12" y1="8" x2="12.01" y2="8"/>
+                  </svg>
+                  <span>Sidecar Persistence Tip</span>
+                </div>
+                <p class="hint-text">
+                  Your current browser does not support direct folder write access. For automatic, non-destructive <strong>.xmp sidecar persistence</strong> directly into your shoot folder on disk, we recommend opening First Proof in <strong>Google Chrome</strong>, <strong>Microsoft Edge</strong>, or another Chromium-based browser.
+                </p>
+              </div>
               <div class="zero-tracking-pill">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 Zero tracking • On-device RAM • Non-destructive .xmp sidecars
@@ -191,7 +204,12 @@
         <!-- Filmstrip Footer -->
         <footer class="filmstrip-container">
           <div class="filmstrip-header">
-            <span id="filmstrip-count" class="filmstrip-count">0 Photos Loaded</span>
+            <div class="filmstrip-header-left">
+              <span id="filmstrip-count" class="filmstrip-count">0 Photos Loaded</span>
+              <span id="browser-storage-badge" class="badge-browser-storage hidden" title="This browser stores edits in session cache. Open in Chrome, Edge, or another Chromium-based browser to automatically persist .xmp sidecars directly to disk.">
+                Session Cache • Use Chrome for .xmp on disk
+              </span>
+            </div>
             <div class="filmstrip-nav-hints">Use ← / → keys to navigate frames | 1–5 for Ratings | P / X for Flags</div>
           </div>
           <div class="filmstrip-scroll" id="filmstrip-scroll">

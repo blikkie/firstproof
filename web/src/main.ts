@@ -294,6 +294,17 @@ class DarkroomApp {
     this.bindEvents();
     this.syncRatingFlagUI();
 
+    // 10b. Check for full folder access (File System Access API) for sidecar persistence
+    const hasFullFolderAccess = 'showDirectoryPicker' in window;
+    const accessHint = document.getElementById('browser-folder-access-hint');
+    if (accessHint) {
+      accessHint.classList.toggle('hidden', hasFullFolderAccess);
+    }
+    const storageBadge = document.getElementById('browser-storage-badge');
+    if (storageBadge) {
+      storageBadge.classList.toggle('hidden', hasFullFolderAccess);
+    }
+
     // 11. Restore recent shoot folder memory from IndexedDB across browser restarts
     FolderIntake.getRecentDirHandle().then((recent) => {
       if (recent) {

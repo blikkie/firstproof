@@ -273,6 +273,40 @@ body.darkroom-body {
   border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
+.browser-access-hint {
+  text-align: left;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.browser-access-hint.hidden {
+  display: none;
+}
+
+.browser-access-hint .hint-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: #fbbf24;
+  margin-bottom: 0.35rem;
+}
+
+.browser-access-hint .hint-text {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.73rem;
+}
+
+.browser-access-hint .hint-text strong {
+  color: var(--text-main);
+}
+
 /* Filmstrip */
 .filmstrip-container {
   height: 120px;
@@ -291,6 +325,27 @@ body.darkroom-body {
   font-size: 0.72rem;
   color: var(--text-dim);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.filmstrip-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.badge-browser-storage {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-browser-storage.hidden {
+  display: none;
 }
 
 .filmstrip-scroll {
