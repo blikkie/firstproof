@@ -108,11 +108,17 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 
 ### 4.1 Open Source IP, Security & Code Cleanliness Auditing
 - **License Compliance & Copyleft Gate (`cargo-deny`)**:
-  - Whitelist permissive licenses (`MIT`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `MPL-2.0`, `CC0-1.0`); hard-block `GPL` / `AGPL`.
+  - Whitelist permissive licenses (`MIT`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `MPL-2.0`, `CC0-1.0`); hard-block copyleft `GPL` / `AGPL`.
   - Audit `rawler` (LGPL-2.1) to ensure standalone dynamic linking or clean-room replacement without copyleft contamination.
+  - Standardize First Proof application code and Rust engine under the **MIT License**.
+  - **Bundled Lensfun Database CC-BY-SA 3.0 Guardrail**:
+    - Quarantines the bundled Lensfun lens calibration database under `assets/lensfun/` as a distinct dataset licensed under Creative Commons Attribution-ShareAlike 3.0 (CC-BY-SA 3.0).
+    - As a collective work / mere aggregation, the database license does not affect First Proof's MIT application code.
+    - Explicitly call out this dataset carve-out in root `LICENSE` and `THIRDPARTY.md`.
+    - Provide visible in-app attribution under the Optics inspector tab lens profile selector (*"Lens profiles provided by the open-source Lensfun Project (CC-BY-SA 3.0)"*) and in the About/Attribution view.
 - **Code Cleanliness & Provenance Scanning (`scancode` / `license-eye`)**:
   - Scan codebase for accidental copy-pasted GPL snippets, proprietary headers, or unlicensed third-party code.
-  - Standardize SPDX license headers (`SPDX-License-Identifier: Apache-2.0 OR MIT`) across all Rust, Swift, and Metal files.
+  - Standardize SPDX license headers (`SPDX-License-Identifier: MIT`) across all Rust, Swift, and Metal files.
 - **Secret & Credential Detection (`gitleaks`)**:
   - Pre-commit and CI scans to guarantee no private keys, signing certificates, local absolute paths, or API tokens exist in repository git history.
 - **Dependency Vulnerability Auditing (`cargo-audit`)**:
@@ -148,6 +154,14 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 - **Decoupled Release Packaging Milestone**:
   - Packaging the standalone native macOS application (compiling `libfirstproof_core.a`, running `uniffi-bindgen`, building the SwiftUI `.app` bundle, Developer ID code signing, and Apple `notarytool` stapling) and headless multi-arch `firstproof-cli` release binaries (`x86_64` and `aarch64` Linux and macOS).
   - Cross-platform GitHub Actions release runner compiling statically linked artifacts with LittleCMS2, shell completions (`bash`, `zsh`, `fish`), and man pages.
+  - **Automated Hardware & Lens Calibration Harvester (`scripts/harvest_hardware_data.sh`)**:
+    - Build a deterministic headless extraction script (`scripts/harvest_hardware_data.sh`) executed during release preparation or CI that pulls both camera profiles and lens correction data directly from authoritative upstream distributions:
+      1. **Camera Calibration**: Pulls Adobe DNG Converter archive packages (extracted headlessly via `7z`) or RawTherapee `camconst.json`, parsing Adobe `.dcp` profiles and DNG tags (ForwardMatrix, Illuminant matrices, `BaselineSharpness`, `LinearResponseLimit`, and sensor black/white saturation margins) directly into `firstproof-engine::calibration::registry` or a compact binary table.
+      2. **Bundled Lens Calibration (Lensfun DB)**: Ingests upstream Lensfun CC-BY-SA 3.0 XML database snapshots (`data/db/*.xml`), compiling and indexing them into a compact pre-indexed binary blob (`lensfun.bin` / JSON) embedded directly in native macOS desktop resources and WebAssembly assets.
+    - **Deprecation of Legacy External Host Scanning**:
+      - Deprecates the old runtime scanning of local Homebrew `/opt/homebrew/share/lensfun` and Linux `/usr/share/lensfun` paths.
+      - Guarantees instant (< 2ms) optical distortion, TCA, and vignetting lookups operate 100% out of the box across desktop and browser darkrooms on day 1 without requiring user OS package installs.
+    - Keeps both new camera and lens support a simple automated version bump away without requiring manual downloads or hand-crafted registry entries.
   - While developing in the Linux environment, macOS packaging is held in place. It will be executed upon returning to a macOS environment or wired into a dedicated `macos-14` / `macos-15` GitHub Actions packaging runner.
   - Direct download links will be posted openly when binaries are ready—no email gates or signups.
 
