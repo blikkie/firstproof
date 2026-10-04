@@ -132,3 +132,25 @@ pub struct EditSettings {
 1. **Mathematical Invariant**: In monochrome mode, neutral axis must be strictly preserved ($R = G = B \implies R' = G' = B'$).
 2. **Boundary Anchoring**: On a synthetic 21-step wedge $(-10\text{ EV}$ to $+6.5\text{ EV})$, grain amplitude must be identically $0.0$ at bounds and peak smoothly at midtone ($0\text{ EV}$).
 3. **Multi-Engine Parity**: Bit-for-bit mathematical parity across Rust CPU export, Metal GPU shader, and WebGL 2 fragment shader verified by `tests/grain_parity.rs`.
+
+---
+
+## 7. Future Enhancement Path: 3-Layer Subtractive Dye Cloud Decorrelation
+
+### Physical Problem & Trade-off Assessment
+- **Microscopic Crystal Geometry (Non-Goal)**:
+  Simulating explicit crystal facet geometry (e.g. Voronoi/hexagonal cellular lattices for tabular T-Grain vs. cubic silver) is rejected on first-principles physical grounds. Real silver crystals ($0.2\text{--}1.5\,\mu\text{m}$) are far smaller than camera photosites ($4.3\,\mu\text{m}$ on a 45MP sensor); tens to hundreds of crystals fall inside a single image pixel. Microscopic facet geometry is entirely sub-pixel and invisible at any viewing distance.
+- **The Observable Photographic Phenomenon**:
+  Under 100% to 200% magnification, real color negative and slide film exhibits subtle, organic **micro-chromatic grain vibration**. This occurs because the yellow, magenta, and cyan dye clouds reside in three physically distinct gelatin layers:
+  1. Top Layer: Yellow dye clouds (blue-sensitive)
+  2. Middle Layer: Magenta dye clouds (green-sensitive, visually sharpest)
+  3. Bottom Layer: Cyan dye clouds (red-sensitive)
+- In the current baseline engine, grain modulates all three channels using a single scalar $\delta$, behaving as achromatic luminance grain.
+
+### Recommended 80/20 Implementation Path (Story 3.21)
+Instead of expensive cellular procedural math or 3 independent noise passes, evaluate the existing continuous noise carrier across small fixed coordinate phase offsets:
+$$\eta_R = \text{noise}(p), \quad \eta_G = \text{noise}(p + \Delta_1), \quad \eta_B = \text{noise}(p + \Delta_2)$$
+Where $\Delta_1, \Delta_2$ represent physical interlayer offsets:
+1. **Color Stocks**: Modulate the $R, G, B$ subtractive transmissions independently using $\eta_R, \eta_G, \eta_B$ weighted by Nutting's midtone density curve, delivering authentic dye-cloud color vibration with near-zero ALU overhead.
+2. **Monochrome Stocks**: Strictly evaluate single-phase $\eta$ across all channels, guaranteeing pristine achromatic neutral silver grain ($R'=G'=B'$).
+
