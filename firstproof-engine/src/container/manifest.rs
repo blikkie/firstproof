@@ -48,6 +48,11 @@ pub struct RawContainerManifest {
 
     // Embedded Preview Slice (offset, length)
     pub preview_slice: Option<(usize, usize)>,
+
+    // DNG Opcode Lists (Stage 1, Stage 2, Stage 3)
+    pub opcode_list_1: Option<Vec<u8>>,
+    pub opcode_list_2: Option<Vec<u8>>,
+    pub opcode_list_3: Option<Vec<u8>>,
 }
 
 impl RawContainerManifest {
@@ -258,6 +263,19 @@ impl RawContainerManifest {
                 }
             });
 
+        // DNG Opcode Lists (Tags 51008, 51009, 51022)
+        let opcode_list_1 = tiff
+            .find_entry(DNG_TAG_OPCODE_LIST_1)
+            .and_then(|e| e.raw_bytes(buf, is_le));
+
+        let opcode_list_2 = tiff
+            .find_entry(DNG_TAG_OPCODE_LIST_2)
+            .and_then(|e| e.raw_bytes(buf, is_le));
+
+        let opcode_list_3 = tiff
+            .find_entry(DNG_TAG_OPCODE_LIST_3)
+            .and_then(|e| e.raw_bytes(buf, is_le));
+
         Some(Self {
             is_dng,
             camera_make,
@@ -283,6 +301,9 @@ impl RawContainerManifest {
             white_levels,
             noise_profile,
             preview_slice,
+            opcode_list_1,
+            opcode_list_2,
+            opcode_list_3,
         })
     }
 }

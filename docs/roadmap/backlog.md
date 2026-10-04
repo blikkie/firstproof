@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
-2. **Story 3.16: Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`)** (P2)
-3. **Story 3.20: Sensitometric Chemical Push/Pull Development Engine** (P2)
-4. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
+1. **Story 3.16: Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`)** (P2)
+2. **Story 3.20: Sensitometric Chemical Push/Pull Development Engine** (P2)
+3. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
+4. **Story 3.22: Sensitometric Paper Base ($L^*a^*b^*$) & ISO(R) Enlarger Grade Calibration** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -55,17 +55,6 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1) - COMPLETED
 All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](completed.md).
-
-
-### 3.14 DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair (P2)
-- **DNG OpcodeList Bytecode Specification**:
-  - Parse and execute `OpcodeList1` (pre-demosaic), `OpcodeList2` (post-demosaic), and `OpcodeList3` (post-crop/geometry) embedded in modern DNG containers (Tags 51008, 51009, 51022).
-- **Factory Bad-Pixel In-Painting (`FixBadPixelsConstant` / `FixBadPixelsList`)**:
-  - In-paint factory-mapped defective, dead, or hot photosites on the raw CFA sensor grid using directional Laplacian interpolation before demosaicing, permanently curing persistent sensor speckles without softening adjacent image pixels.
-- **Lens Flat-Field & Peripheral Vignetting Correction (`GainMap`)**:
-  - Evaluate 2D bilinear mesh radial illumination gain maps calibrated by camera and lens firmware, correcting optical falloff and chromatic vignetting across corners without manual slider adjustments.
-- **Geometric Rectification (`WarpRectilinear`)**:
-  - Execute manufacturer-provided radial distortion polynomials directly within `firstproof-engine`, complementing Lensfun for mirrorless lens systems.
 
 
 ### 3.16 Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`) (P2)

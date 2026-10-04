@@ -298,7 +298,7 @@ impl RawSensorFrame {
             _ => return None,
         };
 
-        Some(RawSensorFrame {
+        let mut frame = RawSensorFrame {
             full_width: raw.width,
             full_height: raw.height,
             active_x: crop_left,
@@ -318,8 +318,27 @@ impl RawSensorFrame {
             linear_response_limit,
             noise_profile,
             sensor_data,
-        })
+        };
 
+        if let Some(op_bytes) = manifest.as_ref().and_then(|m| m.opcode_list_1.as_ref()) {
+            if let Ok(opcodes) = crate::container::DngOpcodeList::parse(op_bytes) {
+                frame.apply_opcode_list_1(&opcodes);
+            }
+        }
+
+        Some(frame)
+    }
+
+    /// Applies DNG OpcodeList1 (pre-demosaic / CFA raw corrections such as bad pixel repair and sensor GainMap).
+    pub fn apply_opcode_list_1(&mut self, opcodes: &crate::container::DngOpcodeList) {
+        crate::container::apply_opcode_list_1_to_raw(
+            &mut self.sensor_data,
+            self.full_width,
+            self.full_height,
+            self.black_levels,
+            self.white_levels,
+            opcodes,
+        );
     }
 
     /// Decodes a `RawSensorFrame` directly from an in-memory RAW file byte slice using rawler.

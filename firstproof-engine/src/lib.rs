@@ -14,7 +14,11 @@ pub mod settings;
 pub mod xmp;
 
 pub use calibration::{CameraCalibration, CameraCalibrationRegistry};
-pub use container::RawContainerManifest;
+pub use container::{
+    apply_opcode_list_1_to_raw, apply_opcode_list_2_to_rgb, is_bayer_green, DngAreaSpec,
+    DngBadPoint, DngBadRect, DngGainMap, DngOpcode, DngOpcodeList, OpcodeError,
+    RawContainerManifest,
+};
 
 
 pub use schema::{

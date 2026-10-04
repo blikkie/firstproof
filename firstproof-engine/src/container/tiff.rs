@@ -65,6 +65,24 @@ impl IfdEntry {
         }
     }
 
+    /// Resolves the raw byte payload of this entry (handling both embedded and offset data).
+    pub fn raw_bytes(&self, buf: &[u8], is_le: bool) -> Option<Vec<u8>> {
+        let size = self.byte_size();
+        if size == 0 {
+            return Some(Vec::new());
+        }
+        if size <= 4 {
+            let bytes = if is_le {
+                self.offset_or_val.to_le_bytes()
+            } else {
+                self.offset_or_val.to_be_bytes()
+            };
+            Some(bytes[..size].to_vec())
+        } else {
+            self.data_slice(buf).map(|s| s.to_vec())
+        }
+    }
+
     /// Reads single unsigned integer value (SHORT or LONG).
     pub fn as_u32(&self, buf: &[u8], is_le: bool) -> Option<u32> {
         if self.count == 0 {
