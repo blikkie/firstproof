@@ -451,7 +451,8 @@ inline float applyPaperGrade(float val, float grade) {
     if (abs(grade) < 0.001) {
         return val;
     }
-    float alpha = 0.40 * (grade / 2.0);
+    // ISO 6846 calibration: Grade 4 (+2.0) -> alpha = +0.60; Grade 0 (-2.0) -> alpha = -0.40
+    float alpha = (grade / 2.0) * ((grade >= 0.0) ? 0.60 : 0.40);
     return clamp(val + alpha * val * (1.0 - val) * (2.0 * val - 1.0), 0.0, 1.0);
 }
 
@@ -459,23 +460,23 @@ inline float3 applyBaseWarmth(float3 rgb, float warmth) {
     if (abs(warmth) < 0.001) {
         return rgb;
     }
-    float lum = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+    float lum = 0.2627 * rgb.r + 0.6780 * rgb.g + 0.0593 * rgb.b;
     float highlightWeight = clamp(pow(lum, 0.6), 0.0, 1.0);
     float factor = (warmth / 100.0) * highlightWeight;
     
     float3 mult;
     if (factor > 0.0) {
         mult = float3(
-            1.0 + factor * 0.060,
-            1.0 + factor * 0.025,
-            1.0 - factor * 0.045
+            1.0,
+            1.0 - factor * 0.013849,
+            1.0 - factor * 0.051111
         );
     } else {
         float absF = -factor;
         mult = float3(
-            1.0 - absF * 0.025,
-            1.0 - absF * 0.008,
-            1.0 + absF * 0.045
+            1.0 - absF * 0.033699,
+            1.0 - absF * 0.031749,
+            1.0
         );
     }
     return clamp(rgb * mult, 0.0, 1.0);

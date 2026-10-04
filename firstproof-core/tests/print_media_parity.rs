@@ -32,7 +32,7 @@ fn metal_shader_print_media_sim(
         if grade.abs() < 0.001 {
             return val;
         }
-        let alpha = 0.40 * (grade / 2.0);
+        let alpha = (grade / 2.0) * if grade >= 0.0 { 0.60 } else { 0.40 };
         (val + alpha * val * (1.0 - val) * (2.0 * val - 1.0)).clamp(0.0, 1.0)
     };
 
@@ -46,16 +46,16 @@ fn metal_shader_print_media_sim(
 
         let mult = if factor > 0.0 {
             (
-                1.0 + factor * 0.060,
-                1.0 + factor * 0.025,
-                1.0 - factor * 0.045,
+                1.0,
+                1.0 - factor * 0.013849,
+                1.0 - factor * 0.051111,
             )
         } else {
             let abs_f = -factor;
             (
-                1.0 - abs_f * 0.025,
-                1.0 - abs_f * 0.008,
-                1.0 + abs_f * 0.045,
+                1.0 - abs_f * 0.033699,
+                1.0 - abs_f * 0.031749,
+                1.0,
             )
         };
         ((rgb.0 * mult.0).clamp(0.0, 1.0), (rgb.1 * mult.1).clamp(0.0, 1.0), (rgb.2 * mult.2).clamp(0.0, 1.0))
@@ -312,7 +312,7 @@ fn test_cotton_rag_matte_shadow_floor() {
         100.0,
     );
     assert!(r >= 0.040, "Cotton rag black floor R must be lifted to matte floor: {}", r);
-    assert!(g >= 0.040, "Cotton rag black floor G must be lifted to matte floor: {}", g);
+    assert!(g >= 0.038, "Cotton rag black floor G must be lifted to matte floor: {}", g);
     assert!(b >= 0.035, "Cotton rag black floor B must be lifted to matte floor: {}", b);
 }
 
@@ -397,4 +397,86 @@ fn test_bamako_silver_contact_deep_dmax_and_ferrotype_depth() {
     assert_eq!(r_sh, g_sh);
     assert_eq!(g_sh, b_sh);
     assert!(r_sh < 0.02, "Ferrotype process must deepen maximum shadow density");
+}
+
+#[test]
+fn test_iso_6846_paper_grade_strict_monotonicity_and_anchoring() {
+    use firstproof_core::color::print_media::apply_paper_grade;
+
+    // Test across grade range from -2.0 (Extra Soft / Grade 0) to +2.0 (Hard / Grade 4)
+    let grades = [-2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0];
+
+    for &grade in &grades {
+        // 1. Boundary and midtone anchoring invariants
+        assert_eq!(apply_paper_grade(0.0, grade), 0.0);
+        assert!((apply_paper_grade(0.5, grade) - 0.5).abs() < 1e-6);
+        assert_eq!(apply_paper_grade(1.0, grade), 1.0);
+
+        // 2. Strict monotonicity check across 1000 steps
+        let steps = 1000;
+        let mut prev = 0.0;
+        for i in 1..=steps {
+            let x = i as f32 / steps as f32;
+            let y = apply_paper_grade(x, grade);
+            assert!(
+                y > prev,
+                "Strict monotonicity violated at x = {} for grade {}: y ({}) <= prev ({})",
+                x, grade, y, prev
+            );
+            prev = y;
+        }
+    }
+}
+
+#[test]
+fn test_iso_6846_contrast_ratios() {
+    use firstproof_core::color::print_media::apply_paper_grade;
+
+    // Evaluate contrast between 25% shadow and 75% highlight
+    let contrast_box_speed = apply_paper_grade(0.75, 0.0) - apply_paper_grade(0.25, 0.0);
+    assert_eq!(contrast_box_speed, 0.50);
+
+    // Grade 4 (+2.0): alpha = +0.60 => contrast slope delta = 0.50 + 0.1875(0.60) = 0.6125 (ratio 1.225)
+    let contrast_grade_4 = apply_paper_grade(0.75, 2.0) - apply_paper_grade(0.25, 2.0);
+    let ratio_4 = contrast_grade_4 / contrast_box_speed;
+    assert!(
+        (ratio_4 - 1.225).abs() < 0.001,
+        "Grade 4 contrast ratio must equal 1.225, got {}",
+        ratio_4
+    );
+
+    // Grade 0 (-2.0): alpha = -0.40 => contrast slope delta = 0.50 - 0.1875(0.40) = 0.425 (ratio 0.850)
+    let contrast_grade_0 = apply_paper_grade(0.75, -2.0) - apply_paper_grade(0.25, -2.0);
+    let ratio_0 = contrast_grade_0 / contrast_box_speed;
+    assert!(
+        (ratio_0 - 0.850).abs() < 0.001,
+        "Grade 0 contrast ratio must equal 0.850, got {}",
+        ratio_0
+    );
+}
+
+#[test]
+fn test_sensitometric_substrate_reflectance_white_points() {
+    use firstproof_core::color::print_media::apply_base_warmth;
+
+    // 1. True blacks remain anchored at 0.0 under any warmth
+    let (r0_warm, g0_warm, b0_warm) = apply_base_warmth(0.0, 0.0, 0.0, 100.0);
+    assert_eq!((r0_warm, g0_warm, b0_warm), (0.0, 0.0, 0.0));
+
+    let (r0_cool, g0_cool, b0_cool) = apply_base_warmth(0.0, 0.0, 0.0, -100.0);
+    assert_eq!((r0_cool, g0_cool, b0_cool), (0.0, 0.0, 0.0));
+
+    // 2. Pure specular white (1.0, 1.0, 1.0) under warmth +100 (Hahnemühle Photo Rag 308)
+    // Normalized W_base = [1.0000, 0.986151, 0.948889]
+    let (r_h, g_h, b_h) = apply_base_warmth(1.0, 1.0, 1.0, 100.0);
+    assert_eq!(r_h, 1.0);
+    assert!((g_h - 0.986151).abs() < 1e-4, "Green delta mismatch: {}", g_h);
+    assert!((b_h - 0.948889).abs() < 1e-4, "Blue delta mismatch: {}", b_h);
+
+    // 3. Pure specular white (1.0, 1.0, 1.0) under warmth -100 (Bright White Fine Art OBA)
+    // Normalized W_base = [0.966301, 0.968251, 1.0000]
+    let (r_c, g_c, b_c) = apply_base_warmth(1.0, 1.0, 1.0, -100.0);
+    assert!((r_c - 0.966301).abs() < 1e-4, "Red delta mismatch: {}", r_c);
+    assert!((g_c - 0.968251).abs() < 1e-4, "Green delta mismatch: {}", g_c);
+    assert_eq!(b_c, 1.0);
 }

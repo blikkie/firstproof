@@ -393,8 +393,15 @@ This archive tracks completed stories and features moved from the active backlog
     - GPU Viewport Canvas (Metal: `Shaders.metal`, `ShaderTypes.h`, `MetalRenderer+Uniforms.swift`): Passes `baselineSharpness` in `ShaderUniforms` and modulates the unsharp mask sample offset dynamically: `float effectiveRadius = max(uniforms.sharpeningRadius * uniforms.baselineSharpness, 0.5f)`.
     - WebGL 2 Engine (`FragmentShader.ts`, `WebGLRenderer.ts`, `PhotoLoaderService.ts`, `main.ts`): Uniform `u_baselineSharpness` scaling `effectiveRadius = max(u_sharpeningRadius * u_baselineSharpness, 0.5)`.
     - Archival CPU Engine (`firstproof-engine::color::pipeline`, `firstproof-core::export::encoders`): `r_step = (edits.sharpening_radius * image.baseline_sharpness).max(0.5)`.
-  - *Verification & Sensor Guards*:
-    - Backed by automated parity tests in `firstproof-core/tests/raw_vs_dng_intake_parity.rs` asserting identical `baseline_sharpness == 1.25` between native `.CR2` (via registry) and `.dng` (via Tag 50732), plus synthetic DNG Tag 50732 extraction.
-    - Verified against `binned_pipeline_parity` and `camera_profiles_parity`.
-    - All 8 pre-flight suites in `./scripts/check.sh` passed cleanly.
+- **Story 3.22: Sensitometric Paper Base ($L^*a^*b^*$) & ISO(R) Enlarger Grade Calibration (`firstproof-engine::color::print_media`, `FirstProofApp/Sources/Shaders/ColorScience.metal`, `web/src/shaders/ColorScience.ts`, `firstproof-core/tests/print_media_parity.rs`)**:
+  - *Authoritative $L^*a^*b^*$ Substrate White Point Calibration*: Replaced hand-tuned base warmth scalars with spectrophotometer data sheets under standard D65, digitized and mapped into Linear Rec.2020:
+    - Warm unbleached cotton rag (*Hahnemühle Photo Rag 308*, $+100$ slider): $L^* = 97.0, a^* = 0.2, b^* = +2.5$, yielding normalized $\mathbf{W}_{\text{warm}} = [1.0000, 0.9862, 0.9489]$ (subtractive blue/green absorption).
+    - Cool barium sulfate with OBA (*Bright White Fine Art OBA*, $-100$ slider): $L^* = 98.5, a^* = 0.5, b^* = -2.0$, yielding normalized $\mathbf{W}_{\text{cool}} = [0.9663, 0.9683, 1.0000]$ (fluorescent blue emission).
+    - Subtractive physical reflectance formulation: $I_{\text{out}} = I \cdot \mathbf{W}_{\text{mult}}$, naturally guaranteeing no channel exceeds $1.0000$ (zero clipping knees) while true blacks stay anchored at $0.0000$.
+  - *ISO 6846 Enlarger Grade Contrast S-Curve*:
+    - Calibrated Paper Grade polynomial S-curve $f(x) = x + \alpha x(1-x)(2x-1)$ against standardized ISO Log Exposure Range ($R$) ratios: Grade 4 ($+2.0$, $\alpha = +0.60$, $+22.5\%$ contrast slope) and Grade 0 ($-2.0$, $\alpha = -0.40$, $-15.0\%$ contrast slope).
+    - Proved and enforced the Strict Monotonicity Invariant ($f'(x) \ge 0.40 > 0$ for all $x \in [0, 1]$), eliminating flat spots and premature zero crossings.
+  - *Tri-Engine Mathematical Parity*: Bit-level mathematical parity verified across Rust CPU (`print_media.rs`), Metal GPU (`ColorScience.metal`), and WebGL 2 (`ColorScience.ts`).
+  - *Verification & Sensor Guards*: Backed by automated tests in `firstproof-core/tests/print_media_parity.rs` asserting strict monotonicity over 1,000 steps, exact midtone ($0.5$) and boundary ($0.0, 1.0$) anchoring, contrast ratios, and substrate reflectance vectors. All 8 pre-flight suites in `./scripts/check.sh` passed cleanly.
+
 

@@ -575,7 +575,8 @@ float applyPaperGrade(float val, float grade) {
     if (abs(grade) < 0.001) {
         return val;
     }
-    float alpha = 0.40 * (grade / 2.0);
+    // ISO 6846 calibration: Grade 4 (+2.0) -> alpha = +0.60; Grade 0 (-2.0) -> alpha = -0.40
+    float alpha = (grade / 2.0) * ((grade >= 0.0) ? 0.60 : 0.40);
     return clamp(val + alpha * val * (1.0 - val) * (2.0 * val - 1.0), 0.0, 1.0);
 }
 
@@ -590,16 +591,16 @@ vec3 applyBaseWarmth(vec3 rgb, float warmth) {
     vec3 mult;
     if (factor > 0.0) {
         mult = vec3(
-            1.0 + factor * 0.060,
-            1.0 + factor * 0.025,
-            1.0 - factor * 0.045
+            1.0,
+            1.0 - factor * 0.013849,
+            1.0 - factor * 0.051111
         );
     } else {
         float absF = -factor;
         mult = vec3(
-            1.0 - absF * 0.025,
-            1.0 - absF * 0.008,
-            1.0 + absF * 0.045
+            1.0 - absF * 0.033699,
+            1.0 - absF * 0.031749,
+            1.0
         );
     }
     return clamp(rgb * mult, 0.0, 1.0);

@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.22: Sensitometric Paper Base ($L^*a^*b^*$) & ISO(R) Enlarger Grade Calibration** (P2)
-2. **Story 4.1: Open Source IP, Security & Code Cleanliness Auditing** (P2)
-3. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P2)
-4. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
+1. **Story 4.1: Open Source IP, Security & Code Cleanliness Auditing** (P2)
+2. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P2)
+3. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
+4. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -66,27 +66,6 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
   - Retain strictly monochromatic luminance grain ($R=G=B$) for black-and-white archetypes (Mobberley, Liguria, Baoding).
 - **Subtractive Beer-Lambert Modulation**:
   - Modulate dye transmission per subtractive channel with Nutting density weighting, preserving 1:1 parity and sub-millisecond real-time performance across Metal, WebGL, and Rust CPU export pipelines.
-
-### 3.22 Sensitometric Paper Base ($L^*a^*b^*$) & ISO(R) Enlarger Grade Calibration (P2)
-- **Hahnemühle & Canson Published Substrate Calibration**:
-  - Replace hand-tuned base warmth scalars in `apply_base_warmth` with authoritative $L^*a^*b^*$ white points digitized from manufacturer technical data sheets:
-    - *Hahnemühle Photo Rag 308*: $L^* = 97.0, a^* = 0.2, b^* = +2.5$ (100% cotton, 0% OBA, natural warm cream).
-    - *Canson Edition Etching Rag*: $L^* = 97.1, a^* = 0.0, b^* = +1.5$ (pure unbleached cellulose, subtle neutral warmth).
-    - *Ilford Galerie FB Classic (Baryta)*: $L^* = 97.5, a^* = -0.5, b^* = +0.5$ (neutral barium sulfate $BaSO_4$ coating).
-    - *Bright White Fine Art (OBA)*: $L^* = 98.5, a^* = +0.5, b^* = -2.0$ (fluorescent optical brightener, cool high-radiance white).
-  - Transform coordinates into Linear Rec.2020 substrate reflectance multipliers ($W_{\text{base}}$), naturally anchoring true blacks at 0.0 while highlights reflect authentic fine-art paper fibers.
-- **ISO 6846 / ANSI PH2.2 Enlarger Grade Exposure Range ($R$) Calibration**:
-  - Replace arbitrary polynomial scalars in `apply_paper_grade` with standardized ISO Log Exposure Range ($R = \Delta \log_{10} H \times 100$) ratios from published Ilford Multigrade FB data sheets:
-    - Grade 00: $R = 160$ ($1.60\text{ log }H$, ultra-soft expansion)
-    - Grade 0: $R = 130$
-    - Grade 1: $R = 110$
-    - Grade 2: $R = 90$ ($0.90\text{ log }H$, normal contrast box speed)
-    - Grade 3: $R = 75$
-    - Grade 4: $R = 60$
-    - Grade 5: $R = 40$ ($0.40\text{ log }H$, hard graphic contrast)
-  - Calibrates the Paper Grade slider slope dynamically so contrast expansion directly mirrors darkroom enlarger exposure steps.
-- **Tri-Engine Bit-Level Parity**:
-  - Implement identically across `print_media.rs` (Rust engine), `ColorScience.metal` (macOS GPU), and `ColorScience.ts` (WebGL 2), verified with automated `print_media_parity` tests.
 
 ---
 
