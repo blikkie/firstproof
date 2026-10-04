@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
-2. **Story 3.4: ColorSync Soft Proofing** (P2)
-3. **Story 3.7: Color Space Tagging & ICC Profile Embedding** (P2)
-4. **Story 3.5: Comprehensive EXIF/IPTC/XMP Ingestion & SQLite Caching Engine** (P2)
+1. **Story 3.6: Cross-Platform Linux Toolchain & Headless `firstproof-cli` Development Engine** (P1)
+2. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+3. **Story 3.15: Sensor Non-Linearity & Anti-Blooming Knee Engine (`LinearResponseLimit`)** (P2)
+4. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -29,11 +29,16 @@ This document strictly tracks pending and deferred features calibrated against o
 > Previous attempts at simulating film grain recoiled because grain was evaluated post-tone-mapping in narrow gamma-encoded sRGB, artificially amplifying shadow noise floors and clipping non-linearly. In real physical film, silver halide crystals and dye clouds react to incident scene photons in the optical domain before optical tone-mapping and print transfer. When re-evaluating grain down the roadmap, it must strictly execute inside the Wide-Gamut Linear Rec.2020 domain using physical sensitometric optical density ($D = \log_{10}(1/T)$) prior to the terminal display transform.
 
 ### 3.3 Archival Open DNG Converter & Lossless Compression Engine (P2)
-- **Lossless Bayer CFA Transcoding**:
+- **Opinionated Zero-Configuration Architecture**:
+  - Eliminates Adobe DNG Converter-style preference dialogs, preview dropdowns, and settings bloat.
+  - Hardened for CLI (`firstproof-cli dng`) and desktop batch processing; strictly avoids heavy batch transcoding inside web browser tabs.
+- **Lossless Bayer CFA Transcoding & Deflate Tile Compression**:
   - Convert proprietary camera RAWs (`.cr2`, `.nef`, `.arw`, `.rw2`) into open standard Adobe DNG (1.4+ / TIFF-EP).
   - Encapsulate raw Bayer mosaic unaltered, preserving exact sensor CFA layout, active sensor crop, black/white saturation levels, and daylight/tungsten color calibration matrices.
-- **Deflate (ZIP) Tile Compression**:
   - Apply lossless Deflate / ZIP tile compression (`flate2`) across raw sensor data, reclaiming 20–35% disk storage with mathematically identical (zero-loss) reconstruction.
+- **Embedded First Proof Authentic Previews (Zero Camera-JPEG Plastic)**:
+  - **SubIFD High-Res Retina Preview ($2560\,\text{px}$ Long Edge)**: Rendered sub-$15\,\text{ms}$ directly from First Proof's 2×2 Bayer box-binning engine (`decodeRawPreviewBinned`) through Linear Rec.2020 $\to$ AgX filmic tone mapping. File size is compact ($\approx 500\text{--}700\,\text{KB}$), preserving $>90\%$ of archive storage savings while ensuring the DNG displays honest, filmic skin tones and highlight rolloff across macOS QuickLook, Finder, and Linux file managers.
+  - **IFD 0 Icon Thumbnail ($256\times170\,\text{px}$)**: Standard uncompressed or JPEG thumbnail for instant OS file icon grid caching.
 - **Bit-for-Bit Verification Safeguard**:
   - Validate decompressed CFA sensor payload against the original proprietary RAW via SHA-256 / CRC32 before committing conversion, ensuring zero risk of archive corruption.
 - **Metadata & Sidecar Integration**:
