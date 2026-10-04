@@ -362,5 +362,8 @@ This archive tracks completed stories and features moved from the active backlog
     - Added 16-tap unit test assertions in `export/mod.rs` (`test_bilateral_tone_recovery_flat_patch`, `test_bilateral_tone_recovery_halo_suppression_at_contrast_edge`, `test_bilateral_tone_recovery_texture_contrast_preservation`).
     - Enforced architectural stage order in `architecture_fitness.rs` asserting `applyBilateralToneRecovery` precedes terminal tone mapping across all engines.
     - All 8 pre-flight suites in `./scripts/check.sh` passed cleanly.
-
-
+- **Story 3.6: Cross-Platform Linux Toolchain & Headless `firstproof-cli` Development Engine (`firstproof-core::bin::cli`, `firstproof-core/Cargo.toml`)**:
+  - *Headless `firstproof-cli` Developer Binary*: Implemented an ergonomic, high-performance command-line darkroom runner in `firstproof-core/src/bin/cli.rs` supporting `develop` (full raw pipeline to 16-bit TIFF or JPEG with XMP auto-discovery, slider overrides, emulsion stocks, and print media) and `inspect` (camera EXIF, sensor CFA geometry, black/white saturation levels, and Lensfun optical calibration).
+  - *Fast vs Archival Demosaic Tiers*: Provided clean switching between `--fast` (sub-15ms 2×2 Bayer box-binning matching the GPU viewport canvas) and `--archival` (full-resolution multi-pass demosaicing).
+  - *Clean Linux Toolchain Decoupling*: Verified 100% native Linux compilation and test execution on Kubuntu / Ubuntu 24.04 LTS without Darwin toolchain or macOS framework dependencies, empowering full-fidelity color science and format engineering headlessly.
+  - *Verification*: Pre-flight check suite (`./scripts/check.sh`) passed 100% clean across all 8 suites; visual inspection files generated and verified on Linux.

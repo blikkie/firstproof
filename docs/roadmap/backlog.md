@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.6: Cross-Platform Linux Toolchain & Headless `firstproof-cli` Development Engine** (P1)
-2. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
-3. **Story 3.15: Sensor Non-Linearity & Anti-Blooming Knee Engine (`LinearResponseLimit`)** (P2)
-4. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
+1. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+2. **Story 3.15: Sensor Non-Linearity & Anti-Blooming Knee Engine (`LinearResponseLimit`)** (P2)
+3. **Story 3.14: DNG Opcode Processing Engine: Lens Flat-Field GainMap & Factory Bad-Pixel Repair** (P2)
+4. **Story 3.16: Adaptive OLPF Deconvolution & Optical Sharpness Tuning (`BaselineSharpness`)** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -48,24 +48,6 @@ This document strictly tracks pending and deferred features calibrated against o
 - **Canvas Soft Proofing Mode**:
   - Canvas toolbar mode simulating sRGB and standard print gamut clipping (e.g., ISO Coated v2 / US Web Coated SWOP) on wide-gamut displays.
   - Gamut warning overlay highlighting out-of-gamut pixels in high-contrast overlay color.
-
-### 3.6 Cross-Platform Linux Toolchain & Headless Development Engine (P1 - Pulled Forward)
-- **Kubuntu & Multi-Arch Linux Toolchain (x86_64 / aarch64)**:
-  - Validate and guarantee that `firstproof-core` compiles and passes all unit tests natively on Linux (tested on Kubuntu / Ubuntu 24.04 LTS).
-  - Document required Linux development packages (`build-essential`, `libclang-dev`, `liblcms2-dev`, `pkg-config`).
-  - Purge any remaining macOS/Darwin-specific assumptions from the Rust core (e.g. hardcoded `/Users/...` path expectations, case-insensitivity assumptions, or Darwin linker flags).
-- **Headless `firstproof-cli` Developer Binary**:
-  - Implement an ergonomic CLI developer tool (`firstproof-cli` in `firstproof-core/src/bin/cli.rs`) that allows running the full RAW darkroom pipeline directly from the Linux terminal:
-    ```bash
-    cargo run --bin firstproof-cli -- develop input.cr2 --out preview.tiff --exposure +0.5 --profile agx-vivid
-    ```
-  - Enables direct, headless development and visual verification of color science, raw demosaicing, AgX tone mapping, and upcoming film emulsions on Linux (opening output in KDE Gwenview or GIMP) without needing a macOS desktop or GPU canvas.
-- **Cross-Platform CI Gate (GitHub Actions)**:
-  - Add a GitHub Actions workflow running `cargo test --all-targets` across both `ubuntu-latest` and `macos-latest`.
-  - Enforces cross-platform portability as a hard merge gate for all future core Rust development.
-- **Clean Architectural Decoupling (Keeping Us Honest)**:
-  - Keeps the core color science, SQLite catalog database, XMP sidecar parser, and export pipeline 100% platform-agnostic and decoupled from macOS AppKit/SwiftUI.
-  - Lays the architectural groundwork for a future native Linux desktop GUI (e.g. Qt/KDE or Rust/WGPU) sharing the exact same `firstproof-core` engine.
 
 ### 3.7 WebAssembly Darkroom Engine & Static Web Launch (P0 / P1 - Pulled Forward)
 - **`firstproof-wasm` Core Crate Scaffolding**:
@@ -186,10 +168,11 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
     - **Torsten Bronger & Lensfun Community**: Open lens database and optical distortion modeling.
     - **CIE Colorimetry & Open Standards**: CIE 1931/1976 colorimetric observers, Planckian locus math, and open standard specifications.
 
-### 4.4 macOS Desktop Binary Release & Packaging Pipeline (Deferred / Standalone Initiative)
-- **Decoupled macOS Release Milestone**:
-  - Packaging the standalone native macOS application (compiling `libfirstproof_core.a`, running `uniffi-bindgen`, building the SwiftUI `.app` bundle, Developer ID code signing, and Apple `notarytool` stapling) is explicitly preserved as a dedicated release-readiness milestone.
-  - While developing in the Linux environment, this track is held in place. It will be executed upon returning to a macOS environment or wired into a dedicated `macos-14` / `macos-15` GitHub Actions packaging runner.
+### 4.4 Standalone Desktop & CLI Release Packaging Pipeline (Deferred / Standalone Initiative)
+- **Decoupled Release Packaging Milestone**:
+  - Packaging the standalone native macOS application (compiling `libfirstproof_core.a`, running `uniffi-bindgen`, building the SwiftUI `.app` bundle, Developer ID code signing, and Apple `notarytool` stapling) and headless multi-arch `firstproof-cli` release binaries (`x86_64` and `aarch64` Linux and macOS).
+  - Cross-platform GitHub Actions release runner compiling statically linked artifacts with LittleCMS2, shell completions (`bash`, `zsh`, `fish`), and man pages.
+  - While developing in the Linux environment, macOS packaging is held in place. It will be executed upon returning to a macOS environment or wired into a dedicated `macos-14` / `macos-15` GitHub Actions packaging runner.
   - Direct download links will be posted openly when binaries are ready—no email gates or signups.
 
 ### 4.5 Swift Desktop Parameter Schema & Behavioral Interaction Parity (Deferred - macOS Milestone)

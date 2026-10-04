@@ -29,3 +29,15 @@ xmp-writer = "0.3"
 img-parts = "0.4.0"
 bayer = "0.1.5"
 lcms2 = { version = "6.2.0", features = ["static"] }
+
+[[bin]]
+name = "firstproof-cli"
+path = "src/bin/cli.rs"
+
+[[bin]]
+name = "inspect"
+path = "src/bin/inspect.rs"
+
+[[bin]]
+name = "calibrate"
+path = "src/bin/calibrate.rs"
