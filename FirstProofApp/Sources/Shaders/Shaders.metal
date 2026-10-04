@@ -151,27 +151,45 @@ fragment float4 fragmentShader(
         rec2020Color *= exposureGain;
     }
     
-    // 4b. Advanced Bilateral Base/Detail Tone Recovery (Highlights, Shadows, Whites, Blacks)
+    // 4b. Multi-Scale Hierarchical Bilateral Tone Recovery (Highlights, Shadows, Whites, Blacks)
     if (editHighlights != 0.0 || editShadows != 0.0 || editWhites != 0.0 || editBlacks != 0.0) {
-        float2 texelSize = 1.0 / float2(texture.get_width(), texture.get_height());
-        float2 step = texelSize * 2.0; // 2-texel stride captures spatial base illumination
-        
-        // Sample 8 neighbors: 4 orthogonal + 4 diagonal
-        float4 s_l  = texture.sample(textureSampler, uv + float2(-step.x, 0.0));
-        float4 s_r  = texture.sample(textureSampler, uv + float2( step.x, 0.0));
-        float4 s_t  = texture.sample(textureSampler, uv + float2(0.0, -step.y));
-        float4 s_b  = texture.sample(textureSampler, uv + float2(0.0,  step.y));
-        float4 s_tl = texture.sample(textureSampler, uv + float2(-step.x, -step.y));
-        float4 s_tr = texture.sample(textureSampler, uv + float2( step.x, -step.y));
-        float4 s_bl = texture.sample(textureSampler, uv + float2(-step.x,  step.y));
-        float4 s_br = texture.sample(textureSampler, uv + float2( step.x,  step.y));
+        float2 texDim = float2(texture.get_width(), texture.get_height());
+        float2 texelSize = 1.0 / texDim;
+        float maxDim = max(texDim.x, texDim.y);
+        float rInner = 1.0;
+        float rOuter = max(16.0, round(maxDim * 0.016));
+        float2 stepInner = texelSize * rInner;
+        float2 stepOuter = texelSize * rOuter;
         
         float y_c = dot(rec2020Color, float3(0.2627, 0.6780, 0.0593));
         float3 wbExposureScale = float3(rScale, gScale, bScale) * exposureGain;
         
-        float4 s_neighbors[8] = { s_l, s_r, s_t, s_b, s_tl, s_tr, s_bl, s_br };
-        float y_neighbors[8];
-        for (int i = 0; i < 8; ++i) {
+        // Inner ring: 4 orthogonal + 4 diagonal (rInner = 1 texel)
+        float4 s_l  = texture.sample(textureSampler, uv + float2(-stepInner.x, 0.0));
+        float4 s_r  = texture.sample(textureSampler, uv + float2( stepInner.x, 0.0));
+        float4 s_t  = texture.sample(textureSampler, uv + float2(0.0, -stepInner.y));
+        float4 s_b  = texture.sample(textureSampler, uv + float2(0.0,  stepInner.y));
+        float4 s_tl = texture.sample(textureSampler, uv + float2(-stepInner.x, -stepInner.y));
+        float4 s_tr = texture.sample(textureSampler, uv + float2( stepInner.x, -stepInner.y));
+        float4 s_bl = texture.sample(textureSampler, uv + float2(-stepInner.x,  stepInner.y));
+        float4 s_br = texture.sample(textureSampler, uv + float2( stepInner.x,  stepInner.y));
+
+        // Outer ring: 4 orthogonal + 4 diagonal (rOuter)
+        float4 s_ol  = texture.sample(textureSampler, uv + float2(-stepOuter.x, 0.0));
+        float4 s_or  = texture.sample(textureSampler, uv + float2( stepOuter.x, 0.0));
+        float4 s_ot  = texture.sample(textureSampler, uv + float2(0.0, -stepOuter.y));
+        float4 s_ob  = texture.sample(textureSampler, uv + float2(0.0,  stepOuter.y));
+        float4 s_otl = texture.sample(textureSampler, uv + float2(-stepOuter.x, -stepOuter.y));
+        float4 s_otr = texture.sample(textureSampler, uv + float2( stepOuter.x, -stepOuter.y));
+        float4 s_obl = texture.sample(textureSampler, uv + float2(-stepOuter.x,  stepOuter.y));
+        float4 s_obr = texture.sample(textureSampler, uv + float2( stepOuter.x,  stepOuter.y));
+        
+        float4 s_neighbors[16] = {
+            s_l, s_r, s_t, s_b, s_tl, s_tr, s_bl, s_br,
+            s_ol, s_or, s_ot, s_ob, s_otl, s_otr, s_obl, s_obr
+        };
+        float y_neighbors[16];
+        for (int i = 0; i < 16; ++i) {
             float3 c;
             if (uniforms.isLinearRaw == 1) {
                 c = s_neighbors[i].rgb;

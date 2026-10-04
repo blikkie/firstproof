@@ -158,7 +158,7 @@ fn test_terminal_display_transform_ordering_webgl() {
 
     // Assert that upstream optical adjustments precede terminal tone mapping
     for upstream in &[
-        "applyToneRecovery",
+        "applyBilateralToneRecovery",
         "applyRecordingEmulsion",
         "applyColorAdjustments",
         "applySplitToning",

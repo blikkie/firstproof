@@ -287,13 +287,16 @@ void main() {
     }
 
     // 1. White Balance in Linear Rec.2020
+    float rScale = 1.0;
+    float gScale = 1.0;
+    float bScale = 1.0;
     if (abs(u_temperature - 5500.0) >= 1.0 || u_tint != 0.0) {
         float tempNorm = clamp(u_temperature / 5500.0, 0.25, 4.0);
-        float rScale = pow(tempNorm, 0.75);
-        float bScale = pow(1.0 / tempNorm, 0.75);
+        rScale = pow(tempNorm, 0.75);
+        bScale = pow(1.0 / tempNorm, 0.75);
         
         float tintFactor = u_tint * 0.002;
-        float gScale = max(1.0 - tintFactor, 0.01);
+        gScale = max(1.0 - tintFactor, 0.01);
         rScale = max(rScale + tintFactor * 0.5, 0.01);
         bScale = max(bScale + tintFactor * 0.5, 0.01);
         
@@ -301,12 +304,71 @@ void main() {
     }
 
     // 2. Scene-Referred Exposure
+    float exposureGain = 1.0;
     if (u_exposure != 0.0) {
-        rec2020Color *= pow(2.0, u_exposure);
+        exposureGain = pow(2.0, u_exposure);
+        rec2020Color *= exposureGain;
     }
 
-    // 3. Tone Recovery in Linear Rec.2020
-    rec2020Color = applyToneRecovery(rec2020Color, u_highlights, u_shadows, u_whites, u_blacks);
+    // 3. Multi-Scale Hierarchical Bilateral Tone Recovery in Linear Rec.2020
+    if (u_highlights != 0.0 || u_shadows != 0.0 || u_whites != 0.0 || u_blacks != 0.0) {
+        vec2 texSize = vec2(textureSize(u_texture, 0));
+        vec2 texelSize = 1.0 / texSize;
+        float maxDim = max(texSize.x, texSize.y);
+        float rInner = 1.0;
+        float rOuter = max(16.0, round(maxDim * 0.016));
+        vec2 stepInner = texelSize * rInner;
+        vec2 stepOuter = texelSize * rOuter;
+
+        float y_c = dot(rec2020Color, vec3(0.2627, 0.6780, 0.0593));
+        vec3 wbExposureScale = vec3(rScale, gScale, bScale) * exposureGain;
+
+        // Inner ring: 4 orthogonal + 4 diagonal (rInner = 1 texel)
+        vec4 s_l  = texture(u_texture, uv + vec2(-stepInner.x, 0.0));
+        vec4 s_r  = texture(u_texture, uv + vec2( stepInner.x, 0.0));
+        vec4 s_t  = texture(u_texture, uv + vec2(0.0, -stepInner.y));
+        vec4 s_b  = texture(u_texture, uv + vec2(0.0,  stepInner.y));
+        vec4 s_tl = texture(u_texture, uv + vec2(-stepInner.x, -stepInner.y));
+        vec4 s_tr = texture(u_texture, uv + vec2( stepInner.x, -stepInner.y));
+        vec4 s_bl = texture(u_texture, uv + vec2(-stepInner.x,  stepInner.y));
+        vec4 s_br = texture(u_texture, uv + vec2( stepInner.x,  stepInner.y));
+
+        // Outer ring: 4 orthogonal + 4 diagonal (rOuter)
+        vec4 s_ol  = texture(u_texture, uv + vec2(-stepOuter.x, 0.0));
+        vec4 s_or  = texture(u_texture, uv + vec2( stepOuter.x, 0.0));
+        vec4 s_ot  = texture(u_texture, uv + vec2(0.0, -stepOuter.y));
+        vec4 s_ob  = texture(u_texture, uv + vec2(0.0,  stepOuter.y));
+        vec4 s_otl = texture(u_texture, uv + vec2(-stepOuter.x, -stepOuter.y));
+        vec4 s_otr = texture(u_texture, uv + vec2( stepOuter.x, -stepOuter.y));
+        vec4 s_obl = texture(u_texture, uv + vec2(-stepOuter.x,  stepOuter.y));
+        vec4 s_obr = texture(u_texture, uv + vec2( stepOuter.x,  stepOuter.y));
+
+        vec4 s_neighbors[16] = vec4[16](
+            s_l, s_r, s_t, s_b, s_tl, s_tr, s_bl, s_br,
+            s_ol, s_or, s_ot, s_ob, s_otl, s_otr, s_obl, s_obr
+        );
+        float y_neighbors[16];
+        for (int i = 0; i < 16; ++i) {
+            vec3 c;
+            if (u_isLinearRec2020 != 0) {
+                c = s_neighbors[i].rgb;
+            } else {
+                c = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(s_neighbors[i].rgb);
+            }
+            c *= wbExposureScale;
+            y_neighbors[i] = dot(c, vec3(0.2627, 0.6780, 0.0593));
+        }
+
+        rec2020Color = applyBilateralToneRecovery(
+            rec2020Color,
+            y_c,
+            y_neighbors,
+            u_highlights,
+            u_shadows,
+            u_whites,
+            u_blacks
+        );
+    }
 
     // 4. Photochemical Recording Emulsion in Linear Rec.2020
     if (u_emulsionArchetype != 0) {

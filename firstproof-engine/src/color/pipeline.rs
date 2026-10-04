@@ -69,14 +69,18 @@ pub fn sample_curve_lut(lut: &[f32], v: f32) -> f32 {
 
 /// Applies advanced bilateral base/detail tone recovery (Highlights, Shadows, Whites, Blacks)
 /// to scene-referred linear RGB values using edge-preserving spatial illumination separation.
-/// y_neighbors contains 8 neighborhood luminances: 4 orthogonal (L, R, T, B) followed by 4 diagonal (TL, TR, BL, BR).
+/// y_neighbors contains 16 neighborhood luminances:
+/// - 0..3: Inner Orthogonal (L, R, T, B) at r1
+/// - 4..7: Inner Diagonal (TL, TR, BL, BR) at r1 * sqrt(2)
+/// - 8..11: Outer Orthogonal (L, R, T, B) at r2
+/// - 12..15: Outer Diagonal (TL, TR, BL, BR) at r2 * sqrt(2)
 #[inline(always)]
 pub fn apply_bilateral_tone_recovery_rgb(
     r: f32,
     g: f32,
     b: f32,
     y_c: f32,
-    y_neighbors: &[f32; 8],
+    y_neighbors: &[f32; 16],
     highlights: f32,
     shadows: f32,
     whites: f32,
@@ -100,7 +104,7 @@ pub fn apply_bilateral_tone_recovery_rgb(
     let mut total_weight = 1.0f32;
     let mut weighted_ev_sum = ev_c;
 
-    // 0..3: Orthogonal neighbors (left, right, top, bottom)
+    // 0..3: Inner Orthogonal neighbors (left, right, top, bottom at r1)
     for i in 0..4 {
         let ev_i = (y_neighbors[i].max(1e-5) / 0.18).log2();
         let d_ev = ev_i - ev_c;
@@ -110,8 +114,28 @@ pub fn apply_bilateral_tone_recovery_rgb(
         weighted_ev_sum += w * ev_i;
     }
 
-    // 4..7: Diagonal neighbors (top-left, top-right, bottom-left, bottom-right)
+    // 4..7: Inner Diagonal neighbors (top-left, top-right, bottom-left, bottom-right at r1)
     for i in 4..8 {
+        let ev_i = (y_neighbors[i].max(1e-5) / 0.18).log2();
+        let d_ev = ev_i - ev_c;
+        let w_r = (-(d_ev * d_ev) * INV_TWO_SIGMA_R_SQ).exp();
+        let w = W_S_DIAG * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+
+    // 8..11: Outer Orthogonal neighbors (left, right, top, bottom at r2)
+    for i in 8..12 {
+        let ev_i = (y_neighbors[i].max(1e-5) / 0.18).log2();
+        let d_ev = ev_i - ev_c;
+        let w_r = (-(d_ev * d_ev) * INV_TWO_SIGMA_R_SQ).exp();
+        let w = W_S_ORTHO * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+
+    // 12..15: Outer Diagonal neighbors (top-left, top-right, bottom-left, bottom-right at r2)
+    for i in 12..16 {
         let ev_i = (y_neighbors[i].max(1e-5) / 0.18).log2();
         let d_ev = ev_i - ev_c;
         let w_r = (-(d_ev * d_ev) * INV_TWO_SIGMA_R_SQ).exp();
@@ -175,7 +199,7 @@ pub fn apply_tone_recovery(
         return (r, g, b);
     }
     let lum = 0.2627 * r + 0.6780 * g + 0.0593 * b;
-    let neighbors = [lum; 8];
+    let neighbors = [lum; 16];
     apply_bilateral_tone_recovery_rgb(
         r, g, b, lum, &neighbors, highlights, shadows, whites, blacks,
     )
@@ -1127,6 +1151,10 @@ pub fn develop_raw_sensor_frame_archival(
         None
     };
 
+    let max_dim = (active_w.max(active_h)) as f32;
+    let r_inner = 1usize;
+    let r_outer = ((max_dim * 0.016).round() as usize).max(16);
+
     // Pass 1: Upstream optical exposure, WB, bilateral tone recovery, recording emulsion
     for i in 0..total_pixels {
         let idx = i * 3;
@@ -1137,13 +1165,19 @@ pub fn develop_raw_sensor_frame_archival(
         if let Some(ref luma) = luma_plane {
             let x = i % active_w;
             let y = i / active_w;
-            let x_l = x.saturating_sub(2);
-            let x_r = (x + 2).min(active_w - 1);
-            let y_t = y.saturating_sub(2);
-            let y_b = (y + 2).min(active_h - 1);
+            let x_l = x.saturating_sub(r_inner);
+            let x_r = (x + r_inner).min(active_w - 1);
+            let y_t = y.saturating_sub(r_inner);
+            let y_b = (y + r_inner).min(active_h - 1);
+
+            let ox_l = x.saturating_sub(r_outer);
+            let ox_r = (x + r_outer).min(active_w - 1);
+            let oy_t = y.saturating_sub(r_outer);
+            let oy_b = (y + r_outer).min(active_h - 1);
 
             let y_c = luma[i];
             let y_neighbors = [
+                // Inner ring: 4 orthogonal + 4 diagonal (r_inner)
                 luma[y * active_w + x_l],
                 luma[y * active_w + x_r],
                 luma[y_t * active_w + x],
@@ -1152,6 +1186,15 @@ pub fn develop_raw_sensor_frame_archival(
                 luma[y_t * active_w + x_r],
                 luma[y_b * active_w + x_l],
                 luma[y_b * active_w + x_r],
+                // Outer ring: 4 orthogonal + 4 diagonal (r_outer)
+                luma[y * active_w + ox_l],
+                luma[y * active_w + ox_r],
+                luma[oy_t * active_w + x],
+                luma[oy_b * active_w + x],
+                luma[oy_t * active_w + ox_l],
+                luma[oy_t * active_w + ox_r],
+                luma[oy_b * active_w + ox_l],
+                luma[oy_b * active_w + ox_r],
             ];
 
             let (r_rec, g_rec, b_rec) = apply_bilateral_tone_recovery_rgb(

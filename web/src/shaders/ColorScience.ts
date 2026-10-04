@@ -213,44 +213,127 @@ vec3 agxToneMapVivid(vec3 rec2020Color, float contrastGain) {
     ), 0.0, 1.0);
 }
 
-// Tone Recovery (Photographic scene-referred highlights/shadows/whites/blacks in EV stops)
-vec3 applyToneRecovery(vec3 rgb, float highlights, float shadows, float whites, float blacks) {
+// Advanced Bilateral Base/Detail Tone Recovery (Highlights, Shadows, Whites, Blacks)
+vec3 applyBilateralToneRecovery(
+    vec3 color,
+    float y_c,
+    float y_neighbors[16],
+    float highlights,
+    float shadows,
+    float whites,
+    float blacks
+) {
     if (highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0) {
-        return rgb;
+        return color;
     }
-    float lum = dot(rgb, vec3(0.2627, 0.6780, 0.0593));
-    if (lum <= 1e-6) {
-        return rgb;
+    
+    if (y_c <= 1e-6) {
+        return color;
     }
-    float ev_base = log2(max(lum, 1e-5) / 0.18);
-    float delta_ev = 0.0;
+    
+    // Log-luminance EV relative to photographic middle gray (0.18)
+    float ev_c = log2(max(y_c, 1e-5) / 0.18);
+    
+    // Bilateral filter base illumination estimation (Dual-concentric ring stencil, 16 taps):
+    // Inner ring (r1): local edge guard against boundary bleed.
+    // Outer ring (r2): macro ambient illumination (Durand & Dorsey 2002 Retinex separation).
+    // Spatial weights at characteristic scale: Orthogonal (dist r) = exp(-0.5) ~ 0.60653066, Diagonal (dist r*sqrt(2)) = exp(-1.0) ~ 0.36787944
+    // Range weights: Gaussian in EV stops with sigma_r = 0.85 EV (2 * sigma_r^2 = 1.445)
+    const float w_s_ortho = 0.60653066;
+    const float w_s_diag  = 0.36787944;
+    const float inv_two_sigma_r_sq = 1.0 / 1.445;
+    
+    float total_weight = 1.0;
+    float weighted_ev_sum = ev_c;
+    
+    // 0..3: Inner Orthogonal neighbors (left, right, top, bottom at r1)
+    for (int i = 0; i < 4; ++i) {
+        float ev_i = log2(max(y_neighbors[i], 1e-5) / 0.18);
+        float d_ev = ev_i - ev_c;
+        float w_r = exp(-(d_ev * d_ev) * inv_two_sigma_r_sq);
+        float w = w_s_ortho * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+    
+    // 4..7: Inner Diagonal neighbors (top-left, top-right, bottom-left, bottom-right at r1)
+    for (int i = 4; i < 8; ++i) {
+        float ev_i = log2(max(y_neighbors[i], 1e-5) / 0.18);
+        float d_ev = ev_i - ev_c;
+        float w_r = exp(-(d_ev * d_ev) * inv_two_sigma_r_sq);
+        float w = w_s_diag * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
 
+    // 8..11: Outer Orthogonal neighbors (left, right, top, bottom at r2)
+    for (int i = 8; i < 12; ++i) {
+        float ev_i = log2(max(y_neighbors[i], 1e-5) / 0.18);
+        float d_ev = ev_i - ev_c;
+        float w_r = exp(-(d_ev * d_ev) * inv_two_sigma_r_sq);
+        float w = w_s_ortho * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+    
+    // 12..15: Outer Diagonal neighbors (top-left, top-right, bottom-left, bottom-right at r2)
+    for (int i = 12; i < 16; ++i) {
+        float ev_i = log2(max(y_neighbors[i], 1e-5) / 0.18);
+        float d_ev = ev_i - ev_c;
+        float w_r = exp(-(d_ev * d_ev) * inv_two_sigma_r_sq);
+        float w = w_s_diag * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+    
+    float ev_base = weighted_ev_sum / total_weight;
+    float delta_ev = 0.0;
+    
     if (blacks != 0.0) {
         float u = clamp((-ev_base - 1.0) / 3.0, 0.0, 1.0);
         float w_blacks = u * u * (3.0 - 2.0 * u);
         delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
     }
+    
     if (shadows != 0.0) {
         float u = clamp(-ev_base / 3.0, 0.0, 1.0);
         float w_shadows = u * u * (3.0 - 2.0 * u);
         delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
     }
+    
     if (highlights != 0.0) {
         float u = clamp(ev_base / 3.0, 0.0, 1.0);
         float w_highlights = u * u * (3.0 - 2.0 * u);
         delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
     }
+    
     if (whites != 0.0) {
         float u = clamp((ev_base - 1.0) / 3.0, 0.0, 1.0);
         float w_whites = u * u * (3.0 - 2.0 * u);
         delta_ev += (whites / 100.0) * 0.90 * w_whites;
     }
-
+    
     if (delta_ev == 0.0) {
-        return rgb;
+        return color;
     }
+    
     float gain = exp2(delta_ev);
-    return rgb * gain;
+    return color * gain;
+}
+
+// Pointwise fallback for backward compatibility
+vec3 applyToneRecovery(vec3 color, float highlights, float shadows, float whites, float blacks) {
+    if (highlights == 0.0 && shadows == 0.0 && whites == 0.0 && blacks == 0.0) {
+        return color;
+    }
+    float lum = dot(color, vec3(0.2627, 0.6780, 0.0593));
+    float neighbors[16] = float[16](
+        lum, lum, lum, lum,
+        lum, lum, lum, lum,
+        lum, lum, lum, lum,
+        lum, lum, lum, lum
+    );
+    return applyBilateralToneRecovery(color, lum, neighbors, highlights, shadows, whites, blacks);
 }
 
 // Color Adjustments: Vibrance, Saturation, Deep Blue, Foliage

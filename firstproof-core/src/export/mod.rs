@@ -297,7 +297,7 @@ mod tests {
     fn test_bilateral_tone_recovery_flat_patch() {
         let (r, g, b) = (0.05, 0.04, 0.03);
         let lum = 0.2627 * r + 0.6780 * g + 0.0593 * b;
-        let neighbors = [lum; 8];
+        let neighbors = [lum; 16];
 
         let bilateral = apply_bilateral_tone_recovery_rgb(r, g, b, lum, &neighbors, -30.0, 40.0, 10.0, -15.0);
         let pointwise = apply_tone_recovery(r, g, b, -30.0, 40.0, 10.0, -15.0);
@@ -315,9 +315,11 @@ mod tests {
         let b_shadow = 0.03;
         let y_shadow = 0.03;
 
-        // 4 orthogonal neighbors: 2 inside shadow (0.03), 2 across edge in sky (0.85)
-        // 4 diagonal neighbors: 2 inside shadow (0.03), 2 across edge in sky (0.85)
-        let edge_neighbors = [0.03, 0.85, 0.03, 0.85, 0.03, 0.85, 0.03, 0.85];
+        // Inner and outer rings with 8 taps in shadow (0.03) and 8 taps in sky (0.85)
+        let edge_neighbors = [
+            0.03, 0.85, 0.03, 0.85, 0.03, 0.85, 0.03, 0.85,
+            0.03, 0.85, 0.03, 0.85, 0.03, 0.85, 0.03, 0.85,
+        ];
 
         // Lift shadows by +60
         let (r_rec, g_rec, b_rec) = apply_bilateral_tone_recovery_rgb(
@@ -343,8 +345,14 @@ mod tests {
         let orig_ratio = y_b / y_a;
 
         // Textured neighborhood with subtle variations around 0.042
-        let neighbors_a = [0.039, 0.041, 0.043, 0.042, 0.038, 0.044, 0.040, 0.041];
-        let neighbors_b = [0.041, 0.043, 0.045, 0.044, 0.040, 0.046, 0.042, 0.043];
+        let neighbors_a = [
+            0.039, 0.041, 0.043, 0.042, 0.038, 0.044, 0.040, 0.041,
+            0.041, 0.042, 0.040, 0.043, 0.039, 0.044, 0.041, 0.042,
+        ];
+        let neighbors_b = [
+            0.041, 0.043, 0.045, 0.044, 0.040, 0.046, 0.042, 0.043,
+            0.041, 0.042, 0.040, 0.043, 0.039, 0.044, 0.041, 0.042,
+        ];
 
         let (_, g_rec_a, _) = apply_bilateral_tone_recovery_rgb(y_a, y_a, y_a, y_a, &neighbors_a, 0.0, 50.0, 0.0, 0.0);
         let (_, g_rec_b, _) = apply_bilateral_tone_recovery_rgb(y_b, y_b, y_b, y_b, &neighbors_b, 0.0, 50.0, 0.0, 0.0);

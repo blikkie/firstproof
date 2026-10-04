@@ -7,11 +7,11 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.18: Multi-Scale Hierarchical Bilateral Tone Recovery** (P2)
-2. **Story 3.19: Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling** (P2)
-3. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
-4. **Story 3.4: ColorSync Soft Proofing** (P2)
-5. **Story 3.7: Color Space Tagging & ICC Profile Embedding** (P2)
+1. **Story 3.19: Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling** (P2)
+2. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
+3. **Story 3.4: ColorSync Soft Proofing** (P2)
+4. **Story 3.7: Color Space Tagging & ICC Profile Embedding** (P2)
+5. **Story 3.12: Dual-Pass Spatial Lateral Chemical Diffusion (Mackie Lines)** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -115,12 +115,6 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
     - Zero-OLPF sensors (e.g. Sony A7R IV, Nikon D850, Leica M10): Constrains radius to prevent digital over-sharpening, ringing halos, and edge brittle-ness.
 - **Multi-Engine Parity**:
   - Harmonize adaptive kernel scaling identically across `Detail.metal`, `FragmentShader.ts`, and `pipeline.rs`.
-
-### 3.18 Multi-Scale Hierarchical Bilateral Tone Recovery (P2)
-- **Physical Context & Specification**: See [spatial_effects_scale_and_fidelity.md](../specs/spatial_effects_scale_and_fidelity.md).
-- **Two-Tier Macro Illumination Separation**:
-  - *Tier 1: Viewport Approximation (Metal & WebGL 2)*: Dual-concentric ring stencil (16 taps: inner ring $r_1=2\text{ px}$ for edge preservation, outer ring $r_2=16\text{ px}$ for broad ambient lighting) or $1/8\times$ mipmap base sampling. Elevates WebGL 2 from pointwise fallback to full parity with Metal.
-  - *Tier 2: Full-Resolution Export (`pipeline.rs`)*: Multi-scale bilateral grid / Gaussian pyramid decomposition ($\sigma_s \approx 2\%\text{–}5\%$ of image diagonal) cleanly separating scene illumination from fine textures without microcontrast flattening or boundary haloing.
 
 ### 3.19 Isotropic 8-Tap Detail Stencil & Proportional Grain Cluster Scaling (P2)
 - **Physical Context & Specification**: See [spatial_effects_scale_and_fidelity.md](../specs/spatial_effects_scale_and_fidelity.md).

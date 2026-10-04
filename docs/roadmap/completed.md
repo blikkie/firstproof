@@ -330,4 +330,23 @@ This archive tracks completed stories and features moved from the active backlog
   - *De-Slopping Legacy Pointwise Bloom*: Removed the old artificial pointwise `bloom = if pan_lum > 0.85 { pan_lum * 0.12 }` hack from `firstproof-engine/src/color/emulsion.rs`, `ColorScience.metal`, `ColorScience.ts`, and `emulsion_parity.rs`, replacing it with true 2D spatial optical point-spread diffusion.
   - *Cross-Platform UI & Parity*: Exposed `Carbon Rem-Jet Backing` (`Intact (Studio ECN-2)` / `Stripped (Halation Scatter)`) in macOS `EmulsionWorkspaceView.swift` and Web `web/index.html` + `InspectorSyncController.ts` conditionally when `RochesterCinema500` is active.
   - *Verification*: Dedicated unit tests (`test_point_spread_halation_inactive_cases`, `test_point_spread_halation_baoding_silver_glow`, `test_point_spread_halation_cinema_stripped_red_shift`), Web TypeScript typechecking, Vitest behavioral tests, and full `./scripts/check.sh` pre-flight suite passed cleanly across all 8 suites.
+- **Story 3.18: Multi-Scale Hierarchical Bilateral Tone Recovery (`firstproof-engine::color::pipeline`, `FirstProofApp/Sources/Shaders/Shaders.metal`, `FirstProofApp/Sources/Shaders/ColorScience.metal`, `web/src/shaders/ColorScience.ts`, `web/src/shaders/FragmentShader.ts`, `firstproof-core::export::pipeline`)**:
+  - *Retinex Scene Decomposition & Microcontrast Preservation*:
+    - Formulated tone recovery (Highlights, Shadows, Whites, Blacks) according to Retinex theory and bilateral tone mapping (Durand & Dorsey 2002) in Linear Rec.2020: natural scene radiance decomposes into $I(x, y) = L(x, y) \cdot R(x, y)$, where $L$ is macro ambient illumination and $R$ is surface reflectance/texture.
+    - Recovering tones based on macro base illumination $L_{\text{base}}$ preserves $100\%$ of fine surface microcontrast $R(x, y) = I(x, y) / L_{\text{base}}(x, y)$ intact without flattening texture bite or causing boundary edge halos.
+  - *Dual-Concentric Ring Stencil (16 Taps)*:
+    - Replaced the single 8-tap ring ($r = 2\text{ px}$) in Metal/Rust and pointwise fallback in WebGL with a unified 16-tap dual-concentric ring stencil:
+      - **Inner Ring** (8 taps at $r_1 \approx 0.15\%$ of frame, $\ge 2\text{ px}$): 4 orthogonal at $r_1$ ($w_s = \exp(-0.5) \approx 0.60653066$) and 4 diagonal at $r_1 \sqrt{2}$ ($w_s = \exp(-1.0) \approx 0.36787944$) guarding immediate optical boundaries against bleed.
+      - **Outer Ring** (8 taps at $r_2 \approx 1.6\%$ of frame, $\ge 16\text{ px}$): 4 orthogonal at $r_2$ and 4 diagonal at $r_2 \sqrt{2}$ capturing the broad ambient scene illumination field.
+    - Range weights: Exact sensitometric Gaussian falloff in log-luminance EV stops: $w_r = \exp(-(\Delta ev)^2 / 2\sigma_r^2)$ with $\sigma_r = 0.85\text{ EV}$ ($2\sigma_r^2 = 1.445$).
+  - *Format-Invariant Canvas Scaling*:
+    - Dynamically scaled radii relative to the 35mm canvas frame rather than fixed raw pixels ($r_{\text{inner}} = \max(2, \text{round}(0.0015 \times \max(W, H)))$, $r_{\text{outer}} = \max(16, \text{round}(0.016 \times \max(W, H)))$), guaranteeing identical macro-illumination estimation across 1024px previews, 24MP sensors, and 45MP sensors.
+  - *WebGL 2 Parity Elevation*:
+    - Elevated WebGL 2 shaders from pointwise fallback to full 16-tap dual-concentric parity with Metal GPU and Rust CPU pipelines, utilizing GLSL 3.00 ES texture size introspection (`textureSize(u_texture, 0)`).
+  - *Verification & Sensor Guards*:
+    - Updated parity harness simulation and test scenarios in `camera_profiles_parity.rs`.
+    - Added 16-tap unit test assertions in `export/mod.rs` (`test_bilateral_tone_recovery_flat_patch`, `test_bilateral_tone_recovery_halo_suppression_at_contrast_edge`, `test_bilateral_tone_recovery_texture_contrast_preservation`).
+    - Enforced architectural stage order in `architecture_fitness.rs` asserting `applyBilateralToneRecovery` precedes terminal tone mapping across all engines.
+    - All 8 pre-flight suites in `./scripts/check.sh` passed cleanly.
+
 

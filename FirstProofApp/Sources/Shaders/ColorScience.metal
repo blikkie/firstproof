@@ -202,7 +202,7 @@ inline float3 agxToneMapVivid(float3 rec2020Color, float contrastGain) {
 inline float3 applyBilateralToneRecovery(
     float3 color,
     float y_c,
-    float y_neighbors[8],
+    float y_neighbors[16],
     float highlights,
     float shadows,
     float whites,
@@ -219,8 +219,10 @@ inline float3 applyBilateralToneRecovery(
     // Log-luminance EV relative to photographic middle gray (0.18)
     float ev_c = log2(max(y_c, 1e-5) / 0.18);
     
-    // Bilateral filter base illumination estimation:
-    // Spatial weights: Center = 1.0, Orthogonal (dist 1) = exp(-0.5) ~ 0.60653066, Diagonal (dist sqrt(2)) = exp(-1.0) ~ 0.36787944
+    // Bilateral filter base illumination estimation (Dual-concentric ring stencil, 16 taps):
+    // Inner ring (r1): local edge guard against boundary bleed.
+    // Outer ring (r2): macro ambient illumination (Durand & Dorsey 2002 Retinex separation).
+    // Spatial weights at characteristic scale: Orthogonal (dist r) = exp(-0.5) ~ 0.60653066, Diagonal (dist r*sqrt(2)) = exp(-1.0) ~ 0.36787944
     // Range weights: Gaussian in EV stops with sigma_r = 0.85 EV (2 * sigma_r^2 = 1.445)
     constexpr float w_s_ortho = 0.60653066;
     constexpr float w_s_diag  = 0.36787944;
@@ -229,7 +231,7 @@ inline float3 applyBilateralToneRecovery(
     float total_weight = 1.0;
     float weighted_ev_sum = ev_c;
     
-    // 0..3: Orthogonal neighbors (left, right, top, bottom)
+    // 0..3: Inner Orthogonal neighbors (left, right, top, bottom at r1)
     for (int i = 0; i < 4; ++i) {
         float ev_i = log2(max(y_neighbors[i], 1e-5) / 0.18);
         float d_ev = ev_i - ev_c;
@@ -239,8 +241,28 @@ inline float3 applyBilateralToneRecovery(
         weighted_ev_sum += w * ev_i;
     }
     
-    // 4..7: Diagonal neighbors (top-left, top-right, bottom-left, bottom-right)
+    // 4..7: Inner Diagonal neighbors (top-left, top-right, bottom-left, bottom-right at r1)
     for (int i = 4; i < 8; ++i) {
+        float ev_i = log2(max(y_neighbors[i], 1e-5) / 0.18);
+        float d_ev = ev_i - ev_c;
+        float w_r = exp(-(d_ev * d_ev) * inv_two_sigma_r_sq);
+        float w = w_s_diag * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+
+    // 8..11: Outer Orthogonal neighbors (left, right, top, bottom at r2)
+    for (int i = 8; i < 12; ++i) {
+        float ev_i = log2(max(y_neighbors[i], 1e-5) / 0.18);
+        float d_ev = ev_i - ev_c;
+        float w_r = exp(-(d_ev * d_ev) * inv_two_sigma_r_sq);
+        float w = w_s_ortho * w_r;
+        total_weight += w;
+        weighted_ev_sum += w * ev_i;
+    }
+    
+    // 12..15: Outer Diagonal neighbors (top-left, top-right, bottom-left, bottom-right at r2)
+    for (int i = 12; i < 16; ++i) {
         float ev_i = log2(max(y_neighbors[i], 1e-5) / 0.18);
         float d_ev = ev_i - ev_c;
         float w_r = exp(-(d_ev * d_ev) * inv_two_sigma_r_sq);
@@ -290,7 +312,12 @@ inline float3 applyToneRecovery(float3 color, float highlights, float shadows, f
         return color;
     }
     float lum = 0.2627 * color.r + 0.6780 * color.g + 0.0593 * color.b;
-    float neighbors[8] = { lum, lum, lum, lum, lum, lum, lum, lum };
+    float neighbors[16] = {
+        lum, lum, lum, lum,
+        lum, lum, lum, lum,
+        lum, lum, lum, lum,
+        lum, lum, lum, lum
+    };
     return applyBilateralToneRecovery(color, lum, neighbors, highlights, shadows, whites, blacks);
 }
 

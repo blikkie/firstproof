@@ -72,6 +72,10 @@ pub fn apply_edits_with_tier(
     let needs_spatial_chem_diffusion = chemical_edge_diffusion && edits.emulsion_archetype != crate::EmulsionArchetype::None;
     let needs_spatial_pass = needs_spatial_chem_diffusion || has_halation;
 
+    let max_dim = image.width.max(image.height) as f32;
+    let r_inner = 1usize;
+    let r_outer = ((max_dim * 0.016).round() as usize).max(16);
+
     if needs_spatial_pass {
         // Pass 1: Upstream optical exposure, WB, bilateral tone recovery, and recording emulsion
         for i in 0..total_pixels {
@@ -86,13 +90,19 @@ pub fn apply_edits_with_tier(
                 let w = image.width;
                 let h = image.height;
                 
-                let x_l = x.saturating_sub(2);
-                let x_r = (x + 2).min(w - 1);
-                let y_t = y.saturating_sub(2);
-                let y_b = (y + 2).min(h - 1);
+                let x_l = x.saturating_sub(r_inner);
+                let x_r = (x + r_inner).min(w - 1);
+                let y_t = y.saturating_sub(r_inner);
+                let y_b = (y + r_inner).min(h - 1);
+
+                let ox_l = x.saturating_sub(r_outer);
+                let ox_r = (x + r_outer).min(w - 1);
+                let oy_t = y.saturating_sub(r_outer);
+                let oy_b = (y + r_outer).min(h - 1);
                 
                 let y_c = luma[i];
                 let y_neighbors = [
+                    // Inner ring: 4 orthogonal + 4 diagonal (r_inner)
                     luma[y * w + x_l],
                     luma[y * w + x_r],
                     luma[y_t * w + x],
@@ -101,6 +111,15 @@ pub fn apply_edits_with_tier(
                     luma[y_t * w + x_r],
                     luma[y_b * w + x_l],
                     luma[y_b * w + x_r],
+                    // Outer ring: 4 orthogonal + 4 diagonal (r_outer)
+                    luma[y * w + ox_l],
+                    luma[y * w + ox_r],
+                    luma[oy_t * w + x],
+                    luma[oy_b * w + x],
+                    luma[oy_t * w + ox_l],
+                    luma[oy_t * w + ox_r],
+                    luma[oy_b * w + ox_l],
+                    luma[oy_b * w + ox_r],
                 ];
                 
                 let (r_rec, g_rec, b_rec) = apply_bilateral_tone_recovery_rgb(
@@ -273,13 +292,19 @@ pub fn apply_edits_with_tier(
                 let w = image.width;
                 let h = image.height;
                 
-                let x_l = x.saturating_sub(2);
-                let x_r = (x + 2).min(w - 1);
-                let y_t = y.saturating_sub(2);
-                let y_b = (y + 2).min(h - 1);
+                let x_l = x.saturating_sub(r_inner);
+                let x_r = (x + r_inner).min(w - 1);
+                let y_t = y.saturating_sub(r_inner);
+                let y_b = (y + r_inner).min(h - 1);
+
+                let ox_l = x.saturating_sub(r_outer);
+                let ox_r = (x + r_outer).min(w - 1);
+                let oy_t = y.saturating_sub(r_outer);
+                let oy_b = (y + r_outer).min(h - 1);
                 
                 let y_c = luma[i];
                 let y_neighbors = [
+                    // Inner ring: 4 orthogonal + 4 diagonal (r_inner)
                     luma[y * w + x_l],
                     luma[y * w + x_r],
                     luma[y_t * w + x],
@@ -288,6 +313,15 @@ pub fn apply_edits_with_tier(
                     luma[y_t * w + x_r],
                     luma[y_b * w + x_l],
                     luma[y_b * w + x_r],
+                    // Outer ring: 4 orthogonal + 4 diagonal (r_outer)
+                    luma[y * w + ox_l],
+                    luma[y * w + ox_r],
+                    luma[oy_t * w + x],
+                    luma[oy_b * w + x],
+                    luma[oy_t * w + ox_l],
+                    luma[oy_t * w + ox_r],
+                    luma[oy_b * w + ox_l],
+                    luma[oy_b * w + ox_r],
                 ];
                 
                 let (r_rec, g_rec, b_rec) = apply_bilateral_tone_recovery_rgb(
