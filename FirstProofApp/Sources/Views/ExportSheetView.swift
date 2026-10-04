@@ -15,7 +15,6 @@ public struct ExportSheetView: View {
     @State private var renderingIntentChoice: String = "RelativeColorimetric" // "RelativeColorimetric" or "Perceptual"
     @State private var isUltraHdrEnabled: Bool = false
     @State private var demosaicQualityChoice: String = "Standard" // "Standard" or "Archival"
-    @State private var chemicalEdgeDiffusionEnabled: Bool = false
     @State private var isExporting: Bool = false
     @State private var exportResultMessage: String? = nil
     
@@ -174,21 +173,6 @@ public struct ExportSheetView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-
-                if hasActiveEmulsion {
-                    Toggle(isOn: $chemicalEdgeDiffusionEnabled) {
-                        Text("Spatial Chemical Edge Diffusion (Mackie Lines)")
-                            .font(.subheadline)
-                    }
-                    .toggleStyle(.checkbox)
-                    .padding(.top, 2)
-
-                    if chemicalEdgeDiffusionEnabled {
-                        Text("Simulates lateral 2D developer exhaustion and bromide inhibitor diffusion across contrasting edges.")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                }
             }
             
             // Sizing
@@ -309,7 +293,6 @@ public struct ExportSheetView: View {
                     renderingIntent: ri,
                     ultraHdr: (exportFormat == "JPEG") && isUltraHdrEnabled,
                     demosaicQuality: dq,
-                    chemicalEdgeDiffusion: chemicalEdgeDiffusionEnabled,
                     renderTier: .archivalExport
                 )
                 
@@ -349,7 +332,6 @@ public struct ExportSheetView: View {
                     renderingIntent: ri,
                     ultraHdr: (exportFormat == "JPEG") && isUltraHdrEnabled,
                     demosaicQuality: dq,
-                    chemicalEdgeDiffusion: chemicalEdgeDiffusionEnabled,
                     renderTier: .archivalExport
                 ))
             }

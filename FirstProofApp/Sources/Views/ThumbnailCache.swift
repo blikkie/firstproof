@@ -427,7 +427,6 @@ public struct AsyncThumbnailView: View {
                     renderingIntent: nil,
                     ultraHdr: false,
                     demosaicQuality: nil,
-                    chemicalEdgeDiffusion: nil,
                     renderTier: nil
                 )
                 

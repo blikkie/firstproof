@@ -220,7 +220,6 @@ export class WasmBridge {
     bytes: Uint8Array,
     edits: EditSettingsPayload,
     quality: 'Standard' | 'Archival' = 'Standard',
-    chemicalEdgeDiffusion: boolean = false,
   ): {
     width: number;
     height: number;
@@ -240,7 +239,6 @@ export class WasmBridge {
       bytes.length,
       editsJson,
       qualityCode,
-      chemicalEdgeDiffusion,
     );
     const res = resVal as {
       linear_offset: number;

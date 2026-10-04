@@ -10,8 +10,7 @@ This document strictly tracks pending and deferred features calibrated against o
 1. **Story 3.3: Archival Open DNG Converter & Lossless Compression Engine** (P2)
 2. **Story 3.4: ColorSync Soft Proofing** (P2)
 3. **Story 3.7: Color Space Tagging & ICC Profile Embedding** (P2)
-4. **Story 3.12: Dual-Pass Spatial Lateral Chemical Diffusion (Mackie Lines)** (P2)
-5. **Story 3.5: Comprehensive EXIF/IPTC/XMP Ingestion & SQLite Caching Engine** (P2)
+4. **Story 3.5: Comprehensive EXIF/IPTC/XMP Ingestion & SQLite Caching Engine** (P2)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -115,18 +114,6 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
     - Zero-OLPF sensors (e.g. Sony A7R IV, Nikon D850, Leica M10): Constrains radius to prevent digital over-sharpening, ringing halos, and edge brittle-ness.
 - **Multi-Engine Parity**:
   - Harmonize adaptive kernel scaling identically across `Detail.metal`, `FragmentShader.ts`, and `pipeline.rs`.
-
-### 3.12 Dual-Pass Spatial Lateral Chemical Diffusion (Mackie Lines) (P2)
-- **Physical Developer Exhaustion & Bromide Restraining**:
-  - Simulates the physical chemical diffusion of developer and bromide reaction byproducts across high-contrast gelatin boundaries ($0.1\text{–}0.3\,\text{mm}$) in diluted developers (Rodinal 1:100, D-76 1:1, stand development).
-  - Produces authentic density borders along highlight boundaries and dark fringe lines (Mackie lines) along shadow boundaries.
-- **Format-Proportional Diffusion Radius**:
-  - Scales diffusion length directly by the `EmulsionFormat` magnification factor: $\Delta_{\text{diffusion}} = 0.2\,\text{mm} \times M$.
-  - 35mm exhibits legendary high-acutance edge bite; 4×5 large format exhibits creamy, continuous micro-tonal gradations.
-- **Two-Tier Engine Parity**:
-  - Viewport: Lateral chemical diffusion evaluated within the dual-ring bilateral/detail stencil.
-  - Export: Full-resolution separable 2D diffusion kernel evaluated on linear Rec.2020 optical density.
-
 ---
 
 

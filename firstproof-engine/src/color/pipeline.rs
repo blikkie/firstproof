@@ -882,92 +882,6 @@ pub fn develop_frame_pipeline(
     out_rgba
 }
 
-/// Photochemical Lateral Chemical Diffusion (Mackie Lines / Developer Exhaustion)
-///
-/// Models 2D spatial diffusion of development inhibitor by-products (bromide ions)
-/// across contrasting density borders in Linear Rec.2020 space.
-pub fn apply_lateral_chemical_diffusion(
-    data: &mut [f32],
-    width: usize,
-    height: usize,
-    strength: f32,
-) {
-    if strength <= 0.0 || width < 5 || height < 5 || data.len() < width * height * 3 {
-        return;
-    }
-
-    let total_pixels = width * height;
-    let mut luma = Vec::with_capacity(total_pixels);
-    for i in 0..total_pixels {
-        let idx = i * 3;
-        let y = 0.2627 * data[idx] + 0.6780 * data[idx + 1] + 0.0593 * data[idx + 2];
-        luma.push(y);
-    }
-
-    let mut h_blur = vec![0.0f32; total_pixels];
-    let w = width;
-    let h = height;
-
-    // Horizontal pass: 5-tap binomial [1, 4, 6, 4, 1] / 16
-    for y in 0..h {
-        let row_start = y * w;
-        for x in 0..w {
-            let x0 = x.saturating_sub(2);
-            let x1 = x.saturating_sub(1);
-            let x2 = x;
-            let x3 = (x + 1).min(w - 1);
-            let x4 = (x + 2).min(w - 1);
-
-            let v = (luma[row_start + x0]
-                + 4.0 * luma[row_start + x1]
-                + 6.0 * luma[row_start + x2]
-                + 4.0 * luma[row_start + x3]
-                + luma[row_start + x4])
-                / 16.0;
-            h_blur[row_start + x] = v;
-        }
-    }
-
-    let mut diff_luma = vec![0.0f32; total_pixels];
-    for y in 0..h {
-        let y0 = y.saturating_sub(2);
-        let y1 = y.saturating_sub(1);
-        let y2 = y;
-        let y3 = (y + 1).min(h - 1);
-        let y4 = (y + 2).min(h - 1);
-
-        let row_start = y * w;
-        for x in 0..w {
-            let v = (h_blur[y0 * w + x]
-                + 4.0 * h_blur[y1 * w + x]
-                + 6.0 * h_blur[y2 * w + x]
-                + 4.0 * h_blur[y3 * w + x]
-                + h_blur[y4 * w + x])
-                / 16.0;
-            diff_luma[row_start + x] = v;
-        }
-    }
-
-    let kappa = strength.clamp(0.0, 0.35);
-    for y in 0..h {
-        let row_start = y * w;
-        for x in 0..w {
-            let p_idx = row_start + x;
-            let y_c = luma[p_idx];
-            let y_diff = diff_luma[p_idx];
-
-            let contrast_diff = y_c - y_diff;
-            let denom = y_diff + 0.18;
-            let factor = (1.0 + kappa * (contrast_diff / denom)).clamp(0.70, 1.35);
-
-            let out_idx = p_idx * 3;
-            data[out_idx] = (data[out_idx] * factor).max(0.0);
-            data[out_idx + 1] = (data[out_idx + 1] * factor).max(0.0);
-            data[out_idx + 2] = (data[out_idx + 2] * factor).max(0.0);
-        }
-    }
-}
-
 /// Physical Optical Halation Scatter & Point-Spread Emulsion Diffusion
 ///
 /// Models Fresnel internal reflection and lateral photon scatter off the film base
@@ -1081,7 +995,6 @@ pub fn develop_raw_sensor_frame_archival(
     frame: &crate::raw::RawSensorFrame,
     edits: &EditSettings,
     quality: crate::modes::DemosaicQuality,
-    chemical_edge_diffusion: bool,
 ) -> (usize, usize, Vec<u16>) {
     let full_w = frame.full_width;
     let full_h = frame.full_height;
@@ -1252,11 +1165,6 @@ pub fn develop_raw_sensor_frame_archival(
         rec2020_data[idx] = r;
         rec2020_data[idx + 1] = g;
         rec2020_data[idx + 2] = b;
-    }
-
-    // Pass 2: 2D Spatial Chemical Diffusion (Mackie Lines)
-    if chemical_edge_diffusion && edits.emulsion_archetype != EmulsionArchetype::None {
-        apply_lateral_chemical_diffusion(&mut rec2020_data, active_w, active_h, 0.15);
     }
 
     // Pass 2b: 2D Spatial Optical Halation Point-Spread Scatter
@@ -1505,7 +1413,7 @@ mod tests {
         };
 
         let edits = EditSettings::default();
-        let (out_w, out_h, u16_data) = develop_raw_sensor_frame_archival(&frame, &edits, DemosaicQuality::Archival, false);
+        let (out_w, out_h, u16_data) = develop_raw_sensor_frame_archival(&frame, &edits, DemosaicQuality::Archival);
         assert_eq!(out_w, w);
         assert_eq!(out_h, h);
 
@@ -1546,7 +1454,7 @@ mod tests {
         };
 
         let edits = EditSettings::default();
-        let (out_w, out_h, u16_data) = develop_raw_sensor_frame_archival(&frame, &edits, DemosaicQuality::Archival, false);
+        let (out_w, out_h, u16_data) = develop_raw_sensor_frame_archival(&frame, &edits, DemosaicQuality::Archival);
         assert_eq!(out_w, w);
         assert_eq!(out_h, h);
 
@@ -1669,10 +1577,10 @@ mod tests {
         let mut edits_off = EditSettings::default();
         edits_off.emulsion_grain_mode = EmulsionGrainMode::Off;
         edits_off.emulsion_format = crate::modes::EmulsionFormat::Format35mm;
-        let (_, _, out_35_off) = develop_raw_sensor_frame_archival(&frame, &edits_off, DemosaicQuality::Archival, false);
+        let (_, _, out_35_off) = develop_raw_sensor_frame_archival(&frame, &edits_off, DemosaicQuality::Archival);
 
         edits_off.emulsion_format = crate::modes::EmulsionFormat::Super8;
-        let (_, _, out_8_off) = develop_raw_sensor_frame_archival(&frame, &edits_off, DemosaicQuality::Archival, false);
+        let (_, _, out_8_off) = develop_raw_sensor_frame_archival(&frame, &edits_off, DemosaicQuality::Archival);
         assert_eq!(out_35_off, out_8_off, "When grain is off, format must not alter pixel output");
 
         // 2. Active Grain: Rochester Cinema 500 with Super8 vs 35mm
@@ -1682,11 +1590,11 @@ mod tests {
         edits_grain_35.grain_size = 1.35;
         edits_grain_35.grain_amount = 0.55;
         edits_grain_35.emulsion_format = crate::modes::EmulsionFormat::Format35mm;
-        let (_, _, out_35_grain) = develop_raw_sensor_frame_archival(&frame, &edits_grain_35, DemosaicQuality::Archival, false);
+        let (_, _, out_35_grain) = develop_raw_sensor_frame_archival(&frame, &edits_grain_35, DemosaicQuality::Archival);
 
         let mut edits_grain_8 = edits_grain_35.clone();
         edits_grain_8.emulsion_format = crate::modes::EmulsionFormat::Super8;
-        let (_, _, out_8_grain) = develop_raw_sensor_frame_archival(&frame, &edits_grain_8, DemosaicQuality::Archival, false);
+        let (_, _, out_8_grain) = develop_raw_sensor_frame_archival(&frame, &edits_grain_8, DemosaicQuality::Archival);
 
         // Archival export MUST reflect grain format differences
         assert_ne!(

@@ -40,7 +40,6 @@ pub struct BatchExportItemRecord {
     pub rendering_intent: ExportRenderingIntent,
     pub ultra_hdr: bool,
     pub demosaic_quality: Option<DemosaicQuality>,
-    pub chemical_edge_diffusion: Option<bool>,
     pub render_tier: Option<RenderTier>,
 }
 
@@ -374,7 +373,6 @@ pub fn export_photo(
     rendering_intent: Option<ExportRenderingIntent>,
     ultra_hdr: Option<bool>,
     demosaic_quality: Option<DemosaicQuality>,
-    chemical_edge_diffusion: Option<bool>,
     render_tier: Option<RenderTier>,
 ) -> bool {
     let dist_tuple = lens_coeffs.as_ref().and_then(|c| {
@@ -389,7 +387,6 @@ pub fn export_photo(
     let ri = rendering_intent.unwrap_or_default();
     let uhdr = ultra_hdr.unwrap_or(false);
     let dq = demosaic_quality.unwrap_or_default();
-    let ced = chemical_edge_diffusion.unwrap_or(false);
     let rt = render_tier.unwrap_or(RenderTier::ArchivalExport);
     
     match export::export_photo_file_advanced(
@@ -403,7 +400,6 @@ pub fn export_photo(
         ri,
         uhdr,
         dq,
-        ced,
         rt,
     ) {
         Ok(_) => true,

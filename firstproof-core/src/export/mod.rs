@@ -650,7 +650,6 @@ mod tests {
                 rendering_intent: ExportRenderingIntent::RelativeColorimetric,
                 ultra_hdr: false,
                 demosaic_quality: None,
-                chemical_edge_diffusion: None,
                 render_tier: None,
             });
         }
@@ -776,7 +775,6 @@ mod tests {
             ExportRenderingIntent::RelativeColorimetric,
             false,
             crate::DemosaicQuality::Archival,
-            false,
             crate::RenderTier::ArchivalExport,
         );
         assert!(res.is_ok(), "Export failed: {:?}", res.err());
@@ -847,57 +845,6 @@ mod tests {
             assert!(!p[0].is_nan() && !p[1].is_nan() && !p[2].is_nan());
             assert!(p[0] >= 0.0 && p[1] >= 0.0 && p[2] >= 0.0);
         }
-    }
-
-    #[test]
-    fn test_lateral_chemical_diffusion_mackie_lines() {
-        // 1. Uniform patch: zero change
-        let w = 16;
-        let h = 16;
-        let mut uniform = vec![0.5f32; w * h * 3];
-        apply_lateral_chemical_diffusion(&mut uniform, w, h, 0.15);
-        for &val in &uniform {
-            assert!((val - 0.5).abs() < 1e-4, "Uniform patch must remain unchanged");
-        }
-
-        // 2. Step edge: Mackie lines (border contrast enhancement / developer exhaustion)
-        // Left half: 0.2 (shadow), Right half: 0.8 (highlight)
-        let mut edge = vec![0.0f32; w * h * 3];
-        for y in 0..h {
-            for x in 0..w {
-                let v = if x < 8 { 0.2 } else { 0.8 };
-                let idx = (y * w + x) * 3;
-                edge[idx] = v;
-                edge[idx + 1] = v;
-                edge[idx + 2] = v;
-            }
-        }
-
-        apply_lateral_chemical_diffusion(&mut edge, w, h, 0.20);
-
-        // In the middle row (away from top/bottom borders):
-        let mid_y = h / 2;
-        let p_shadow_near_edge = edge[(mid_y * w + 7) * 3]; // x=7: shadow border
-        let p_shadow_far = edge[(mid_y * w + 1) * 3];       // x=1: deep shadow
-
-        let p_highlight_near_edge = edge[(mid_y * w + 8) * 3]; // x=8: highlight border
-        let p_highlight_far = edge[(mid_y * w + 14) * 3];      // x=14: uniform highlight
-
-        // Adjacent to the bright area, developer is exhausted by high silver reduction,
-        // so the shadow border receives less active developer: density drops / undershoot occurs.
-        assert!(
-            p_shadow_near_edge <= p_shadow_far,
-            "Shadow edge must exhibit bromide inhibition / undershoot (got {} vs far {})",
-            p_shadow_near_edge, p_shadow_far
-        );
-
-        // Conversely, fresh developer diffuses from the unexposed shadow across into the highlight border,
-        // producing the Mackie line (overshoot / adjacency fringe):
-        assert!(
-            p_highlight_near_edge >= p_highlight_far,
-            "Highlight edge must exhibit fresh developer boost / overshoot (got {} vs far {})",
-            p_highlight_near_edge, p_highlight_far
-        );
     }
 }
 

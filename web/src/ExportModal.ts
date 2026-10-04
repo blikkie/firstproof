@@ -20,7 +20,6 @@ export interface ExportExecutionOptions {
   customDimension: number;
   destinationDirHandle?: any;
   demosaicQuality?: 'Standard' | 'Archival';
-  chemicalEdgeDiffusion?: boolean;
 }
 
 export type ExportHandler = (
@@ -43,8 +42,6 @@ export class ExportModal {
   private sizeOption: 'Original' | '2048' | '3840' | 'Custom' = 'Original';
   private customDimension: number = 2048;
   private demosaicQuality: 'Standard' | 'Archival' = 'Standard';
-  private chemicalEdgeDiffusion: boolean = false;
-  private hasActiveEmulsion: boolean = false;
 
   public init(onExport: ExportHandler) {
     this.onExportHandler = onExport;
@@ -58,9 +55,8 @@ export class ExportModal {
     this.bindEvents();
   }
 
-  public open(photos: PhotoFileEntry[], hasActiveEmulsion: boolean = false) {
+  public open(photos: PhotoFileEntry[]) {
     this.targetPhotos = photos;
-    this.hasActiveEmulsion = hasActiveEmulsion;
     this.isExporting = false;
     this.resetStatusMessage();
     this.updateUI();
@@ -185,16 +181,6 @@ export class ExportModal {
       });
     });
 
-    // Mackie Lines Chemical Diffusion Checkbox
-    const mackieCheck = this.dialogEl.querySelector(
-      '#export-check-mackie',
-    ) as HTMLInputElement;
-    const mackieHint = this.dialogEl.querySelector('#export-mackie-hint');
-    mackieCheck?.addEventListener('change', () => {
-      this.chemicalEdgeDiffusion = mackieCheck.checked;
-      mackieHint?.classList.toggle('hidden', !this.chemicalEdgeDiffusion);
-    });
-
     // Sizing Select
     const sizeSelect = this.dialogEl.querySelector(
       '#export-size-select',
@@ -295,23 +281,6 @@ export class ExportModal {
       this.demosaicQuality !== 'Archival',
     );
 
-    const mackieContainer = this.dialogEl.querySelector(
-      '#export-mackie-container',
-    );
-    const mackieCheck = this.dialogEl.querySelector(
-      '#export-check-mackie',
-    ) as HTMLInputElement;
-    const mackieHint = this.dialogEl.querySelector('#export-mackie-hint');
-    if (mackieContainer) {
-      mackieContainer.classList.toggle('hidden', !this.hasActiveEmulsion);
-    }
-    if (mackieCheck) {
-      mackieCheck.checked = this.chemicalEdgeDiffusion;
-    }
-    if (mackieHint) {
-      mackieHint.classList.toggle('hidden', !this.chemicalEdgeDiffusion);
-    }
-
     const customDimRow = this.dialogEl.querySelector('#export-custom-dim-row');
     customDimRow?.classList.toggle('hidden', this.sizeOption !== 'Custom');
   }
@@ -395,8 +364,6 @@ export class ExportModal {
       customDimension: this.customDimension,
       destinationDirHandle: this.destinationDirHandle,
       demosaicQuality: this.demosaicQuality,
-      chemicalEdgeDiffusion:
-        this.hasActiveEmulsion && this.chemicalEdgeDiffusion,
     };
 
     try {

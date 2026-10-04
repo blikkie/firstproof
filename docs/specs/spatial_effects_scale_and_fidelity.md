@@ -130,10 +130,8 @@ $$\Delta D = \eta \cdot 4Y(1-Y) \cdot \text{grainAmount}$$
 
 ## 5. Downstream Spatial Effects (Stories 3.12 & 3.16)
 
-1. **Story 3.12: Dual-Pass Spatial Lateral Chemical Diffusion (Mackie Lines)**:
-   - Simulates physical developer and bromide ion exhaustion across high-contrast gelatin boundaries ($0.1\text{–}0.3\,\text{mm}$).
-   - Inherits `EmulsionFormat` magnification factor: $\Delta_{\text{diffusion}} = 0.2\,\text{mm} \times M$.
-   - 35mm exhibits prominent edge acutance borders; 4×5 exhibits creamy, continuous tonal gradations.
+1. **Story 3.12: Dual-Pass Spatial Lateral Chemical Diffusion (Mackie Lines) [Dropped]**:
+   - *Status*: Dropped / Struck (YAGNI & Anti-Slop). Dilute stand development developer exhaustion (Mackie lines / Eberhard effect) visually mimics synthetic digital clarity / unsharp mask halos; dropped to maintain photographic restraint and prevent slider bloat.
 2. **Story 3.16: Adaptive OLPF Deconvolution & Optical Sharpness Tuning**:
    - Consumes the 8-tap isotropic stencil and format MTF scaling to reverse birefringent sensor anti-aliasing filters while preventing diffraction-induced ringing.
 

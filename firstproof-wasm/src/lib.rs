@@ -208,7 +208,6 @@ pub fn develop_raw_archival_from_scratchpad(
     input_len: usize,
     edits_json: &str,
     quality: u32,
-    chemical_edge_diffusion: bool,
 ) -> Result<JsValue, JsValue> {
     let edits: EditSettings = serde_json::from_str(edits_json)
         .map_err(|e| JsValue::from_str(&format!("Invalid edits JSON: {}", e)))?;
@@ -232,7 +231,6 @@ pub fn develop_raw_archival_from_scratchpad(
             &frame,
             &edits,
             quality_mode,
-            chemical_edge_diffusion,
         );
 
         let bytes_needed = u16_data.len() * 2;

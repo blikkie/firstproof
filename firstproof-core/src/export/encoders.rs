@@ -34,12 +34,11 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
         rendering_intent,
         ultra_hdr,
         DemosaicQuality::Standard,
-        false,
         RenderTier::ArchivalExport,
     )
 }
 
-/// Exports an edited photo to JPEG or true 16-bit TIFF with selectable RenderTier, demosaicing precision, and chemical edge diffusion.
+/// Exports an edited photo to JPEG or true 16-bit TIFF with selectable RenderTier and demosaicing precision.
 pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     input_path: P,
     output_path: Q,
@@ -51,14 +50,13 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     rendering_intent: ExportRenderingIntent,
     ultra_hdr: bool,
     demosaic_quality: DemosaicQuality,
-    chemical_edge_diffusion: bool,
     render_tier: RenderTier,
 ) -> Result<(), String> {
     let input_path = input_path.as_ref();
     let output_path = output_path.as_ref();
     
     let mut image = decode_image_with_quality(input_path, demosaic_quality)?;
-    apply_edits_with_tier(&mut image, edits, render_tier, chemical_edge_diffusion);
+    apply_edits_with_tier(&mut image, edits, render_tier);
     
     let orig_width = image.width as u32;
     let orig_height = image.height as u32;

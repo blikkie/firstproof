@@ -4,7 +4,6 @@ use crate::color::{
 use crate::EditSettings;
 use crate::RenderTier;
 use super::decode::DemosaicedImage;
-use rayon::prelude::*;
 
 #[inline(always)]
 fn is_curve_active(pts: &[crate::CurvePointRecord]) -> bool {
@@ -13,15 +12,14 @@ fn is_curve_active(pts: &[crate::CurvePointRecord]) -> bool {
 
 /// Applies user edits in 16-bit linear space using default archival export tier.
 pub fn apply_edits(image: &mut DemosaicedImage, edits: &EditSettings) {
-    apply_edits_with_tier(image, edits, RenderTier::ArchivalExport, false);
+    apply_edits_with_tier(image, edits, RenderTier::ArchivalExport);
 }
 
-/// Applies user edits in 16-bit linear space with selectable RenderTier and optional chemical edge diffusion.
+/// Applies user edits in 16-bit linear space with selectable RenderTier.
 pub fn apply_edits_with_tier(
     image: &mut DemosaicedImage,
     edits: &EditSettings,
     _tier: RenderTier,
-    chemical_edge_diffusion: bool,
 ) {
     let total_exposure = edits.exposure;
     let exposure_gain = 2.0f32.powf(total_exposure);
@@ -69,8 +67,7 @@ pub fn apply_edits_with_tier(
     let has_halation = edits.emulsion_archetype == crate::EmulsionArchetype::BaodingSilver100
         || (edits.emulsion_archetype == crate::EmulsionArchetype::RochesterCinema500
             && edits.remjet_backing == crate::RemjetBackingMode::Stripped);
-    let needs_spatial_chem_diffusion = chemical_edge_diffusion && edits.emulsion_archetype != crate::EmulsionArchetype::None;
-    let needs_spatial_pass = needs_spatial_chem_diffusion || has_halation;
+    let needs_spatial_pass = has_halation;
 
     let max_dim = image.width.max(image.height) as f32;
     let r_inner = 1usize;
@@ -143,11 +140,6 @@ pub fn apply_edits_with_tier(
             image.data[idx] = r_em;
             image.data[idx + 1] = g_em;
             image.data[idx + 2] = b_em;
-        }
-
-        // Pass 2: 2D Spatial Lateral Chemical Diffusion (Mackie Lines / Developer Exhaustion)
-        if needs_spatial_chem_diffusion {
-            apply_lateral_chemical_diffusion(&mut image.data, image.width, image.height, 0.15);
         }
 
         // Pass 2b: 2D Spatial Optical Halation Point-Spread Scatter
@@ -459,91 +451,6 @@ pub fn apply_edits_with_tier(
             image.data[idx + 2] = b.max(0.0);
         }
     }
-}
-
-/// Photochemical Lateral Chemical Diffusion (Mackie Lines / Developer Exhaustion)
-///
-/// Models 2D spatial diffusion of development inhibitor by-products (bromide ions)
-/// across contrasting density borders in Linear Rec.2020 space.
-pub fn apply_lateral_chemical_diffusion(
-    data: &mut [f32],
-    width: usize,
-    height: usize,
-    strength: f32,
-) {
-    if strength <= 0.0 || width < 5 || height < 5 || data.len() < width * height * 3 {
-        return;
-    }
-
-    let total_pixels = width * height;
-    let mut luma = Vec::with_capacity(total_pixels);
-    for i in 0..total_pixels {
-        let idx = i * 3;
-        let y = 0.2627 * data[idx] + 0.6780 * data[idx + 1] + 0.0593 * data[idx + 2];
-        luma.push(y);
-    }
-
-    let mut h_blur = vec![0.0f32; total_pixels];
-    let w = width;
-    let h = height;
-
-    // Horizontal pass: 5-tap binomial [1, 4, 6, 4, 1] / 16
-    h_blur.par_chunks_exact_mut(w).enumerate().for_each(|(y, row)| {
-        let row_start = y * w;
-        for x in 0..w {
-            let x0 = x.saturating_sub(2);
-            let x1 = x.saturating_sub(1);
-            let x2 = x;
-            let x3 = (x + 1).min(w - 1);
-            let x4 = (x + 2).min(w - 1);
-
-            let v = (luma[row_start + x0]
-                + 4.0 * luma[row_start + x1]
-                + 6.0 * luma[row_start + x2]
-                + 4.0 * luma[row_start + x3]
-                + luma[row_start + x4])
-                / 16.0;
-            row[x] = v;
-        }
-    });
-
-    let mut diff_luma = vec![0.0f32; total_pixels];
-    diff_luma.par_chunks_exact_mut(w).enumerate().for_each(|(y, row)| {
-        let y0 = y.saturating_sub(2);
-        let y1 = y.saturating_sub(1);
-        let y2 = y;
-        let y3 = (y + 1).min(h - 1);
-        let y4 = (y + 2).min(h - 1);
-
-        for x in 0..w {
-            let v = (h_blur[y0 * w + x]
-                + 4.0 * h_blur[y1 * w + x]
-                + 6.0 * h_blur[y2 * w + x]
-                + 4.0 * h_blur[y3 * w + x]
-                + h_blur[y4 * w + x])
-                / 16.0;
-            row[x] = v;
-        }
-    });
-
-    let kappa = strength.clamp(0.0, 0.35);
-    data.par_chunks_exact_mut(w * 3).enumerate().for_each(|(y, row_slice)| {
-        let row_start = y * w;
-        for x in 0..w {
-            let p_idx = row_start + x;
-            let y_c = luma[p_idx];
-            let y_diff = diff_luma[p_idx];
-
-            let contrast_diff = y_c - y_diff;
-            let denom = y_diff + 0.18;
-            let factor = (1.0 + kappa * (contrast_diff / denom)).clamp(0.70, 1.35);
-
-            let out_idx = x * 3;
-            row_slice[out_idx] = (row_slice[out_idx] * factor).max(0.0);
-            row_slice[out_idx + 1] = (row_slice[out_idx + 1] * factor).max(0.0);
-            row_slice[out_idx + 2] = (row_slice[out_idx + 2] * factor).max(0.0);
-        }
-    });
 }
 
 pub use crate::color::{

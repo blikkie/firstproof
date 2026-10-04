@@ -80,7 +80,10 @@ This archive tracks completed stories and features moved from the active backlog
   - *Polaroid / Instant Contact Positive Invariant (`CambridgeDiffusion100`)*: Enforced contact scale ($M \equiv 1.0$), zero halation bloom (bypassed due to opaque $\text{TiO}_2$/carbon black layers), and dye diffusion transfer mottling.
   - *Web Darkroom UI Controls*: Integrated Film Format Gate selector and decoupled Grain Size / Grain Amount sliders with auto-initialization from calibrated film defaults and double-click reset.
   - *Multi-Engine Math Parity*: Verified bit-level parity across Metal, WebGL, and Rust with 10 unit/integration tests in `grain_parity.rs` and 100% clean pre-flight suite (`check.sh`).
-
+- **Story 3.12: Dual-Pass Spatial Lateral Chemical Diffusion (Mackie Lines) [Dropped & Purged]**:
+  - *Product Philosophy & Anti-Slop Audit*: Evaluated developer exhaustion / Eberhard effect (Mackie lines) against First Proof's core philosophy ("Pure capture. Honest color. Zero digital plastic. Print & web first"). In physical darkrooms, prominent Mackie lines occur primarily under dilute stand development (e.g. Rodinal 1:100) and were regarded as an uneven agitation defect. Perceptually, bright density rims and dark fringes mimic synthetic digital "clarity" or unsharp mask halos.
+  - *Purge of Dead Code & Slider Bloat Prevention*: Dropped Story 3.12 and pruned legacy unscaled `chemical_edge_diffusion` plumbing across the entire stack (`ExportModal.ts`, `ExportSheetView.swift`, `ThumbnailCache.swift`, `firstproof-engine/src/color/pipeline.rs`, `firstproof-core/src/export/`, and `firstproof-wasm`). Prevents slider bloat in the Emulsion workspace and eliminates unnecessary GPU texture taps and separable 2D convolutions in export pipelines.
+  - *Verification*: Pre-flight sensor suite (`./scripts/check.sh`) passed 100% cleanly across all 8 suites (Rust unit tests, Clippy, TypeScript typecheck, Biome linter, Vitest behavioral tests, WebAssembly build & tests, and Vite production bundle).
 
 ---
 

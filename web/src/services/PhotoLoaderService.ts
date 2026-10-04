@@ -602,13 +602,11 @@ export class PhotoLoaderService {
         const arrayBuffer = await entry.file.arrayBuffer();
         const rawBytes = new Uint8Array(arrayBuffer);
         const quality = options.demosaicQuality ?? 'Standard';
-        const chemDiff = !!options.chemicalEdgeDiffusion;
 
         const developed = this.bridge.developRawArchival(
           rawBytes,
           photoEdits,
           quality,
-          chemDiff,
         );
 
         const rot = (photoEdits.rotation ?? 0) % 360;

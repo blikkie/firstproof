@@ -50,7 +50,7 @@ pub use xmp::{
     serialize_curve_points, XmpData,
 };
 pub use color::{
-    apply_lateral_chemical_diffusion, develop_frame_pipeline, develop_pixel_pipeline,
+    develop_frame_pipeline, develop_pixel_pipeline,
     develop_raw_sensor_frame_archival, evaluate_display_luma, is_neutral_edits,
     linear_rgb_to_srgb8, linear_to_srgb_gamma, srgb_gamma_to_linear, Color3, ColorSpacePrimaries,
     Matrix3x3,

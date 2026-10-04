@@ -18,7 +18,6 @@ pub fn export_batch_photos(
             });
 
             let demosaic_quality = item.demosaic_quality.unwrap_or_default();
-            let chemical_edge_diffusion = item.chemical_edge_diffusion.unwrap_or(false);
             let render_tier = item.render_tier.unwrap_or(crate::RenderTier::ArchivalExport);
 
             match export_photo_file_advanced(
@@ -32,7 +31,6 @@ pub fn export_batch_photos(
                 item.rendering_intent,
                 item.ultra_hdr,
                 demosaic_quality,
-                chemical_edge_diffusion,
                 render_tier,
             ) {
                 Ok(()) => BatchExportResultRecord {
