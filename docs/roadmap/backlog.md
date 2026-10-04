@@ -100,6 +100,27 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 - **Subtractive Beer-Lambert Modulation**:
   - Modulate dye transmission per subtractive channel with Nutting density weighting, preserving 1:1 parity and sub-millisecond real-time performance across Metal, WebGL, and Rust CPU export pipelines.
 
+### 3.22 Sensitometric Paper Base ($L^*a^*b^*$) & ISO(R) Enlarger Grade Calibration (P2)
+- **Hahnemühle & Canson Published Substrate Calibration**:
+  - Replace hand-tuned base warmth scalars in `apply_base_warmth` with authoritative $L^*a^*b^*$ white points digitized from manufacturer technical data sheets:
+    - *Hahnemühle Photo Rag 308*: $L^* = 97.0, a^* = 0.2, b^* = +2.5$ (100% cotton, 0% OBA, natural warm cream).
+    - *Canson Edition Etching Rag*: $L^* = 97.1, a^* = 0.0, b^* = +1.5$ (pure unbleached cellulose, subtle neutral warmth).
+    - *Ilford Galerie FB Classic (Baryta)*: $L^* = 97.5, a^* = -0.5, b^* = +0.5$ (neutral barium sulfate $BaSO_4$ coating).
+    - *Bright White Fine Art (OBA)*: $L^* = 98.5, a^* = +0.5, b^* = -2.0$ (fluorescent optical brightener, cool high-radiance white).
+  - Transform coordinates into Linear Rec.2020 substrate reflectance multipliers ($W_{\text{base}}$), naturally anchoring true blacks at 0.0 while highlights reflect authentic fine-art paper fibers.
+- **ISO 6846 / ANSI PH2.2 Enlarger Grade Exposure Range ($R$) Calibration**:
+  - Replace arbitrary polynomial scalars in `apply_paper_grade` with standardized ISO Log Exposure Range ($R = \Delta \log_{10} H \times 100$) ratios from published Ilford Multigrade FB data sheets:
+    - Grade 00: $R = 160$ ($1.60\text{ log }H$, ultra-soft expansion)
+    - Grade 0: $R = 130$
+    - Grade 1: $R = 110$
+    - Grade 2: $R = 90$ ($0.90\text{ log }H$, normal contrast box speed)
+    - Grade 3: $R = 75$
+    - Grade 4: $R = 60$
+    - Grade 5: $R = 40$ ($0.40\text{ log }H$, hard graphic contrast)
+  - Calibrates the Paper Grade slider slope dynamically so contrast expansion directly mirrors darkroom enlarger exposure steps.
+- **Tri-Engine Bit-Level Parity**:
+  - Implement identically across `print_media.rs` (Rust engine), `ColorScience.metal` (macOS GPU), and `ColorScience.ts` (WebGL 2), verified with automated `print_media_parity` tests.
+
 ---
 
 
@@ -239,7 +260,34 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 - **Exploratory Darkroom & Optical Emulations (Preserving Anti-Slop Invariants)**:
   - **Virtual Optical Notch Filtering**: Emulate physical chemical glass filters (such as didymium/neodymium glass that sharply absorbs the $580\text{–}590\,\text{nm}$ sodium doublet, or analog FL-D/FL-W magenta glass) to selectively suppress line-emission spikes without distorting continuous adjacent spectral channels.
   - **Targeted Hue-Band De-Spiking**: Parametric narrow-band chromaticity qualifiers in the color engine that can gently attenuate saturated line-emission spikes toward natural warm amber/tungsten, anchored to known physical emission wavelengths.
-  - **Strict Anti-Slop Guardrail**: Never attempt synthetic multi-source AI auto-hallucination. Any future tool must remain a conscious, physical optical emulation with predictable, manual photographer control.
+
+### 5.6 First Proof Mobile Capture App: Pure Optical Camera & Tactile Darkroom (Exploratory / Post-v2)
+- **The Joy of Pure Capture on Mobile**:
+  - Brings the quiet presence, tactile pleasure, and deliberate pace of manual camera craft to mobile devices: *"Pure capture. Honest color. Zero digital plastic."*
+  - Direct hardware sensor stream: bypasses manufacturer ISP processing via low-level native camera APIs (`ImageFormat.RAW_SENSOR` / `RAW16` on Android `Camera2` & NDK, `kCVPixelFormatType_14Bayer_RGGB` on iOS `AVCapturePhotoOutput`).
+  - Pure single-exposure capture: disables computational multi-frame fusion, sets `NOISE_REDUCTION_MODE = OFF`, `EDGE_MODE = OFF`, and `TONEMAP_MODE = OFF` / linear contrast curve, honoring the raw optical photon noise floor and authentic lens character.
+- **The AgX Viewfinder (Real-Time 60fps GPU Pipeline)**:
+  - Renders the live camera preview directly through First Proof's open-domain **AgX filmic tone mapper in Linear Rec.2020** wide-gamut color space at 60fps on mobile GPUs (Vulkan / OpenGL ES 3.0 on Android, Metal on iOS).
+  - Highlights rolloff organically with natural photopic desaturation, preventing electric cyan/blue blowout on skies and specular highlights.
+  - Live composition modes: compose directly in authentic chemical emulsions (e.g. Tri-X 400, Portra 400, Rochester Cinema 500) or historical print media (Baryta, Bamako Silver Contact, Cyanotype).
+- **Tactile Manual Control Surface & Priority Exposure Modes (Leica/Hasselblad Ergonomics)**:
+  - **Exposure Modes**: Full Manual (M), Aperture Priority (Av), Shutter Priority (Tv), and Program Auto (P) with prominent, weighted haptic Exposure Compensation dial ($\pm 3.0\text{ EV}$ in $1/3\text{ EV}$ increments).
+  - **Auto-ISO with Minimum Shutter Floor**: Configurable minimum shutter speed ceiling ($1/125\text{s}$ or $1/\text{focal length}$) preventing motion blur before analog gain floats.
+  - **Tactile Viewfinder Controls**: Weighted haptic dials for Shutter Speed ($1/32,000\text{s}$ to $30\text{s}$), native ISO analog gain, Kelvin White Balance, and Focus Distance (diopters with live high-contrast focus peaking and 100% split-prism zoom assist).
+  - Quick hyperfocal snap shortcut for street photography.
+- **Sensitometric Metering & The Zone System Assistant (Anti-Plastic Guardrail)**:
+  - **Meter Modes**: Multi-Zone Evaluative, Center-Weighted, Spot, and **Highlight-Weighted Metering** (meters specifically to anchor brightest scene highlights just under `LinearResponseLimit`, letting AgX handle natural filmic shoulder roll-off).
+  - **Zone System Telemetry**: Minimalist, non-intrusive live readout showing scene dynamic range distribution across Ansel Adams Zones 0–X.
+  - **Strict Anti-Slop Invariant (Zero Synthetic Scene-Coloring AI)**: Hard rejection of consumer AI "scene styles" (no artificial sky saturation, no food warming, no synthetic skin smoothing, no hallucinatory filters). On-device intelligence functions strictly as an optical exposure meter and advisory tool, never painting over or second-guessing raw scene photons.
+- **Archival Open DNG Output & Immutable Master Invariant**:
+  - Writes standard Adobe DNG 1.4+ containers directly via First Proof's 4-stage atomic archival writer (`firstproof-core::dng`), embedding First Proof's authentic, un-baked retina preview (Linear Rec.2020 $\to$ AgX) in SubIFD1.
+  - Edits, ratings, and capture metadata persist in standard `.xmp` sidecars (`photo.dng.xmp`), traveling seamlessly to the macOS desktop and web darkroom via local folder sync.
+- **Instant Frictionless Master-Grade Sharing (Flagship Speed)**:
+  - One-tap invocation of the native OS share sheet (`Intent.ACTION_SEND` on Android, `UIActivityViewController` on iOS) directly from the viewfinder review strip or photo inspect view.
+  - Flagship mobile SoCs (Snapdragon 8 / Apple A-series / Google Tensor) leverage SIMD/NEON and GPU compute to crunch full-resolution Bayer RAW $\to$ Linear Rec.2020 $\to$ AgX filmic tone curve into an archival-quality JPEG in well under a second.
+  - Exports a finished, wide-gamut sRGB or Display P3 JPEG with authentic tone curves and embedded ICC profiles, letting photographers share finished work instantly with zero tedious export micro-management.
+- **Cross-Platform Shared Rust Engine**:
+  - Core capture orchestration, DNG serialization, and color processing compiled directly from `firstproof-engine` via `cargo-ndk` (`aarch64-linux-android`) for Android and UniFFI for iOS.
 
 ---
 
