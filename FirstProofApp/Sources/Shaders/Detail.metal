@@ -67,6 +67,38 @@ inline float clusteredGrainNoise(float2 p) {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+inline float evalGrainProcNoise(float2 pos, float s, bool is_instant) {
+    if (is_instant) {
+        return 0.60 * clusteredGrainNoise(pos / s)
+            + 0.40 * clusteredGrainNoise(pos / (s * 1.8) + float2(17.3, 31.7));
+    } else if (s > 1.0) {
+        float t_cluster = clamp((s - 1.0) / 2.0, 0.0, 1.0);
+        float cluster = clusteredGrainNoise(pos / s);
+        float micro = proceduralGrainNoise(pos.x, pos.y);
+        float clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
+        return mix(micro, clumped, t_cluster);
+    } else {
+        return proceduralGrainNoise(pos.x, pos.y);
+    }
+}
+
+inline float evalGrainEta(float proc_val, float sensor_seed, int grain_mode, bool is_instant) {
+    if (grain_mode == 1) { // SeedFromSensor
+        if (is_instant) {
+            return clamp(0.55 * proc_val + 0.20 * sensor_seed, -1.0, 1.0);
+        } else {
+            return clamp(proc_val * (0.45 + 0.55 * abs(sensor_seed)) + 0.45 * sensor_seed, -1.0, 1.0);
+        }
+    } else if (grain_mode == 2) { // SynthesizePhysical
+        if (is_instant) {
+            return clamp(0.85 * proc_val + 0.05 * sensor_seed, -1.0, 1.0);
+        } else {
+            return clamp(0.90 * proc_val + 0.10 * sensor_seed, -1.0, 1.0);
+        }
+    }
+    return 0.0;
+}
+
 inline float3 applyStochasticEmulsionGrain(
     float3 color,
     float y_c,
@@ -85,6 +117,11 @@ inline float3 applyStochasticEmulsionGrain(
     int archetype
 ) {
     if (grain_mode == 0) {
+        return color;
+    }
+
+    float amount = clamp(grain_amount, 0.0, 2.0);
+    if (amount < 0.001) {
         return color;
     }
 
@@ -108,56 +145,53 @@ inline float3 applyStochasticEmulsionGrain(
     // 2. Stochastic carrier: Polaroid DDT dye diffusion mottling vs silver crystal lattice
     bool is_instant = (archetype == 7);
     float s = max(cluster_size, 0.25);
-    float proc_noise = 0.0;
-    if (is_instant) {
-        proc_noise = 0.60 * clusteredGrainNoise(p / s)
-            + 0.40 * clusteredGrainNoise(p / (s * 1.8) + float2(17.3, 31.7));
-    } else if (s > 1.0) {
-        float t_cluster = clamp((s - 1.0) / 2.0, 0.0, 1.0);
-        float cluster = clusteredGrainNoise(p / s);
-        float micro = proceduralGrainNoise(p.x, p.y);
-        float clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
-        proc_noise = mix(micro, clumped, t_cluster);
-    } else {
-        proc_noise = proceduralGrainNoise(p.x, p.y);
-    }
+    float proc_common = evalGrainProcNoise(p, s, is_instant);
+    float eta_common = evalGrainEta(proc_common, sensor_seed, grain_mode, is_instant);
 
-    float eta = 0.0;
-    if (grain_mode == 1) { // SeedFromSensor
-        if (is_instant) {
-            eta = clamp(0.55 * proc_noise + 0.20 * sensor_seed, -1.0, 1.0);
-        } else {
-            eta = clamp(proc_noise * (0.45 + 0.55 * abs(sensor_seed)) + 0.45 * sensor_seed, -1.0, 1.0);
-        }
-    } else if (grain_mode == 2) { // SynthesizePhysical
-        if (is_instant) {
-            eta = clamp(0.85 * proc_noise + 0.05 * sensor_seed, -1.0, 1.0);
-        } else {
-            eta = clamp(0.90 * proc_noise + 0.10 * sensor_seed, -1.0, 1.0);
-        }
-    }
-
+    // 3. Nutting midtone density weighting: G(Y) = 4 * Y * (1 - Y)
     float y_clamped = clamp(y_c, 0.0, 1.0);
     float nutting = 4.0 * y_clamped * (1.0 - y_clamped);
 
-    // Multiplicative optical transmittance modulation obeying Beer-Lambert law T = 10^(-D)
-    float amount = clamp(grain_amount, 0.0, 2.0);
-    float delta = eta * nutting * 0.28 * amount;
+    // 4. Optical transmittance modulation
     float y_pixel = dot(color, float3(0.2627, 0.6780, 0.0593));
 
     bool is_monochrome = (archetype == 6 || archetype == 10 || archetype == 11);
     if (is_monochrome) {
+        // Metallic Silver: Pure achromatic optical density modulation (R = G = B)
+        float delta = eta_common * nutting * 0.28 * amount;
         float y_res = max(y_pixel * (1.0 + delta), 0.0);
         return float3(y_res);
     } else {
+        // Subtractive 3-Layer Dye Cloud Decorrelation (Cyan -> Red, Magenta -> Green, Yellow -> Blue)
+        float proc_r = evalGrainProcNoise(p + float2(17.3, 31.7), s, is_instant);
+        float proc_g = evalGrainProcNoise(p + float2(73.1, 19.9), s, is_instant);
+        float proc_b = evalGrainProcNoise(p + float2(43.7, 89.3), s, is_instant);
+
+        float eta_r = evalGrainEta(proc_r, sensor_seed, grain_mode, is_instant);
+        float eta_g = evalGrainEta(proc_g, sensor_seed, grain_mode, is_instant);
+        float eta_b = evalGrainEta(proc_b, sensor_seed, grain_mode, is_instant);
+
+        // Mix 75% common photopic luminance carrier with 25% independent subtractive layer phase
+        // Energy-preserving Euclidean normalization: 1.0 / sqrt(0.75^2 + 0.25^2) ≈ 1.264911
+        float beta = 0.25;
+        float norm = 1.264911;
+        float eta_final_r = mix(eta_common, eta_r, beta) * norm;
+        float eta_final_g = mix(eta_common, eta_g, beta) * norm;
+        float eta_final_b = mix(eta_common, eta_b, beta) * norm;
+
+        float scale = nutting * 0.28 * amount;
+        float delta_r = eta_final_r * scale;
+        float delta_g = eta_final_g * scale;
+        float delta_b = eta_final_b * scale;
+
         float chroma_damp = 1.0 - 0.10 * nutting;
         float r_c = y_pixel + chroma_damp * (color.r - y_pixel);
         float g_c = y_pixel + chroma_damp * (color.g - y_pixel);
         float b_c = y_pixel + chroma_damp * (color.b - y_pixel);
 
-        float r_res = max(r_c * (1.0 + delta), 0.0);
-        float g_res = max(g_c * (1.0 + delta), 0.0);
-        float b_res = max(b_c * (1.0 + delta), 0.0);
+        float r_res = max(r_c * (1.0 + delta_r), 0.0);
+        float g_res = max(g_c * (1.0 + delta_g), 0.0);
+        float b_res = max(b_c * (1.0 + delta_b), 0.0);
 
         return float3(r_res, g_res, b_res);
     }

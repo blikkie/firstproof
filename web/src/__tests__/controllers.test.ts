@@ -182,5 +182,85 @@ describe('Controller & First-Responder Architecture', () => {
       ]);
       expect(select.value).toBe('Format35mm');
     });
+
+    it('auto-engages SeedFromSensor grain when selecting a film archetype and resets to Off on None', async () => {
+      const { InspectorSyncController } = await import(
+        '../controllers/InspectorSyncController'
+      );
+      document.body.innerHTML = `
+        <div id="row-remjet"></div>
+        <div id="row-enlarger-filter"></div>
+        <div id="section-print-media-sliders"></div>
+        <label id="label-emulsion-format">Film Format Gate</label>
+        <select id="select-emulsion-format" class="select-input">
+          <option value="Format35mm" selected>35mm</option>
+        </select>
+        <select id="select-emulsion" class="select-input">
+          <option value="None" selected>None</option>
+          <option value="RochesterPortrait400">Rochester Portrait 400</option>
+        </select>
+        <select id="select-emulsion-grain-mode" class="select-input">
+          <option value="Off" selected>Off</option>
+          <option value="SeedFromSensor">SeedFromSensor</option>
+        </select>
+        <input type="range" id="slider-grain-size" value="1.0" />
+        <span id="val-grain-size">1.00x</span>
+        <input type="range" id="slider-grain-amount" value="1.0" />
+        <span id="val-grain-amount">1.00x</span>
+      `;
+
+      const edits: any = {
+        emulsion_archetype: 'None',
+        emulsion_grain_mode: 'Off',
+        grain_size: 1.0,
+        grain_amount: 1.0,
+        print_media: 'None',
+      };
+
+      const mockDelegate: any = {
+        getEdits: () => edits,
+        renderCanvas: vi.fn(),
+        autoSaveSidecar: vi.fn(),
+        isCurrentPhotoRaw: () => true,
+        getDefaultEdits: () => ({ ...edits }),
+        getCurveWidget: () => null,
+        getRating: () => 0,
+        getStatus: () => 'None',
+        getActiveIndex: () => 0,
+      };
+
+      const controller = new InspectorSyncController(mockDelegate);
+      controller.bind();
+      controller.updateEmulsionWorkspaceVisibility();
+
+      const selectEmulsion = document.getElementById(
+        'select-emulsion',
+      ) as HTMLSelectElement;
+      const selectGrainMode = document.getElementById(
+        'select-emulsion-grain-mode',
+      ) as HTMLSelectElement;
+
+      // 1. Initial baseline: clean sensor, grain Off
+      expect(edits.emulsion_archetype).toBe('None');
+      expect(edits.emulsion_grain_mode).toBe('Off');
+
+      // 2. Select Rochester Portrait 400: "when we simulate a film, default to all of the film"
+      selectEmulsion.value = 'RochesterPortrait400';
+      selectEmulsion.dispatchEvent(new Event('change'));
+
+      expect(edits.emulsion_archetype).toBe('RochesterPortrait400');
+      expect(edits.emulsion_grain_mode).toBe('SeedFromSensor');
+      expect(selectGrainMode.value).toBe('SeedFromSensor');
+      expect(edits.grain_size).toBe(1.0);
+      expect(edits.grain_amount).toBe(0.8);
+
+      // 3. Reverting back to None resets grain mode to Off
+      selectEmulsion.value = 'None';
+      selectEmulsion.dispatchEvent(new Event('change'));
+
+      expect(edits.emulsion_archetype).toBe('None');
+      expect(edits.emulsion_grain_mode).toBe('Off');
+      expect(selectGrainMode.value).toBe('Off');
+    });
   });
 });

@@ -808,26 +808,49 @@ export class InspectorSyncController {
         .value as EmulsionArchetype;
       edits.emulsion_archetype = archetype;
 
-      // Auto-initialize grain_size and grain_amount from calibrated defaults
-      const defaults = CALIBRATED_GRAIN_DEFAULTS[archetype];
-      if (defaults) {
-        edits.grain_size = defaults.size;
-        edits.grain_amount = defaults.amount;
-        const inputSize = document.getElementById(
-          'slider-grain-size',
-        ) as HTMLInputElement | null;
-        const valSize = document.getElementById('val-grain-size');
-        if (inputSize && valSize) {
-          inputSize.value = `${defaults.size}`;
-          valSize.innerText = `${defaults.size.toFixed(2)}x`;
+      if (archetype && archetype !== 'None') {
+        // When simulating a film stock, default to all of the film:
+        // Automatically engage SeedFromSensor grain if grain mode was Off or uninitialized.
+        if (!edits.emulsion_grain_mode || edits.emulsion_grain_mode === 'Off') {
+          edits.emulsion_grain_mode = 'SeedFromSensor';
+          const selectGrainMode = document.getElementById(
+            'select-emulsion-grain-mode',
+          ) as HTMLSelectElement | null;
+          if (selectGrainMode) {
+            selectGrainMode.value = 'SeedFromSensor';
+          }
         }
-        const inputAmount = document.getElementById(
-          'slider-grain-amount',
-        ) as HTMLInputElement | null;
-        const valAmount = document.getElementById('val-grain-amount');
-        if (inputAmount && valAmount) {
-          inputAmount.value = `${defaults.amount}`;
-          valAmount.innerText = `${defaults.amount.toFixed(2)}x`;
+
+        // Auto-initialize grain_size and grain_amount from calibrated defaults
+        const defaults = CALIBRATED_GRAIN_DEFAULTS[archetype];
+        if (defaults) {
+          edits.grain_size = defaults.size;
+          edits.grain_amount = defaults.amount;
+          const inputSize = document.getElementById(
+            'slider-grain-size',
+          ) as HTMLInputElement | null;
+          const valSize = document.getElementById('val-grain-size');
+          if (inputSize && valSize) {
+            inputSize.value = `${defaults.size}`;
+            valSize.innerText = `${defaults.size.toFixed(2)}x`;
+          }
+          const inputAmount = document.getElementById(
+            'slider-grain-amount',
+          ) as HTMLInputElement | null;
+          const valAmount = document.getElementById('val-grain-amount');
+          if (inputAmount && valAmount) {
+            inputAmount.value = `${defaults.amount}`;
+            valAmount.innerText = `${defaults.amount.toFixed(2)}x`;
+          }
+        }
+      } else {
+        // Reverting to None: reset grain back to Off
+        edits.emulsion_grain_mode = 'Off';
+        const selectGrainMode = document.getElementById(
+          'select-emulsion-grain-mode',
+        ) as HTMLSelectElement | null;
+        if (selectGrainMode) {
+          selectGrainMode.value = 'Off';
         }
       }
 

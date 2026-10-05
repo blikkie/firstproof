@@ -1000,6 +1000,13 @@ extension AppViewModel {
         guard self.emulsionArchetype != archetype else { return }
         let before = currentEdits
         self.emulsionArchetype = archetype
+        if archetype != .none {
+            if self.emulsionGrainMode == .off {
+                self.emulsionGrainMode = .seedFromSensor
+            }
+        } else {
+            self.emulsionGrainMode = .off
+        }
         if archetype == .cambridgeDiffusion100 && (self.emulsionFormat == .super8 || self.emulsionFormat == .format16mm) {
             self.emulsionFormat = .format35mm
         }

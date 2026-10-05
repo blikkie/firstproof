@@ -109,41 +109,44 @@ pub fn apply_stochastic_emulsion_grain(
     // 2. Stochastic silver crystal lattice carrier / dye diffusion
     let is_instant = archetype == EmulsionArchetype::CambridgeDiffusion100;
     let s = cluster_size.max(0.25);
-    let proc_noise = if is_instant {
-        // Instant dye diffusion transfer (DDT) through reagent pods:
-        // Softer, fine-grained micro-diffusion mottling rather than crystalline silver halide
-        0.60 * clustered_grain_noise(px / s, py / s)
-            + 0.40 * clustered_grain_noise(px / (s * 1.8) + 17.3, py / (s * 1.8) + 31.7)
-    } else if s > 1.0 {
-        let t_cluster = ((s - 1.0) / 2.0).clamp(0.0, 1.0);
-        let cluster = clustered_grain_noise(px / s, py / s);
-        let micro = procedural_grain_noise(px, py);
-        // Crystal-dense clump modulation: micro-crystal acutance is modulated by the cluster envelope,
-        // preserving crisp high-frequency grain bite across every pixel while clumping organically.
-        let clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
-        (1.0 - t_cluster) * micro + t_cluster * clumped
-    } else {
-        procedural_grain_noise(px, py)
+
+    let eval_proc_noise = |x: f32, y: f32| -> f32 {
+        if is_instant {
+            0.60 * clustered_grain_noise(x / s, y / s)
+                + 0.40 * clustered_grain_noise(x / (s * 1.8) + 17.3, y / (s * 1.8) + 31.7)
+        } else if s > 1.0 {
+            let t_cluster = ((s - 1.0) / 2.0).clamp(0.0, 1.0);
+            let cluster = clustered_grain_noise(x / s, y / s);
+            let micro = procedural_grain_noise(x, y);
+            let clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
+            (1.0 - t_cluster) * micro + t_cluster * clumped
+        } else {
+            procedural_grain_noise(x, y)
+        }
     };
 
-    // 3. Emulsion grain nucleation
-    let eta = match grain_mode {
-        EmulsionGrainMode::Off => 0.0,
-        EmulsionGrainMode::SeedFromSensor => {
-            if is_instant {
-                (0.55 * proc_noise + 0.20 * sensor_seed).clamp(-1.0, 1.0)
-            } else {
-                (proc_noise * (0.45 + 0.55 * sensor_seed.abs()) + 0.45 * sensor_seed).clamp(-1.0, 1.0)
+    let eval_eta = |proc: f32| -> f32 {
+        match grain_mode {
+            EmulsionGrainMode::Off => 0.0,
+            EmulsionGrainMode::SeedFromSensor => {
+                if is_instant {
+                    (0.55 * proc + 0.20 * sensor_seed).clamp(-1.0, 1.0)
+                } else {
+                    (proc * (0.45 + 0.55 * sensor_seed.abs()) + 0.45 * sensor_seed).clamp(-1.0, 1.0)
+                }
             }
-        }
-        EmulsionGrainMode::SynthesizePhysical => {
-            if is_instant {
-                (0.85 * proc_noise + 0.05 * sensor_seed).clamp(-1.0, 1.0)
-            } else {
-                (0.90 * proc_noise + 0.10 * sensor_seed).clamp(-1.0, 1.0)
+            EmulsionGrainMode::SynthesizePhysical => {
+                if is_instant {
+                    (0.85 * proc + 0.05 * sensor_seed).clamp(-1.0, 1.0)
+                } else {
+                    (0.90 * proc + 0.10 * sensor_seed).clamp(-1.0, 1.0)
+                }
             }
         }
     };
+
+    let proc_common = eval_proc_noise(px, py);
+    let eta_common = eval_eta(proc_common);
 
     // 4. Nutting midtone density weighting: G(Y) = 4 * Y * (1 - Y)
     // Strictly anchored at G(0.0) == 0.0 and G(1.0) == 0.0
@@ -152,24 +155,52 @@ pub fn apply_stochastic_emulsion_grain(
 
     // Multiplicative optical transmittance modulation obeying Beer-Lambert law T = 10^(-D)
     let amount = grain_amount.clamp(0.0, 2.0);
-    let delta = eta * nutting * 0.28 * amount;
+    if amount < 0.001 {
+        return (r, g, b);
+    }
+
     let y_pixel = 0.2627 * r + 0.6780 * g + 0.0593 * b;
 
-    // 5. Emulsion-specific remapping
+    // 5. Emulsion-specific remapping:
+    // Metallic Silver (Monochrome) vs 3-Layer Subtractive Organic Dye Clouds (Color)
     if archetype.is_monochrome() {
-        // Metallic Silver Crystals: Pure achromatic optical density modulation
+        // Metallic Silver Crystals: Pure achromatic optical density modulation (R = G = B)
+        let delta = eta_common * nutting * 0.28 * amount;
         let y_res = (y_pixel * (1.0 + delta)).max(0.0);
         (y_res, y_res, y_res)
     } else {
-        // Organic Dye Clouds: Multiplicative optical transmittance with subtle chrominance phase consolidation
+        // Subtractive 3-Layer Dye Cloud Decorrelation (Cyan -> Red, Magenta -> Green, Yellow -> Blue):
+        // Evaluate stochastic carrier at fixed spatial phase offsets matching physical layer separation.
+        let proc_r = eval_proc_noise(px + 17.3, py + 31.7);
+        let proc_g = eval_proc_noise(px + 73.1, py + 19.9);
+        let proc_b = eval_proc_noise(px + 43.7, py + 89.3);
+
+        let eta_r = eval_eta(proc_r);
+        let eta_g = eval_eta(proc_g);
+        let eta_b = eval_eta(proc_b);
+
+        // Mix 75% common photopic luminance density with 25% independent subtractive layer phase.
+        // Energy-preserving Euclidean normalization: 1 / sqrt(0.75^2 + 0.25^2) = 1 / sqrt(0.625) ≈ 1.264911
+        // Guarantees channel RMS granularity variance matches calibrated ANSI/ISO 10505 density without attenuation.
+        let beta = 0.25f32;
+        let norm = 1.264_911f32;
+        let eta_final_r = ((1.0 - beta) * eta_common + beta * eta_r) * norm;
+        let eta_final_g = ((1.0 - beta) * eta_common + beta * eta_g) * norm;
+        let eta_final_b = ((1.0 - beta) * eta_common + beta * eta_b) * norm;
+
+        let scale = nutting * 0.28 * amount;
+        let delta_r = eta_final_r * scale;
+        let delta_g = eta_final_g * scale;
+        let delta_b = eta_final_b * scale;
+
         let chroma_damp = 1.0 - 0.10 * nutting;
         let r_c = y_pixel + chroma_damp * (r - y_pixel);
         let g_c = y_pixel + chroma_damp * (g - y_pixel);
         let b_c = y_pixel + chroma_damp * (b - y_pixel);
 
-        let r_res = (r_c * (1.0 + delta)).max(0.0);
-        let g_res = (g_c * (1.0 + delta)).max(0.0);
-        let b_res = (b_c * (1.0 + delta)).max(0.0);
+        let r_res = (r_c * (1.0 + delta_r)).max(0.0);
+        let g_res = (g_c * (1.0 + delta_g)).max(0.0);
+        let b_res = (b_c * (1.0 + delta_b)).max(0.0);
 
         (r_res, g_res, b_res)
     }

@@ -38,6 +38,11 @@ fn metal_shader_grain_sim(
         return (r, g, b);
     }
 
+    let amount = grain_amount.clamp(0.0, 2.0);
+    if amount < 0.001 {
+        return (r, g, b);
+    }
+
     let y_lowpass = (1.0 / 6.0) * (y_l + y_r + y_t + y_b)
         + (1.0 / 12.0) * (y_tl + y_tr + y_bl + y_br);
     let delta_sensor = y_c - y_lowpass;
@@ -81,57 +86,82 @@ fn metal_shader_grain_sim(
     };
 
     let s = cluster_size.max(0.25);
-    let proc_noise = if is_instant {
-        0.60 * clustered_noise_fn(px / s, py / s)
-            + 0.40 * clustered_noise_fn(px / (s * 1.8) + 17.3, py / (s * 1.8) + 31.7)
-    } else if s > 1.0 {
-        let t_cluster = ((s - 1.0) / 2.0).clamp(0.0, 1.0);
-        let cluster = clustered_noise_fn(px / s, py / s);
-        let micro = proc_noise_fn(px, py);
-        let clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
-        (1.0 - t_cluster) * micro + t_cluster * clumped
-    } else {
-        proc_noise_fn(px, py)
+    let eval_proc_noise = |x: f32, y: f32| {
+        if is_instant {
+            0.60 * clustered_noise_fn(x / s, y / s)
+                + 0.40 * clustered_noise_fn(x / (s * 1.8) + 17.3, y / (s * 1.8) + 31.7)
+        } else if s > 1.0 {
+            let t_cluster = ((s - 1.0) / 2.0).clamp(0.0, 1.0);
+            let cluster = clustered_noise_fn(x / s, y / s);
+            let micro = proc_noise_fn(x, y);
+            let clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
+            (1.0 - t_cluster) * micro + t_cluster * clumped
+        } else {
+            proc_noise_fn(x, y)
+        }
     };
 
-    let eta = match grain_mode {
-        1 => {
-            if is_instant {
-                (0.55 * proc_noise + 0.20 * sensor_seed).clamp(-1.0, 1.0)
-            } else {
-                (proc_noise * (0.45 + 0.55 * sensor_seed.abs()) + 0.45 * sensor_seed).clamp(-1.0, 1.0)
+    let eval_eta = |proc_val: f32| {
+        match grain_mode {
+            1 => {
+                if is_instant {
+                    (0.55 * proc_val + 0.20 * sensor_seed).clamp(-1.0, 1.0)
+                } else {
+                    (proc_val * (0.45 + 0.55 * sensor_seed.abs()) + 0.45 * sensor_seed).clamp(-1.0, 1.0)
+                }
             }
-        }
-        2 => {
-            if is_instant {
-                (0.85 * proc_noise + 0.05 * sensor_seed).clamp(-1.0, 1.0)
-            } else {
-                (0.90 * proc_noise + 0.10 * sensor_seed).clamp(-1.0, 1.0)
+            2 => {
+                if is_instant {
+                    (0.85 * proc_val + 0.05 * sensor_seed).clamp(-1.0, 1.0)
+                } else {
+                    (0.90 * proc_val + 0.10 * sensor_seed).clamp(-1.0, 1.0)
+                }
             }
+            _ => 0.0,
         }
-        _ => 0.0,
     };
+
+    let proc_common = eval_proc_noise(px, py);
+    let eta_common = eval_eta(proc_common);
 
     let y_clamped = y_c.clamp(0.0, 1.0);
     let nutting = 4.0 * y_clamped * (1.0 - y_clamped);
 
-    let amount = grain_amount.clamp(0.0, 2.0);
-    let delta = eta * nutting * 0.28 * amount;
     let y_pixel = 0.2627 * r + 0.6780 * g + 0.0593 * b;
 
     let is_monochrome = archetype == 6 || archetype == 10 || archetype == 11;
     if is_monochrome {
+        let delta = eta_common * nutting * 0.28 * amount;
         let y_res = (y_pixel * (1.0 + delta)).max(0.0);
         (y_res, y_res, y_res)
     } else {
+        let proc_r = eval_proc_noise(px + 17.3, py + 31.7);
+        let proc_g = eval_proc_noise(px + 73.1, py + 19.9);
+        let proc_b = eval_proc_noise(px + 43.7, py + 89.3);
+
+        let eta_r = eval_eta(proc_r);
+        let eta_g = eval_eta(proc_g);
+        let eta_b = eval_eta(proc_b);
+
+        let beta = 0.25f32;
+        let norm = 1.264_911f32;
+        let eta_final_r = ((1.0 - beta) * eta_common + beta * eta_r) * norm;
+        let eta_final_g = ((1.0 - beta) * eta_common + beta * eta_g) * norm;
+        let eta_final_b = ((1.0 - beta) * eta_common + beta * eta_b) * norm;
+
+        let scale = nutting * 0.28 * amount;
+        let delta_r = eta_final_r * scale;
+        let delta_g = eta_final_g * scale;
+        let delta_b = eta_final_b * scale;
+
         let chroma_damp = 1.0 - 0.10 * nutting;
         let r_c = y_pixel + chroma_damp * (r - y_pixel);
         let g_c = y_pixel + chroma_damp * (g - y_pixel);
         let b_c = y_pixel + chroma_damp * (b - y_pixel);
 
-        let r_res = (r_c * (1.0 + delta)).max(0.0);
-        let g_res = (g_c * (1.0 + delta)).max(0.0);
-        let b_res = (b_c * (1.0 + delta)).max(0.0);
+        let r_res = (r_c * (1.0 + delta_r)).max(0.0);
+        let g_res = (g_c * (1.0 + delta_g)).max(0.0);
+        let b_res = (b_c * (1.0 + delta_b)).max(0.0);
 
         (r_res, g_res, b_res)
     }
@@ -476,3 +506,120 @@ fn test_edge_gradient_decoupling_prevents_oversharpening() {
     );
     assert!(out_g > 0.0 && out_b > 0.0);
 }
+
+#[test]
+fn test_subtractive_3_layer_dye_cloud_decorrelation_micro_chroma() {
+    let gray = 0.35f32;
+    let y_c = gray;
+    let y_lowpass = gray * 0.98;
+
+    let color_archetypes = [
+        EmulsionArchetype::RochesterPortrait400,
+        EmulsionArchetype::AshigaraChrome50,
+        EmulsionArchetype::RochesterK14Chrome64,
+        EmulsionArchetype::RochesterCinema500,
+        EmulsionArchetype::LeverkusenPortrait160,
+        EmulsionArchetype::AshigaraPortrait400,
+    ];
+
+    for &archetype in &color_archetypes {
+        let mut has_micro_chroma = false;
+        for i in 0..10 {
+            let px = 12.5 + (i as f32) * 17.3;
+            let py = 34.2 + (i as f32) * 23.9;
+
+            let (r, g, b) = apply_stochastic_emulsion_grain(
+                gray, gray, gray, y_c, y_lowpass, y_lowpass, y_lowpass, y_lowpass,
+                y_lowpass, y_lowpass, y_lowpass, y_lowpass, px, py,
+                EmulsionGrainMode::SynthesizePhysical,
+                1.0,
+                1.0,
+                archetype,
+            );
+
+            let diff_rg = (r - g).abs();
+            let diff_gb = (g - b).abs();
+
+            if diff_rg > 1e-4 || diff_gb > 1e-4 {
+                has_micro_chroma = true;
+            }
+
+            // Invariant: Subtractive organic dye clouds must have restrained micro-chroma (beta = 0.25).
+            // It must NOT turn into harsh digital RGB sensor confetti!
+            let max_channel_spread = (r - g).abs().max((g - b).abs()).max((r - b).abs());
+            assert!(
+                max_channel_spread < 0.15,
+                "Micro-chromatic dye cloud variance must be restrained (< 0.15), was {} for archetype {:?}",
+                max_channel_spread,
+                archetype
+            );
+        }
+
+        assert!(
+            has_micro_chroma,
+            "Color archetype {:?} must exhibit 3-layer dye cloud micro-chromatic variance",
+            archetype
+        );
+    }
+}
+
+#[test]
+fn test_monochrome_silver_strict_neutrality() {
+    let gray = 0.35f32;
+    let y_c = gray;
+    let y_lowpass = gray * 0.98;
+
+    let mono_archetypes = [
+        EmulsionArchetype::MobberleySilver400,
+        EmulsionArchetype::LiguriaCinema80,
+        EmulsionArchetype::BaodingSilver100,
+    ];
+
+    for &archetype in &mono_archetypes {
+        for i in 0..10 {
+            let px = 12.5 + (i as f32) * 17.3;
+            let py = 34.2 + (i as f32) * 23.9;
+
+            let (r, g, b) = apply_stochastic_emulsion_grain(
+                gray, gray, gray, y_c, y_lowpass, y_lowpass, y_lowpass, y_lowpass,
+                y_lowpass, y_lowpass, y_lowpass, y_lowpass, px, py,
+                EmulsionGrainMode::SynthesizePhysical,
+                1.0,
+                1.2,
+                archetype,
+            );
+
+            assert_eq!(
+                r, g,
+                "Monochrome silver grain must be strictly neutral R==G (archetype {:?}, px={}, py={})",
+                archetype, px, py
+            );
+            assert_eq!(
+                g, b,
+                "Monochrome silver grain must be strictly neutral G==B (archetype {:?}, px={}, py={})",
+                archetype, px, py
+            );
+        }
+    }
+}
+
+#[test]
+fn test_subtractive_dye_cloud_zero_amount_bypass() {
+    let (r, g, b) = (0.42, 0.28, 0.19);
+    let y_c = 0.2627 * r + 0.6780 * g + 0.0593 * b;
+    let y_lowpass = y_c * 0.96;
+
+    let (out_r, out_g, out_b) = apply_stochastic_emulsion_grain(
+        r, g, b, y_c, y_lowpass, y_lowpass, y_lowpass, y_lowpass,
+        y_lowpass, y_lowpass, y_lowpass, y_lowpass, 25.0, 42.0,
+        EmulsionGrainMode::SynthesizePhysical,
+        1.0,
+        0.0005, // Below 0.001 threshold
+        EmulsionArchetype::RochesterPortrait400,
+    );
+
+    assert_eq!(out_r, r, "Zero-bypass must preserve R bit-for-bit");
+    assert_eq!(out_g, g, "Zero-bypass must preserve G bit-for-bit");
+    assert_eq!(out_b, b, "Zero-bypass must preserve B bit-for-bit");
+}
+

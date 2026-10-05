@@ -7,10 +7,9 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
-2. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P2)
-3. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P2)
-4. **Story 4.1: Open Source IP, Security & Code Cleanliness Auditing** (P2 — Deferred to Pre-Release Hardening Gate)
+1. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P2)
+2. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P2)
+3. **Story 4.1: Open Source IP, Security & Code Cleanliness Auditing** (P2 — Deferred to Pre-Release Hardening Gate)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
@@ -57,15 +56,6 @@ This document strictly tracks pending and deferred features calibrated against o
 All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](completed.md).
 
 
-### 3.21 Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration (P2)
-- **Physical Context & Anti-Bloat Scope**:
-  - Rejects microscopic crystal facet simulation (individual tabular vs. cubic crystal shapes are sub-pixel at typical camera resolutions of $4.3\,\mu\text{m}$/pixel).
-  - Targets the single perceivable photographic phenomenon at 100% zoom: subtle chromatic vibration arising from the spatial independence of the three physical emulsion layers in color film (Cyan, Magenta, Yellow).
-- **Decorrelated Multi-Layer Phase Evaluation**:
-  - In color negative and slide emulsions, evaluate the stochastic noise carrier across small fixed coordinate phase offsets ($\eta_R, \eta_G, \eta_B$) corresponding to the physical separation between the top Yellow, middle Magenta, and bottom Cyan dye cloud layers.
-  - Retain strictly monochromatic luminance grain ($R=G=B$) for black-and-white archetypes (Mobberley, Liguria, Baoding).
-- **Subtractive Beer-Lambert Modulation**:
-  - Modulate dye transmission per subtractive channel with Nutting density weighting, preserving 1:1 parity and sub-millisecond real-time performance across Metal, WebGL, and Rust CPU export pipelines.
 
 ---
 

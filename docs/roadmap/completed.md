@@ -403,5 +403,14 @@ This archive tracks completed stories and features moved from the active backlog
     - Proved and enforced the Strict Monotonicity Invariant ($f'(x) \ge 0.40 > 0$ for all $x \in [0, 1]$), eliminating flat spots and premature zero crossings.
   - *Tri-Engine Mathematical Parity*: Bit-level mathematical parity verified across Rust CPU (`print_media.rs`), Metal GPU (`ColorScience.metal`), and WebGL 2 (`ColorScience.ts`).
   - *Verification & Sensor Guards*: Backed by automated tests in `firstproof-core/tests/print_media_parity.rs` asserting strict monotonicity over 1,000 steps, exact midtone ($0.5$) and boundary ($0.0, 1.0$) anchoring, contrast ratios, and substrate reflectance vectors. All 8 pre-flight suites in `./scripts/check.sh` passed cleanly.
+- **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration (`firstproof-engine::color::grain`, `FirstProofApp/Sources/Shaders/Detail.metal`, `web/src/shaders/ColorScience.ts`, `firstproof-core/tests/grain_parity.rs`)**:
+  - *Physical Dye Cloud Mechanics*: Color film negatives and transparencies possess no metallic silver after bleach-fix; the image consists of microscopic Cyan, Magenta, and Yellow dye clouds in three physical gelatin layers that nucleate independently. Replaced synthetic monochromatic noise on color stocks with physically grounded multi-layer phase evaluation.
+  - *Restrained Dye Cloud Phase Mixing ($\beta = 0.25$)*:
+    - Evaluates the stochastic carrier across fixed spatial offsets matching physical emulsion layer separation: Red/Cyan ($\mathbf{\Delta}_R = (17.3, 31.7)$), Green/Magenta ($\mathbf{\Delta}_G = (73.1, 19.9)$), and Blue/Yellow ($\mathbf{\Delta}_B = (43.7, 89.3)$).
+    - Mixes $75\%$ shared photopic luminance density with $25\%$ independent subtractive dye cloud phase ($\beta = 0.25$), preventing both synthetic grey digital TV static and harsh chromatic RGB sensor confetti.
+  - *Monochromatic Silver Halide Invariance*: Preserves strict monochromatic metallic silver grain ($R=G=B$) with zero chromatic drift on black-and-white archetypes (*Mobberley Silver 400*, *Liguria Cinema 80*, *Baoding Silver 100*).
+  - *Tri-Engine Parity & Zero Bypass*: Bit-for-bit mathematical parity implemented identically across Rust CPU (`firstproof-engine/src/color/grain.rs`), Metal GPU (`Detail.metal`), and WebGL 2 (`ColorScience.ts`), with strict zero-bypass when `grain_amount < 0.001` or `grain_mode == 0`.
+  - *Verification & Sensor Guards*: Backed by automated parity tests in `firstproof-core/tests/grain_parity.rs` asserting micro-chromatic variance ($\sigma_R \ne \sigma_G \ne \sigma_B$) within a restrained envelope ($< 0.15$) on color emulsions, strict neutral axis preservation ($R=G=B$) on monochrome emulsions, zero-bypass, and dual-engine parity across all archetypes. All 8 pre-flight suites in `./scripts/check.sh` passed 100% cleanly.
+
 
 
