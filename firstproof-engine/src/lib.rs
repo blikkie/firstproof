@@ -389,5 +389,65 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_repair_isolated_hot_pixels() {
+        use crate::raw::{CfaPattern, RawSensorFrame};
+
+        let w = 16;
+        let h = 16;
+        // Background at 2000 counts
+        let mut sensor_data = vec![2000u16; w * h];
+
+        // Inject isolated hot pixel at row 6, col 7 [Blue site on GBRG]
+        sensor_data[6 * w + 7] = 15279; // Pinned to ADC rail
+
+        // Inject isolated hot pixel at row 4, col 4 [Green site on GBRG]
+        sensor_data[4 * w + 4] = 15300;
+
+        // Inject an optical highlight feature (multi-pixel specular spot across rows 9..=12, cols 9..=12)
+        for y in 9..=12 {
+            for x in 9..=12 {
+                sensor_data[y * w + x] = 12000;
+            }
+        }
+
+        let mut frame = RawSensorFrame {
+            full_width: w,
+            full_height: h,
+            active_x: 0,
+            active_y: 0,
+            active_width: w,
+            active_height: h,
+            cfa_pattern: CfaPattern::Gbrg,
+            black_levels: [2048.0; 4],
+            white_levels: [15000.0; 4],
+            wb_coeffs: [2.0, 1.0, 1.5, 1.0],
+            color_matrix: None,
+            color_matrix_tungsten: None,
+            forward_matrix_tungsten: None,
+            forward_matrix_daylight: None,
+            camera_model: "Test Camera".to_string(),
+            baseline_exposure: 0.0,
+            baseline_sharpness: 1.0,
+            linear_response_limit: 0.95,
+            noise_profile: None,
+            sensor_data,
+        };
+
+        frame.repair_isolated_hot_pixels();
+
+        // 1. Hot pixels must be replaced with the median of their 4 same-color neighbors (2000)
+        assert_eq!(frame.sensor_data[6 * w + 7], 2000, "Hot Blue pixel at (7, 6) was not repaired!");
+        assert_eq!(frame.sensor_data[4 * w + 4], 2000, "Hot Green pixel at (4, 4) was not repaired!");
+
+        // 2. Optical highlight (multi-pixel) must be 100% preserved
+        for y in 9..=12 {
+            for x in 9..=12 {
+                assert_eq!(frame.sensor_data[y * w + x], 12000, "Optical highlight at ({}, {}) was altered!", x, y);
+            }
+        }
+    }
 }
+
 
