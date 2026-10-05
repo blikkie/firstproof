@@ -7,10 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 4.1: Open Source IP, Security & Code Cleanliness Auditing** (P2)
+1. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
 2. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P2)
-3. **Story 3.21: Subtractive 3-Layer Dye Cloud Decorrelation & Micro-Chromatic Grain Vibration** (P2)
-4. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P2)
+3. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P2)
+4. **Story 4.1: Open Source IP, Security & Code Cleanliness Auditing** (P2 — Deferred to Pre-Release Hardening Gate)
 
 
 > **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
