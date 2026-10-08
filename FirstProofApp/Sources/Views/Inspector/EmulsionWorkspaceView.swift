@@ -28,7 +28,6 @@ public struct EmulsionWorkspaceView: View {
         viewModel.printMedia != .none ||
         viewModel.enlargerFilter != .neutralPanchromatic ||
         viewModel.printPaperGrade != 0.0 ||
-        viewModel.printBaseWarmth != 0.0 ||
         viewModel.printProcessDepth != 100.0
     }
     
@@ -328,28 +327,7 @@ public struct EmulsionWorkspaceView: View {
                         .foregroundColor(.secondary.opacity(0.7))
                     }
                     
-                    // 2. Base Warmth
-                    VStack(alignment: .leading, spacing: 2) {
-                        SliderRow(
-                            label: "Base Warmth",
-                            value: $viewModel.printBaseWarmth,
-                            range: -100.0...100.0,
-                            format: "%+.0f",
-                            onReset: { viewModel.resetSlider(.printBaseWarmth) },
-                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printBaseWarmth) }
-                        )
-                        HStack {
-                            Text("Baryta Optical")
-                            Spacer()
-                            Text("Neutral")
-                            Spacer()
-                            Text("Natural Cotton")
-                        }
-                        .font(.system(size: 9))
-                        .foregroundColor(.secondary.opacity(0.7))
-                    }
-                    
-                    // 3. Process Depth
+                    // 2. Process Depth
                     VStack(alignment: .leading, spacing: 2) {
                         SliderRow(
                             label: "Process Depth",

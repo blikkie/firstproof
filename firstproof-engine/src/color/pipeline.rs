@@ -736,7 +736,6 @@ pub fn develop_pixel_pipeline(
             edits.print_media,
             edits.enlarger_filter,
             edits.print_paper_grade,
-            edits.print_base_warmth,
             edits.print_process_depth,
         );
         srgb_linear_out = Color3::new(pr, pg, pb);
@@ -1361,7 +1360,7 @@ pub fn develop_raw_sensor_frame_archival(
         if edits.print_media != PrintMediaMode::None {
             let (r_p, g_p, b_p) = apply_print_media(
                 r, g, b, edits.print_media, edits.enlarger_filter,
-                edits.print_paper_grade, edits.print_base_warmth, edits.print_process_depth,
+                edits.print_paper_grade, edits.print_process_depth,
             );
             r = r_p;
             g = g_p;

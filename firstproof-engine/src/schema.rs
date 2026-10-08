@@ -333,18 +333,6 @@ pub fn all_adjustments() -> Vec<AdjustmentDescriptor> {
             precision: 1,
         },
         AdjustmentDescriptor {
-            id: "base_warmth".into(),
-            name: "Base Tint / Warmth".into(),
-            category: WorkspaceCategory::Emulsion,
-            min: -100.0,
-            max: 100.0,
-            step: 1.0,
-            default: 0.0,
-            scale_mode: ScaleMode::Linear,
-            unit: "".into(),
-            precision: 0,
-        },
-        AdjustmentDescriptor {
             id: "process_depth".into(),
             name: "Process Depth".into(),
             category: WorkspaceCategory::Emulsion,

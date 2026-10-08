@@ -36,7 +36,6 @@ uniform int u_halationMode;
 
 uniform int u_printMediaMode;
 uniform float u_printPaperGrade;
-uniform float u_printBaseWarmth;
 uniform float u_printProcessDepth;
 uniform int u_enlargerFilterMode;
 
@@ -570,7 +569,7 @@ void main() {
 
     // 11. Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration in Linear Display Space
     if (u_printMediaMode != 0) {
-        srgbLinearOut = applyPrintMedia(srgbLinearOut, u_printMediaMode, u_enlargerFilterMode, u_printPaperGrade, u_printBaseWarmth, u_printProcessDepth);
+        srgbLinearOut = applyPrintMedia(srgbLinearOut, u_printMediaMode, u_enlargerFilterMode, u_printPaperGrade, u_printProcessDepth);
     }
 
     // 12. Final Display Output: Display Gamma with 8-bit TPDF dither (The VERY LAST step!)

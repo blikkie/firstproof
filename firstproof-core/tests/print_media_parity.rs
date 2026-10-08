@@ -19,7 +19,6 @@ fn metal_shader_print_media_sim(
     media_mode: i32,
     filter_mode: i32,
     paper_grade: f32,
-    base_warmth: f32,
     process_depth: f32,
 ) -> (f32, f32, f32) {
     if media_mode == 0 {
@@ -100,7 +99,7 @@ fn metal_shader_print_media_sim(
             g_out = (g_out * (1.0 - dye_density * 0.6)).clamp(0.0, 1.0);
             b_out = (b_out * (1.0 - dye_density * 0.9)).clamp(0.0, 1.0);
 
-            metal_base_warmth((r_out, g_out, b_out), base_warmth)
+            (r_out, g_out, b_out)
         }
         2 => { // SilverDyeBleach
             let r_g = metal_paper_grade(r, paper_grade);
@@ -119,26 +118,36 @@ fn metal_shader_print_media_sim(
             let g_out = (lum + (g_p - lum) * azo_sat).clamp(0.0, 1.0);
             let b_out = (lum + (b_p - lum) * azo_sat).clamp(0.0, 1.0);
 
-            metal_base_warmth((r_out, g_out, b_out), base_warmth)
+            (r_out, g_out, b_out)
         }
         3 => { // FineArtCottonRag
             let r_g = metal_paper_grade(r, paper_grade);
             let g_g = metal_paper_grade(g, paper_grade);
             let b_g = metal_paper_grade(b, paper_grade);
 
-            let matte_floor = 0.055 - 0.015 * depth;
-            let r_p = r_g + matte_floor * (1.0 - r_g) * (1.0 - r_g);
-            let g_p = g_g + matte_floor * (1.0 - g_g) * (1.0 - g_g);
-            let b_p = b_g + matte_floor * (1.0 - b_g) * (1.0 - b_g);
+            let floor = 0.016 * depth;
+            let knee = 0.10;
+            let apply_matte_toe = |c: f32| -> f32 {
+                if c < knee {
+                    let u = 1.0 - c / knee;
+                    c + floor * u * u * (3.0 - 2.0 * u)
+                } else {
+                    c
+                }
+            };
+
+            let r_p = apply_matte_toe(r_g);
+            let g_p = apply_matte_toe(g_g);
+            let b_p = apply_matte_toe(b_g);
 
             let lum = 0.2627 * r_p + 0.6780 * g_p + 0.0593 * b_p;
-            let pigment_sat = 0.75 + 0.25 * depth;
+            let pigment_sat = 0.95 + 0.05 * depth;
 
             let r_out = (lum + (r_p - lum) * pigment_sat).clamp(0.0, 1.0);
             let g_out = (lum + (g_p - lum) * pigment_sat).clamp(0.0, 1.0);
             let b_out = (lum + (b_p - lum) * pigment_sat).clamp(0.0, 1.0);
 
-            metal_base_warmth((r_out, g_out, b_out), base_warmth + 15.0)
+            metal_base_warmth((r_out, g_out, b_out), 15.0)
         }
         4 => { // BarytaSilverGelatin
             let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
@@ -147,7 +156,7 @@ fn metal_shader_print_media_sim(
             let dmax_gamma = 1.0 + 0.08 * depth;
             let silver_toned = silver.powf(dmax_gamma);
 
-            metal_base_warmth((silver_toned, silver_toned, silver_toned), base_warmth)
+            (silver_toned, silver_toned, silver_toned)
         }
         5 => { // WarmtoneChlorobromide
             let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
@@ -164,7 +173,7 @@ fn metal_shader_print_media_sim(
             let b_tone = silver_deep + depth * (-mid_mask * 0.018 + shadow_density * 0.030);
 
             let toned = (r_tone.clamp(0.0, 1.0), g_tone.clamp(0.0, 1.0), b_tone.clamp(0.0, 1.0));
-            metal_base_warmth(toned, base_warmth)
+            metal_base_warmth(toned, 5.0)
         }
         6 => { // PlatinumPalladium
             let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
@@ -179,7 +188,7 @@ fn metal_shader_print_media_sim(
             let b_tone = silver_base - warm_lift * 0.020;
 
             let toned = (r_tone.clamp(0.0, 1.0), g_tone.clamp(0.0, 1.0), b_tone.clamp(0.0, 1.0));
-            metal_base_warmth(toned, base_warmth + 10.0 * depth)
+            metal_base_warmth(toned, 10.0 * depth)
         }
         7 => { // Cyanotype
             let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
@@ -192,7 +201,7 @@ fn metal_shader_print_media_sim(
             let b_p = silver * (1.0 - 0.05 * depth * density) + 0.07 * depth * density;
 
             let toned = (r_p.clamp(0.0, 1.0), g_p.clamp(0.0, 1.0), b_p.clamp(0.0, 1.0));
-            metal_base_warmth(toned, base_warmth + 8.0 * depth)
+            metal_base_warmth(toned, 8.0 * depth)
         }
         8 => { // BamakoSilverContact
             let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
@@ -201,7 +210,7 @@ fn metal_shader_print_media_sim(
             let s_lum = (c + 0.22 * c * (1.0 - c) * (2.0 * c - 1.0) + 0.14 * c * (1.0 - c)).clamp(0.0, 1.0);
             let ferro = s_lum.powf(1.0 + 0.15 * depth);
             let silver = (ferro * depth + graded * (1.0 - depth)).clamp(0.0, 1.0);
-            metal_base_warmth((silver, silver, silver), base_warmth)
+            (silver, silver, silver)
         }
         _ => (r, g, b),
     }
@@ -223,7 +232,6 @@ fn test_clean_bypass_when_none() {
             PrintMediaMode::None,
             EnlargerFilterMode::NeutralPanchromatic,
             1.5,
-            50.0,
             80.0,
         );
         assert_eq!(out_r, r, "Bypass must pass R unaltered");
@@ -265,34 +273,31 @@ fn test_dual_engine_parity_across_all_archetypes() {
     ];
 
     let paper_grades = [-1.5, 0.0, 1.5];
-    let base_warmths = [-40.0, 0.0, 40.0];
     let process_depths = [50.0, 100.0];
 
     for &media in &media_modes {
         for &filter in &filter_modes {
             for &grade in &paper_grades {
-                for &warmth in &base_warmths {
-                    for &depth in &process_depths {
-                        for &(r, g, b) in &test_colors {
-                            let (rust_r, rust_g, rust_b) = apply_print_media(
-                                r, g, b, media, filter, grade, warmth, depth,
-                            );
-                            let (metal_r, metal_g, metal_b) = metal_shader_print_media_sim(
-                                r, g, b, media.id_number(), filter.id_number(), grade, warmth, depth,
-                            );
+                for &depth in &process_depths {
+                    for &(r, g, b) in &test_colors {
+                        let (rust_r, rust_g, rust_b) = apply_print_media(
+                            r, g, b, media, filter, grade, depth,
+                        );
+                        let (metal_r, metal_g, metal_b) = metal_shader_print_media_sim(
+                            r, g, b, media.id_number(), filter.id_number(), grade, depth,
+                        );
 
-                            let diff_r = (rust_r - metal_r).abs();
-                            let diff_g = (rust_g - metal_g).abs();
-                            let diff_b = (rust_b - metal_b).abs();
+                        let diff_r = (rust_r - metal_r).abs();
+                        let diff_g = (rust_g - metal_g).abs();
+                        let diff_b = (rust_b - metal_b).abs();
 
-                            assert!(
-                                diff_r < 1e-5 && diff_g < 1e-5 && diff_b < 1e-5,
-                                "Parity mismatch for {:?} (filter {:?}, grade {}, warmth {}, depth {}): Rust=({}, {}, {}), Metal=({}, {}, {})",
-                                media, filter, grade, warmth, depth,
-                                rust_r, rust_g, rust_b,
-                                metal_r, metal_g, metal_b
-                            );
-                        }
+                        assert!(
+                            diff_r < 1e-5 && diff_g < 1e-5 && diff_b < 1e-5,
+                            "Parity mismatch for {:?} (filter {:?}, grade {}, depth {}): Rust=({}, {}, {}), Metal=({}, {}, {})",
+                            media, filter, grade, depth,
+                            rust_r, rust_g, rust_b,
+                            metal_r, metal_g, metal_b
+                        );
                     }
                 }
             }
@@ -302,18 +307,31 @@ fn test_dual_engine_parity_across_all_archetypes() {
 
 #[test]
 fn test_cotton_rag_matte_shadow_floor() {
-    // Archival Cotton Rag has a matte shadow floor of Dmax ~ 1.65 (floor >= 0.045)
+    // Archival Cotton Rag has a velvety matte shadow floor (Dmax ~ 1.75, reflectance ~0.016)
     let (r, g, b) = apply_print_media(
         0.0, 0.0, 0.0,
         PrintMediaMode::FineArtCottonRag,
         EnlargerFilterMode::NeutralPanchromatic,
         0.0,
-        0.0, // Baseline warmth
         100.0,
     );
-    assert!(r >= 0.040, "Cotton rag black floor R must be lifted to matte floor: {}", r);
-    assert!(g >= 0.038, "Cotton rag black floor G must be lifted to matte floor: {}", g);
-    assert!(b >= 0.035, "Cotton rag black floor B must be lifted to matte floor: {}", b);
+    assert!(r >= 0.015 && r <= 0.025, "Cotton rag black floor R must be cushioned to velvety floor: {}", r);
+    assert!(g >= 0.015 && g <= 0.025, "Cotton rag black floor G must be cushioned to velvety floor: {}", g);
+    assert!(b >= 0.014 && b <= 0.025, "Cotton rag black floor B must be cushioned to velvety floor: {}", b);
+
+    // Critical Anti-Haze Invariant: Middle gray (0.18) must have ZERO white haze lift
+    let (r_mid, _, _) = apply_print_media(
+        0.18, 0.18, 0.18,
+        PrintMediaMode::FineArtCottonRag,
+        EnlargerFilterMode::NeutralPanchromatic,
+        0.0,
+        100.0,
+    );
+    assert!(
+        (r_mid - 0.18).abs() < 0.005,
+        "Cotton rag must have zero white haze lift at middle gray 0.18: got {}",
+        r_mid
+    );
 }
 
 #[test]
@@ -323,7 +341,6 @@ fn test_cyanotype_prussian_blue_chemistry() {
         0.05, 0.05, 0.05, // Deep shadow
         PrintMediaMode::Cyanotype,
         EnlargerFilterMode::NeutralPanchromatic,
-        0.0,
         0.0,
         100.0,
     );
@@ -377,7 +394,6 @@ fn test_bamako_silver_contact_deep_dmax_and_ferrotype_depth() {
         PrintMediaMode::BamakoSilverContact,
         EnlargerFilterMode::NeutralPanchromatic,
         0.0,
-        0.0,
         100.0,
     );
     // Neutral axis must be preserved
@@ -390,7 +406,6 @@ fn test_bamako_silver_contact_deep_dmax_and_ferrotype_depth() {
         0.02, 0.02, 0.02,
         PrintMediaMode::BamakoSilverContact,
         EnlargerFilterMode::NeutralPanchromatic,
-        0.0,
         0.0,
         100.0,
     );

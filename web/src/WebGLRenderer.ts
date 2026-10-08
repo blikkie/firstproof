@@ -168,7 +168,6 @@ export class WebGLRenderer {
       'u_formatMagnification',
       'u_printMediaMode',
       'u_printPaperGrade',
-      'u_printBaseWarmth',
       'u_printProcessDepth',
       'u_enlargerFilterMode',
       'u_splitShadowHue',
@@ -716,7 +715,6 @@ export class WebGLRenderer {
       PRINT_MEDIA_MAP[edits.print_media] ?? 0,
     );
     gl.uniform1f(this.uLocs['u_printPaperGrade'], edits.print_paper_grade);
-    gl.uniform1f(this.uLocs['u_printBaseWarmth'], edits.print_base_warmth);
     gl.uniform1f(
       this.uLocs['u_printProcessDepth'],
       (edits as any).print_process_depth ?? 100.0,

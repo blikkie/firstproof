@@ -336,7 +336,6 @@ export class InspectorSyncController {
     setVal('grain-size', edits.grain_size, (v) => `${v.toFixed(2)}x`);
     setVal('grain-amount', edits.grain_amount, (v) => `${v.toFixed(2)}x`);
     setVal('paper-grade', edits.print_paper_grade, (v) => `${v.toFixed(1)}`);
-    setVal('base-warmth', edits.print_base_warmth, (v) => `${Math.round(v)}`);
     setVal(
       'process-depth',
       edits.print_process_depth,
@@ -625,12 +624,6 @@ export class InspectorSyncController {
       'paper-grade',
       'print_paper_grade',
       (v) => `${v.toFixed(1)}`,
-      0.0,
-    );
-    bindSlider(
-      'base-warmth',
-      'print_base_warmth',
-      (v) => `${Math.round(v)}`,
       0.0,
     );
     bindSlider(

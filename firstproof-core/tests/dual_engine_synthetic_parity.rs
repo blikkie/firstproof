@@ -151,7 +151,6 @@ fn test_synthetic_macbeth_and_neutral_ramp_dual_engine_parity() {
                     edits.print_media,
                     edits.enlarger_filter,
                     edits.print_paper_grade,
-                    edits.print_base_warmth,
                     edits.print_process_depth,
                 );
                 gpu_r = r_pm;

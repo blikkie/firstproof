@@ -473,7 +473,6 @@ fragment float4 fragmentShader(
             uniforms.printMediaMode,
             uniforms.enlargerFilterMode,
             uniforms.printPaperGrade,
-            uniforms.printBaseWarmth,
             uniforms.printProcessDepth
         );
     }
