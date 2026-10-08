@@ -16,7 +16,7 @@ pub mod xmp;
 
 pub use calibration::{CameraCalibration, CameraCalibrationRegistry};
 pub use container::{
-    apply_opcode_list_1_to_raw, apply_opcode_list_2_to_rgb, is_bayer_green, DngAreaSpec,
+    apply_opcode_list_1_to_raw, apply_opcode_list_2_to_raw, apply_opcode_list_2_to_rgb, is_bayer_green, DngAreaSpec,
     DngBadPoint, DngBadRect, DngGainMap, DngOpcode, DngOpcodeList, OpcodeError,
     RawContainerManifest,
 };
@@ -269,6 +269,8 @@ mod tests {
             baseline_sharpness: 1.25,
             linear_response_limit: 0.96,
             noise_profile: None,
+            profile_tone_curve: None,
+            warp_rectilinear: None,
             sensor_data: vec![2046; 100],
         };
 
@@ -300,6 +302,8 @@ mod tests {
             baseline_sharpness: 1.25,
             linear_response_limit: 0.96,
             noise_profile: None,
+            profile_tone_curve: None,
+            warp_rectilinear: None,
             sensor_data: vec![2046; 100],
         };
 
@@ -432,6 +436,8 @@ mod tests {
             baseline_sharpness: 1.0,
             linear_response_limit: 0.95,
             noise_profile: None,
+            profile_tone_curve: None,
+            warp_rectilinear: None,
             sensor_data,
         };
 

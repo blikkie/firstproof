@@ -116,6 +116,8 @@ pub struct RawSensorFrame {
     pub baseline_sharpness: f32,
     pub linear_response_limit: f32,
     pub noise_profile: Option<[f64; 2]>,
+    pub profile_tone_curve: Option<Vec<(f32, f32)>>,
+    pub warp_rectilinear: Option<([f64; 4], [f64; 2])>,
     pub sensor_data: Vec<u16>,
 }
 
@@ -317,6 +319,16 @@ impl RawSensorFrame {
                 }
             });
 
+        let profile_tone_curve = manifest
+            .as_ref()
+            .and_then(|m| m.profile_tone_curve.clone());
+
+        let warp_rectilinear = manifest
+            .as_ref()
+            .and_then(|m| m.opcode_list_3.as_ref())
+            .and_then(|bytes| crate::container::DngOpcodeList::parse(bytes).ok())
+            .and_then(|opcodes| opcodes.find_warp_rectilinear());
+
         let sensor_data = match raw.data {
             rawler::RawImageData::Integer(cfa) => cfa,
             _ => return None,
@@ -342,12 +354,20 @@ impl RawSensorFrame {
             baseline_sharpness,
             linear_response_limit,
             noise_profile,
+            profile_tone_curve,
+            warp_rectilinear,
             sensor_data,
         };
 
         if let Some(op_bytes) = manifest.as_ref().and_then(|m| m.opcode_list_1.as_ref()) {
             if let Ok(opcodes) = crate::container::DngOpcodeList::parse(op_bytes) {
                 frame.apply_opcode_list_1(&opcodes);
+            }
+        }
+
+        if let Some(op_bytes) = manifest.as_ref().and_then(|m| m.opcode_list_2.as_ref()) {
+            if let Ok(opcodes) = crate::container::DngOpcodeList::parse(op_bytes) {
+                frame.apply_opcode_list_2(&opcodes);
             }
         }
 
@@ -360,6 +380,19 @@ impl RawSensorFrame {
     /// Applies DNG OpcodeList1 (pre-demosaic / CFA raw corrections such as bad pixel repair and sensor GainMap).
     pub fn apply_opcode_list_1(&mut self, opcodes: &crate::container::DngOpcodeList) {
         crate::container::apply_opcode_list_1_to_raw(
+            &mut self.sensor_data,
+            self.full_width,
+            self.full_height,
+            self.black_levels,
+            self.white_levels,
+            opcodes,
+        );
+    }
+
+    /// Applies DNG OpcodeList2 (Bayer CFA raw stage, such as flat-field GainMaps)
+    /// to the raw sensor CFA mosaic before demosaicing.
+    pub fn apply_opcode_list_2(&mut self, opcodes: &crate::container::DngOpcodeList) {
+        crate::container::apply_opcode_list_2_to_raw(
             &mut self.sensor_data,
             self.full_width,
             self.full_height,

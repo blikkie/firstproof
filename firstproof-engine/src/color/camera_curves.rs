@@ -70,9 +70,20 @@ pub fn evaluate_tone_curve(x: f32, curve: &[(f32, f32)]) -> f32 {
         return curve[n - 1].1;
     }
 
+    let n_segs = n - 1;
+    let mut d_stack = [0.0f32; 32];
+    let mut m_stack = [0.0f32; 33];
+    let mut d_heap;
+    let mut m_heap;
+    let (d, m): (&mut [f32], &mut [f32]) = if n_segs <= 32 {
+        (&mut d_stack[..n_segs], &mut m_stack[..n])
+    } else {
+        d_heap = vec![0.0f32; n_segs];
+        m_heap = vec![0.0f32; n];
+        (&mut d_heap[..], &mut m_heap[..])
+    };
+
     // 1. Calculate secant slopes d_k = (y_{k+1} - y_k) / (x_{k+1} - x_k)
-    let mut d = [0.0f32; 32];
-    let n_segs = (n - 1).min(32);
     for k in 0..n_segs {
         let dx = curve[k + 1].0 - curve[k].0;
         let dy = curve[k + 1].1 - curve[k].1;
@@ -80,7 +91,6 @@ pub fn evaluate_tone_curve(x: f32, curve: &[(f32, f32)]) -> f32 {
     }
 
     // 2. Initialize tangents as averages of adjacent secants
-    let mut m = [0.0f32; 33];
     m[0] = d[0];
     for k in 1..n_segs {
         m[k] = 0.5 * (d[k - 1] + d[k]);
@@ -104,14 +114,11 @@ pub fn evaluate_tone_curve(x: f32, curve: &[(f32, f32)]) -> f32 {
         }
     }
 
-    // 4. Find the active segment
-    let mut seg = 0;
-    for k in 0..n_segs {
-        if x_clamped >= curve[k].0 && x_clamped <= curve[k + 1].0 {
-            seg = k;
-            break;
-        }
-    }
+    // 4. Find the active segment via binary search
+    let seg = match curve.binary_search_by(|p| p.0.partial_cmp(&x_clamped).unwrap_or(std::cmp::Ordering::Equal)) {
+        Ok(idx) => idx.min(n_segs - 1),
+        Err(idx) => idx.saturating_sub(1).min(n_segs - 1),
+    };
 
     // 5. Evaluate Hermite cubic polynomial
     let h = curve[seg + 1].0 - curve[seg].0;
@@ -181,4 +188,46 @@ pub fn built_in_vivid_tone_curve() -> Vec<(f32, f32)> {
         (0.80, 0.880),
         (1.00, 1.000),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dense_257_point_curve_monotonicity_and_anchoring() {
+        // Construct a synthetic 257-point sigmoid S-curve
+        let points: Vec<(f32, f32)> = (0..=256)
+            .map(|i| {
+                let x = i as f32 / 256.0;
+                // Sigmoidal Hermite tone curve
+                let y = x * x * (3.0 - 2.0 * x);
+                (x, y)
+            })
+            .collect();
+
+        assert_eq!(evaluate_tone_curve(0.0, &points), 0.0);
+        assert_eq!(evaluate_tone_curve(1.0, &points), 1.0);
+
+        let mut prev_y = -1.0f32;
+        for i in 0..=1000 {
+            let x = i as f32 / 1000.0;
+            let y = evaluate_tone_curve(x, &points);
+            assert!(y >= prev_y, "Non-monotonic step at x={}: prev={}, curr={}", x, prev_y, y);
+            assert!((0.0..=1.0).contains(&y));
+            prev_y = y;
+        }
+
+        // Verify knot pass-through
+        for &(kx, ky) in points.iter().step_by(16) {
+            let evaluated = evaluate_tone_curve(kx, &points);
+            assert!(
+                (evaluated - ky).abs() < 1e-4,
+                "Failed knot pass-through at x={}: expected {}, got {}",
+                kx,
+                ky,
+                evaluated
+            );
+        }
+    }
 }

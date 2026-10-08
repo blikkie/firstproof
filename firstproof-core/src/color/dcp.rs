@@ -126,80 +126,9 @@ pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
 /// 1. Passes exactly through each control point (x_k, y_k).
 /// 2. C^1 derivative continuity throughout [0.0, 1.0] without slope discontinuities.
 /// 3. Strictly monotonic: non-negative slope everywhere, eliminating solarization and flat plateaus.
+#[inline]
 pub fn evaluate_tone_curve(x: f32, curve: &[(f32, f32)]) -> f32 {
-    let n = curve.len();
-    if n == 0 {
-        return x;
-    }
-    if n == 1 {
-        return curve[0].1;
-    }
-    let x_clamped = x.clamp(0.0, 1.0);
-    if x_clamped <= curve[0].0 {
-        return curve[0].1;
-    }
-    if x_clamped >= curve[n - 1].0 {
-        return curve[n - 1].1;
-    }
-
-    // 1. Calculate secant slopes d_k = (y_{k+1} - y_k) / (x_{k+1} - x_k)
-    let mut d = [0.0f32; 32];
-    let n_segs = (n - 1).min(32);
-    for k in 0..n_segs {
-        let dx = curve[k + 1].0 - curve[k].0;
-        let dy = curve[k + 1].1 - curve[k].1;
-        d[k] = if dx.abs() > 1e-6 { dy / dx } else { 0.0 };
-    }
-
-    // 2. Initialize knot tangents m_k as average of adjacent secants
-    let mut m = [0.0f32; 32];
-    m[0] = d[0];
-    m[n_segs] = d[n_segs - 1];
-    for k in 1..n_segs {
-        m[k] = 0.5 * (d[k - 1] + d[k]);
-    }
-
-    // 3. Apply Fritsch-Carlson monotonicity condition
-    for k in 0..n_segs {
-        if d[k].abs() < 1e-6 {
-            m[k] = 0.0;
-            m[k + 1] = 0.0;
-        } else {
-            let alpha = m[k] / d[k];
-            let beta = m[k + 1] / d[k];
-            let hyp = alpha * alpha + beta * beta;
-            if hyp > 9.0 {
-                let tau = 3.0 / hyp.sqrt();
-                m[k] = tau * alpha * d[k];
-                m[k + 1] = tau * beta * d[k];
-            }
-        }
-    }
-
-    // 4. Locate active interval and evaluate cubic Hermite polynomial
-    for k in 0..n_segs {
-        let x0 = curve[k].0;
-        let x1 = curve[k + 1].0;
-        if x_clamped >= x0 && x_clamped <= x1 {
-            let dx = x1 - x0;
-            if dx.abs() < 1e-6 {
-                return curve[k].1;
-            }
-            let t = (x_clamped - x0) / dx;
-            let t2 = t * t;
-            let t3 = t2 * t;
-
-            let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
-            let h10 = t3 - 2.0 * t2 + t;
-            let h01 = -2.0 * t3 + 3.0 * t2;
-            let h11 = t3 - t2;
-
-            let y = h00 * curve[k].1 + h10 * m[k] * dx + h01 * curve[k + 1].1 + h11 * m[k + 1] * dx;
-            return y.clamp(0.0, 1.0);
-        }
-    }
-
-    x_clamped
+    firstproof_engine::color::evaluate_tone_curve(x, curve)
 }
 
 /// A 3D Hue-Saturation-Value delta table for camera memory color enhancements.

@@ -532,6 +532,9 @@ fn cmd_inspect_photo(path_str: &str) {
         println!("🎨 Frame as_shot_temperature: {:.1}K", frame.as_shot_temperature());
         println!("🎨 Frame baseline_exposure: {:.3} EV (gain: {:.3}x)", frame.baseline_exposure, 2.0f32.powf(frame.baseline_exposure));
         println!("🎨 Frame linear_response_limit: {:.3} (anti-blooming knee: {:.1}%)", frame.linear_response_limit, frame.linear_response_limit * 100.0);
+        println!("🎨 Frame noise_profile: {:?}", frame.noise_profile);
+        println!("🎨 Frame profile_tone_curve: {}", if let Some(ref c) = frame.profile_tone_curve { format!("Present ({} points)", c.len()) } else { "None".to_string() });
+        println!("🎨 Frame warp_rectilinear: {:?}", frame.warp_rectilinear);
         let m = frame.compute_sensor_to_rec2020();
         println!("🎨 Sensor to Rec.2020: {:?}", m);
     }

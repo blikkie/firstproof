@@ -1313,6 +1313,39 @@ pub fn develop_raw_sensor_frame_archival(
         rec2020_data = processed_rec2020;
     }
 
+    // Precompute tone profile LUT if Camera matching mode
+    let camera_curve_lut: Option<Vec<f32>> = match edits.tone_profile {
+        ColorProfileMode::AgxVivid | ColorProfileMode::AgxFilmic => None,
+        mode => {
+            let curve = match mode {
+                ColorProfileMode::CameraPortrait => built_in_portrait_tone_curve(),
+                ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
+                ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
+                _ => {
+                    if let Some(ref ptc) = frame.profile_tone_curve {
+                        ptc.clone()
+                    } else {
+                        built_in_standard_tone_curve()
+                    }
+                }
+            };
+            let lut_size = 4096;
+            Some(
+                (0..lut_size)
+                    .map(|i| {
+                        let x = i as f32 / (lut_size - 1) as f32;
+                        let curved = evaluate_tone_curve(x, &curve);
+                        if (contrast_gain - 1.0).abs() > 0.001 {
+                            ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
+                        } else {
+                            curved.clamp(0.0, 1.0)
+                        }
+                    })
+                    .collect(),
+            )
+        }
+    };
+
     // Pass 5: Tone mapping, Print media, Gamma -> 16-bit
     let mut out_u16 = Vec::with_capacity(total_pixels * 3);
     for i in 0..total_pixels {
@@ -1335,25 +1368,18 @@ pub fn develop_raw_sensor_frame_archival(
                 g = c_srgb.g();
                 b = c_srgb.b();
             }
-            mode => {
+            _ => {
                 let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r, g, b));
-                let curve = match mode {
-                    ColorProfileMode::CameraPortrait => built_in_portrait_tone_curve(),
-                    ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
-                    ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
-                    _ => built_in_standard_tone_curve(),
-                };
-                let apply_curve = |v: f32| -> f32 {
-                    let curved = evaluate_tone_curve(v, &curve);
-                    if (contrast_gain - 1.0).abs() > 0.001 {
-                        ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
-                    } else {
-                        curved.clamp(0.0, 1.0)
-                    }
-                };
-                r = apply_curve(c_srgb.r().max(0.0));
-                g = apply_curve(c_srgb.g().max(0.0));
-                b = apply_curve(c_srgb.b().max(0.0));
+                if let Some(ref lut) = camera_curve_lut {
+                    let lut_size_f = (lut.len() - 1) as f32;
+                    let apply_curve = |v: f32| -> f32 {
+                        let idx = (v.clamp(0.0, 1.0) * lut_size_f).round() as usize;
+                        lut[idx]
+                    };
+                    r = apply_curve(c_srgb.r().max(0.0));
+                    g = apply_curve(c_srgb.g().max(0.0));
+                    b = apply_curve(c_srgb.b().max(0.0));
+                }
             }
         }
 
@@ -1410,6 +1436,8 @@ mod tests {
             baseline_sharpness: 1.0,
             linear_response_limit: 0.96,
             noise_profile: None,
+            profile_tone_curve: None,
+            warp_rectilinear: None,
             sensor_data: vec![500u16; w * h],
         };
 
@@ -1453,6 +1481,8 @@ mod tests {
             baseline_sharpness: 1.0,
             linear_response_limit: 0.96,
             noise_profile: None,
+            profile_tone_curve: None,
+            warp_rectilinear: None,
             sensor_data: vec![1000u16; w * h], // Saturated photosites (cloud highlight)
         };
 
@@ -1575,6 +1605,8 @@ mod tests {
             baseline_sharpness: 1.0,
             linear_response_limit: 0.96,
             noise_profile: None,
+            profile_tone_curve: None,
+            warp_rectilinear: None,
             sensor_data: vec![500u16; w * h],
         };
 

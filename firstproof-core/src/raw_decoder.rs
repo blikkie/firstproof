@@ -35,18 +35,9 @@ impl RawDecoder for RawlerDecoder {
     fn decode(&self, path: &Path) -> Result<RawSensorFrame, String> {
         let raw = rawler::decode_file(path).map_err(|e| format!("Rawler decode error: {}", e))?;
 
-        let header = std::fs::File::open(path)
-            .ok()
-            .and_then(|mut f| {
-                use std::io::Read;
-                let mut buf = vec![0u8; 262144]; // 256KB to capture all DNG IFD0 tables and NoiseProfile
-                let n = f.read(&mut buf).ok()?;
-                buf.truncate(n);
-                Some(buf)
-            })
-            .unwrap_or_default();
+        let bytes = std::fs::read(path).unwrap_or_default();
 
-        RawSensorFrame::decode_from_raw_image(raw, &header)
+        RawSensorFrame::decode_from_raw_image(raw, &bytes)
             .ok_or_else(|| "Failed to construct RawSensorFrame from decoded RAW".to_string())
     }
 }

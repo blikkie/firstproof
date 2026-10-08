@@ -69,6 +69,8 @@ mod tests {
             data: vec![0.18, 0.18, 0.18],
             is_raw: true,
             baseline_sharpness: 1.0,
+            profile_tone_curve: None,
+            warp_rectilinear: None,
         };
         let edits = EditSettings {
             temperature: 5500.0,
@@ -839,6 +841,8 @@ mod tests {
             baseline_sharpness: 1.0,
             linear_response_limit: 0.96,
             noise_profile: None,
+            profile_tone_curve: None,
+            warp_rectilinear: None,
             sensor_data: vec![1000u16; w * h],
         };
 

@@ -38,7 +38,6 @@ This document strictly tracks pending and deferred features calibrated against o
   - Evaluate physical densitometry ($D_{\text{max}}$) under standard gallery illumination ($D_{50}$ / $D_{65}$) against digital screen rendering.
   - Benchmark shadow floor formulations across physical prints: compare physical reflective carbon ink depth vs emissive display floor lift (Option A: natural restrained floor $\sim 0.004$; Option B: micro-contrast compression without additive lift; Option C: current localized Hermite toe).
   - Tune paper grade and process depth default presets to guarantee 1:1 perceptual fidelity between darkroom viewport and physical framed gallery print.
-
 ### 3.7 WebAssembly Darkroom Engine & Static Web Launch (P0 / P1 - Pulled Forward)
 - **`firstproof-wasm` Core Crate Scaffolding**:
   - Extract lightweight WebAssembly bindings target using `wasm-bindgen` and `wasm-pack`.

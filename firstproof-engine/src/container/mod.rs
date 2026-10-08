@@ -13,7 +13,7 @@ pub mod tiff;
 
 pub use manifest::RawContainerManifest;
 pub use opcodes::{
-    apply_opcode_list_1_to_raw, apply_opcode_list_2_to_rgb, is_bayer_green, DngAreaSpec,
+    apply_opcode_list_1_to_raw, apply_opcode_list_2_to_raw, apply_opcode_list_2_to_rgb, is_bayer_green, DngAreaSpec,
     DngBadPoint, DngBadRect, DngGainMap, DngOpcode, DngOpcodeList, OpcodeError,
     OPCODE_FIX_BAD_PIXELS_CONSTANT, OPCODE_FIX_BAD_PIXELS_LIST, OPCODE_GAIN_MAP,
     OPCODE_WARP_RECTILINEAR,

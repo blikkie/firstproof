@@ -38,6 +38,13 @@ This archive tracks completed stories and features moved from the active backlog
   - Implemented chromatic difference median filtering on $(R - G)$ and $(B - G)$ difference planes, eliminating false-color chroma speckles while preserving 100% of spatial green luminance ($G$) optical sharpness.
   - Completely eliminated heuristic `applyCameraHueSat` and synthetic 3D HueSatMaps, grounding the color pipeline strictly in physical CIE spectral matrices and sensitometric tone mapping.
   - Quantitative verification against camera reference JPEG (`_MG_2332.CR2`): MSE dropped from 299.11 to 135.65 (-54.6%), PSNR rose from 23.37 dB to 26.81 dB, Mean Total Error dropped to 8.91/255 (3.49%), and full-frame blue parity matched at 94.3 vs 94.2.
+- **Story 3.24: Computational DNG Optical Fidelity & Hardware Calibration**:
+  - Full-container TIFF ingestion resolving end-of-file IFD0 structures written by mobile computational capture pipelines, extracting true `BaselineExposure` (+1.770 EV on Pixel 11 Pro).
+  - Ingested SubIFD0 `NoiseProfile` (Tag 51041: read noise offset $O$ and Poisson shot slope $S$) directly into `RawSensorFrame::noise_profile` to drive physical sensor noise modeling and grain scaling.
+  - Generalized `evaluate_tone_curve` to support dense $N$-point curves ($N = 257$ on Google Camera `ProfileToneCurve`, Tag 50940) via Fritsch-Carlson monotonic cubic Hermite interpolation with $O(\log N)$ binary search and a precomputed 4,096-sample LUT before the pixel processing loop.
+  - Executed 4-channel $30 \times 40$ 2D spatial `GainMap` meshes from `OpcodeList2` (Tag 51009) with `row_pitch: 2, col_pitch: 2` on the raw Bayer mosaic prior to demosaicing, completely eliminating peripheral $\cos^4 \theta$ optical falloff and chromatic vignetting.
+  - Ingested `OpcodeList3` `WarpRectilinear` (Tag 51022) radial distortion coefficients into `RawSensorFrame::warp_rectilinear` and `DemosaicedImage::warp_rectilinear`.
+  - Guarded against computational plastic by strictly rejecting synthetic depth maps and AI skin smoothing masks.
 
 ---
 

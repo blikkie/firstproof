@@ -49,6 +49,9 @@ pub struct RawContainerManifest {
     // Embedded Preview Slice (offset, length)
     pub preview_slice: Option<(usize, usize)>,
 
+    // Embedded Camera Profile Tone Curve (Tag 50940: pairs of (x, y))
+    pub profile_tone_curve: Option<Vec<(f32, f32)>>,
+
     // DNG Opcode Lists (Stage 1, Stage 2, Stage 3)
     pub opcode_list_1: Option<Vec<u8>>,
     pub opcode_list_2: Option<Vec<u8>>,
@@ -263,6 +266,19 @@ impl RawContainerManifest {
                 }
             });
 
+        // Embedded Camera Profile Tone Curve (Tag 50940)
+        let profile_tone_curve = tiff
+            .find_entry(DNG_TAG_PROFILE_TONE_CURVE)
+            .and_then(|e| e.as_f32_vec(buf, is_le))
+            .and_then(|v| {
+                if v.len() >= 4 && v.len() % 2 == 0 {
+                    let (chunks, _) = v.as_chunks::<2>();
+                    Some(chunks.iter().map(|c| (c[0], c[1])).collect())
+                } else {
+                    None
+                }
+            });
+
         // DNG Opcode Lists (Tags 51008, 51009, 51022)
         let opcode_list_1 = tiff
             .find_entry(DNG_TAG_OPCODE_LIST_1)
@@ -301,6 +317,7 @@ impl RawContainerManifest {
             white_levels,
             noise_profile,
             preview_slice,
+            profile_tone_curve,
             opcode_list_1,
             opcode_list_2,
             opcode_list_3,

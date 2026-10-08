@@ -443,6 +443,8 @@ fn test_cr2_0194_full_pipeline_parity() {
         data: demosaiced.data.clone(),
         is_raw: demosaiced.is_raw,
         baseline_sharpness: demosaiced.baseline_sharpness,
+        profile_tone_curve: demosaiced.profile_tone_curve.clone(),
+        warp_rectilinear: demosaiced.warp_rectilinear,
     };
     firstproof_core::export::apply_edits(&mut export_img, &edits);
     
@@ -652,6 +654,8 @@ fn test_sliders_dual_engine_parity_sweep() {
                 data: vec![c_rec2020.r(), c_rec2020.g(), c_rec2020.b()],
                 is_raw: true,
                 baseline_sharpness: 1.0,
+                profile_tone_curve: None,
+                warp_rectilinear: None,
             };
             let edits = firstproof_core::EditSettings {
                 exposure: exp,

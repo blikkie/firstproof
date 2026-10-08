@@ -40,6 +40,8 @@ fn test_binned_quad_patterns_math() {
             baseline_sharpness: 1.0,
             linear_response_limit: 0.96,
             noise_profile: None,
+            profile_tone_curve: None,
+            warp_rectilinear: None,
             sensor_data,
         };
 

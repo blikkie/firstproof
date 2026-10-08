@@ -181,6 +181,8 @@ impl SyntheticTestChart {
             data: self.rec2020_data.clone(),
             is_raw: true,
             baseline_sharpness: 1.0,
+            profile_tone_curve: None,
+            warp_rectilinear: None,
         }
     }
 

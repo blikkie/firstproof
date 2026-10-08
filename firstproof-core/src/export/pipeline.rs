@@ -69,6 +69,38 @@ pub fn apply_edits_with_tier(
             && edits.remjet_backing == crate::RemjetBackingMode::Stripped);
     let needs_spatial_pass = has_halation;
 
+    let camera_curve_lut: Option<Vec<f32>> = match edits.tone_profile {
+        crate::ColorProfileMode::AgxVivid | crate::ColorProfileMode::AgxFilmic => None,
+        mode => {
+            let curve = match mode {
+                crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_tone_curve(),
+                crate::ColorProfileMode::CameraLandscape => crate::color::dcp::DcpProfile::built_in_landscape_tone_curve(),
+                crate::ColorProfileMode::CameraVivid => crate::color::dcp::DcpProfile::built_in_vivid_tone_curve(),
+                _ => {
+                    if let Some(ref ptc) = image.profile_tone_curve {
+                        ptc.clone()
+                    } else {
+                        crate::color::dcp::DcpProfile::built_in_standard_tone_curve()
+                    }
+                }
+            };
+            let lut_size = 4096;
+            Some(
+                (0..lut_size)
+                    .map(|i| {
+                        let x = i as f32 / (lut_size - 1) as f32;
+                        let curved = crate::color::evaluate_tone_curve(x, &curve);
+                        if (contrast_gain - 1.0).abs() > 0.001 {
+                            ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
+                        } else {
+                            curved.clamp(0.0, 1.0)
+                        }
+                    })
+                    .collect(),
+            )
+        }
+    };
+
     let max_dim = image.width.max(image.height) as f32;
     let r_inner = 1usize;
     let r_outer = ((max_dim * 0.016).round() as usize).max(16);
@@ -216,32 +248,19 @@ pub fn apply_edits_with_tier(
                         g = c_srgb.g();
                         b = c_srgb.b();
                     }
-                    mode => {
+                    _ => {
                         let c_rec2020 = Color3::new(r, g, b);
                         let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
-                        let r_init = c_srgb.r().max(0.0);
-                        let g_init = c_srgb.g().max(0.0);
-                        let b_init = c_srgb.b().max(0.0);
-
-                        let curve = match mode {
-                            crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_tone_curve(),
-                            crate::ColorProfileMode::CameraLandscape => crate::color::dcp::DcpProfile::built_in_landscape_tone_curve(),
-                            crate::ColorProfileMode::CameraVivid => crate::color::dcp::DcpProfile::built_in_vivid_tone_curve(),
-                            _ => crate::color::dcp::DcpProfile::built_in_standard_tone_curve(),
-                        };
-                        
-                        let apply_curve = |v: f32| -> f32 {
-                            let curved = crate::color::evaluate_tone_curve(v, &curve);
-                            if (contrast_gain - 1.0).abs() > 0.001 {
-                                ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
-                            } else {
-                                curved.clamp(0.0, 1.0)
-                            }
-                        };
-
-                        r = apply_curve(r_init);
-                        g = apply_curve(g_init);
-                        b = apply_curve(b_init);
+                        if let Some(ref lut) = camera_curve_lut {
+                            let lut_size_f = (lut.len() - 1) as f32;
+                            let apply_curve = |v: f32| -> f32 {
+                                let idx = (v.clamp(0.0, 1.0) * lut_size_f).round() as usize;
+                                lut[idx]
+                            };
+                            r = apply_curve(c_srgb.r().max(0.0));
+                            g = apply_curve(c_srgb.g().max(0.0));
+                            b = apply_curve(c_srgb.b().max(0.0));
+                        }
                     }
                 }
             } else {
@@ -394,32 +413,19 @@ pub fn apply_edits_with_tier(
                         g = c_srgb.g();
                         b = c_srgb.b();
                     }
-                    mode => {
+                    _ => {
                         let c_rec2020 = Color3::new(r, g, b);
                         let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
-                        let r_init = c_srgb.r().max(0.0);
-                        let g_init = c_srgb.g().max(0.0);
-                        let b_init = c_srgb.b().max(0.0);
-
-                        let curve = match mode {
-                            crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_tone_curve(),
-                            crate::ColorProfileMode::CameraLandscape => crate::color::dcp::DcpProfile::built_in_landscape_tone_curve(),
-                            crate::ColorProfileMode::CameraVivid => crate::color::dcp::DcpProfile::built_in_vivid_tone_curve(),
-                            _ => crate::color::dcp::DcpProfile::built_in_standard_tone_curve(),
-                        };
-                        
-                        let apply_curve = |v: f32| -> f32 {
-                            let curved = crate::color::evaluate_tone_curve(v, &curve);
-                            if (contrast_gain - 1.0).abs() > 0.001 {
-                                ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
-                            } else {
-                                curved.clamp(0.0, 1.0)
-                            }
-                        };
-
-                        r = apply_curve(r_init);
-                        g = apply_curve(g_init);
-                        b = apply_curve(b_init);
+                        if let Some(ref lut) = camera_curve_lut {
+                            let lut_size_f = (lut.len() - 1) as f32;
+                            let apply_curve = |v: f32| -> f32 {
+                                let idx = (v.clamp(0.0, 1.0) * lut_size_f).round() as usize;
+                                lut[idx]
+                            };
+                            r = apply_curve(c_srgb.r().max(0.0));
+                            g = apply_curve(c_srgb.g().max(0.0));
+                            b = apply_curve(c_srgb.b().max(0.0));
+                        }
                     }
                 }
             } else {

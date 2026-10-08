@@ -384,6 +384,16 @@ impl DngOpcodeList {
         self.opcodes.len()
     }
 
+    /// Extracts the first WarpRectilinear opcode coefficients and optical center, if present.
+    pub fn find_warp_rectilinear(&self) -> Option<([f64; 4], [f64; 2])> {
+        for op in &self.opcodes {
+            if let DngOpcode::WarpRectilinear { coefficients, center, .. } = op {
+                return Some((*coefficients, *center));
+            }
+        }
+        None
+    }
+
     /// Parses an OpcodeList from raw big-endian byte stream per DNG Specification.
     pub fn parse(buf: &[u8]) -> Result<Self, OpcodeError> {
         if buf.is_empty() {
@@ -767,15 +777,20 @@ pub fn apply_opcode_list_1_to_raw(
                 let start_col = area.left.max(0);
                 let end_col = area.right.min(w);
 
-                for row in start_row..end_row {
-                    if (row - area.top) % (area.row_pitch as i32) != 0 {
-                        continue;
-                    }
-                    for col in start_col..end_col {
-                        if (col - area.left) % (area.col_pitch as i32) != 0 {
-                            continue;
-                        }
+                let row_step = (area.row_pitch as i32).max(1);
+                let col_step = (area.col_pitch as i32).max(1);
 
+                let r_offset = (start_row - area.top).rem_euclid(row_step);
+                let first_row = if r_offset == 0 { start_row } else { start_row + (row_step - r_offset) };
+
+                let c_offset = (start_col - area.left).rem_euclid(col_step);
+                let first_col = if c_offset == 0 { start_col } else { start_col + (col_step - c_offset) };
+
+                let mut row = first_row;
+                while row < end_row {
+                    let mut col = first_col;
+                    let row_idx = (row as usize) * width;
+                    while col < end_col {
                         let cfa_idx = ((row as usize) % 2) * 2 + ((col as usize) % 2);
                         let black = black_levels[cfa_idx];
                         let white = white_levels[cfa_idx];
@@ -790,16 +805,32 @@ pub fn apply_opcode_list_1_to_raw(
                             area.right,
                         );
 
-                        let idx = (row as usize) * width + (col as usize);
+                        let idx = row_idx + (col as usize);
                         let val = sensor_data[idx] as f32;
                         let val_lin = (val - black).max(0.0) * gain;
                         sensor_data[idx] = (val_lin + black).clamp(0.0, white).round() as u16;
+
+                        col += col_step;
                     }
+                    row += row_step;
                 }
             }
             _ => {}
         }
     }
+}
+
+/// Applies DNG OpcodeList2 (Bayer CFA raw stage, such as lens shading and flat-field GainMaps)
+/// to the raw sensor CFA mosaic before demosaicing.
+pub fn apply_opcode_list_2_to_raw(
+    sensor_data: &mut [u16],
+    width: usize,
+    height: usize,
+    black_levels: [f32; 4],
+    white_levels: [f32; 4],
+    opcodes: &DngOpcodeList,
+) {
+    apply_opcode_list_1_to_raw(sensor_data, width, height, black_levels, white_levels, opcodes);
 }
 
 /// Applies DNG OpcodeList2 (post-demosaic linear RGB stage) to a demosaiced RGB float buffer.
@@ -951,5 +982,55 @@ mod tests {
 
         assert_eq!(raw[1 * 4 + 2], 1000, "Green dead pixel should be restored to 1000");
         assert_eq!(raw[2 * 4 + 2], 1000, "Red dead pixel should be restored to 1000");
+    }
+
+    #[test]
+    fn test_pitched_bayer_gain_map_execution() {
+        let mut raw = vec![1000u16; 16]; // 4x4 image
+        // Target specifically (0,0), (0,2), (2,0), (2,2) via row_pitch: 2, col_pitch: 2
+        let area = DngAreaSpec {
+            top: 0,
+            left: 0,
+            bottom: 4,
+            right: 4,
+            plane: 0,
+            planes: 1,
+            row_pitch: 2,
+            col_pitch: 2,
+        };
+        let map = DngGainMap {
+            points_v: 2,
+            points_h: 2,
+            spacing_v: 1.0,
+            spacing_h: 1.0,
+            origin_v: 0.0,
+            origin_h: 0.0,
+            planes: 1,
+            map_gain: vec![2.0, 2.0, 2.0, 2.0], // Uniform 2x gain
+        };
+
+        let mut list = DngOpcodeList::new();
+        list.opcodes.push(DngOpcode::GainMap {
+            min_version: DNG_VERSION_1_3_0_0,
+            flags: FLAG_NONE,
+            area,
+            map,
+        });
+
+        apply_opcode_list_2_to_raw(&mut raw, 4, 4, [0.0; 4], [65535.0; 4], &list);
+
+        // Targeted channel (R in RGGB) must be scaled 2x to 2000
+        assert_eq!(raw[0 * 4 + 0], 2000);
+        assert_eq!(raw[0 * 4 + 2], 2000);
+        assert_eq!(raw[2 * 4 + 0], 2000);
+        assert_eq!(raw[2 * 4 + 2], 2000);
+
+        // All other channels must remain completely untouched at 1000
+        assert_eq!(raw[0 * 4 + 1], 1000);
+        assert_eq!(raw[0 * 4 + 3], 1000);
+        assert_eq!(raw[1 * 4 + 0], 1000);
+        assert_eq!(raw[1 * 4 + 1], 1000);
+        assert_eq!(raw[1 * 4 + 2], 1000);
+        assert_eq!(raw[1 * 4 + 3], 1000);
     }
 }
