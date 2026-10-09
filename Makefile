@@ -57,10 +57,12 @@ test-all:
 	GIT_CONFIG_GLOBAL=/dev/null cargo test --workspace
 	GIT_CONFIG_GLOBAL=/dev/null cargo check -p firstproof-wasm --target wasm32-unknown-unknown
 	cd firstproof-wasm && wasm-pack build --target web --out-dir pkg
+	cd firstproof-wasm && wasm-pack build --target nodejs --out-dir pkg-node
 	node firstproof-wasm/test_wasm.js
 
 build-wasm:
 	cd firstproof-wasm && wasm-pack build --target web --out-dir pkg
+	cd firstproof-wasm && wasm-pack build --target nodejs --out-dir pkg-node
 
 build-web: build-wasm
 	cd web && npm run build

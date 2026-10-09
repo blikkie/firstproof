@@ -35,6 +35,9 @@ npm --prefix web run test
 # Step 6: WebAssembly Package & Tests
 echo "==> [6/8] Verifying WebAssembly build & tests..."
 (cd firstproof-wasm && wasm-pack build --target web --out-dir pkg >/dev/null 2>&1)
+if [[ ! -d "firstproof-wasm/pkg-node" ]]; then
+    (cd firstproof-wasm && wasm-pack build --target nodejs --out-dir pkg-node >/dev/null 2>&1)
+fi
 node firstproof-wasm/test_wasm.js >/dev/null
 
 # Step 7: Web Client Build
