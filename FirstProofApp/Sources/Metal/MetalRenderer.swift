@@ -27,6 +27,9 @@ extension ShaderUniforms {
         u.splitToningBalance = 0.0
         u.emulsionGrainMode = 0
         u.grainScale = 1.0
+        u.grainSize = 1.0
+        u.grainAmount = 1.0
+        u.rotation = 0
         return u
     }
 }
@@ -223,8 +226,9 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         let origH = CGFloat(texture.height)
         guard origW > 0, origH > 0 else { return }
         
-        let cropWFrac = max(CGFloat(uniforms.cropRight - uniforms.cropLeft), 0.01)
-        let cropHFrac = max(CGFloat(uniforms.cropBottom - uniforms.cropTop), 0.01)
+        let isCroppedInViewport = (uniforms.cropModeActive == 0)
+        let cropWFrac = isCroppedInViewport ? max(CGFloat(uniforms.cropRight - uniforms.cropLeft), 0.01) : 1.0
+        let cropHFrac = isCroppedInViewport ? max(CGFloat(uniforms.cropBottom - uniforms.cropTop), 0.01) : 1.0
         let effectiveOrigW = origW * cropWFrac
         let effectiveOrigH = origH * cropHFrac
         

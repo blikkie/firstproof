@@ -495,12 +495,12 @@ vec3 applyRecordingEmulsion(vec3 rgb, int archetype, float pushPullEv, int filte
     float expGain = pow(2.0, clamp(pushPullEv, -2.0, 2.0));
     vec3 cur = max(rgb * expGain, vec3(0.0));
 
-    if (archetype == 1 || archetype == 5) { // Rochester Portrait 400 (Daylight 200 merged)
+    if (archetype == 1) { // Rochester Portrait 400 (Kodak Portra 400)
         vec3 dir = applyDirChemicalCoupling(cur, -0.04, 0.02, -0.08, 0.02, 0.02, -0.05);
         return vec3(
-            applyFilmCharacteristicCurve(dir.r, 0.90, 0.38, 0.08),
-            applyFilmCharacteristicCurve(dir.g, 0.90, 0.38, 0.08),
-            applyFilmCharacteristicCurve(dir.b, 0.90, 0.38, 0.08)
+            applyFilmCharacteristicCurve(dir.r, 0.92, 0.38, 0.04),
+            applyFilmCharacteristicCurve(dir.g, 0.90, 0.38, 0.06),
+            applyFilmCharacteristicCurve(dir.b, 0.88, 0.40, 0.12)
         );
     } else if (archetype == 2) { // Ashigara Chrome 50
         vec3 dir = applyDirChemicalCoupling(cur, -0.15, -0.08, -0.18, -0.08, -0.06, -0.12);
@@ -523,6 +523,13 @@ vec3 applyRecordingEmulsion(vec3 rgb, int archetype, float pushPullEv, int filte
             applyFilmCharacteristicCurve(dir.g, 0.82, 0.45, 0.08),
             applyFilmCharacteristicCurve(dir.b, 0.82, 0.45, 0.08)
         );
+    } else if (archetype == 5) { // Rochester Daylight 200 (Kodak Gold 200)
+        vec3 dir = applyDirChemicalCoupling(cur, -0.02, 0.04, -0.06, 0.03, 0.04, -0.03);
+        return vec3(
+            applyFilmCharacteristicCurve(dir.r, 1.12, 0.22, 0.05),
+            applyFilmCharacteristicCurve(dir.g, 1.08, 0.22, 0.08),
+            applyFilmCharacteristicCurve(dir.b, 0.98, 0.24, 0.16)
+        );
     } else if (archetype == 6) { // Mobberley Silver 400 (B&W)
         vec3 w = getEnlargerFilterWeights(filterMode);
         float panLum = dot(cur, w);
@@ -542,19 +549,19 @@ vec3 applyRecordingEmulsion(vec3 rgb, int archetype, float pushPullEv, int filte
             min(curv.g + baseRefl * 1.00, 2.0),
             min(curv.b + baseRefl * 0.94, 2.0)
         );
-    } else if (archetype == 8) { // Leverkusen Portrait 160 (Agfa Agfacolor / Vista, Leverkusen, Germany)
-        vec3 dir = applyDirChemicalCoupling(cur, -0.05, 0.01, -0.06, 0.02, 0.02, -0.04);
+    } else if (archetype == 8) { // Leverkusen Portrait 160 (Agfa Optima 160)
+        vec3 dir = applyDirChemicalCoupling(cur, -0.05, 0.01, -0.07, 0.02, 0.02, -0.04);
         return vec3(
-            applyEmulsionSCurve(dir.r, 0.06, -0.02),
-            applyEmulsionSCurve(dir.g, 0.06, -0.02),
-            applyEmulsionSCurve(dir.b, 0.06, -0.02)
+            applyFilmCharacteristicCurve(dir.r, 0.96, 0.32, 0.08),
+            applyFilmCharacteristicCurve(dir.g, 0.94, 0.32, 0.03),
+            applyFilmCharacteristicCurve(dir.b, 0.92, 0.30, 0.10)
         );
-    } else if (archetype == 9) { // Ashigara Portrait 400 (Fujicolor Pro 400H, Minamiashigara, Japan)
-        vec3 dir = applyDirChemicalCoupling(cur, -0.06, 0.02, -0.12, 0.04, 0.03, -0.08);
+    } else if (archetype == 9) { // Ashigara Portrait 400 (Fujicolor Pro 400H)
+        vec3 dir = applyDirChemicalCoupling(cur, -0.06, 0.02, -0.14, 0.05, 0.04, -0.08);
         return vec3(
-            applyEmulsionSCurve(dir.r, 0.08, 0.06),
-            applyEmulsionSCurve(dir.g, 0.08, 0.06),
-            applyEmulsionSCurve(dir.b, 0.08, 0.06)
+            applyFilmCharacteristicCurve(dir.r, 0.92, 0.36, 0.14),
+            applyFilmCharacteristicCurve(dir.g, 0.92, 0.36, 0.04),
+            applyFilmCharacteristicCurve(dir.b, 0.94, 0.34, 0.04)
         );
     } else if (archetype == 10) { // Liguria Cinema 80 (Ferrania P30, Cairo Montenotte, Italy)
         vec3 w = getEnlargerFilterWeights(filterMode);

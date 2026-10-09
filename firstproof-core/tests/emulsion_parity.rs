@@ -93,9 +93,9 @@ fn metal_shader_emulsion_sim(
         1 => { // RochesterPortrait400
             let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.04, 0.02, -0.08, 0.02, 0.02, -0.05);
             (
-                metal_film_curve(dir.0, 0.90, 0.38, 0.08),
-                metal_film_curve(dir.1, 0.90, 0.38, 0.08),
-                metal_film_curve(dir.2, 0.90, 0.38, 0.08),
+                metal_film_curve(dir.0, 0.92, 0.38, 0.04),
+                metal_film_curve(dir.1, 0.90, 0.38, 0.06),
+                metal_film_curve(dir.2, 0.88, 0.40, 0.12),
             )
         }
         2 => { // AshigaraChrome50
@@ -122,12 +122,12 @@ fn metal_shader_emulsion_sim(
                 metal_film_curve(dir.2, 0.82, 0.45, 0.08),
             )
         }
-        5 => { // RochesterDaylight200 (Merged into RochesterPortrait400 per Story 3.11 spec)
-            let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.04, 0.02, -0.08, 0.02, 0.02, -0.05);
+        5 => { // RochesterDaylight200 (Kodak Gold 200)
+            let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.02, 0.04, -0.06, 0.03, 0.04, -0.03);
             (
-                metal_film_curve(dir.0, 0.90, 0.38, 0.08),
-                metal_film_curve(dir.1, 0.90, 0.38, 0.08),
-                metal_film_curve(dir.2, 0.90, 0.38, 0.08),
+                metal_film_curve(dir.0, 1.12, 0.22, 0.05),
+                metal_film_curve(dir.1, 1.08, 0.22, 0.08),
+                metal_film_curve(dir.2, 0.98, 0.24, 0.16),
             )
         }
         6 => { // MobberleySilver400
@@ -156,19 +156,19 @@ fn metal_shader_emulsion_sim(
             (tio2_r, tio2_g, tio2_b)
         }
         8 => { // LeverkusenPortrait160
-            let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.05, 0.01, -0.06, 0.02, 0.02, -0.04);
+            let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.05, 0.01, -0.07, 0.02, 0.02, -0.04);
             (
-                metal_emulsion_s_curve(dir.0, 0.06, -0.02),
-                metal_emulsion_s_curve(dir.1, 0.06, -0.02),
-                metal_emulsion_s_curve(dir.2, 0.06, -0.02),
+                metal_film_curve(dir.0, 0.96, 0.32, 0.08),
+                metal_film_curve(dir.1, 0.94, 0.32, 0.03),
+                metal_film_curve(dir.2, 0.92, 0.30, 0.10),
             )
         }
         9 => { // AshigaraPortrait400
-            let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.06, 0.02, -0.12, 0.04, 0.03, -0.08);
+            let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.06, 0.02, -0.14, 0.05, 0.04, -0.08);
             (
-                metal_emulsion_s_curve(dir.0, 0.08, 0.06),
-                metal_emulsion_s_curve(dir.1, 0.08, 0.06),
-                metal_emulsion_s_curve(dir.2, 0.08, 0.06),
+                metal_film_curve(dir.0, 0.92, 0.36, 0.14),
+                metal_film_curve(dir.1, 0.92, 0.36, 0.04),
+                metal_film_curve(dir.2, 0.94, 0.34, 0.04),
             )
         }
         10 => { // LiguriaCinema80

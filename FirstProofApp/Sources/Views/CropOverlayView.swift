@@ -30,10 +30,9 @@ public struct CropOverlayView: View {
         GeometryReader { geometry in
             let viewSize = geometry.size
             let isOrthogonal = (viewModel.rotationDegrees == 90 || viewModel.rotationDegrees == 270)
-            let baseW = viewModel.previewImage?.size.width ?? 4000
-            let baseH = viewModel.previewImage?.size.height ?? 3000
-            let imgW = CGFloat(isOrthogonal ? baseH : baseW)
-            let imgH = CGFloat(isOrthogonal ? baseW : baseH)
+            let dims = viewModel.currentImageDimensions
+            let imgW = CGFloat(isOrthogonal ? dims.height : dims.width)
+            let imgH = CGFloat(isOrthogonal ? dims.width : dims.height)
             let imageAspect = imgW / max(imgH, 1.0)
             let viewAspect = viewSize.width / max(viewSize.height, 1.0)
             
@@ -61,8 +60,8 @@ public struct CropOverlayView: View {
             let cropRect = CGRect(x: cropX, y: cropY, width: cropW, height: cropH)
             
             ZStack {
-                // 1. Dimmed Scrim outside active crop box
-                scrimView(viewSize: viewSize, cropRect: cropRect)
+                // 1. Dimmed Scrim outside active crop box (confined strictly to the image)
+                scrimView(imageRect: imageRect, cropRect: cropRect)
                 
                 // 2. Crop Frame Border & Rule-of-Thirds Grid
                 cropFrameAndGrid(cropRect: cropRect)
@@ -111,6 +110,11 @@ public struct CropOverlayView: View {
                 }
             }
             .onDisappear {
+                guard viewModel.isCropToolActive else {
+                    activeHandle = nil
+                    isRotating = false
+                    return
+                }
                 if activeHandle != nil {
                     handleDragEnded()
                 } else if viewModel.undoHistory.scrubStartEdits != nil {
@@ -122,10 +126,9 @@ public struct CropOverlayView: View {
     
     // MARK: - Scrim View
     @ViewBuilder
-    private func scrimView(viewSize: CGSize, cropRect: CGRect) -> some View {
-        Canvas { context, size in
-            let fullRect = CGRect(origin: .zero, size: size)
-            context.fill(Path(fullRect), with: .color(Color.black.opacity(0.55)))
+    private func scrimView(imageRect: CGRect, cropRect: CGRect) -> some View {
+        Canvas { context, _ in
+            context.fill(Path(imageRect), with: .color(Color.black.opacity(0.55)))
             context.blendMode = .clear
             context.fill(Path(cropRect), with: .color(.white))
         }
@@ -520,16 +523,26 @@ public struct CropOverlayView: View {
             Divider()
                 .frame(height: 18)
             
+            // Cancel Button
+            Button(action: {
+                activeHandle = nil
+                isRotating = false
+                viewModel.cancelCrop()
+            }) {
+                HStack(spacing: 4) {
+                    Text("Cancel")
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Cancel crop modifications and revert to previous framing (Esc)")
+            
             // Done Button
             Button(action: {
-                if activeHandle != nil {
-                    handleDragEnded()
-                } else if viewModel.undoHistory.scrubStartEdits != nil {
-                    viewModel.endSliderScrub(actionName: "Crop Box")
-                }
-                viewModel.isCropToolActive = false
-                viewModel.saveCurrentEdits()
-                viewModel.notifyThumbnailChanged()
+                activeHandle = nil
+                isRotating = false
+                viewModel.commitCrop()
             }) {
                 HStack(spacing: 4) {
                     Text("Done")

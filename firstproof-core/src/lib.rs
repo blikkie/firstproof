@@ -34,7 +34,7 @@ pub struct BatchExportItemRecord {
     pub input_path: String,
     pub output_path: String,
     pub edits: EditSettings,
-    pub lens_coeffs: Option<LensCorrectionCoefficients>,
+    pub lens_coeffs: Option<LensCorrectionCoefficientsRecord>,
     pub quality: u32,
     pub max_dimension: Option<u32>,
     pub color_space: ExportColorSpace,

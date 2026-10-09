@@ -10,7 +10,8 @@ public struct EmulsionWorkspaceView: View {
         viewModel.emulsionArchetype != .none ||
         viewModel.remjetBacking != .intact ||
         viewModel.emulsionGrainMode != .off ||
-        viewModel.grainScale != 1.0
+        viewModel.grainSize != 1.0 ||
+        viewModel.grainAmount != 1.0
     }
     
     private var isMonochromeActive: Bool {
@@ -158,7 +159,7 @@ public struct EmulsionWorkspaceView: View {
                                 Text("Stripped (Halation Scatter)").tag(RemjetBackingMode.stripped)
                             }
                             .labelsHidden()
-                            .pickerStyle(.segmented)
+                            .pickerStyle(.menu)
                         }
                     }
                 }
@@ -183,12 +184,20 @@ public struct EmulsionWorkspaceView: View {
                 
                 if viewModel.emulsionGrainMode != .off {
                     SliderRow(
-                        label: "Grain Scale",
-                        value: $viewModel.grainScale,
-                        range: 0.5...2.0,
+                        label: "Grain Size",
+                        value: $viewModel.grainSize,
+                        range: 0.2...3.0,
                         format: "%.2fx",
-                        onReset: { viewModel.resetSlider(.grainScale) },
-                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .grainScale) }
+                        onReset: { viewModel.resetSlider(.grainSize) },
+                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .grainSize) }
+                    )
+                    SliderRow(
+                        label: "Grain Amount",
+                        value: $viewModel.grainAmount,
+                        range: 0.0...2.0,
+                        format: "%.2fx",
+                        onReset: { viewModel.resetSlider(.grainAmount) },
+                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .grainAmount) }
                     )
                 }
             }

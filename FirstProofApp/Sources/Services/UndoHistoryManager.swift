@@ -161,6 +161,14 @@ public final class UndoHistoryManager {
         return hist.redoStack
     }
     
+    /// Restores the exact undo and redo stacks for a photo (e.g. when cancelling an interactive crop session).
+    public func restorePhotoHistory(for path: String, undoStack: [UndoEntry], redoStack: [UndoEntry]) {
+        let hist = photoHistory(for: path)
+        hist.undoStack = undoStack
+        hist.redoStack = redoStack
+        historyRevision += 1
+    }
+    
     // MARK: - Scoped Undo / Redo Query & Execution
     
     public func canUndo(isDetailMode: Bool, activePhotoPath: String?) -> Bool {

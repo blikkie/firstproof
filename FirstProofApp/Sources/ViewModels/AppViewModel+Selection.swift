@@ -264,6 +264,7 @@ extension AppViewModel {
         self.lensCoefficients = resolvedCoeffs
         self.applyEdits(targetEdits)
         self.isCropToolActive = false
+        self.cropSessionSnapshot = nil
         self.currentGainMapRecord = nil
         
         if self.selectedPhotoIsRaw {

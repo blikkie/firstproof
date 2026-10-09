@@ -43,7 +43,8 @@ public struct MetalCanvasView: NSViewRepresentable {
         
         let mtkView = CanvasMTKView(frame: .zero, device: device)
         mtkView.colorPixelFormat = .rgba16Float
-        mtkView.clearColor = MTLClearColor(red: 0.08, green: 0.08, blue: 0.08, alpha: 1.0)
+        let neutral = NSColor.underPageBackgroundColor.usingColorSpace(.sRGB) ?? NSColor(srgbRed: 0.14, green: 0.14, blue: 0.14, alpha: 1.0)
+        mtkView.clearColor = MTLClearColor(red: Double(neutral.redComponent), green: Double(neutral.greenComponent), blue: Double(neutral.blueComponent), alpha: 1.0)
         mtkView.enableSetNeedsDisplay = true
         mtkView.isPaused = true // Event-driven rendering: only redraws when sliders, gestures, or image change!
         mtkView.coordinator = context.coordinator
@@ -133,19 +134,13 @@ public struct MetalCanvasView: NSViewRepresentable {
             context.coordinator.lastPreviewImage = viewModel.previewImage
         }
         
+        let neutral = NSColor.underPageBackgroundColor.usingColorSpace(.sRGB) ?? NSColor(srgbRed: 0.14, green: 0.14, blue: 0.14, alpha: 1.0)
+        nsView.clearColor = MTLClearColor(red: Double(neutral.redComponent), green: Double(neutral.greenComponent), blue: Double(neutral.blueComponent), alpha: 1.0)
+        
         // 2. Transmit Slider & Lensfun Uniforms to GPU
-        let imageW: Float
-        let imageH: Float
-        if let raw = viewModel.rawPreviewRecord {
-            imageW = Float(raw.width)
-            imageH = Float(raw.height)
-        } else if let img = viewModel.previewImage {
-            imageW = Float(img.size.width)
-            imageH = Float(img.size.height)
-        } else {
-            imageW = 4000.0
-            imageH = 3000.0
-        }
+        let dims = viewModel.currentImageDimensions
+        let imageW = Float(dims.width)
+        let imageH = Float(dims.height)
         let imageAspect = imageW / max(imageH, 1.0)
         
         let isLinearRaw = viewModel.rawPreviewRecord != nil

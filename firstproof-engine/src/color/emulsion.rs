@@ -125,10 +125,10 @@ pub fn apply_recording_emulsion(
                 0.02, -0.05,
             );
 
-            // Sensitometric C-41 Portrait D-log H curve: gentle gamma 0.90, soft highlight shoulder roll-off (0.38)
-            let r_curv = apply_film_characteristic_curve(r_dir, 0.90, 0.38, 0.08);
-            let g_curv = apply_film_characteristic_curve(g_dir, 0.90, 0.38, 0.08);
-            let b_curv = apply_film_characteristic_curve(b_dir, 0.90, 0.38, 0.08);
+            // Sensitometric C-41 Portrait D-log H curve: gentle gamma 0.90, soft highlight shoulder roll-off (0.38), warm golden toe
+            let r_curv = apply_film_characteristic_curve(r_dir, 0.92, 0.38, 0.04);
+            let g_curv = apply_film_characteristic_curve(g_dir, 0.90, 0.38, 0.06);
+            let b_curv = apply_film_characteristic_curve(b_dir, 0.88, 0.40, 0.12);
 
             (r_curv, g_curv, b_curv)
         }
@@ -197,19 +197,18 @@ pub fn apply_recording_emulsion(
         // 5. Rochester Daylight 200 (C-41, Rochester NY)
         // Technical Reference: Kodak Publication E-7022 / CIS-124 ("KODAK GOLD 200 Film"), Status M Densitometry.
         // Characteristics: Consumer daylight negative with punchier midtone slope (gamma 1.12 R / 1.08 G / 0.98 B),
-        // yellow dye suppression of blue, and warm amber saturation in sunlit highlights and skin tones.
-        // 5. Rochester Daylight 200 (Merged into Rochester Portrait 400 per Story 3.11 spec)
+        // warm amber sunlit highlights, and dense blue shadow toe.
         EmulsionArchetype::RochesterDaylight200 => {
             let (r_dir, g_dir, b_dir) = apply_dir_chemical_coupling(
                 cur_r, cur_g, cur_b,
-                -0.04, 0.02,
-                -0.08, 0.02,
-                0.02, -0.05,
+                -0.02, 0.04,
+                -0.06, 0.03,
+                0.04, -0.03,
             );
 
-            let r_curv = apply_film_characteristic_curve(r_dir, 0.90, 0.38, 0.08);
-            let g_curv = apply_film_characteristic_curve(g_dir, 0.90, 0.38, 0.08);
-            let b_curv = apply_film_characteristic_curve(b_dir, 0.90, 0.38, 0.08);
+            let r_curv = apply_film_characteristic_curve(r_dir, 1.12, 0.22, 0.05);
+            let g_curv = apply_film_characteristic_curve(g_dir, 1.08, 0.22, 0.08);
+            let b_curv = apply_film_characteristic_curve(b_dir, 0.98, 0.24, 0.16);
 
             (r_curv, g_curv, b_curv)
         }
@@ -255,17 +254,17 @@ pub fn apply_recording_emulsion(
         // 8. Leverkusen Portrait 160 (Agfa Agfacolor / Vista, Leverkusen, Germany)
         // Technical Reference: Agfa-Gevaert Technical Data Sheet F-PF4-E ("Agfacolor Portrait 160 / Optima 160"), Status M Densitometry;
         // Agfa Fischer Substantive Color Coupler Patent (DE Patent 253332 / US Patent 2,179,244).
-        // Characteristics: Substantive European dye couplers, earthy ochre midtones, soft pastel greens, muted shadow saturation.
+        // Characteristics: Substantive European dye couplers, earthy ochre midtones, soft pastel greens, muted shadow saturation, olive shadow toe.
         EmulsionArchetype::LeverkusenPortrait160 => {
             let (r_dir, g_dir, b_dir) = apply_dir_chemical_coupling(
                 cur_r, cur_g, cur_b,
                 -0.05, 0.01,
-                -0.06, 0.02,
+                -0.07, 0.02,
                 0.02, -0.04,
             );
-            let r_curv = apply_emulsion_s_curve(r_dir, 0.06, -0.02);
-            let g_curv = apply_emulsion_s_curve(g_dir, 0.06, -0.02);
-            let b_curv = apply_emulsion_s_curve(b_dir, 0.06, -0.02);
+            let r_curv = apply_film_characteristic_curve(r_dir, 0.96, 0.32, 0.08);
+            let g_curv = apply_film_characteristic_curve(g_dir, 0.94, 0.32, 0.03);
+            let b_curv = apply_film_characteristic_curve(b_dir, 0.92, 0.30, 0.10);
 
             (r_curv, g_curv, b_curv)
         }
@@ -273,17 +272,18 @@ pub fn apply_recording_emulsion(
         // 9. Ashigara Portrait 400 (Fujicolor Pro 400H, Minamiashigara, Japan)
         // Technical Reference: Fujifilm Technical Data Sheet AF3-0242E ("Fujicolor PRO 400H Professional") &
         // US Patent 4,840,880 ("Silver halide color photographic material having a fourth color-sensitive layer", Takada et al., Fuji Photo Film Co.).
-        // Characteristics: Patented 4th color layer (cyan-sensitive inter-layer) suppressing fluorescent cast; airy skin tones.
+        // Characteristics: Patented 4th color layer (cyan-sensitive inter-layer) suppressing fluorescent cast;
+        // extended cyan toe creating iconic cool cyan-mint shadow floor (toe_R = 0.14 vs toe_G/B = 0.04); airy pastel skin tones.
         EmulsionArchetype::AshigaraPortrait400 => {
             let (r_dir, g_dir, b_dir) = apply_dir_chemical_coupling(
                 cur_r, cur_g, cur_b,
                 -0.06, 0.02,
-                -0.12, 0.04,
-                0.03, -0.08,
+                -0.14, 0.05,
+                0.04, -0.08,
             );
-            let r_curv = apply_emulsion_s_curve(r_dir, 0.08, 0.06);
-            let g_curv = apply_emulsion_s_curve(g_dir, 0.08, 0.06);
-            let b_curv = apply_emulsion_s_curve(b_dir, 0.08, 0.06);
+            let r_curv = apply_film_characteristic_curve(r_dir, 0.92, 0.36, 0.14);
+            let g_curv = apply_film_characteristic_curve(g_dir, 0.92, 0.36, 0.04);
+            let b_curv = apply_film_characteristic_curve(b_dir, 0.94, 0.34, 0.04);
 
             (r_curv, g_curv, b_curv)
         }

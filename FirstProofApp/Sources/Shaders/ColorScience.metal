@@ -717,9 +717,9 @@ inline float3 applyRecordingEmulsion(
         case 1: { // RochesterPortrait400 - Ref: Kodak Pub E-4050 (Portra 400), Status M Densitometry
             float3 dir = applyDirChemicalCoupling(curRgb, -0.04, 0.02, -0.08, 0.02, 0.02, -0.05);
             return float3(
-                applyFilmCharacteristicCurve(dir.r, 0.90, 0.38, 0.08),
-                applyFilmCharacteristicCurve(dir.g, 0.90, 0.38, 0.08),
-                applyFilmCharacteristicCurve(dir.b, 0.90, 0.38, 0.08)
+                applyFilmCharacteristicCurve(dir.r, 0.92, 0.38, 0.04),
+                applyFilmCharacteristicCurve(dir.g, 0.90, 0.38, 0.06),
+                applyFilmCharacteristicCurve(dir.b, 0.88, 0.40, 0.12)
             );
         }
         case 2: { // AshigaraChrome50 - Ref: Fujifilm Data Sheet AF3-960E (Velvia 50), Status A Densitometry
@@ -746,12 +746,12 @@ inline float3 applyRecordingEmulsion(
                 applyFilmCharacteristicCurve(dir.b, 0.82, 0.45, 0.08)
             );
         }
-        case 5: { // RochesterDaylight200 (Merged into RochesterPortrait400 per Story 3.11 spec)
-            float3 dir = applyDirChemicalCoupling(curRgb, -0.04, 0.02, -0.08, 0.02, 0.02, -0.05);
+        case 5: { // RochesterDaylight200 - Ref: Kodak Pub E-7022 / CIS-124 (Gold 200), Status M Densitometry
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.02, 0.04, -0.06, 0.03, 0.04, -0.03);
             return float3(
-                applyFilmCharacteristicCurve(dir.r, 0.90, 0.38, 0.08),
-                applyFilmCharacteristicCurve(dir.g, 0.90, 0.38, 0.08),
-                applyFilmCharacteristicCurve(dir.b, 0.90, 0.38, 0.08)
+                applyFilmCharacteristicCurve(dir.r, 1.12, 0.22, 0.05),
+                applyFilmCharacteristicCurve(dir.g, 1.08, 0.22, 0.08),
+                applyFilmCharacteristicCurve(dir.b, 0.98, 0.24, 0.16)
             );
         }
         case 6: { // MobberleySilver400 - Ref: Ilford Technical Info Sheet (HP5 Plus), ID-11 Developer (1+1)
@@ -772,19 +772,19 @@ inline float3 applyRecordingEmulsion(
             return min(curv + baseRefl * float3(1.02, 1.00, 0.94), 2.0);
         }
         case 8: { // LeverkusenPortrait160 - Ref: Agfa TDS F-PF4-E (Optima 160) & Fischer Patent US 2,179,244
-            float3 dir = applyDirChemicalCoupling(curRgb, -0.05, 0.01, -0.06, 0.02, 0.02, -0.04);
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.05, 0.01, -0.07, 0.02, 0.02, -0.04);
             return float3(
-                applyEmulsionSCurve(dir.r, 0.06, -0.02),
-                applyEmulsionSCurve(dir.g, 0.06, -0.02),
-                applyEmulsionSCurve(dir.b, 0.06, -0.02)
+                applyFilmCharacteristicCurve(dir.r, 0.96, 0.32, 0.08),
+                applyFilmCharacteristicCurve(dir.g, 0.94, 0.32, 0.03),
+                applyFilmCharacteristicCurve(dir.b, 0.92, 0.30, 0.10)
             );
         }
         case 9: { // AshigaraPortrait400 - Ref: Fujifilm TDS AF3-0242E (PRO 400H) & US Patent 4,840,880 (4th Layer)
-            float3 dir = applyDirChemicalCoupling(curRgb, -0.06, 0.02, -0.12, 0.04, 0.03, -0.08);
+            float3 dir = applyDirChemicalCoupling(curRgb, -0.06, 0.02, -0.14, 0.05, 0.04, -0.08);
             return float3(
-                applyEmulsionSCurve(dir.r, 0.08, 0.06),
-                applyEmulsionSCurve(dir.g, 0.08, 0.06),
-                applyEmulsionSCurve(dir.b, 0.08, 0.06)
+                applyFilmCharacteristicCurve(dir.r, 0.92, 0.36, 0.14),
+                applyFilmCharacteristicCurve(dir.g, 0.92, 0.36, 0.04),
+                applyFilmCharacteristicCurve(dir.b, 0.94, 0.34, 0.04)
             );
         }
         case 10: { // LiguriaCinema80 - Ref: FILM Ferrania TDS P30 (Cairo Montenotte Laboratories)

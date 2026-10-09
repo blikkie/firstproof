@@ -2,3 +2,8 @@ module firstproof_coreFFI {
     header "firstproof_coreFFI.h"
     export *
 }
+
+module firstproof_engineFFI {
+    header "firstproof_engineFFI.h"
+    export *
+}

@@ -44,6 +44,8 @@ public enum EditSliderType {
     case perspectiveHorizontal
     case lutIntensity
     case grainScale
+    case grainSize
+    case grainAmount
     case splitToningShadowHue
     case splitToningShadowSat
     case splitToningHighlightHue
@@ -76,6 +78,8 @@ public enum EditSliderType {
         case .perspectiveHorizontal: return "Perspective Horizontal"
         case .lutIntensity: return "LUT Intensity"
         case .grainScale: return "Grain Scale"
+        case .grainSize: return "Grain Size"
+        case .grainAmount: return "Grain Amount"
         case .splitToningShadowHue: return "Shadow Hue"
         case .splitToningShadowSat: return "Shadow Saturation"
         case .splitToningHighlightHue: return "Highlight Hue"
@@ -181,6 +185,18 @@ public final class AppViewModel {
     public var isIntermediatePreviewActive: Bool = false
     public var currentGainMapRecord: GainMapRecord? = nil
     public var isDemosaicing: Bool = false
+    
+    /// Canonical uncropped sensor/image dimensions in pixels/points.
+    public var currentImageDimensions: (width: CGFloat, height: CGFloat) {
+        if let raw = rawPreviewRecord, raw.width > 0, raw.height > 0 {
+            return (CGFloat(raw.width), CGFloat(raw.height))
+        }
+        if let img = previewImage, img.size.width > 0, img.size.height > 0 {
+            return (img.size.width, img.size.height)
+        }
+        return (4000.0, 3000.0)
+    }
+    
     @ObservationIgnored var activeDecodeToken: UUID = UUID()
     @ObservationIgnored var activeDecodeTask: Task<Void, Never>? = nil
     @ObservationIgnored var activeCatalogTask: Task<Void, Never>? = nil
@@ -293,6 +309,10 @@ public final class AppViewModel {
     public var emulsionGrainMode: EmulsionGrainMode = .off
     public var grainScale: Float = 1.0                // 0.5 .. 2.0
     public var defaultGrainScale: Float { 1.0 }
+    public var grainSize: Float = 1.0                 // 0.2 .. 3.0
+    public var defaultGrainSize: Float { 1.0 }
+    public var grainAmount: Float = 1.0               // 0.0 .. 2.0
+    public var defaultGrainAmount: Float { 1.0 }
     
     public var splitToningShadowHue: Float = 215.0      // 0 .. 360
     public var splitToningShadowSat: Float = 0.0        // 0 .. 100
@@ -362,6 +382,7 @@ public final class AppViewModel {
     public var cropConstrain: Bool = true
     public var isCropToolActive: Bool = false
     public var cropAspectRatioPreset: CropAspectRatioPreset = .original
+    @ObservationIgnored public var cropSessionSnapshot: CropSessionSnapshot? = nil
     public var lensCorrectionEnabled: Bool = true
     public var toneProfile: ColorProfileMode = .agxVivid
     public var selectedLutName: String? = nil

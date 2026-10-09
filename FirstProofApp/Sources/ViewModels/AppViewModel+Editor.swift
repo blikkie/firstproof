@@ -40,6 +40,8 @@ extension AppViewModel {
             noiseReduction: self.noiseReduction,
             emulsionGrainMode: self.emulsionGrainMode,
             grainScale: self.grainScale,
+            grainSize: self.grainSize,
+            grainAmount: self.grainAmount,
             emulsionArchetype: self.emulsionArchetype,
             emulsionFormat: self.emulsionFormat,
             emulsionExposure: self.emulsionExposure,
@@ -94,6 +96,8 @@ extension EditSettings {
             noiseReduction: 0.0,
             emulsionGrainMode: .off,
             grainScale: 1.0,
+            grainSize: 1.0,
+            grainAmount: 1.0,
             emulsionArchetype: .none,
             emulsionFormat: .format35mm,
             emulsionExposure: 0.0,
@@ -147,6 +151,8 @@ extension AppViewModel {
         self.noiseReduction = edits.noiseReduction
         self.emulsionGrainMode = edits.emulsionGrainMode
         self.grainScale = edits.grainScale
+        self.grainSize = edits.grainSize
+        self.grainAmount = edits.grainAmount
         self.emulsionArchetype = edits.emulsionArchetype
         if edits.emulsionArchetype == .cambridgeDiffusion100 && (edits.emulsionFormat == .super8 || edits.emulsionFormat == .format16mm) {
             self.emulsionFormat = .format35mm
@@ -249,6 +255,10 @@ extension AppViewModel {
                 title = "Noise Reduction (\(Int(noiseReduction)))"
             case .grainScale:
                 title = "Grain Scale (\(String(format: "%.1fx", grainScale)))"
+            case .grainSize:
+                title = "Grain Size (\(String(format: "%.2fx", grainSize)))"
+            case .grainAmount:
+                title = "Grain Amount (\(String(format: "%.2fx", grainAmount)))"
             case .lutIntensity:
                 title = "LUT Intensity (\(Int(lutIntensity * 100))%)"
             case .splitToningShadowHue:
@@ -359,15 +369,87 @@ extension AppViewModel {
     }
     
     // MARK: - Crop & Composition Controls
+    
+    /// Transient snapshot capturing pre-crop darkroom state so users can cancel via Escape.
+    public struct CropSessionSnapshot {
+        public let edits: EditSettings
+        public let preset: CropAspectRatioPreset
+        public let photoPath: String?
+        public let undoStack: [UndoEntry]
+        public let redoStack: [UndoEntry]
+        
+        public init(
+            edits: EditSettings,
+            preset: CropAspectRatioPreset,
+            photoPath: String?,
+            undoStack: [UndoEntry],
+            redoStack: [UndoEntry]
+        ) {
+            self.edits = edits
+            self.preset = preset
+            self.photoPath = photoPath
+            self.undoStack = undoStack
+            self.redoStack = redoStack
+        }
+    }
+    public func enterCropMode() {
+        guard !isCropToolActive else { return }
+        let currentPhotoPath = selectedPhoto?.filePath
+        let currentUndoStack = undoHistory.undoStack(for: currentPhotoPath)
+        let currentRedoStack = undoHistory.redoStack(for: currentPhotoPath)
+        
+        cropSessionSnapshot = CropSessionSnapshot(
+            edits: currentEdits,
+            preset: cropAspectRatioPreset,
+            photoPath: currentPhotoPath,
+            undoStack: currentUndoStack,
+            redoStack: currentRedoStack
+        )
+        isCropToolActive = true
+    }
+    
+    public func commitCrop() {
+        guard isCropToolActive else { return }
+        if undoHistory.scrubStartEdits != nil {
+            endSliderScrub(actionName: "Crop Box")
+        }
+        isCropToolActive = false
+        cropSessionSnapshot = nil
+        saveCurrentEdits()
+        notifyThumbnailChanged()
+    }
+    
+    public func cancelCrop() {
+        guard isCropToolActive else { return }
+        
+        // Discard any active gesture scrub without recording undo
+        undoHistory.scrubStartEdits = nil
+        undoHistory.scrubPhotoPath = nil
+        
+        if let snapshot = cropSessionSnapshot {
+            applyEdits(snapshot.edits)
+            cropAspectRatioPreset = snapshot.preset
+            if let path = snapshot.photoPath {
+                undoHistory.restorePhotoHistory(
+                    for: path,
+                    undoStack: snapshot.undoStack,
+                    redoStack: snapshot.redoStack
+                )
+            }
+            cropSessionSnapshot = nil
+        }
+        
+        isCropToolActive = false
+        saveCurrentEdits()
+        notifyThumbnailChanged()
+    }
+    
     public func toggleCropTool() {
         if isCropToolActive {
-            if undoHistory.scrubStartEdits != nil {
-                endSliderScrub(actionName: "Crop Box")
-            }
-            saveCurrentEdits()
-            notifyThumbnailChanged()
+            commitCrop()
+        } else {
+            enterCropMode()
         }
-        isCropToolActive.toggle()
     }
     
     public func setCropAspectRatioPreset(_ preset: CropAspectRatioPreset) {
@@ -376,13 +458,18 @@ extension AppViewModel {
         guard preset != .freeform else { return }
         
         let isOrthogonal = (rotationDegrees == 90 || rotationDegrees == 270)
-        let baseW = previewImage?.size.width ?? 4000
-        let baseH = previewImage?.size.height ?? 3000
-        let origW: CGFloat = CGFloat(isOrthogonal ? baseH : baseW)
-        let origH: CGFloat = CGFloat(isOrthogonal ? baseW : baseH)
+        let dims = currentImageDimensions
+        let origW: CGFloat = isOrthogonal ? dims.height : dims.width
+        let origH: CGFloat = isOrthogonal ? dims.width : dims.height
         let originalAspect: CGFloat = origW / max(origH, 1.0)
         
-        let isPortrait = (origW < origH)
+        let currentW: CGFloat = CGFloat(cropRight - cropLeft)
+        let currentH: CGFloat = CGFloat(cropBottom - cropTop)
+        let center = CGPoint(x: CGFloat(cropLeft + cropRight) / 2.0, y: CGFloat(cropTop + cropBottom) / 2.0)
+        
+        let currentPhotoAspect: CGFloat = (currentW / max(currentH, 0.001)) * originalAspect
+        let isPortrait = (currentW >= 0.99 && currentH >= 0.99) ? (origW < origH) : (currentPhotoAspect < 1.0)
+        
         let targetAspect: CGFloat
         switch preset {
         case .original:
@@ -399,21 +486,18 @@ extension AppViewModel {
             return
         }
         
-        let normTargetAspect: CGFloat = targetAspect / originalAspect
-        let currentW: CGFloat = CGFloat(cropRight - cropLeft)
-        let currentH: CGFloat = CGFloat(cropBottom - cropTop)
-        let center = CGPoint(x: CGFloat(cropLeft + cropRight) / 2.0, y: CGFloat(cropTop + cropBottom) / 2.0)
+        let rCurr: CGFloat = currentPhotoAspect / originalAspect
+        let maxWCurr: CGFloat = (rCurr >= 1.0) ? 1.0 : rCurr
+        let maxHCurr: CGFloat = (rCurr >= 1.0) ? (1.0 / max(rCurr, 0.001)) : 1.0
+        let rawScale: CGFloat = min(currentW / max(maxWCurr, 0.001), currentH / max(maxHCurr, 0.001), 1.0)
+        let scale: CGFloat = (rawScale > 0.995) ? 1.0 : rawScale
         
-        var newW: CGFloat = currentW
-        var newH: CGFloat = currentW / max(normTargetAspect, 0.001)
-        if newH > 1.0 || newH > currentH {
-            newH = min(currentH, 1.0)
-            newW = newH * normTargetAspect
-        }
-        if newW > 1.0 {
-            newW = 1.0
-            newH = newW / max(normTargetAspect, 0.001)
-        }
+        let rTarget: CGFloat = targetAspect / originalAspect
+        let maxWTarget: CGFloat = (rTarget >= 1.0) ? 1.0 : rTarget
+        let maxHTarget: CGFloat = (rTarget >= 1.0) ? (1.0 / max(rTarget, 0.001)) : 1.0
+        
+        let newW: CGFloat = min(scale * maxWTarget, 1.0)
+        let newH: CGFloat = min(scale * maxHTarget, 1.0)
         
         let newLeft = max(center.x - newW / 2.0, 0.0)
         let newRight = min(newLeft + newW, 1.0)
@@ -438,26 +522,27 @@ extension AppViewModel {
         let center = CGPoint(x: CGFloat(cropLeft + cropRight) / 2.0, y: CGFloat(cropTop + cropBottom) / 2.0)
         
         let isOrthogonal = (rotationDegrees == 90 || rotationDegrees == 270)
-        let baseW = previewImage?.size.width ?? 4000
-        let baseH = previewImage?.size.height ?? 3000
-        let origW: CGFloat = CGFloat(isOrthogonal ? baseH : baseW)
-        let origH: CGFloat = CGFloat(isOrthogonal ? baseW : baseH)
+        let dims = currentImageDimensions
+        let origW: CGFloat = isOrthogonal ? dims.height : dims.width
+        let origH: CGFloat = isOrthogonal ? dims.width : dims.height
         let originalAspect: CGFloat = origW / max(origH, 1.0)
         
+        // 1. Current physical aspect ratio and normalized ratio R_curr
         let currentPhotoAspect: CGFloat = (currentW / max(currentH, 0.001)) * originalAspect
-        let newPhotoAspect: CGFloat = 1.0 / max(currentPhotoAspect, 0.01)
-        let newNormAspect: CGFloat = newPhotoAspect / originalAspect
+        let rCurr: CGFloat = currentPhotoAspect / originalAspect // == currentW / currentH
+        let maxWCurr: CGFloat = (rCurr >= 1.0) ? 1.0 : rCurr
+        let maxHCurr: CGFloat = (rCurr >= 1.0) ? (1.0 / max(rCurr, 0.001)) : 1.0
+        let rawScale: CGFloat = min(currentW / max(maxWCurr, 0.001), currentH / max(maxHCurr, 0.001), 1.0)
+        let scale: CGFloat = (rawScale > 0.995) ? 1.0 : rawScale
         
-        var newW: CGFloat = currentH * newNormAspect
-        var newH: CGFloat = currentH
-        if newW > 1.0 {
-            newW = 1.0
-            newH = newW / max(newNormAspect, 0.001)
-        }
-        if newH > 1.0 {
-            newH = 1.0
-            newW = newH * newNormAspect
-        }
+        // 2. Inverted target physical aspect ratio and normalized ratio R_target
+        let targetPhotoAspect: CGFloat = 1.0 / max(currentPhotoAspect, 0.001)
+        let rTarget: CGFloat = targetPhotoAspect / originalAspect
+        let maxWTarget: CGFloat = (rTarget >= 1.0) ? 1.0 : rTarget
+        let maxHTarget: CGFloat = (rTarget >= 1.0) ? (1.0 / max(rTarget, 0.001)) : 1.0
+        
+        let newW: CGFloat = min(scale * maxWTarget, 1.0)
+        let newH: CGFloat = min(scale * maxHTarget, 1.0)
         
         let newLeft = max(center.x - newW / 2.0, 0.0)
         let newRight = min(newLeft + newW, 1.0)
@@ -702,6 +787,10 @@ extension AppViewModel {
             noiseReduction = defaultNoiseReduction
         case .grainScale:
             grainScale = defaultGrainScale
+        case .grainSize:
+            grainSize = defaultGrainSize
+        case .grainAmount:
+            grainAmount = defaultGrainAmount
         case .temperature:
             temperature = asShotTemperature
         case .tint:
@@ -779,6 +868,8 @@ extension AppViewModel {
         emulsionExposure = defaultEmulsionExposure
         emulsionGrainMode = .off
         grainScale = defaultGrainScale
+        grainSize = defaultGrainSize
+        grainAmount = defaultGrainAmount
         temperature = asShotTemperature
         tint = asShotTint
         straightenAngle = 0.0
@@ -790,6 +881,7 @@ extension AppViewModel {
         perspectiveHorizontal = 0.0
         cropConstrain = true
         isCropToolActive = false
+        cropSessionSnapshot = nil
         cropAspectRatioPreset = .original
         rotationDegrees = defaultExifRotation
         remjetBacking = .intact
@@ -1097,6 +1189,8 @@ extension AppViewModel {
         self.remjetBacking = .intact
         self.emulsionGrainMode = .off
         self.grainScale = 1.0
+        self.grainSize = 1.0
+        self.grainAmount = 1.0
         registerDiscreteEdit(title: "Reset Film Emulsion", before: before)
         notifyThumbnailChanged()
     }

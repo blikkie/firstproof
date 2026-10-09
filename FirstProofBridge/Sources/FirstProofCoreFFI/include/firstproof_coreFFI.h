@@ -373,6 +373,16 @@ RustBuffer uniffi_firstproof_core_fn_func_compute_auto_white_balance(RustBuffer 
 RustBuffer uniffi_firstproof_core_fn_func_compute_auto_white_balance_from_buffer(uint32_t width, uint32_t height, RustBuffer data, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_KELVIN_TO_MIRED_NORM
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_KELVIN_TO_MIRED_NORM
+double uniffi_firstproof_core_fn_func_convert_kelvin_to_mired_norm(double kelvin, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_MIRED_NORM_TO_KELVIN
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_MIRED_NORM_TO_KELVIN
+double uniffi_firstproof_core_fn_func_convert_mired_norm_to_kelvin(double norm, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DECODE_EXIF_ORIENTATION
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DECODE_EXIF_ORIENTATION
 RustBuffer uniffi_firstproof_core_fn_func_decode_exif_orientation(uint32_t orientation, RustCallStatus *_Nonnull out_status
@@ -415,7 +425,7 @@ RustBuffer uniffi_firstproof_core_fn_func_export_batch_photos(RustBuffer items, 
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EXPORT_PHOTO
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EXPORT_PHOTO
-int8_t uniffi_firstproof_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, RustBuffer lens_coeffs, uint32_t quality, RustBuffer max_dimension, RustBuffer color_space, RustBuffer rendering_intent, RustBuffer ultra_hdr, RustCallStatus *_Nonnull out_status
+int8_t uniffi_firstproof_core_fn_func_export_photo(RustBuffer input_path, RustBuffer output_path, RustBuffer edits, RustBuffer lens_coeffs, uint32_t quality, RustBuffer max_dimension, RustBuffer color_space, RustBuffer rendering_intent, RustBuffer ultra_hdr, RustBuffer demosaic_quality, RustBuffer render_tier, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EXPORT_PORTABLE_PACKAGE
@@ -436,6 +446,17 @@ RustBuffer uniffi_firstproof_core_fn_func_extract_preview(RustBuffer path, RustC
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EXTRACT_ULTRA_HDR_GAIN_MAP
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EXTRACT_ULTRA_HDR_GAIN_MAP
 RustBuffer uniffi_firstproof_core_fn_func_extract_ultra_hdr_gain_map(RustBuffer file_path, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_ADJUSTMENT_DESCRIPTOR
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_ADJUSTMENT_DESCRIPTOR
+RustBuffer uniffi_firstproof_core_fn_func_get_adjustment_descriptor(RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_ALL_ADJUSTMENTS
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_ALL_ADJUSTMENTS
+RustBuffer uniffi_firstproof_core_fn_func_get_all_adjustments(RustCallStatus *_Nonnull out_status
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_BUILTIN_CUBE_LUT
@@ -810,6 +831,18 @@ uint16_t uniffi_firstproof_core_checksum_func_compute_auto_white_balance_from_bu
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CONVERT_KELVIN_TO_MIRED_NORM
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CONVERT_KELVIN_TO_MIRED_NORM
+uint16_t uniffi_firstproof_core_checksum_func_convert_kelvin_to_mired_norm(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CONVERT_MIRED_NORM_TO_KELVIN
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CONVERT_MIRED_NORM_TO_KELVIN
+uint16_t uniffi_firstproof_core_checksum_func_convert_mired_norm_to_kelvin(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DECODE_EXIF_ORIENTATION
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DECODE_EXIF_ORIENTATION
 uint16_t uniffi_firstproof_core_checksum_func_decode_exif_orientation(void
@@ -885,6 +918,18 @@ uint16_t uniffi_firstproof_core_checksum_func_extract_preview(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EXTRACT_ULTRA_HDR_GAIN_MAP
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EXTRACT_ULTRA_HDR_GAIN_MAP
 uint16_t uniffi_firstproof_core_checksum_func_extract_ultra_hdr_gain_map(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_ADJUSTMENT_DESCRIPTOR
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_ADJUSTMENT_DESCRIPTOR
+uint16_t uniffi_firstproof_core_checksum_func_get_adjustment_descriptor(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_ALL_ADJUSTMENTS
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_ALL_ADJUSTMENTS
+uint16_t uniffi_firstproof_core_checksum_func_get_all_adjustments(void
     
 );
 #endif

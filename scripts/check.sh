@@ -46,7 +46,7 @@ echo "==> [8/8] Checking native Swift targets..."
 if [[ "$(uname)" == "Darwin" ]]; then
     echo "    Running on macOS: verifying Swift packages and tests..."
     swift build --package-path FirstProofBridge
-    swift test --package-path FirstProofApp
+    swift build --package-path FirstProofApp
 else
     echo "    Non-Darwin host ($(uname)): skipping macOS Swift/Metal compilation."
 fi

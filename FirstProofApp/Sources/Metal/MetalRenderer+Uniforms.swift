@@ -103,6 +103,8 @@ extension MetalRenderer {
             uniforms.emulsionGrainMode = 2
         }
         uniforms.grainScale = edits.grainScale
+        uniforms.grainSize = edits.grainSize
+        uniforms.grainAmount = edits.grainAmount
         uniforms.splitToningShadowSat = edits.splitToningShadowSat
         uniforms.splitToningHighlightHue = edits.splitToningHighlightHue
         uniforms.splitToningHighlightSat = edits.splitToningHighlightSat
@@ -188,6 +190,7 @@ extension MetalRenderer {
         self.rotationDegrees = Int(edits.rotation)
         self.flipHorizontal = edits.flipHorizontal
         self.flipVertical = edits.flipVertical
+        uniforms.rotation = Int32(edits.rotation)
         
         let isMasterActive = edits.curves.master.count > 2 || (edits.curves.master.count == 2 && (edits.curves.master[0].y != 0.0 || edits.curves.master[1].y != 1.0))
         let isRedActive = edits.curves.red.count > 2 || (edits.curves.red.count == 2 && (edits.curves.red[0].y != 0.0 || edits.curves.red[1].y != 1.0))

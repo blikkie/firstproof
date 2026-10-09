@@ -932,88 +932,6 @@ public func FfiConverterTypeFirstProofLensfun_lower(_ value: FirstProofLensfun) 
 }
 
 
-public struct AllCurvesLutRecord {
-    public var master: [Float]
-    public var red: [Float]
-    public var green: [Float]
-    public var blue: [Float]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(master: [Float], red: [Float], green: [Float], blue: [Float]) {
-        self.master = master
-        self.red = red
-        self.green = green
-        self.blue = blue
-    }
-}
-
-
-
-extension AllCurvesLutRecord: Equatable, Hashable {
-    public static func ==(lhs: AllCurvesLutRecord, rhs: AllCurvesLutRecord) -> Bool {
-        if lhs.master != rhs.master {
-            return false
-        }
-        if lhs.red != rhs.red {
-            return false
-        }
-        if lhs.green != rhs.green {
-            return false
-        }
-        if lhs.blue != rhs.blue {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(master)
-        hasher.combine(red)
-        hasher.combine(green)
-        hasher.combine(blue)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAllCurvesLutRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AllCurvesLutRecord {
-        return
-            try AllCurvesLutRecord(
-                master: FfiConverterSequenceFloat.read(from: &buf), 
-                red: FfiConverterSequenceFloat.read(from: &buf), 
-                green: FfiConverterSequenceFloat.read(from: &buf), 
-                blue: FfiConverterSequenceFloat.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: AllCurvesLutRecord, into buf: inout [UInt8]) {
-        FfiConverterSequenceFloat.write(value.master, into: &buf)
-        FfiConverterSequenceFloat.write(value.red, into: &buf)
-        FfiConverterSequenceFloat.write(value.green, into: &buf)
-        FfiConverterSequenceFloat.write(value.blue, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAllCurvesLutRecord_lift(_ buf: RustBuffer) throws -> AllCurvesLutRecord {
-    return try FfiConverterTypeAllCurvesLutRecord.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAllCurvesLutRecord_lower(_ value: AllCurvesLutRecord) -> RustBuffer {
-    return FfiConverterTypeAllCurvesLutRecord.lower(value)
-}
-
-
 public struct AutoAdjustments {
     public var exposure: Float
     public var contrast: Float
@@ -1090,10 +1008,12 @@ public struct BatchExportItemRecord {
     public var colorSpace: ExportColorSpace
     public var renderingIntent: ExportRenderingIntent
     public var ultraHdr: Bool
+    public var demosaicQuality: DemosaicQuality?
+    public var renderTier: RenderTier?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace, renderingIntent: ExportRenderingIntent, ultraHdr: Bool) {
+    public init(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace, renderingIntent: ExportRenderingIntent, ultraHdr: Bool, demosaicQuality: DemosaicQuality?, renderTier: RenderTier?) {
         self.inputPath = inputPath
         self.outputPath = outputPath
         self.edits = edits
@@ -1103,6 +1023,8 @@ public struct BatchExportItemRecord {
         self.colorSpace = colorSpace
         self.renderingIntent = renderingIntent
         self.ultraHdr = ultraHdr
+        self.demosaicQuality = demosaicQuality
+        self.renderTier = renderTier
     }
 }
 
@@ -1137,6 +1059,12 @@ extension BatchExportItemRecord: Equatable, Hashable {
         if lhs.ultraHdr != rhs.ultraHdr {
             return false
         }
+        if lhs.demosaicQuality != rhs.demosaicQuality {
+            return false
+        }
+        if lhs.renderTier != rhs.renderTier {
+            return false
+        }
         return true
     }
 
@@ -1150,6 +1078,8 @@ extension BatchExportItemRecord: Equatable, Hashable {
         hasher.combine(colorSpace)
         hasher.combine(renderingIntent)
         hasher.combine(ultraHdr)
+        hasher.combine(demosaicQuality)
+        hasher.combine(renderTier)
     }
 }
 
@@ -1169,7 +1099,9 @@ public struct FfiConverterTypeBatchExportItemRecord: FfiConverterRustBuffer {
                 maxDimension: FfiConverterOptionUInt32.read(from: &buf), 
                 colorSpace: FfiConverterTypeExportColorSpace.read(from: &buf), 
                 renderingIntent: FfiConverterTypeExportRenderingIntent.read(from: &buf), 
-                ultraHdr: FfiConverterBool.read(from: &buf)
+                ultraHdr: FfiConverterBool.read(from: &buf), 
+                demosaicQuality: FfiConverterOptionTypeDemosaicQuality.read(from: &buf), 
+                renderTier: FfiConverterOptionTypeRenderTier.read(from: &buf)
         )
     }
 
@@ -1183,6 +1115,8 @@ public struct FfiConverterTypeBatchExportItemRecord: FfiConverterRustBuffer {
         FfiConverterTypeExportColorSpace.write(value.colorSpace, into: &buf)
         FfiConverterTypeExportRenderingIntent.write(value.renderingIntent, into: &buf)
         FfiConverterBool.write(value.ultraHdr, into: &buf)
+        FfiConverterOptionTypeDemosaicQuality.write(value.demosaicQuality, into: &buf)
+        FfiConverterOptionTypeRenderTier.write(value.renderTier, into: &buf)
     }
 }
 
@@ -1355,548 +1289,6 @@ public func FfiConverterTypeCubeLutRecord_lift(_ buf: RustBuffer) throws -> Cube
 #endif
 public func FfiConverterTypeCubeLutRecord_lower(_ value: CubeLutRecord) -> RustBuffer {
     return FfiConverterTypeCubeLutRecord.lower(value)
-}
-
-
-public struct CurvePointRecord {
-    public var x: Float
-    public var y: Float
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(x: Float, y: Float) {
-        self.x = x
-        self.y = y
-    }
-}
-
-
-
-extension CurvePointRecord: Equatable, Hashable {
-    public static func ==(lhs: CurvePointRecord, rhs: CurvePointRecord) -> Bool {
-        if lhs.x != rhs.x {
-            return false
-        }
-        if lhs.y != rhs.y {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(x)
-        hasher.combine(y)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCurvePointRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurvePointRecord {
-        return
-            try CurvePointRecord(
-                x: FfiConverterFloat.read(from: &buf), 
-                y: FfiConverterFloat.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CurvePointRecord, into buf: inout [UInt8]) {
-        FfiConverterFloat.write(value.x, into: &buf)
-        FfiConverterFloat.write(value.y, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCurvePointRecord_lift(_ buf: RustBuffer) throws -> CurvePointRecord {
-    return try FfiConverterTypeCurvePointRecord.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCurvePointRecord_lower(_ value: CurvePointRecord) -> RustBuffer {
-    return FfiConverterTypeCurvePointRecord.lower(value)
-}
-
-
-public struct EditSettings {
-    public var exposure: Float
-    public var contrast: Float
-    public var highlights: Float
-    public var shadows: Float
-    public var whites: Float
-    public var blacks: Float
-    public var vibrance: Float
-    public var saturation: Float
-    public var deepBlue: Float
-    public var foliage: Float
-    public var temperature: Float
-    public var tint: Float
-    public var cropLeft: Float
-    public var cropTop: Float
-    public var cropRight: Float
-    public var cropBottom: Float
-    public var cropAngle: Float
-    public var perspectiveVertical: Float
-    public var perspectiveHorizontal: Float
-    public var cropConstrain: Bool
-    public var rotation: Int32
-    public var flipHorizontal: Bool
-    public var flipVertical: Bool
-    public var toneProfile: ColorProfileMode
-    public var lutName: String?
-    public var lutIntensity: Float
-    public var sharpeningAmount: Float
-    public var sharpeningRadius: Float
-    public var sharpeningMasking: Float
-    public var noiseReduction: Float
-    public var emulsionArchetype: EmulsionArchetype
-    public var emulsionFormat: EmulsionFormat
-    public var emulsionExposure: Float
-    public var curves: ToneCurvesRecord
-    public var splitToningShadowHue: Float
-    public var splitToningShadowSat: Float
-    public var splitToningHighlightHue: Float
-    public var splitToningHighlightSat: Float
-    public var splitToningBalance: Float
-    public var printMedia: PrintMediaMode
-    public var enlargerFilter: EnlargerFilterMode
-    public var printPaperGrade: Float
-    public var printBaseWarmth: Float
-    public var printProcessDepth: Float
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, emulsionArchetype: EmulsionArchetype, emulsionFormat: EmulsionFormat, emulsionExposure: Float, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float, printMedia: PrintMediaMode, enlargerFilter: EnlargerFilterMode, printPaperGrade: Float, printBaseWarmth: Float, printProcessDepth: Float) {
-        self.exposure = exposure
-        self.contrast = contrast
-        self.highlights = highlights
-        self.shadows = shadows
-        self.whites = whites
-        self.blacks = blacks
-        self.vibrance = vibrance
-        self.saturation = saturation
-        self.deepBlue = deepBlue
-        self.foliage = foliage
-        self.temperature = temperature
-        self.tint = tint
-        self.cropLeft = cropLeft
-        self.cropTop = cropTop
-        self.cropRight = cropRight
-        self.cropBottom = cropBottom
-        self.cropAngle = cropAngle
-        self.perspectiveVertical = perspectiveVertical
-        self.perspectiveHorizontal = perspectiveHorizontal
-        self.cropConstrain = cropConstrain
-        self.rotation = rotation
-        self.flipHorizontal = flipHorizontal
-        self.flipVertical = flipVertical
-        self.toneProfile = toneProfile
-        self.lutName = lutName
-        self.lutIntensity = lutIntensity
-        self.sharpeningAmount = sharpeningAmount
-        self.sharpeningRadius = sharpeningRadius
-        self.sharpeningMasking = sharpeningMasking
-        self.noiseReduction = noiseReduction
-        self.emulsionArchetype = emulsionArchetype
-        self.emulsionFormat = emulsionFormat
-        self.emulsionExposure = emulsionExposure
-        self.curves = curves
-        self.splitToningShadowHue = splitToningShadowHue
-        self.splitToningShadowSat = splitToningShadowSat
-        self.splitToningHighlightHue = splitToningHighlightHue
-        self.splitToningHighlightSat = splitToningHighlightSat
-        self.splitToningBalance = splitToningBalance
-        self.printMedia = printMedia
-        self.enlargerFilter = enlargerFilter
-        self.printPaperGrade = printPaperGrade
-        self.printBaseWarmth = printBaseWarmth
-        self.printProcessDepth = printProcessDepth
-    }
-}
-
-
-
-extension EditSettings: Equatable, Hashable {
-    public static func ==(lhs: EditSettings, rhs: EditSettings) -> Bool {
-        if lhs.exposure != rhs.exposure {
-            return false
-        }
-        if lhs.contrast != rhs.contrast {
-            return false
-        }
-        if lhs.highlights != rhs.highlights {
-            return false
-        }
-        if lhs.shadows != rhs.shadows {
-            return false
-        }
-        if lhs.whites != rhs.whites {
-            return false
-        }
-        if lhs.blacks != rhs.blacks {
-            return false
-        }
-        if lhs.vibrance != rhs.vibrance {
-            return false
-        }
-        if lhs.saturation != rhs.saturation {
-            return false
-        }
-        if lhs.deepBlue != rhs.deepBlue {
-            return false
-        }
-        if lhs.foliage != rhs.foliage {
-            return false
-        }
-        if lhs.temperature != rhs.temperature {
-            return false
-        }
-        if lhs.tint != rhs.tint {
-            return false
-        }
-        if lhs.cropLeft != rhs.cropLeft {
-            return false
-        }
-        if lhs.cropTop != rhs.cropTop {
-            return false
-        }
-        if lhs.cropRight != rhs.cropRight {
-            return false
-        }
-        if lhs.cropBottom != rhs.cropBottom {
-            return false
-        }
-        if lhs.cropAngle != rhs.cropAngle {
-            return false
-        }
-        if lhs.perspectiveVertical != rhs.perspectiveVertical {
-            return false
-        }
-        if lhs.perspectiveHorizontal != rhs.perspectiveHorizontal {
-            return false
-        }
-        if lhs.cropConstrain != rhs.cropConstrain {
-            return false
-        }
-        if lhs.rotation != rhs.rotation {
-            return false
-        }
-        if lhs.flipHorizontal != rhs.flipHorizontal {
-            return false
-        }
-        if lhs.flipVertical != rhs.flipVertical {
-            return false
-        }
-        if lhs.toneProfile != rhs.toneProfile {
-            return false
-        }
-        if lhs.lutName != rhs.lutName {
-            return false
-        }
-        if lhs.lutIntensity != rhs.lutIntensity {
-            return false
-        }
-        if lhs.sharpeningAmount != rhs.sharpeningAmount {
-            return false
-        }
-        if lhs.sharpeningRadius != rhs.sharpeningRadius {
-            return false
-        }
-        if lhs.sharpeningMasking != rhs.sharpeningMasking {
-            return false
-        }
-        if lhs.noiseReduction != rhs.noiseReduction {
-            return false
-        }
-        if lhs.emulsionArchetype != rhs.emulsionArchetype {
-            return false
-        }
-        if lhs.emulsionFormat != rhs.emulsionFormat {
-            return false
-        }
-        if lhs.emulsionExposure != rhs.emulsionExposure {
-            return false
-        }
-        if lhs.curves != rhs.curves {
-            return false
-        }
-        if lhs.splitToningShadowHue != rhs.splitToningShadowHue {
-            return false
-        }
-        if lhs.splitToningShadowSat != rhs.splitToningShadowSat {
-            return false
-        }
-        if lhs.splitToningHighlightHue != rhs.splitToningHighlightHue {
-            return false
-        }
-        if lhs.splitToningHighlightSat != rhs.splitToningHighlightSat {
-            return false
-        }
-        if lhs.splitToningBalance != rhs.splitToningBalance {
-            return false
-        }
-        if lhs.printMedia != rhs.printMedia {
-            return false
-        }
-        if lhs.enlargerFilter != rhs.enlargerFilter {
-            return false
-        }
-        if lhs.printPaperGrade != rhs.printPaperGrade {
-            return false
-        }
-        if lhs.printBaseWarmth != rhs.printBaseWarmth {
-            return false
-        }
-        if lhs.printProcessDepth != rhs.printProcessDepth {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(exposure)
-        hasher.combine(contrast)
-        hasher.combine(highlights)
-        hasher.combine(shadows)
-        hasher.combine(whites)
-        hasher.combine(blacks)
-        hasher.combine(vibrance)
-        hasher.combine(saturation)
-        hasher.combine(deepBlue)
-        hasher.combine(foliage)
-        hasher.combine(temperature)
-        hasher.combine(tint)
-        hasher.combine(cropLeft)
-        hasher.combine(cropTop)
-        hasher.combine(cropRight)
-        hasher.combine(cropBottom)
-        hasher.combine(cropAngle)
-        hasher.combine(perspectiveVertical)
-        hasher.combine(perspectiveHorizontal)
-        hasher.combine(cropConstrain)
-        hasher.combine(rotation)
-        hasher.combine(flipHorizontal)
-        hasher.combine(flipVertical)
-        hasher.combine(toneProfile)
-        hasher.combine(lutName)
-        hasher.combine(lutIntensity)
-        hasher.combine(sharpeningAmount)
-        hasher.combine(sharpeningRadius)
-        hasher.combine(sharpeningMasking)
-        hasher.combine(noiseReduction)
-        hasher.combine(emulsionArchetype)
-        hasher.combine(emulsionFormat)
-        hasher.combine(emulsionExposure)
-        hasher.combine(curves)
-        hasher.combine(splitToningShadowHue)
-        hasher.combine(splitToningShadowSat)
-        hasher.combine(splitToningHighlightHue)
-        hasher.combine(splitToningHighlightSat)
-        hasher.combine(splitToningBalance)
-        hasher.combine(printMedia)
-        hasher.combine(enlargerFilter)
-        hasher.combine(printPaperGrade)
-        hasher.combine(printBaseWarmth)
-        hasher.combine(printProcessDepth)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EditSettings {
-        return
-            try EditSettings(
-                exposure: FfiConverterFloat.read(from: &buf), 
-                contrast: FfiConverterFloat.read(from: &buf), 
-                highlights: FfiConverterFloat.read(from: &buf), 
-                shadows: FfiConverterFloat.read(from: &buf), 
-                whites: FfiConverterFloat.read(from: &buf), 
-                blacks: FfiConverterFloat.read(from: &buf), 
-                vibrance: FfiConverterFloat.read(from: &buf), 
-                saturation: FfiConverterFloat.read(from: &buf), 
-                deepBlue: FfiConverterFloat.read(from: &buf), 
-                foliage: FfiConverterFloat.read(from: &buf), 
-                temperature: FfiConverterFloat.read(from: &buf), 
-                tint: FfiConverterFloat.read(from: &buf), 
-                cropLeft: FfiConverterFloat.read(from: &buf), 
-                cropTop: FfiConverterFloat.read(from: &buf), 
-                cropRight: FfiConverterFloat.read(from: &buf), 
-                cropBottom: FfiConverterFloat.read(from: &buf), 
-                cropAngle: FfiConverterFloat.read(from: &buf), 
-                perspectiveVertical: FfiConverterFloat.read(from: &buf), 
-                perspectiveHorizontal: FfiConverterFloat.read(from: &buf), 
-                cropConstrain: FfiConverterBool.read(from: &buf), 
-                rotation: FfiConverterInt32.read(from: &buf), 
-                flipHorizontal: FfiConverterBool.read(from: &buf), 
-                flipVertical: FfiConverterBool.read(from: &buf), 
-                toneProfile: FfiConverterTypeColorProfileMode.read(from: &buf), 
-                lutName: FfiConverterOptionString.read(from: &buf), 
-                lutIntensity: FfiConverterFloat.read(from: &buf), 
-                sharpeningAmount: FfiConverterFloat.read(from: &buf), 
-                sharpeningRadius: FfiConverterFloat.read(from: &buf), 
-                sharpeningMasking: FfiConverterFloat.read(from: &buf), 
-                noiseReduction: FfiConverterFloat.read(from: &buf), 
-                emulsionArchetype: FfiConverterTypeEmulsionArchetype.read(from: &buf), 
-                emulsionFormat: FfiConverterTypeEmulsionFormat.read(from: &buf), 
-                emulsionExposure: FfiConverterFloat.read(from: &buf), 
-                curves: FfiConverterTypeToneCurvesRecord.read(from: &buf), 
-                splitToningShadowHue: FfiConverterFloat.read(from: &buf), 
-                splitToningShadowSat: FfiConverterFloat.read(from: &buf), 
-                splitToningHighlightHue: FfiConverterFloat.read(from: &buf), 
-                splitToningHighlightSat: FfiConverterFloat.read(from: &buf), 
-                splitToningBalance: FfiConverterFloat.read(from: &buf), 
-                printMedia: FfiConverterTypePrintMediaMode.read(from: &buf), 
-                enlargerFilter: FfiConverterTypeEnlargerFilterMode.read(from: &buf), 
-                printPaperGrade: FfiConverterFloat.read(from: &buf), 
-                printBaseWarmth: FfiConverterFloat.read(from: &buf), 
-                printProcessDepth: FfiConverterFloat.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: EditSettings, into buf: inout [UInt8]) {
-        FfiConverterFloat.write(value.exposure, into: &buf)
-        FfiConverterFloat.write(value.contrast, into: &buf)
-        FfiConverterFloat.write(value.highlights, into: &buf)
-        FfiConverterFloat.write(value.shadows, into: &buf)
-        FfiConverterFloat.write(value.whites, into: &buf)
-        FfiConverterFloat.write(value.blacks, into: &buf)
-        FfiConverterFloat.write(value.vibrance, into: &buf)
-        FfiConverterFloat.write(value.saturation, into: &buf)
-        FfiConverterFloat.write(value.deepBlue, into: &buf)
-        FfiConverterFloat.write(value.foliage, into: &buf)
-        FfiConverterFloat.write(value.temperature, into: &buf)
-        FfiConverterFloat.write(value.tint, into: &buf)
-        FfiConverterFloat.write(value.cropLeft, into: &buf)
-        FfiConverterFloat.write(value.cropTop, into: &buf)
-        FfiConverterFloat.write(value.cropRight, into: &buf)
-        FfiConverterFloat.write(value.cropBottom, into: &buf)
-        FfiConverterFloat.write(value.cropAngle, into: &buf)
-        FfiConverterFloat.write(value.perspectiveVertical, into: &buf)
-        FfiConverterFloat.write(value.perspectiveHorizontal, into: &buf)
-        FfiConverterBool.write(value.cropConstrain, into: &buf)
-        FfiConverterInt32.write(value.rotation, into: &buf)
-        FfiConverterBool.write(value.flipHorizontal, into: &buf)
-        FfiConverterBool.write(value.flipVertical, into: &buf)
-        FfiConverterTypeColorProfileMode.write(value.toneProfile, into: &buf)
-        FfiConverterOptionString.write(value.lutName, into: &buf)
-        FfiConverterFloat.write(value.lutIntensity, into: &buf)
-        FfiConverterFloat.write(value.sharpeningAmount, into: &buf)
-        FfiConverterFloat.write(value.sharpeningRadius, into: &buf)
-        FfiConverterFloat.write(value.sharpeningMasking, into: &buf)
-        FfiConverterFloat.write(value.noiseReduction, into: &buf)
-        FfiConverterTypeEmulsionArchetype.write(value.emulsionArchetype, into: &buf)
-        FfiConverterTypeEmulsionFormat.write(value.emulsionFormat, into: &buf)
-        FfiConverterFloat.write(value.emulsionExposure, into: &buf)
-        FfiConverterTypeToneCurvesRecord.write(value.curves, into: &buf)
-        FfiConverterFloat.write(value.splitToningShadowHue, into: &buf)
-        FfiConverterFloat.write(value.splitToningShadowSat, into: &buf)
-        FfiConverterFloat.write(value.splitToningHighlightHue, into: &buf)
-        FfiConverterFloat.write(value.splitToningHighlightSat, into: &buf)
-        FfiConverterFloat.write(value.splitToningBalance, into: &buf)
-        FfiConverterTypePrintMediaMode.write(value.printMedia, into: &buf)
-        FfiConverterTypeEnlargerFilterMode.write(value.enlargerFilter, into: &buf)
-        FfiConverterFloat.write(value.printPaperGrade, into: &buf)
-        FfiConverterFloat.write(value.printBaseWarmth, into: &buf)
-        FfiConverterFloat.write(value.printProcessDepth, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEditSettings_lift(_ buf: RustBuffer) throws -> EditSettings {
-    return try FfiConverterTypeEditSettings.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEditSettings_lower(_ value: EditSettings) -> RustBuffer {
-    return FfiConverterTypeEditSettings.lower(value)
-}
-
-
-public struct ExifOrientationRecord {
-    public var rotation: Int32
-    public var flipHorizontal: Bool
-    public var flipVertical: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(rotation: Int32, flipHorizontal: Bool, flipVertical: Bool) {
-        self.rotation = rotation
-        self.flipHorizontal = flipHorizontal
-        self.flipVertical = flipVertical
-    }
-}
-
-
-
-extension ExifOrientationRecord: Equatable, Hashable {
-    public static func ==(lhs: ExifOrientationRecord, rhs: ExifOrientationRecord) -> Bool {
-        if lhs.rotation != rhs.rotation {
-            return false
-        }
-        if lhs.flipHorizontal != rhs.flipHorizontal {
-            return false
-        }
-        if lhs.flipVertical != rhs.flipVertical {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(rotation)
-        hasher.combine(flipHorizontal)
-        hasher.combine(flipVertical)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeExifOrientationRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExifOrientationRecord {
-        return
-            try ExifOrientationRecord(
-                rotation: FfiConverterInt32.read(from: &buf), 
-                flipHorizontal: FfiConverterBool.read(from: &buf), 
-                flipVertical: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ExifOrientationRecord, into buf: inout [UInt8]) {
-        FfiConverterInt32.write(value.rotation, into: &buf)
-        FfiConverterBool.write(value.flipHorizontal, into: &buf)
-        FfiConverterBool.write(value.flipVertical, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeExifOrientationRecord_lift(_ buf: RustBuffer) throws -> ExifOrientationRecord {
-    return try FfiConverterTypeExifOrientationRecord.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeExifOrientationRecord_lower(_ value: ExifOrientationRecord) -> RustBuffer {
-    return FfiConverterTypeExifOrientationRecord.lower(value)
 }
 
 
@@ -2560,6 +1952,112 @@ public func FfiConverterTypeImportReportRecord_lower(_ value: ImportReportRecord
 }
 
 
+public struct LensCorrectionCoefficients {
+    public var distortion: [Float]
+    public var tca: [Float]
+    public var vignetting: [Float]
+    public var distortionModel: String
+    public var hasDistortion: Bool
+    public var hasTca: Bool
+    public var hasVignetting: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(distortion: [Float], tca: [Float], vignetting: [Float], distortionModel: String, hasDistortion: Bool, hasTca: Bool, hasVignetting: Bool) {
+        self.distortion = distortion
+        self.tca = tca
+        self.vignetting = vignetting
+        self.distortionModel = distortionModel
+        self.hasDistortion = hasDistortion
+        self.hasTca = hasTca
+        self.hasVignetting = hasVignetting
+    }
+}
+
+
+
+extension LensCorrectionCoefficients: Equatable, Hashable {
+    public static func ==(lhs: LensCorrectionCoefficients, rhs: LensCorrectionCoefficients) -> Bool {
+        if lhs.distortion != rhs.distortion {
+            return false
+        }
+        if lhs.tca != rhs.tca {
+            return false
+        }
+        if lhs.vignetting != rhs.vignetting {
+            return false
+        }
+        if lhs.distortionModel != rhs.distortionModel {
+            return false
+        }
+        if lhs.hasDistortion != rhs.hasDistortion {
+            return false
+        }
+        if lhs.hasTca != rhs.hasTca {
+            return false
+        }
+        if lhs.hasVignetting != rhs.hasVignetting {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(distortion)
+        hasher.combine(tca)
+        hasher.combine(vignetting)
+        hasher.combine(distortionModel)
+        hasher.combine(hasDistortion)
+        hasher.combine(hasTca)
+        hasher.combine(hasVignetting)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLensCorrectionCoefficients: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LensCorrectionCoefficients {
+        return
+            try LensCorrectionCoefficients(
+                distortion: FfiConverterSequenceFloat.read(from: &buf), 
+                tca: FfiConverterSequenceFloat.read(from: &buf), 
+                vignetting: FfiConverterSequenceFloat.read(from: &buf), 
+                distortionModel: FfiConverterString.read(from: &buf), 
+                hasDistortion: FfiConverterBool.read(from: &buf), 
+                hasTca: FfiConverterBool.read(from: &buf), 
+                hasVignetting: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LensCorrectionCoefficients, into buf: inout [UInt8]) {
+        FfiConverterSequenceFloat.write(value.distortion, into: &buf)
+        FfiConverterSequenceFloat.write(value.tca, into: &buf)
+        FfiConverterSequenceFloat.write(value.vignetting, into: &buf)
+        FfiConverterString.write(value.distortionModel, into: &buf)
+        FfiConverterBool.write(value.hasDistortion, into: &buf)
+        FfiConverterBool.write(value.hasTca, into: &buf)
+        FfiConverterBool.write(value.hasVignetting, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLensCorrectionCoefficients_lift(_ buf: RustBuffer) throws -> LensCorrectionCoefficients {
+    return try FfiConverterTypeLensCorrectionCoefficients.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLensCorrectionCoefficients_lower(_ value: LensCorrectionCoefficients) -> RustBuffer {
+    return FfiConverterTypeLensCorrectionCoefficients.lower(value)
+}
+
+
 public struct LensCorrectionCoefficientsRecord {
     public var distortion: [Float]
     public var tca: [Float]
@@ -3170,154 +2668,6 @@ public func FfiConverterTypeTakeoutMetadataRecord_lower(_ value: TakeoutMetadata
 }
 
 
-public struct ToneCurvesRecord {
-    public var master: [CurvePointRecord]
-    public var red: [CurvePointRecord]
-    public var green: [CurvePointRecord]
-    public var blue: [CurvePointRecord]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(master: [CurvePointRecord], red: [CurvePointRecord], green: [CurvePointRecord], blue: [CurvePointRecord]) {
-        self.master = master
-        self.red = red
-        self.green = green
-        self.blue = blue
-    }
-}
-
-
-
-extension ToneCurvesRecord: Equatable, Hashable {
-    public static func ==(lhs: ToneCurvesRecord, rhs: ToneCurvesRecord) -> Bool {
-        if lhs.master != rhs.master {
-            return false
-        }
-        if lhs.red != rhs.red {
-            return false
-        }
-        if lhs.green != rhs.green {
-            return false
-        }
-        if lhs.blue != rhs.blue {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(master)
-        hasher.combine(red)
-        hasher.combine(green)
-        hasher.combine(blue)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeToneCurvesRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ToneCurvesRecord {
-        return
-            try ToneCurvesRecord(
-                master: FfiConverterSequenceTypeCurvePointRecord.read(from: &buf), 
-                red: FfiConverterSequenceTypeCurvePointRecord.read(from: &buf), 
-                green: FfiConverterSequenceTypeCurvePointRecord.read(from: &buf), 
-                blue: FfiConverterSequenceTypeCurvePointRecord.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ToneCurvesRecord, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeCurvePointRecord.write(value.master, into: &buf)
-        FfiConverterSequenceTypeCurvePointRecord.write(value.red, into: &buf)
-        FfiConverterSequenceTypeCurvePointRecord.write(value.green, into: &buf)
-        FfiConverterSequenceTypeCurvePointRecord.write(value.blue, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeToneCurvesRecord_lift(_ buf: RustBuffer) throws -> ToneCurvesRecord {
-    return try FfiConverterTypeToneCurvesRecord.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeToneCurvesRecord_lower(_ value: ToneCurvesRecord) -> RustBuffer {
-    return FfiConverterTypeToneCurvesRecord.lower(value)
-}
-
-
-public struct WhiteBalanceResult {
-    public var temperature: Float
-    public var tint: Float
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(temperature: Float, tint: Float) {
-        self.temperature = temperature
-        self.tint = tint
-    }
-}
-
-
-
-extension WhiteBalanceResult: Equatable, Hashable {
-    public static func ==(lhs: WhiteBalanceResult, rhs: WhiteBalanceResult) -> Bool {
-        if lhs.temperature != rhs.temperature {
-            return false
-        }
-        if lhs.tint != rhs.tint {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(temperature)
-        hasher.combine(tint)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWhiteBalanceResult: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhiteBalanceResult {
-        return
-            try WhiteBalanceResult(
-                temperature: FfiConverterFloat.read(from: &buf), 
-                tint: FfiConverterFloat.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: WhiteBalanceResult, into buf: inout [UInt8]) {
-        FfiConverterFloat.write(value.temperature, into: &buf)
-        FfiConverterFloat.write(value.tint, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWhiteBalanceResult_lift(_ buf: RustBuffer) throws -> WhiteBalanceResult {
-    return try FfiConverterTypeWhiteBalanceResult.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWhiteBalanceResult_lower(_ value: WhiteBalanceResult) -> RustBuffer {
-    return FfiConverterTypeWhiteBalanceResult.lower(value)
-}
-
-
 public struct XmpDataRecord {
     public var rating: Int32?
     public var status: String
@@ -3447,495 +2797,6 @@ public func FfiConverterTypeXmpDataRecord_lower(_ value: XmpDataRecord) -> RustB
     return FfiConverterTypeXmpDataRecord.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum ColorProfileMode {
-    
-    case agxVivid
-    case agxFilmic
-    case cameraStandard
-    case cameraPortrait
-    case cameraLandscape
-    case cameraVivid
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeColorProfileMode: FfiConverterRustBuffer {
-    typealias SwiftType = ColorProfileMode
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColorProfileMode {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .agxVivid
-        
-        case 2: return .agxFilmic
-        
-        case 3: return .cameraStandard
-        
-        case 4: return .cameraPortrait
-        
-        case 5: return .cameraLandscape
-        
-        case 6: return .cameraVivid
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ColorProfileMode, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .agxVivid:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .agxFilmic:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .cameraStandard:
-            writeInt(&buf, Int32(3))
-        
-        
-        case .cameraPortrait:
-            writeInt(&buf, Int32(4))
-        
-        
-        case .cameraLandscape:
-            writeInt(&buf, Int32(5))
-        
-        
-        case .cameraVivid:
-            writeInt(&buf, Int32(6))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeColorProfileMode_lift(_ buf: RustBuffer) throws -> ColorProfileMode {
-    return try FfiConverterTypeColorProfileMode.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeColorProfileMode_lower(_ value: ColorProfileMode) -> RustBuffer {
-    return FfiConverterTypeColorProfileMode.lower(value)
-}
-
-
-
-extension ColorProfileMode: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum EmulsionArchetype {
-    
-    case none
-    case rochesterPortrait400
-    case ashigaraChrome50
-    case rochesterK14Chrome64
-    case rochesterCinema500
-    case rochesterDaylight200
-    case mobberleySilver400
-    case cambridgeDiffusion100
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeEmulsionArchetype: FfiConverterRustBuffer {
-    typealias SwiftType = EmulsionArchetype
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EmulsionArchetype {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .none
-        
-        case 2: return .rochesterPortrait400
-        
-        case 3: return .ashigaraChrome50
-        
-        case 4: return .rochesterK14Chrome64
-        
-        case 5: return .rochesterCinema500
-        
-        case 6: return .rochesterDaylight200
-        
-        case 7: return .mobberleySilver400
-        
-        case 8: return .cambridgeDiffusion100
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: EmulsionArchetype, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .none:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .rochesterPortrait400:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .ashigaraChrome50:
-            writeInt(&buf, Int32(3))
-        
-        
-        case .rochesterK14Chrome64:
-            writeInt(&buf, Int32(4))
-        
-        
-        case .rochesterCinema500:
-            writeInt(&buf, Int32(5))
-        
-        
-        case .rochesterDaylight200:
-            writeInt(&buf, Int32(6))
-        
-        
-        case .mobberleySilver400:
-            writeInt(&buf, Int32(7))
-        
-        
-        case .cambridgeDiffusion100:
-            writeInt(&buf, Int32(8))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEmulsionArchetype_lift(_ buf: RustBuffer) throws -> EmulsionArchetype {
-    return try FfiConverterTypeEmulsionArchetype.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEmulsionArchetype_lower(_ value: EmulsionArchetype) -> RustBuffer {
-    return FfiConverterTypeEmulsionArchetype.lower(value)
-}
-
-
-
-extension EmulsionArchetype: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum EmulsionFormat {
-    
-    case format35mm
-    case format120
-    case format4x5
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeEmulsionFormat: FfiConverterRustBuffer {
-    typealias SwiftType = EmulsionFormat
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EmulsionFormat {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .format35mm
-        
-        case 2: return .format120
-        
-        case 3: return .format4x5
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: EmulsionFormat, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .format35mm:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .format120:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .format4x5:
-            writeInt(&buf, Int32(3))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEmulsionFormat_lift(_ buf: RustBuffer) throws -> EmulsionFormat {
-    return try FfiConverterTypeEmulsionFormat.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEmulsionFormat_lower(_ value: EmulsionFormat) -> RustBuffer {
-    return FfiConverterTypeEmulsionFormat.lower(value)
-}
-
-
-
-extension EmulsionFormat: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum EnlargerFilterMode {
-    
-    case neutralPanchromatic
-    case yellowK2
-    case orange16
-    case red25A
-    case greenX1
-    case orthochromatic
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeEnlargerFilterMode: FfiConverterRustBuffer {
-    typealias SwiftType = EnlargerFilterMode
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EnlargerFilterMode {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .neutralPanchromatic
-        
-        case 2: return .yellowK2
-        
-        case 3: return .orange16
-        
-        case 4: return .red25A
-        
-        case 5: return .greenX1
-        
-        case 6: return .orthochromatic
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: EnlargerFilterMode, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .neutralPanchromatic:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .yellowK2:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .orange16:
-            writeInt(&buf, Int32(3))
-        
-        
-        case .red25A:
-            writeInt(&buf, Int32(4))
-        
-        
-        case .greenX1:
-            writeInt(&buf, Int32(5))
-        
-        
-        case .orthochromatic:
-            writeInt(&buf, Int32(6))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEnlargerFilterMode_lift(_ buf: RustBuffer) throws -> EnlargerFilterMode {
-    return try FfiConverterTypeEnlargerFilterMode.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEnlargerFilterMode_lower(_ value: EnlargerFilterMode) -> RustBuffer {
-    return FfiConverterTypeEnlargerFilterMode.lower(value)
-}
-
-
-
-extension EnlargerFilterMode: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum ExportColorSpace {
-    
-    case srgb
-    case displayP3
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeExportColorSpace: FfiConverterRustBuffer {
-    typealias SwiftType = ExportColorSpace
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExportColorSpace {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .srgb
-        
-        case 2: return .displayP3
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ExportColorSpace, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .srgb:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .displayP3:
-            writeInt(&buf, Int32(2))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeExportColorSpace_lift(_ buf: RustBuffer) throws -> ExportColorSpace {
-    return try FfiConverterTypeExportColorSpace.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeExportColorSpace_lower(_ value: ExportColorSpace) -> RustBuffer {
-    return FfiConverterTypeExportColorSpace.lower(value)
-}
-
-
-
-extension ExportColorSpace: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum ExportRenderingIntent {
-    
-    case perceptual
-    case relativeColorimetric
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeExportRenderingIntent: FfiConverterRustBuffer {
-    typealias SwiftType = ExportRenderingIntent
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExportRenderingIntent {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .perceptual
-        
-        case 2: return .relativeColorimetric
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ExportRenderingIntent, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .perceptual:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .relativeColorimetric:
-            writeInt(&buf, Int32(2))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeExportRenderingIntent_lift(_ buf: RustBuffer) throws -> ExportRenderingIntent {
-    return try FfiConverterTypeExportRenderingIntent.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeExportRenderingIntent_lower(_ value: ExportRenderingIntent) -> RustBuffer {
-    return FfiConverterTypeExportRenderingIntent.lower(value)
-}
-
-
-
-extension ExportRenderingIntent: Equatable, Hashable {}
-
-
-
 
 public enum FirstProofError {
 
@@ -3990,112 +2851,6 @@ extension FirstProofError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum PrintMediaMode {
-    
-    case none
-    case chromogenicTypeC
-    case silverDyeBleach
-    case fineArtCottonRag
-    case barytaSilverGelatin
-    case warmtoneChlorobromide
-    case platinumPalladium
-    case cyanotype
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePrintMediaMode: FfiConverterRustBuffer {
-    typealias SwiftType = PrintMediaMode
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrintMediaMode {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .none
-        
-        case 2: return .chromogenicTypeC
-        
-        case 3: return .silverDyeBleach
-        
-        case 4: return .fineArtCottonRag
-        
-        case 5: return .barytaSilverGelatin
-        
-        case 6: return .warmtoneChlorobromide
-        
-        case 7: return .platinumPalladium
-        
-        case 8: return .cyanotype
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: PrintMediaMode, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .none:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .chromogenicTypeC:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .silverDyeBleach:
-            writeInt(&buf, Int32(3))
-        
-        
-        case .fineArtCottonRag:
-            writeInt(&buf, Int32(4))
-        
-        
-        case .barytaSilverGelatin:
-            writeInt(&buf, Int32(5))
-        
-        
-        case .warmtoneChlorobromide:
-            writeInt(&buf, Int32(6))
-        
-        
-        case .platinumPalladium:
-            writeInt(&buf, Int32(7))
-        
-        
-        case .cyanotype:
-            writeInt(&buf, Int32(8))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePrintMediaMode_lift(_ buf: RustBuffer) throws -> PrintMediaMode {
-    return try FfiConverterTypePrintMediaMode.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePrintMediaMode_lower(_ value: PrintMediaMode) -> RustBuffer {
-    return FfiConverterTypePrintMediaMode.lower(value)
-}
-
-
-
-extension PrintMediaMode: Equatable, Hashable {}
-
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -4484,30 +3239,6 @@ fileprivate struct FfiConverterOptionTypeTakeoutMetadataRecord: FfiConverterRust
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeWhiteBalanceResult: FfiConverterRustBuffer {
-    typealias SwiftType = WhiteBalanceResult?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeWhiteBalanceResult.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeWhiteBalanceResult.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeXmpDataRecord: FfiConverterRustBuffer {
     typealias SwiftType = XmpDataRecord?
 
@@ -4524,6 +3255,54 @@ fileprivate struct FfiConverterOptionTypeXmpDataRecord: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeXmpDataRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeAdjustmentDescriptor: FfiConverterRustBuffer {
+    typealias SwiftType = AdjustmentDescriptor?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAdjustmentDescriptor.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAdjustmentDescriptor.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeDemosaicQuality: FfiConverterRustBuffer {
+    typealias SwiftType = DemosaicQuality?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeDemosaicQuality.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeDemosaicQuality.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -4572,6 +3351,54 @@ fileprivate struct FfiConverterOptionTypeExportRenderingIntent: FfiConverterRust
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeExportRenderingIntent.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeRenderTier: FfiConverterRustBuffer {
+    typealias SwiftType = RenderTier?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeRenderTier.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeRenderTier.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeWhiteBalanceResult: FfiConverterRustBuffer {
+    typealias SwiftType = WhiteBalanceResult?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeWhiteBalanceResult.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeWhiteBalanceResult.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -4680,31 +3507,6 @@ fileprivate struct FfiConverterSequenceTypeBatchExportResultRecord: FfiConverter
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeCurvePointRecord: FfiConverterRustBuffer {
-    typealias SwiftType = [CurvePointRecord]
-
-    public static func write(_ value: [CurvePointRecord], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeCurvePointRecord.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CurvePointRecord] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [CurvePointRecord]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeCurvePointRecord.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypePhotoRecord: FfiConverterRustBuffer {
     typealias SwiftType = [PhotoRecord]
 
@@ -4751,11 +3553,83 @@ fileprivate struct FfiConverterSequenceTypeTakeoutMatchRecord: FfiConverterRustB
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeAdjustmentDescriptor: FfiConverterRustBuffer {
+    typealias SwiftType = [AdjustmentDescriptor]
+
+    public static func write(_ value: [AdjustmentDescriptor], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeAdjustmentDescriptor.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [AdjustmentDescriptor] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [AdjustmentDescriptor]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeAdjustmentDescriptor.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCurvePointRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [CurvePointRecord]
+
+    public static func write(_ value: [CurvePointRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCurvePointRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CurvePointRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CurvePointRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCurvePointRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /**
  * Calculates photographic Kelvin temperature and tint from an unadjusted neutral pixel sample.
  */
 public func calculateWhiteBalanceFromSample(r: Float, g: Float, b: Float) -> WhiteBalanceResult {
-    return try!  FfiConverterTypeWhiteBalanceResult.lift(try! rustCall() {
+    return try!  FfiConverterTypeWhiteBalanceResult_lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_calculate_white_balance_from_sample(
         FfiConverterFloat.lower(r),
         FfiConverterFloat.lower(g),
@@ -4801,8 +3675,22 @@ public func computeAutoWhiteBalanceFromBuffer(width: UInt32, height: UInt32, dat
     )
 })
 }
+public func convertKelvinToMiredNorm(kelvin: Double) -> Double {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_convert_kelvin_to_mired_norm(
+        FfiConverterDouble.lower(kelvin),$0
+    )
+})
+}
+public func convertMiredNormToKelvin(norm: Double) -> Double {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_convert_mired_norm_to_kelvin(
+        FfiConverterDouble.lower(norm),$0
+    )
+})
+}
 public func decodeExifOrientation(orientation: UInt32) -> ExifOrientationRecord {
-    return try!  FfiConverterTypeExifOrientationRecord.lift(try! rustCall() {
+    return try!  FfiConverterTypeExifOrientationRecord_lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_decode_exif_orientation(
         FfiConverterUInt32.lower(orientation),$0
     )
@@ -4830,7 +3718,7 @@ public func decodeRawPreviewBinned(path: String) -> RawPreviewRecord? {
 public func editsCacheSignature(edits: EditSettings) -> String {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_edits_cache_signature(
-        FfiConverterTypeEditSettings.lower(edits),$0
+        FfiConverterTypeEditSettings_lower(edits),$0
     )
 })
 }
@@ -4840,7 +3728,7 @@ public func editsCacheSignature(edits: EditSettings) -> String {
 public func editsHasModifications(edits: EditSettings, asShotTemp: Float?, asShotTint: Float?) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_edits_has_modifications(
-        FfiConverterTypeEditSettings.lower(edits),
+        FfiConverterTypeEditSettings_lower(edits),
         FfiConverterOptionFloat.lower(asShotTemp),
         FfiConverterOptionFloat.lower(asShotTint),$0
     )
@@ -4850,9 +3738,9 @@ public func editsHasModifications(edits: EditSettings, asShotTemp: Float?, asSho
  * Evaluates the 4 channels of ToneCurvesRecord into four 256-sample LUTs (Master, Red, Green, Blue).
  */
 public func evaluateAllCurvesLut(curves: ToneCurvesRecord) -> AllCurvesLutRecord {
-    return try!  FfiConverterTypeAllCurvesLutRecord.lift(try! rustCall() {
+    return try!  FfiConverterTypeAllCurvesLutRecord_lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_evaluate_all_curves_lut(
-        FfiConverterTypeToneCurvesRecord.lower(curves),$0
+        FfiConverterTypeToneCurvesRecord_lower(curves),$0
     )
 })
 }
@@ -4874,18 +3762,20 @@ public func exportBatchPhotos(items: [BatchExportItemRecord]) -> [BatchExportRes
     )
 })
 }
-public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace?, renderingIntent: ExportRenderingIntent?, ultraHdr: Bool?) -> Bool {
+public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace?, renderingIntent: ExportRenderingIntent?, ultraHdr: Bool?, demosaicQuality: DemosaicQuality?, renderTier: RenderTier?) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_export_photo(
         FfiConverterString.lower(inputPath),
         FfiConverterString.lower(outputPath),
-        FfiConverterTypeEditSettings.lower(edits),
+        FfiConverterTypeEditSettings_lower(edits),
         FfiConverterOptionTypeLensCorrectionCoefficientsRecord.lower(lensCoeffs),
         FfiConverterUInt32.lower(quality),
         FfiConverterOptionUInt32.lower(maxDimension),
         FfiConverterOptionTypeExportColorSpace.lower(colorSpace),
         FfiConverterOptionTypeExportRenderingIntent.lower(renderingIntent),
-        FfiConverterOptionBool.lower(ultraHdr),$0
+        FfiConverterOptionBool.lower(ultraHdr),
+        FfiConverterOptionTypeDemosaicQuality.lower(demosaicQuality),
+        FfiConverterOptionTypeRenderTier.lower(renderTier),$0
     )
 })
 }
@@ -4916,6 +3806,19 @@ public func extractUltraHdrGainMap(filePath: String) -> GainMapRecord? {
     return try!  FfiConverterOptionTypeGainMapRecord.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_extract_ultra_hdr_gain_map(
         FfiConverterString.lower(filePath),$0
+    )
+})
+}
+public func getAdjustmentDescriptor(id: String) -> AdjustmentDescriptor? {
+    return try!  FfiConverterOptionTypeAdjustmentDescriptor.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_get_adjustment_descriptor(
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+public func getAllAdjustments() -> [AdjustmentDescriptor] {
+    return try!  FfiConverterSequenceTypeAdjustmentDescriptor.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_get_all_adjustments($0
     )
 })
 }
@@ -5016,7 +3919,7 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_calculate_white_balance_from_sample() != 45529) {
+    if (uniffi_firstproof_core_checksum_func_calculate_white_balance_from_sample() != 12127) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_check_connection() != 26981) {
@@ -5028,13 +3931,19 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_compute_auto_adjustments_from_buffer() != 43322) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance() != 3907) {
+    if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance() != 26234) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance_from_buffer() != 18312) {
+    if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance_from_buffer() != 16899) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_decode_exif_orientation() != 46859) {
+    if (uniffi_firstproof_core_checksum_func_convert_kelvin_to_mired_norm() != 11770) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_convert_mired_norm_to_kelvin() != 43230) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_decode_exif_orientation() != 3086) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_decode_raw_preview() != 25928) {
@@ -5043,22 +3952,22 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_decode_raw_preview_binned() != 554) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_edits_cache_signature() != 39833) {
+    if (uniffi_firstproof_core_checksum_func_edits_cache_signature() != 39649) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_edits_has_modifications() != 24369) {
+    if (uniffi_firstproof_core_checksum_func_edits_has_modifications() != 5428) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_evaluate_all_curves_lut() != 50284) {
+    if (uniffi_firstproof_core_checksum_func_evaluate_all_curves_lut() != 16051) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_evaluate_curve_lut() != 14317) {
+    if (uniffi_firstproof_core_checksum_func_evaluate_curve_lut() != 25736) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_export_batch_photos() != 38182) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_export_photo() != 13010) {
+    if (uniffi_firstproof_core_checksum_func_export_photo() != 62031) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_export_portable_package() != 7427) {
@@ -5071,6 +3980,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_extract_ultra_hdr_gain_map() != 4456) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_get_adjustment_descriptor() != 5221) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_get_all_adjustments() != 61677) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut() != 34257) {

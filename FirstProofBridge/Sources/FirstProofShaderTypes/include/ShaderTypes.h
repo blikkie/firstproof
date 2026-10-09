@@ -67,21 +67,26 @@ struct ShaderUniforms {
     float gainMapMax;        // e.g. 3.0 (8x boost)
     float gainMapGamma;      // standard 1.0
     float gainMapCapacityMax;// e.g. 3.0
-    int32_t emulsionArchetype; // 0 = None, 1 = RochesterPortrait400, 2 = AshigaraChrome50, 3 = RochesterK14Chrome64, 4 = RochesterCinema500, 5 = RochesterDaylight200, 6 = MobberleySilver400, 7 = CambridgeDiffusion100
-    int32_t emulsionFormat;    // 0 = 35mm, 1 = 120, 2 = 4x5
+    int32_t emulsionArchetype; // 0 = None, 1 = RochesterPortrait400, 2 = AshigaraChrome50, 3 = RochesterK14Chrome64, 4 = RochesterCinema500, 5 = RochesterDaylight200, 6 = MobberleySilver400, 7 = CambridgeDiffusion100, 8 = LeverkusenPortrait160, 9 = AshigaraPortrait400, 10 = LiguriaCinema80, 11 = BaodingSilver100
+    int32_t emulsionFormat;    // 0 = 35mm, 1 = 120, 2 = 4x5, 3 = Super8, 4 = 16mm
     float emulsionExposure;    // -2.0 .. +2.0 (default 0.0)
-    float _emulsionPadding;    // Alignment padding
+    int32_t emulsionGrainMode; // 0 = Off, 1 = SeedFromSensor, 2 = SynthesizePhysical
+    float grainScale;          // 0.5 .. 2.0 (default 1.0)
+    float grainSize;           // 0.2 .. 3.0 (default 1.0)
+    float grainAmount;         // 0.0 .. 2.0 (default 1.0)
     int32_t isIntermediate;  // 1 = pre-rendered intermediate preview (bypass all shader color/tone/geometry)
     float splitToningShadowHue;    // 0.0 .. 360.0 (degrees, default 215.0)
     float splitToningShadowSat;    // 0.0 .. 100.0 (default 0.0)
     float splitToningHighlightHue; // 0.0 .. 360.0 (degrees, default 45.0)
     float splitToningHighlightSat; // 0.0 .. 100.0 (default 0.0)
     float splitToningBalance;      // -100.0 .. +100.0 (default 0.0)
-    int32_t printMediaMode;        // 0 = None, 1 = ChromogenicTypeC, 2 = SilverDyeBleach, 3 = FineArtCottonRag, 4 = BarytaSilverGelatin, 5 = WarmtoneChlorobromide, 6 = PlatinumPalladium, 7 = Cyanotype
+    int32_t printMediaMode;        // 0 = None, 1 = ChromogenicTypeC, 2 = SilverDyeBleach, 3 = FineArtCottonRag, 4 = BarytaSilverGelatin, 5 = WarmtoneChlorobromide, 6 = PlatinumPalladium, 7 = Cyanotype, 8 = BamakoSilverContact
     int32_t enlargerFilterMode;    // 0 = Neutral, 1 = YellowK2, 2 = Orange16, 3 = Red25A, 4 = GreenX1, 5 = Orthochromatic
     float printPaperGrade;         // -2.0 .. +2.0 (default 0.0)
     float printBaseWarmth;         // -100.0 .. +100.0 (default 0.0)
     float printProcessDepth;       // 0.0 .. 100.0 (default 100.0)
+    int32_t halationMode;          // 0 = Off, 1 = Monochrome (BaodingSilver100), 2 = Red-shifted (RochesterCinema500 stripped)
+    int32_t rotation;              // 0, 90, 180, 270
 };
 
 #endif /* ShaderTypes_h */
