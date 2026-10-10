@@ -219,7 +219,7 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
 
     // Transfer buffers back to main thread zero-copy
     const transferables: Transferable[] = [imageSlice.buffer];
-    if (linearData && linearData.buffer) {
+    if (linearData?.buffer) {
       transferables.push(linearData.buffer);
     }
     (self as any).postMessage(response, transferables);

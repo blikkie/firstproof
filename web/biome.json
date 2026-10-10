@@ -19,13 +19,15 @@
       "recommended": true,
       "complexity": {
         "noStaticOnlyClass": "off",
-        "noThisInStatic": "off"
+        "noThisInStatic": "off",
+        "useOptionalChain": "error"
       },
       "style": {
         "noNonNullAssertion": "off"
       },
       "suspicious": {
-        "noExplicitAny": "off"
+        "noExplicitAny": "off",
+        "noGlobalIsNan": "error"
       }
     }
   },

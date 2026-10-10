@@ -68,7 +68,7 @@ export class ExportModal {
 
   public close() {
     if (this.isExporting) return;
-    if (this.dialogEl && this.dialogEl.open) {
+    if (this.dialogEl?.open) {
       this.dialogEl.close();
     }
   }
@@ -201,7 +201,7 @@ export class ExportModal {
     ) as HTMLInputElement;
     customDimInput?.addEventListener('input', () => {
       const val = parseInt(customDimInput.value, 10);
-      if (!isNaN(val) && val > 0) {
+      if (!Number.isNaN(val) && val > 0) {
         this.customDimension = val;
       }
     });

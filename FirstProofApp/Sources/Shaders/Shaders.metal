@@ -28,11 +28,11 @@ vertex VertexOutput vertexShader(
     return out;
 }
 
-// Interleaved Gradient Noise (Jorge Jimenez, Next Generation Post Processing)
+// Interleaved Gradient Noise (Jorge Jimenez, Next Generation Post Processing 2014)
 // Extremely fast, zero texture lookups, optimal blue-noise-like properties for sample jitter and dithering
 inline float ign(float2 p) {
-    float3 magic = float3(0.06711056f, 0.00583715f, 52.9829189f);
-    return fract(magic.z * fract(dot(p, magic.xy)));
+    float3 ignCoeffs = float3(0.06711056f, 0.00583715f, 52.9829189f);
+    return fract(ignCoeffs.z * fract(dot(p, ignCoeffs.xy)));
 }
 
 // MARK: - Fragment Shader (Linear RAW Pipeline)

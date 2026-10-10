@@ -12,7 +12,7 @@ const STANDARD_FSTOPS = [
  * Format camera aperture floats into standard photographic f-stops (e.g., f/2.8 instead of f/2.799999952316284).
  */
 export function formatAperture(val?: number | null): string {
-  if (val === undefined || val === null || isNaN(val) || val <= 0) {
+  if (val === undefined || val === null || Number.isNaN(val) || val <= 0) {
     return '—';
   }
   // Find closest standard f-stop within 3% tolerance
@@ -37,7 +37,7 @@ export function formatShutterSpeed(shutter?: string | number | null): string {
     if (shutter.endsWith('s')) return shutter;
     if (shutter.includes('/')) return `${shutter}s`;
     const num = parseFloat(shutter);
-    if (isNaN(num)) return `${shutter}s`;
+    if (Number.isNaN(num)) return `${shutter}s`;
     shutter = num;
   }
   if (shutter >= 0.4) {
@@ -51,7 +51,7 @@ export function formatShutterSpeed(shutter?: string | number | null): string {
  * Format focal length into millimeters (e.g., 50mm, 85mm).
  */
 export function formatFocalLength(val?: number | null): string {
-  if (val === undefined || val === null || isNaN(val) || val <= 0) {
+  if (val === undefined || val === null || Number.isNaN(val) || val <= 0) {
     return '—';
   }
   return `${Math.round(val)}mm`;
@@ -61,7 +61,7 @@ export function formatFocalLength(val?: number | null): string {
  * Format camera ISO rating (e.g., ISO 400).
  */
 export function formatISO(val?: number | null): string {
-  if (val === undefined || val === null || isNaN(val) || val <= 0) {
+  if (val === undefined || val === null || Number.isNaN(val) || val <= 0) {
     return '—';
   }
   return `${Math.round(val)}`;

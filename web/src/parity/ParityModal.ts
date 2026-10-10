@@ -255,7 +255,7 @@ export class ParityModal {
 
     let activeTestCase: ParityTestCase;
 
-    if (photo && photo.isLinearRec2020 && photo.linearData) {
+    if (photo?.isLinearRec2020 && photo.linearData) {
       // 1. Sample center 256x256 patch from the uncompressed 16-bit Linear Rec.2020 RAW sensor frame
       const w = Math.min(photo.width, 256);
       const h = Math.min(photo.height, 256);

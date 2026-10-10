@@ -168,7 +168,7 @@ export class PhotoLoaderService {
           try {
             const bytes = new Uint8Array(arrayBuffer);
             resolve(this.bridge.decodeImageBytes(bytes));
-          } catch (e) {
+          } catch (_e) {
             reject(new Error(res.error || 'Worker decode failed'));
           }
         }

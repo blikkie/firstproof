@@ -74,6 +74,11 @@
   - Never duplicate RAW decoding, Bayer binning, tone curve evaluation, or color math logic ad-hoc inside `firstproof-wasm`.
   - WASM decoders and calculations must strictly consume shared domain models (`RawSensorFrame`, `EditSettings`, `evaluate_curve_lut`) defined in `firstproof-engine` to guarantee 1:1 color science, sensitometric math, and channel mapping parity across native macOS and web darkroom targets.
 
+- **Post-Public Enum Immutability & Slot Preservation Invariant**:
+  - Once First Proof is publicly released (v0.1+), **never delete or renumber existing enum discriminants or ID slots** in serialized domain models (`PrintMediaMode`, `EmulsionArchetype`, `EnlargerFilterMode`, etc.).
+  - Renumbering discriminants breaks backward compatibility with user catalogs (`catalog.db`), existing `.xmp` sidecars, and cross-platform FFI bridges.
+  - When an archetype, filter, or adjustment is retired post-release, its numeric discriminant must be permanently **marked as `Reserved` or aliased to fallback/unset (`None`)**, gracefully falling back to neutral defaults during deserialization without shifting adjacent IDs.
+
 - **Physical Sensitometric Math Over Magic Numbers & Piecewise Hacks**:
   - Emulations (film stocks, recording emulsions, print media, enlarger filtration, toner chemistry) must always be grounded in continuous physical, optical, and sensitometric math—never arbitrary "magic numbers", hard thresholds, or piecewise if/else hacks.
   - Tonal curves must be smooth $C^1$ or $C^\infty$ analytical functions (e.g. bounded cubic polynomial S-curves $f(x) = x + \alpha \cdot x(1-x)(2x-1)$, smooth Hermite shoulders, or sigmoidal density curves). Fractional power laws $x^\gamma$ with infinite derivative ($f' \to \infty$) at bounds are forbidden.

@@ -139,7 +139,7 @@ export class FolderIntake {
 
   public static async saveRecentDirHandle(dirHandle: any): Promise<void> {
     try {
-      if (dirHandle && dirHandle.name) {
+      if (dirHandle?.name) {
         localStorage.setItem('fp_recent_folder_name', dirHandle.name);
       }
       const db = await FolderIntake.getIDB();
@@ -173,7 +173,7 @@ export class FolderIntake {
         const tx = db.transaction('handles', 'readonly');
         const req = tx.objectStore('handles').get('recent_dir');
         req.onsuccess = () => {
-          if (req.result && req.result.handle) {
+          if (req.result?.handle) {
             resolve({
               dirHandle: req.result.handle,
               name: req.result.name || storedName,

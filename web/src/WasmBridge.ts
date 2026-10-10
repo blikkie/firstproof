@@ -87,10 +87,7 @@ export class WasmBridge {
   }
 
   private getWasmMemoryBuffer(): ArrayBuffer | null {
-    if (this.wasmMemory && this.wasmMemory.buffer) {
-      return this.wasmMemory.buffer;
-    }
-    return null;
+    return this.wasmMemory?.buffer ?? null;
   }
 
   public decodeImageBytes(bytes: Uint8Array): {

@@ -6,13 +6,12 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ---
 
-## 🚀 Immediate Next Up
-1. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P2)
-2. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P2)
-3. **Story 4.1: Open Source IP, Security & Code Cleanliness Auditing** (P2 — Deferred to Pre-Release Hardening Gate)
-
-
-> **Environment Note**: Native macOS desktop binary packaging (Xcode, Swift packages, UniFFI `.xcframework`, macOS code signing, and notarization) is decoupled into a dedicated initiative (**Phase 4.4**) on hold while working on Linux. Current active development focuses on the WebAssembly web darkroom and cross-platform headless Linux engine.
+## 🚀 Immediate Next Up (v0.1 Release Gate)
+1. **Story 4.0: Comprehensive AI Slop Audit & Codebase De-Slop Pass** (P0)
+2. **Story 4.5: Swift Desktop Parameter Schema & Behavioral Interaction Parity** (P0)
+3. **Story 4.1: Open Source IP, Security & License Compliance Gate** (P1)
+4. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P1)
+5. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P1)
 
 ---
 
@@ -70,9 +69,28 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 
 
 
-## Phase 4: Pre-Release IP Audit, Code Cleanliness & Distribution (P2)
+## Phase 4: Pre-Release IP Audit, Code Cleanliness & Distribution (P0 / P1)
 
-### 4.1 Open Source IP, Security & Code Cleanliness Auditing
+### 4.0 Comprehensive AI Slop Audit & Codebase De-Slop Pass (P0 - Immediate Quality Gate)
+- **Lens 1: Anti-Magic Number & Formula Derivation Audit**:
+  - Rigorously inspect every numerical constant, localized multiplier, threshold, and curve evaluation across Rust (`firstproof-core`, `firstproof-engine`), Metal (`ColorScience.metal`, `Shaders.metal`, `Geometry.metal`), and TypeScript/WebGL (`ColorScience.ts`, `WebGLRenderer.ts`).
+  - Weed out arbitrary heuristics, trial-and-error fudge factors, and localized piecewise offsets.
+  - Guarantee all mathematical parameters trace directly to published sensitometric standards (DNG specification, Troy Sobotka's AgX specification, CIE photopic luminance, ISO 6846).
+- **Lens 2: Hallucinated / Defensive Boilerplate Slop Purge & Strict Typing**:
+  - **Strict `noExplicitAny` Enforcement (`web/biome.json`)**:
+    - Promote Biome's `suspicious/noExplicitAny` rule from `"off"` to `"error"`.
+    - Systematically eliminate the ~81 `any` types across `web/src`: convert `catch (err: any)` to `catch (err: unknown)` with error-narrowing helpers, type web workers with `DedicatedWorkerGlobalScope`, replace loose file system handles with `FileSystemDirectoryHandle` / `FileSystemFileHandle`, and type WASM memory and exports via `FirstProofWasmExports`.
+    - Where external FFI or third-party dynamics strictly prevent static typing, require documented `// biome-ignore lint/suspicious/noExplicitAny: <rationale>` comments.
+  - **Defensive Boilerplate & Ghost Branches**:
+    - Purge speculative AI-generated abstraction layers, redundant null-checks / unreachable defensive branches (`obj?.val !== undefined && obj.val`), verbose conversational docstrings that merely restate code (`// Sets x to 5`), and single-use helper utilities that obscure flow.
+- **Lens 3: Visual & UX Plastic Slop Purge**:
+  - Audit UI components in both native macOS SwiftUI (`FirstProofApp`) and Web darkroom (`web/`) against First Proof's darkroom aesthetic: opaque `#181818` / `#1E1E1E` dark slate, monospaced lining numbers, tactile controls, and zero digital plastic (no generic gradients, gratuitous bounces, or ungrounded UI chrome).
+- **Lens 4: Architectural Symmetry & Single Source of Truth**:
+  - Verify that shared domain models, coordinate transforms, and state transitions are homed strictly in `firstproof-engine` rather than duplicated or drifted across Swift and TypeScript host wrappers.
+- **Lens 5: Dependency & Asset Hygiene**:
+  - Remove dead test fixtures, orphan scratch files, unused npm/Cargo packages, and temporary build detritus to keep the codebase razor-sharp and minimal.
+
+### 4.1 Open Source IP, Security & License Compliance Gate (P1)
 - **License Compliance & Copyleft Gate (`cargo-deny`)**:
   - Whitelist permissive licenses (`MIT`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `MPL-2.0`, `CC0-1.0`); hard-block copyleft `GPL` / `AGPL`.
   - Audit `rawler` (LGPL-2.1) to ensure standalone dynamic linking or clean-room replacement without copyleft contamination.
@@ -92,13 +110,13 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 - **Memory Safety & Undefined Behavior (`cargo miri`)**:
   - Validate unsafe FFI pointer conversions and raw byte slicing in `raw_decoder` and `export` modules under Miri.
 
-### 4.2 Pre-Release Git History Scrubbing Pass
+### 4.2 Pre-Release Git History Scrubbing Pass (P2 - Pre-Push Gate)
 - **Git History Rewrite & Scrubbing Pass (`git-filter-repo` / BFG)**:
   - *(Note: Active codebase path sanitization and test scratch cleanup completed; see completed.md)*
   - Perform an automated history rewrite prior to public release to scrub local paths, developer usernames, private emails, and transient binary blobs from git commit history.
   - Followed by aggressive reflog expiration and garbage collection (`git reflog expire --expire=now --all && git gc --prune=now --aggressive`).
 
-### 4.3 Web Distribution & Release Site (`firstproof.photo`)
+### 4.3 Web Distribution & Release Site (`firstproof.photo`) (P1)
 - **Craft-First, Zero Sales Pitch Design**:
   - Restrained, typography-driven static page (deep neutral darks, editorial layout, zero marketing popups, tracking cookies, or conversion fluff).
   - Unadorned application screenshots showing the actual darkroom interface and workflow.
@@ -116,8 +134,8 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
     - **Torsten Bronger & Lensfun Community**: Open lens database and optical distortion modeling.
     - **CIE Colorimetry & Open Standards**: CIE 1931/1976 colorimetric observers, Planckian locus math, and open standard specifications.
 
-### 4.4 Standalone Desktop & CLI Release Packaging Pipeline (Deferred / Standalone Initiative)
-- **Decoupled Release Packaging Milestone**:
+### 4.4 Standalone Desktop & CLI Release Packaging Pipeline (P1)
+- **Release Packaging Milestone**:
   - Packaging the standalone native macOS application (compiling `libfirstproof_core.a`, running `uniffi-bindgen`, building the SwiftUI `.app` bundle, Developer ID code signing, and Apple `notarytool` stapling) and headless multi-arch `firstproof-cli` release binaries (`x86_64` and `aarch64` Linux and macOS).
   - Cross-platform GitHub Actions release runner compiling statically linked artifacts with LittleCMS2, shell completions (`bash`, `zsh`, `fish`), and man pages.
   - **Automated Hardware & Lens Calibration Harvester (`scripts/harvest_hardware_data.sh`)**:
@@ -128,10 +146,10 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
       - Deprecates the old runtime scanning of local Homebrew `/opt/homebrew/share/lensfun` and Linux `/usr/share/lensfun` paths.
       - Guarantees instant (< 2ms) optical distortion, TCA, and vignetting lookups operate 100% out of the box across desktop and browser darkrooms on day 1 without requiring user OS package installs.
     - Keeps both new camera and lens support a simple automated version bump away without requiring manual downloads or hand-crafted registry entries.
-  - While developing in the Linux environment, macOS packaging is held in place. It will be executed upon returning to a macOS environment or wired into a dedicated `macos-14` / `macos-15` GitHub Actions packaging runner.
+  - Native macOS `.app` bundle verification active on macOS workstation via `make bundle`.
   - Direct download links will be posted openly when binaries are ready—no email gates or signups.
 
-### 4.5 Swift Desktop Parameter Schema & Behavioral Interaction Parity (Deferred - macOS Milestone)
+### 4.5 Swift Desktop Parameter Schema & Behavioral Interaction Parity (P0)
 - **Swift View & Model Schema Consumption**:
   - *(Note: Rust core UniFFI & WASM parameter schema bridge completed; see completed.md)*
   - Refactor `SliderRow.swift`, `DevelopInspectorView.swift`, and `AppViewModel.swift` to derive slider ranges, steps, defaults, and formatters directly from the canonical Rust descriptors rather than hardcoding values in Swift views.
@@ -147,7 +165,7 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 - **Cross-Platform Verification Gate**:
   - Verify 1:1 parameter boundaries, visual feedback, and keyboard/mouse interaction parity between native macOS and WebAssembly darkroom targets.
 
-### 4.7 Native macOS Desktop Archival DNG Ingest & Batch Action (Deferred - macOS Milestone)
+### 4.7 Native macOS Desktop Archival DNG Ingest & Batch Action (P2)
 - **Ingest Flow Integration (`ImportSheetView.swift`, `AppViewModel.swift`)**:
   - Add "Convert to Archival DNG on Ingest" toggle in the intake dialog.
   - Streams copied photos through `firstproof_core::dng::convert_raw_to_dng` with post-write disk read-back verification before adding to catalog SQLite.
