@@ -2688,7 +2688,6 @@ public enum PrintMediaMode {
     case none
     case chromogenicTypeC
     case silverDyeBleach
-    case fineArtCottonRag
     case barytaSilverGelatin
     case warmtoneChlorobromide
     case platinumPalladium
@@ -2713,17 +2712,15 @@ public struct FfiConverterTypePrintMediaMode: FfiConverterRustBuffer {
         
         case 3: return .silverDyeBleach
         
-        case 4: return .fineArtCottonRag
+        case 4: return .barytaSilverGelatin
         
-        case 5: return .barytaSilverGelatin
+        case 5: return .warmtoneChlorobromide
         
-        case 6: return .warmtoneChlorobromide
+        case 6: return .platinumPalladium
         
-        case 7: return .platinumPalladium
+        case 7: return .cyanotype
         
-        case 8: return .cyanotype
-        
-        case 9: return .bamakoSilverContact
+        case 8: return .bamakoSilverContact
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2745,28 +2742,24 @@ public struct FfiConverterTypePrintMediaMode: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case .fineArtCottonRag:
+        case .barytaSilverGelatin:
             writeInt(&buf, Int32(4))
         
         
-        case .barytaSilverGelatin:
+        case .warmtoneChlorobromide:
             writeInt(&buf, Int32(5))
         
         
-        case .warmtoneChlorobromide:
+        case .platinumPalladium:
             writeInt(&buf, Int32(6))
         
         
-        case .platinumPalladium:
+        case .cyanotype:
             writeInt(&buf, Int32(7))
         
         
-        case .cyanotype:
-            writeInt(&buf, Int32(8))
-        
-        
         case .bamakoSilverContact:
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
         
         }
     }

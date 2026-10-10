@@ -44,13 +44,12 @@ const PRINT_MEDIA_MAP: Record<string, number> = {
   None: 0,
   ChromogenicTypeC: 1,
   SilverDyeBleach: 2,
-  FineArtCottonRag: 3,
-  BarytaSilverGelatin: 4,
-  WarmtoneChlorobromide: 5,
-  PlatinumPalladium: 6,
-  Cyanotype: 7,
-  PrussianCyanotype: 7,
-  BamakoSilverContact: 8,
+  BarytaSilverGelatin: 3,
+  WarmtoneChlorobromide: 4,
+  PlatinumPalladium: 5,
+  Cyanotype: 6,
+  PrussianCyanotype: 6,
+  BamakoSilverContact: 7,
 };
 
 export class WebGLRenderer {

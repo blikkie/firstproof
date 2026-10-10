@@ -120,36 +120,7 @@ fn metal_shader_print_media_sim(
 
             (r_out, g_out, b_out)
         }
-        3 => { // FineArtCottonRag
-            let r_g = metal_paper_grade(r, paper_grade);
-            let g_g = metal_paper_grade(g, paper_grade);
-            let b_g = metal_paper_grade(b, paper_grade);
-
-            let floor = 0.016 * depth;
-            let knee = 0.10;
-            let apply_matte_toe = |c: f32| -> f32 {
-                if c < knee {
-                    let u = 1.0 - c / knee;
-                    c + floor * u * u * (3.0 - 2.0 * u)
-                } else {
-                    c
-                }
-            };
-
-            let r_p = apply_matte_toe(r_g);
-            let g_p = apply_matte_toe(g_g);
-            let b_p = apply_matte_toe(b_g);
-
-            let lum = 0.2627 * r_p + 0.6780 * g_p + 0.0593 * b_p;
-            let pigment_sat = 0.95 + 0.05 * depth;
-
-            let r_out = (lum + (r_p - lum) * pigment_sat).clamp(0.0, 1.0);
-            let g_out = (lum + (g_p - lum) * pigment_sat).clamp(0.0, 1.0);
-            let b_out = (lum + (b_p - lum) * pigment_sat).clamp(0.0, 1.0);
-
-            metal_base_warmth((r_out, g_out, b_out), 15.0)
-        }
-        4 => { // BarytaSilverGelatin
+        3 => { // BarytaSilverGelatin
             let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
             let silver = metal_paper_grade(raw_lum, paper_grade);
 
@@ -158,7 +129,7 @@ fn metal_shader_print_media_sim(
 
             (silver_toned, silver_toned, silver_toned)
         }
-        5 => { // WarmtoneChlorobromide
+        4 => { // WarmtoneChlorobromide
             let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
             let silver = metal_paper_grade(raw_lum, paper_grade);
 
@@ -166,44 +137,41 @@ fn metal_shader_print_media_sim(
             let silver_deep = silver.powf(shadow_pow);
 
             let mid_mask = 4.0 * silver * (1.0 - silver);
-            let shadow_density = (1.0 - silver).max(0.0);
+            let shadow_mask = 4.0 * silver * (1.0 - silver) * (1.0 - silver);
 
-            let r_tone = silver_deep + depth * (mid_mask * 0.030 + shadow_density * 0.020);
-            let g_tone = silver_deep + depth * (mid_mask * 0.012 - shadow_density * 0.015);
-            let b_tone = silver_deep + depth * (-mid_mask * 0.018 + shadow_density * 0.030);
+            let r_tone = silver_deep + depth * (mid_mask * 0.025 + shadow_mask * 0.020);
+            let g_tone = silver_deep + depth * (mid_mask * 0.010 - shadow_mask * 0.012);
+            let b_tone = silver_deep + depth * (-mid_mask * 0.015 + shadow_mask * 0.025);
 
             let toned = (r_tone.clamp(0.0, 1.0), g_tone.clamp(0.0, 1.0), b_tone.clamp(0.0, 1.0));
             metal_base_warmth(toned, 5.0)
         }
-        6 => { // PlatinumPalladium
+        5 => { // PlatinumPalladium
             let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
             let silver = metal_paper_grade(raw_lum, paper_grade);
 
-            let matte_floor = 0.035 * depth;
-            let silver_base = matte_floor + (1.0 - matte_floor) * silver;
-
-            let warm_lift = (1.0 - silver_base.powf(0.6)).max(0.0) * depth;
-            let r_tone = silver_base + warm_lift * 0.045;
-            let g_tone = silver_base + warm_lift * 0.028;
-            let b_tone = silver_base - warm_lift * 0.020;
+            let pt_scale = silver + depth * 0.10 * silver * (1.0 - silver) * (1.0 - silver);
+            let mid_warmth = 4.0 * silver * (1.0 - silver);
+            let r_tone = pt_scale + depth * mid_warmth * 0.040;
+            let g_tone = pt_scale + depth * mid_warmth * 0.024;
+            let b_tone = pt_scale - depth * mid_warmth * 0.016;
 
             let toned = (r_tone.clamp(0.0, 1.0), g_tone.clamp(0.0, 1.0), b_tone.clamp(0.0, 1.0));
             metal_base_warmth(toned, 10.0 * depth)
         }
-        7 => { // Cyanotype
+        6 => { // Cyanotype
             let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
             let silver = metal_paper_grade(raw_lum, paper_grade);
 
             let density = 1.0 - silver;
-
-            let r_p = silver * (1.0 - 0.75 * depth * density);
-            let g_p = silver * (1.0 - 0.35 * depth * density) + 0.02 * depth * density;
-            let b_p = silver * (1.0 - 0.05 * depth * density) + 0.07 * depth * density;
+            let r_p = silver * (1.0 - 0.85 * depth * density);
+            let g_p = silver * (1.0 - 0.45 * depth * density);
+            let b_p = silver * (1.0 - 0.05 * depth * density);
 
             let toned = (r_p.clamp(0.0, 1.0), g_p.clamp(0.0, 1.0), b_p.clamp(0.0, 1.0));
             metal_base_warmth(toned, 8.0 * depth)
         }
-        8 => { // BamakoSilverContact
+        7 => { // BamakoSilverContact
             let raw_lum = (r * filter_weights.0 + g * filter_weights.1 + b * filter_weights.2).clamp(0.0, 1.0);
             let graded = metal_paper_grade(raw_lum, paper_grade);
             let c = graded.clamp(0.0, 1.0);
@@ -255,7 +223,6 @@ fn test_dual_engine_parity_across_all_archetypes() {
     let media_modes = [
         PrintMediaMode::ChromogenicTypeC,
         PrintMediaMode::SilverDyeBleach,
-        PrintMediaMode::FineArtCottonRag,
         PrintMediaMode::BarytaSilverGelatin,
         PrintMediaMode::WarmtoneChlorobromide,
         PrintMediaMode::PlatinumPalladium,
@@ -306,35 +273,6 @@ fn test_dual_engine_parity_across_all_archetypes() {
 }
 
 #[test]
-fn test_cotton_rag_matte_shadow_floor() {
-    // Archival Cotton Rag has a velvety matte shadow floor (Dmax ~ 1.75, reflectance ~0.016)
-    let (r, g, b) = apply_print_media(
-        0.0, 0.0, 0.0,
-        PrintMediaMode::FineArtCottonRag,
-        EnlargerFilterMode::NeutralPanchromatic,
-        0.0,
-        100.0,
-    );
-    assert!(r >= 0.015 && r <= 0.025, "Cotton rag black floor R must be cushioned to velvety floor: {}", r);
-    assert!(g >= 0.015 && g <= 0.025, "Cotton rag black floor G must be cushioned to velvety floor: {}", g);
-    assert!(b >= 0.014 && b <= 0.025, "Cotton rag black floor B must be cushioned to velvety floor: {}", b);
-
-    // Critical Anti-Haze Invariant: Middle gray (0.18) must have ZERO white haze lift
-    let (r_mid, _, _) = apply_print_media(
-        0.18, 0.18, 0.18,
-        PrintMediaMode::FineArtCottonRag,
-        EnlargerFilterMode::NeutralPanchromatic,
-        0.0,
-        100.0,
-    );
-    assert!(
-        (r_mid - 0.18).abs() < 0.005,
-        "Cotton rag must have zero white haze lift at middle gray 0.18: got {}",
-        r_mid
-    );
-}
-
-#[test]
 fn test_cyanotype_prussian_blue_chemistry() {
     // Historic Cyanotype produces intense Prussian blue shadows where Red is heavily absorbed
     let (r, g, b) = apply_print_media(
@@ -346,6 +284,66 @@ fn test_cyanotype_prussian_blue_chemistry() {
     );
     assert!(b > r, "Cyanotype must have dominant blue over red in shadow density: R={}, B={}", r, b);
     assert!(b > g, "Cyanotype must have dominant blue over green in shadow density: G={}, B={}", g, b);
+}
+
+#[test]
+fn test_bw_print_media_boundary_anchoring_and_toning() {
+    let bw_media = [
+        PrintMediaMode::PlatinumPalladium,
+        PrintMediaMode::WarmtoneChlorobromide,
+        PrintMediaMode::Cyanotype,
+        PrintMediaMode::BarytaSilverGelatin,
+        PrintMediaMode::BamakoSilverContact,
+    ];
+
+    // 1. Strict Boundary Anchoring Invariant: f(0.0) == 0.0
+    // Zero additive floor lifts; terminal Dmax must reach absolute black for printability.
+    for &media in &bw_media {
+        let (r, g, b) = apply_print_media(
+            0.0, 0.0, 0.0,
+            media,
+            EnlargerFilterMode::NeutralPanchromatic,
+            0.0,
+            100.0,
+        );
+        assert_eq!(
+            (r, g, b), (0.0, 0.0, 0.0),
+            "{:?} must strictly anchor to (0.0, 0.0, 0.0) at maximum density: got ({}, {}, {})",
+            media, r, g, b
+        );
+    }
+
+    // 2. Platinum / Palladium: Luminous open shadow scale + warm palladium glow
+    let (pt_r, pt_g, pt_b) = apply_print_media(
+        0.05, 0.05, 0.05,
+        PrintMediaMode::PlatinumPalladium,
+        EnlargerFilterMode::NeutralPanchromatic,
+        0.0,
+        100.0,
+    );
+    assert!(
+        pt_r > 0.05,
+        "Platinum/Palladium must lift shadow scale for luminous open shadows: R={}", pt_r
+    );
+    assert!(
+        pt_r > pt_g && pt_g > pt_b,
+        "Platinum/Palladium must exhibit warm amber glow in shadows: R={}, G={}, B={}",
+        pt_r, pt_g, pt_b
+    );
+
+    // 3. Warmtone Chlorobromide: Selenium plum undertone in deep shadows
+    let (ch_r, ch_g, ch_b) = apply_print_media(
+        0.10, 0.10, 0.10,
+        PrintMediaMode::WarmtoneChlorobromide,
+        EnlargerFilterMode::NeutralPanchromatic,
+        0.0,
+        100.0,
+    );
+    assert!(
+        ch_r > ch_g && ch_b > ch_g,
+        "Warmtone Chlorobromide must exhibit selenium plum undertone (R, B > G) in shadows: R={}, G={}, B={}",
+        ch_r, ch_g, ch_b
+    );
 }
 
 #[test]

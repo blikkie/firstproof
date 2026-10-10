@@ -348,7 +348,6 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
             PrintMediaMode::None => "None",
             PrintMediaMode::ChromogenicTypeC => "ChromogenicTypeC",
             PrintMediaMode::SilverDyeBleach => "SilverDyeBleach",
-            PrintMediaMode::FineArtCottonRag => "FineArtCottonRag",
             PrintMediaMode::BarytaSilverGelatin => "BarytaSilverGelatin",
             PrintMediaMode::WarmtoneChlorobromide => "WarmtoneChlorobromide",
             PrintMediaMode::PlatinumPalladium => "PlatinumPalladium",
@@ -717,7 +716,6 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
         data.edits.print_media = match pm_str {
             "ChromogenicTypeC" => PrintMediaMode::ChromogenicTypeC,
             "SilverDyeBleach" => PrintMediaMode::SilverDyeBleach,
-            "FineArtCottonRag" => PrintMediaMode::FineArtCottonRag,
             "BarytaSilverGelatin" => PrintMediaMode::BarytaSilverGelatin,
             "WarmtoneChlorobromide" => PrintMediaMode::WarmtoneChlorobromide,
             "PlatinumPalladium" => PrintMediaMode::PlatinumPalladium,

@@ -143,40 +143,7 @@ pub fn apply_print_media(
             (r_out, g_out, b_out)
         }
 
-        // 3. Archival Fine-Art Cotton Rag (Mineral Pigment)
-        // Velvety matte shadow floor (Dmax ~ 1.75, reflectance ~0.016), unbleached cotton base warmth (+15.0).
-        // Fiber surface scatter: confined strictly to deep shadow toe (x < 0.10), eliminating white haze
-        // and preserving full midtone clarity and contrast across Zone II through Zone X.
-        PrintMediaMode::FineArtCottonRag => {
-            let r_graded = apply_paper_grade(r, paper_grade);
-            let g_graded = apply_paper_grade(g, paper_grade);
-            let b_graded = apply_paper_grade(b, paper_grade);
-
-            let floor = 0.016 * depth;
-            let knee = 0.10;
-            let apply_matte_toe = |c: f32| -> f32 {
-                if c < knee {
-                    let u = 1.0 - c / knee;
-                    c + floor * u * u * (3.0 - 2.0 * u)
-                } else {
-                    c
-                }
-            };
-
-            let r_p = apply_matte_toe(r_graded);
-            let g_p = apply_matte_toe(g_graded);
-            let b_p = apply_matte_toe(b_graded);
-
-            let lum = 0.2627 * r_p + 0.6780 * g_p + 0.0593 * b_p;
-            let pigment_sat = 0.95 + 0.05 * depth;
-            let r_out = (lum + (r_p - lum) * pigment_sat).clamp(0.0, 1.0);
-            let g_out = (lum + (g_p - lum) * pigment_sat).clamp(0.0, 1.0);
-            let b_out = (lum + (b_p - lum) * pigment_sat).clamp(0.0, 1.0);
-
-            apply_base_warmth(r_out, g_out, b_out, 15.0)
-        }
-
-        // 4. Baryta Silver Gelatin FB
+        // 3. Baryta Silver Gelatin FB
         // Neutral barium sulfate base. Smooth continuous Dmax boost without any threshold knees or banding.
         PrintMediaMode::BarytaSilverGelatin => {
             let (wr, wg, wb) = filter.spectral_weights();
@@ -189,9 +156,9 @@ pub fn apply_print_media(
             (silver_toned, silver_toned, silver_toned)
         }
 
-        // 5. Warmtone Chlorobromide (Selenium Toned)
+        // 4. Warmtone Chlorobromide (Selenium Toned)
         // Deep velvety Dmax with subtle cool plum-black depths and warm charcoal midtones (+5.0 base warmth).
-        // Uses smooth parabolic harmonic bell curve for midtone dye deposition.
+        // Strictly boundary-anchored (f(0.0) = 0.0, f(1.0) = 1.0) with colloidal selenium dye deposition.
         PrintMediaMode::WarmtoneChlorobromide => {
             let (wr, wg, wb) = filter.spectral_weights();
             let raw_lum = (wr * r + wg * g + wb * b).clamp(0.0, 1.0);
@@ -200,12 +167,15 @@ pub fn apply_print_media(
             let shadow_pow = 1.0 + 0.10 * depth;
             let silver_deep = silver.powf(shadow_pow);
 
+            // Harmonic masks vanishing strictly at 0.0 and 1.0:
+            // mid_mask peaks at 0.50 for warm charcoal midtones
+            // shadow_mask peaks around 0.15 for subtle selenium plum-black shadows
             let mid_mask = 4.0 * silver * (1.0 - silver);
-            let shadow_density = (1.0 - silver).max(0.0);
+            let shadow_mask = 4.0 * silver * (1.0 - silver) * (1.0 - silver);
 
-            let r_tone = silver_deep + depth * (mid_mask * 0.030 + shadow_density * 0.020);
-            let g_tone = silver_deep + depth * (mid_mask * 0.012 - shadow_density * 0.015);
-            let b_tone = silver_deep + depth * (-mid_mask * 0.018 + shadow_density * 0.030);
+            let r_tone = silver_deep + depth * (mid_mask * 0.025 + shadow_mask * 0.020);
+            let g_tone = silver_deep + depth * (mid_mask * 0.010 - shadow_mask * 0.012);
+            let b_tone = silver_deep + depth * (-mid_mask * 0.015 + shadow_mask * 0.025);
 
             let r_toned = r_tone.clamp(0.0, 1.0);
             let g_toned = g_tone.clamp(0.0, 1.0);
@@ -214,20 +184,24 @@ pub fn apply_print_media(
             apply_base_warmth(r_toned, g_toned, b_toned, 5.0)
         }
 
-        // 6. Platinum / Palladium (Noble Metal Cotton Rag)
-        // Gentle warm noble-metal midtone luminescence with soft matte fiber shadow floor (+10.0 warmth * depth).
+        // 5. Platinum / Palladium (Noble Metal Cotton Rag)
+        // Authentic sensitometric noble-metal characteristic curve: luminous open shadow toe
+        // with strict boundary anchoring (f(0.0) = 0.0, f(1.0) = 1.0) and rich colloidal palladium warmth.
         PrintMediaMode::PlatinumPalladium => {
             let (wr, wg, wb) = filter.spectral_weights();
             let raw_lum = (wr * r + wg * g + wb * b).clamp(0.0, 1.0);
             let silver = apply_paper_grade(raw_lum, paper_grade);
 
-            let matte_floor = 0.035 * depth;
-            let silver_base = matte_floor + (1.0 - matte_floor) * silver;
+            // Luminous open shadow scale via cubic polynomial toe modulation:
+            // Strictly monotonic: f(0) = 0, f(1) = 1, f'(x) > 0 for all x in [0, 1].
+            let pt_scale = silver + depth * 0.10 * silver * (1.0 - silver) * (1.0 - silver);
 
-            let warm_lift = (1.0 - silver_base.powf(0.6)).max(0.0) * depth;
-            let r_tone = silver_base + warm_lift * 0.045;
-            let g_tone = silver_base + warm_lift * 0.028;
-            let b_tone = silver_base - warm_lift * 0.020;
+            // Harmonic bell curve colloidal palladium warmth (peaks in lower midtones around Zone III-IV):
+            // Vanishes at x=0 (deep velvety neutral charcoal black) and x=1 (pure paper base).
+            let mid_warmth = 4.0 * silver * (1.0 - silver);
+            let r_tone = pt_scale + depth * mid_warmth * 0.040;
+            let g_tone = pt_scale + depth * mid_warmth * 0.024;
+            let b_tone = pt_scale - depth * mid_warmth * 0.016;
 
             let r_toned = r_tone.clamp(0.0, 1.0);
             let g_toned = g_tone.clamp(0.0, 1.0);
@@ -236,8 +210,9 @@ pub fn apply_print_media(
             apply_base_warmth(r_toned, g_toned, b_toned, 10.0 * depth)
         }
 
-        // 7. Historic Cyanotype (1842 Prussian Blue Iron Salts)
+        // 6. Historic Cyanotype (1842 Prussian Blue Iron Salts)
         // Authentic subtractive ferric ferrocyanide pigment chemistry (+8.0 warmth * depth).
+        // Strictly boundary-anchored (f(0.0) = 0.0, f(1.0) = 1.0).
         PrintMediaMode::Cyanotype => {
             let (wr, wg, wb) = filter.spectral_weights();
             let raw_lum = (wr * r + wg * g + wb * b).clamp(0.0, 1.0);
@@ -246,9 +221,9 @@ pub fn apply_print_media(
             let density = 1.0 - silver;
 
             // Subtractive Prussian blue: Red & Green absorbed by pigment, Blue transmits
-            let r_p = silver * (1.0 - 0.75 * depth * density);
-            let g_p = silver * (1.0 - 0.35 * depth * density) + 0.02 * depth * density;
-            let b_p = silver * (1.0 - 0.05 * depth * density) + 0.07 * depth * density;
+            let r_p = silver * (1.0 - 0.85 * depth * density);
+            let g_p = silver * (1.0 - 0.45 * depth * density);
+            let b_p = silver * (1.0 - 0.05 * depth * density);
 
             let r_toned = r_p.clamp(0.0, 1.0);
             let g_toned = g_p.clamp(0.0, 1.0);
@@ -257,7 +232,7 @@ pub fn apply_print_media(
             apply_base_warmth(r_toned, g_toned, b_toned, 8.0 * depth)
         }
 
-        // 8. Bamako Silver Contact (Seydou Keïta & Malick Sidibé, Bamako, Mali)
+        // 7. Bamako Silver Contact (Seydou Keïta & Malick Sidibé, Bamako, Mali)
         // High-Dmax ferrotype contact print; Zone III-V expansion on deep skin tones, crisp textile acutance.
         PrintMediaMode::BamakoSilverContact => {
             let (wr, wg, wb) = filter.spectral_weights();

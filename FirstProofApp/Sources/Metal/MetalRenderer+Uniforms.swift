@@ -125,18 +125,16 @@ extension MetalRenderer {
             uniforms.printMediaMode = 1
         case .silverDyeBleach:
             uniforms.printMediaMode = 2
-        case .fineArtCottonRag:
-            uniforms.printMediaMode = 3
         case .barytaSilverGelatin:
-            uniforms.printMediaMode = 4
+            uniforms.printMediaMode = 3
         case .warmtoneChlorobromide:
-            uniforms.printMediaMode = 5
+            uniforms.printMediaMode = 4
         case .platinumPalladium:
-            uniforms.printMediaMode = 6
+            uniforms.printMediaMode = 5
         case .cyanotype:
-            uniforms.printMediaMode = 7
+            uniforms.printMediaMode = 6
         case .bamakoSilverContact:
-            uniforms.printMediaMode = 8
+            uniforms.printMediaMode = 7
         }
         
         switch edits.enlargerFilter {

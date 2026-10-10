@@ -31,6 +31,9 @@ This document strictly tracks pending and deferred features calibrated against o
 - **Canvas Soft Proofing Mode**:
   - Canvas toolbar mode simulating sRGB and standard print gamut clipping (e.g., ISO Coated v2 / US Web Coated SWOP) on wide-gamut displays.
   - Gamut warning overlay highlighting out-of-gamut pixels in high-contrast overlay color.
+- **Paper Substrate & Media Proofing (Decoupled from Develop Adjustments)**:
+  - Substrate white-point reflectance and ink absorption limits (e.g. unbleached cotton rag matte, Hahnemühle Photo Rag, baryta surface sheen) simulate the physical print media viewing environment via LittleCMS2 ICC proofing transforms.
+  - Enforces the architectural invariant that develop adjustments never apply additive digital floor lifts to simulate paper—true carbon black ($D_{\max}$) is always preserved at $f(0.0) \equiv 0.0$ for output print fidelity.
 
 ### 3.23 Physical Proof Run Calibration & Real-Paper Dmax Verification (P2)
 - **Physical Test Batch Print Proofing**:

@@ -250,7 +250,6 @@ pub enum PrintMediaMode {
     None,
     ChromogenicTypeC,
     SilverDyeBleach,
-    FineArtCottonRag,
     BarytaSilverGelatin,
     WarmtoneChlorobromide,
     PlatinumPalladium,
@@ -278,12 +277,11 @@ impl PrintMediaMode {
             Self::None => 0,
             Self::ChromogenicTypeC => 1,
             Self::SilverDyeBleach => 2,
-            Self::FineArtCottonRag => 3,
-            Self::BarytaSilverGelatin => 4,
-            Self::WarmtoneChlorobromide => 5,
-            Self::PlatinumPalladium => 6,
-            Self::Cyanotype => 7,
-            Self::BamakoSilverContact => 8,
+            Self::BarytaSilverGelatin => 3,
+            Self::WarmtoneChlorobromide => 4,
+            Self::PlatinumPalladium => 5,
+            Self::Cyanotype => 6,
+            Self::BamakoSilverContact => 7,
         }
     }
 
@@ -291,12 +289,11 @@ impl PrintMediaMode {
         match id {
             1 => Self::ChromogenicTypeC,
             2 => Self::SilverDyeBleach,
-            3 => Self::FineArtCottonRag,
-            4 => Self::BarytaSilverGelatin,
-            5 => Self::WarmtoneChlorobromide,
-            6 => Self::PlatinumPalladium,
-            7 => Self::Cyanotype,
-            8 => Self::BamakoSilverContact,
+            3 => Self::BarytaSilverGelatin,
+            4 => Self::WarmtoneChlorobromide,
+            5 => Self::PlatinumPalladium,
+            6 => Self::Cyanotype,
+            7 => Self::BamakoSilverContact,
             _ => Self::None,
         }
     }

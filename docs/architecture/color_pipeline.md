@@ -87,3 +87,18 @@ To prevent tone-curve collisions (double tone-mapping), out-of-gamut clipping, a
    - Emulsion profiles and darkroom print toners are strictly opt-in creative tools. The pipeline default is always pure optical sensor capture (Camera DCP + AgX).
    - Upstream in-camera recording chemistry (DIR couplers) and downstream darkroom printmaking (enlarger filtration, silver paper D-log H, archival toning) are orthogonal stages. Neither replaces or overrides the other.
    - For detailed manufacturer publication codes and sensitometric characteristic curve derivations, see [sensitometric_emulsion_references.md](sensitometric_emulsion_references.md).
+
+8. **Print Media Sensitometry, Boundary Anchoring & Substrate Decoupling**:
+   - Darkroom print media archetypes model authentic photochemical and noble-metal processes:
+     1. **Chromogenic Type-C**: RA-4 cyan/magenta/yellow dye coupling on resin-coated base with highlight compression.
+     2. **Silver Dye-Bleach Classic**: Subtractive azo dye destruction reversal on polyester base ($D_{\max} > 3.0$).
+     3. **Baryta Silver Gelatin FB**: Neutral barium sulfate ($\text{BaSO}_4$) fiber base holding metallic silver filaments.
+     4. **Warmtone Chlorobromide**: Colloidal selenium dye deposition shifting silver to warm charcoal and plum tones.
+     5. **Platinum / Palladium**: UV reduction of ferric oxalate to elemental noble metal with luminous open shadow toe and warm colloidal palladium midtones.
+     6. **Historic Cyanotype**: 1842 Sir John Herschel ferric ferrocyanide Prussian blue salts.
+     7. **Bamako Silver Contact**: High-silver contact paper ferrotyped to glass (Keïta / Sidibé).
+   - **Strict Boundary Anchoring Invariant ($f(0.0) \equiv 0.0, f(1.0) \equiv 1.0$)**:
+     - Additive digital black floor lifts (`+ 0.016` to `+ 0.035`) are forbidden in develop adjustments. They violate physical printer color management: causing inkjet drivers to starve print heads of carbon black pigment ($D_{\max}$), double-washing out physical prints, and casting unnatural cloudy veils on wide-gamut displays.
+     - Luminous open shadow graduation in noble metals (Platinum/Palladium) is formulated via analytical cubic toe cushioning $f(x) = x + \alpha \cdot x(1-x)^2$ and harmonic colloidal dye toning, preserving absolute terminal black.
+   - **Substrate Decoupling**:
+     - Paper substrates (unbleached cotton rag, alpha-cellulose, base reflectance, OBA white points, substrate absorption limits) belong exclusively in **Soft Proofing via ICC profiles (Story 3.4)**, not develop adjustments.

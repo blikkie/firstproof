@@ -242,7 +242,6 @@ public struct EmulsionWorkspaceView: View {
                         Section("Color Print Media") {
                             Text("Gallery Chromogenic Type-C (RA-4)").tag(PrintMediaMode.chromogenicTypeC)
                             Text("Silver Dye-Bleach Classic (Azo Reversal)").tag(PrintMediaMode.silverDyeBleach)
-                            Text("Archival Fine-Art Cotton Rag (Mineral)").tag(PrintMediaMode.fineArtCottonRag)
                         }
                         
                         Section("Monochrome Media & Archival Chemistry") {
@@ -413,14 +412,12 @@ public struct EmulsionWorkspaceView: View {
             return "Classic gallery C-print standard (RA-4). The historical baseline for modern color expectations—intentionally subtle by default, with creamy highlight roll-off and organic CMY dye weight. Shape character with Paper Grade and Warmth."
         case .silverDyeBleach:
             return "High-gloss reversal print with pure azo dyes. Ultra-deep shadow density (Dmax > 3.0), punchy micro-contrast, and glowing gem tones."
-        case .fineArtCottonRag:
-            return "100% unbleached cotton base with mineral pigment. Velvety matte shadow floor (Dmax ≈ 1.65), natural paper warmth, and glare-free breadth."
         case .barytaSilverGelatin:
             return "Neutral barium sulfate (BaSO4) fiber base. Deep Dmax ≈ 2.2, crisp midtone silver separation, and pure neutral silver blacks."
         case .warmtoneChlorobromide:
             return "Warm fiber base chlorobromide with archival selenium toning. Cool plum-black shadow depths, warm charcoal midtones, and delicate highlights."
         case .platinumPalladium:
-            return "Noble metal hand-coated on cotton rag. Delicate long midtone graduation, soft non-clipping highlights, and matte charcoal Dmax ≈ 1.6."
+            return "Noble metal hand-coated on cotton rag. Delicate long midtone graduation, luminous open shadow toe, and rich colloidal palladium warmth."
         case .cyanotype:
             return "1842 Sir John Herschel Prussian blue iron-salt process. Rich cyan-blue shadow density and slight warm ivory highlight base."
         case .bamakoSilverContact:

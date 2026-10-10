@@ -1048,7 +1048,6 @@ extension AppViewModel {
         case .none: title = "Print Media: None (Display)"
         case .chromogenicTypeC: title = "Print Media: Chromogenic Type-C"
         case .silverDyeBleach: title = "Print Media: Silver Dye-Bleach"
-        case .fineArtCottonRag: title = "Print Media: Cotton Rag"
         case .barytaSilverGelatin: title = "Print Media: Baryta Silver Gelatin"
         case .warmtoneChlorobromide: title = "Print Media: Warmtone Chlorobromide"
         case .platinumPalladium: title = "Print Media: Platinum/Palladium"

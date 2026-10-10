@@ -97,7 +97,7 @@ describe('Edit Settings & Modification Invariants', () => {
       ).toBe(true);
       expect(
         hasModifications(
-          { ...edits, print_media: 'FineArtCottonRag' },
+          { ...edits, print_media: 'PlatinumPalladium' },
           1,
           0,
           'Unflagged',

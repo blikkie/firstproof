@@ -49,8 +49,8 @@ fn test_synthetic_macbeth_and_neutral_ramp_dual_engine_parity() {
             enlarger_filter: EnlargerFilterMode::Red25A,
             ..Default::default()
         }),
-        ("Fine Art Cotton Rag Print Media", EditSettings {
-            print_media: PrintMediaMode::FineArtCottonRag,
+        ("Platinum / Palladium Print Media", EditSettings {
+            print_media: PrintMediaMode::PlatinumPalladium,
             print_paper_grade: 1.0,
             print_base_warmth: 15.0,
             print_process_depth: 80.0,

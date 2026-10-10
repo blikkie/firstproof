@@ -552,35 +552,7 @@ inline float3 applyPrintMedia(
             
             return float3(rOut, gOut, bOut);
         }
-        case 3: { // FineArtCottonRag (Mineral Pigment)
-            float rG = applyPaperGrade(rgb.r, paperGrade);
-            float gG = applyPaperGrade(rgb.g, paperGrade);
-            float bG = applyPaperGrade(rgb.b, paperGrade);
-            
-            // Velvety matte shadow floor confined to deep shadows (c < 0.10) to eliminate white haze
-            float floor = 0.016 * depth;
-            float knee = 0.10;
-            auto applyMatteToe = [floor, knee](float c) -> float {
-                if (c < knee) {
-                    float u = 1.0 - c / knee;
-                    return c + floor * u * u * (3.0 - 2.0 * u);
-                }
-                return c;
-            };
-            
-            float rP = applyMatteToe(rG);
-            float gP = applyMatteToe(gG);
-            float bP = applyMatteToe(bG);
-            
-            float lum = 0.2627 * rP + 0.6780 * gP + 0.0593 * bP;
-            float pigmentSat = 0.95 + 0.05 * depth;
-            float rOut = clamp(lum + (rP - lum) * pigmentSat, 0.0, 1.0);
-            float gOut = clamp(lum + (gP - lum) * pigmentSat, 0.0, 1.0);
-            float bOut = clamp(lum + (bP - lum) * pigmentSat, 0.0, 1.0);
-            
-            return applyBaseWarmth(float3(rOut, gOut, bOut), 15.0);
-        }
-        case 4: { // BarytaSilverGelatin
+        case 3: { // BarytaSilverGelatin
             float3 w = getEnlargerFilterWeights(filterMode);
             float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
             float silver = applyPaperGrade(rawLum, paperGrade);
@@ -590,7 +562,7 @@ inline float3 applyPrintMedia(
             
             return float3(silverToned);
         }
-        case 5: { // WarmtoneChlorobromide (Selenium Toned)
+        case 4: { // WarmtoneChlorobromide (Selenium Toned)
             float3 w = getEnlargerFilterWeights(filterMode);
             float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
             float silver = applyPaperGrade(rawLum, paperGrade);
@@ -598,47 +570,48 @@ inline float3 applyPrintMedia(
             float shadowPow = 1.0 + 0.10 * depth;
             float silverDeep = pow(silver, shadowPow);
             
-            // Smooth parabolic harmonic bell curve for midtone dye deposition
+            // Harmonic masks vanishing strictly at 0.0 and 1.0
             float midMask = 4.0 * silver * (1.0 - silver);
-            float shadowDensity = max(1.0 - silver, 0.0);
+            float shadowMask = 4.0 * silver * (1.0 - silver) * (1.0 - silver);
             
-            float rTone = silverDeep + depth * (midMask * 0.030 + shadowDensity * 0.020);
-            float gTone = silverDeep + depth * (midMask * 0.012 - shadowDensity * 0.015);
-            float bTone = silverDeep + depth * (-midMask * 0.018 + shadowDensity * 0.030);
+            float rTone = silverDeep + depth * (midMask * 0.025 + shadowMask * 0.020);
+            float gTone = silverDeep + depth * (midMask * 0.010 - shadowMask * 0.012);
+            float bTone = silverDeep + depth * (-midMask * 0.015 + shadowMask * 0.025);
             
             float3 toned = clamp(float3(rTone, gTone, bTone), 0.0, 1.0);
             return applyBaseWarmth(toned, 5.0);
         }
-        case 6: { // PlatinumPalladium
+        case 5: { // PlatinumPalladium
             float3 w = getEnlargerFilterWeights(filterMode);
             float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
             float silver = applyPaperGrade(rawLum, paperGrade);
             
-            float matteFloor = 0.035 * depth;
-            float silverBase = matteFloor + (1.0 - matteFloor) * silver;
+            // Luminous open shadow scale via cubic polynomial toe modulation (f(0) = 0, f(1) = 1)
+            float ptScale = silver + depth * 0.10 * silver * (1.0 - silver) * (1.0 - silver);
             
-            float warmLift = max(1.0 - pow(silverBase, 0.6), 0.0) * depth;
-            float rTone = silverBase + warmLift * 0.045;
-            float gTone = silverBase + warmLift * 0.028;
-            float bTone = silverBase - warmLift * 0.020;
+            // Harmonic bell curve colloidal palladium warmth
+            float midWarmth = 4.0 * silver * (1.0 - silver);
+            float rTone = ptScale + depth * midWarmth * 0.040;
+            float gTone = ptScale + depth * midWarmth * 0.024;
+            float bTone = ptScale - depth * midWarmth * 0.016;
             
             float3 toned = clamp(float3(rTone, gTone, bTone), 0.0, 1.0);
             return applyBaseWarmth(toned, 10.0 * depth);
         }
-        case 7: { // Cyanotype
+        case 6: { // Cyanotype
             float3 w = getEnlargerFilterWeights(filterMode);
             float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
             float silver = applyPaperGrade(rawLum, paperGrade);
             
             float density = 1.0 - silver;
-            float rP = silver * (1.0 - 0.75 * depth * density);
-            float gP = silver * (1.0 - 0.35 * depth * density) + 0.02 * depth * density;
-            float bP = silver * (1.0 - 0.05 * depth * density) + 0.07 * depth * density;
+            float rP = silver * (1.0 - 0.85 * depth * density);
+            float gP = silver * (1.0 - 0.45 * depth * density);
+            float bP = silver * (1.0 - 0.05 * depth * density);
             
             float3 toned = clamp(float3(rP, gP, bP), 0.0, 1.0);
             return applyBaseWarmth(toned, 8.0 * depth);
         }
-        case 8: { // BamakoSilverContact (Seydou Keïta & Malick Sidibé, Bamako, Mali)
+        case 7: { // BamakoSilverContact (Seydou Keïta & Malick Sidibé, Bamako, Mali)
             float3 w = getEnlargerFilterWeights(filterMode);
             float rawLum = clamp(dot(rgb, w), 0.0, 1.0);
             float graded = applyPaperGrade(rawLum, paperGrade);

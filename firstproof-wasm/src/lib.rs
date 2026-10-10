@@ -800,7 +800,6 @@ export type PrintMediaMode =
     | 'None'
     | 'ChromogenicTypeC'
     | 'SilverDyeBleach'
-    | 'FineArtCottonRag'
     | 'BarytaSilverGelatin'
     | 'WarmtoneChlorobromide'
     | 'PlatinumPalladium'
