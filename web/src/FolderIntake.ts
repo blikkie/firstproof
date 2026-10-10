@@ -1,8 +1,23 @@
+interface FileSystemHandlePermissionDescriptor {
+  mode?: 'read' | 'readwrite';
+}
+
+export interface FileSystemDirectoryHandleExtended
+  extends FileSystemDirectoryHandle {
+  values(): AsyncIterableIterator<FileSystemHandle>;
+  queryPermission?(
+    descriptor?: FileSystemHandlePermissionDescriptor,
+  ): Promise<PermissionState>;
+  requestPermission?(
+    descriptor?: FileSystemHandlePermissionDescriptor,
+  ): Promise<PermissionState>;
+}
+
 export interface PhotoFileEntry {
   name: string;
   file: File;
-  handle?: any; // FileSystemFileHandle if showDirectoryPicker used
-  dirHandle?: any; // FileSystemDirectoryHandle
+  handle?: FileSystemFileHandle;
+  dirHandle?: FileSystemDirectoryHandleExtended;
 }
 
 export class FolderIntake {
@@ -36,8 +51,8 @@ export class FolderIntake {
   ]);
 
   private static async scanDirectoryHandle(
-    dirHandle: any,
-    rootDirHandle?: any,
+    dirHandle: FileSystemDirectoryHandleExtended,
+    rootDirHandle?: FileSystemDirectoryHandleExtended,
     depth = 0,
   ): Promise<PhotoFileEntry[]> {
     const entries: PhotoFileEntry[] = [];
@@ -50,11 +65,12 @@ export class FolderIntake {
         FolderIntake.isSupportedExtension(entry.name)
       ) {
         try {
-          const file = await entry.getFile();
+          const fileHandle = entry as FileSystemFileHandle;
+          const file = await fileHandle.getFile();
           entries.push({
             name: entry.name,
             file,
-            handle: entry,
+            handle: fileHandle,
             dirHandle: parentDir,
           });
         } catch (e) {
@@ -66,8 +82,9 @@ export class FolderIntake {
         !FolderIntake.IGNORED_DIRS.has(entry.name)
       ) {
         try {
+          const subDir = entry as FileSystemDirectoryHandleExtended;
           const subEntries = await FolderIntake.scanDirectoryHandle(
-            entry,
+            subDir,
             parentDir,
             depth + 1,
           );
@@ -86,7 +103,7 @@ export class FolderIntake {
   // Tier 1: Modern File System Access API
   public static async openDirectoryPicker(): Promise<{
     entries: PhotoFileEntry[];
-    dirHandle?: any;
+    dirHandle?: FileSystemDirectoryHandleExtended;
     cancelled?: boolean;
   }> {
     const isSupported = 'showDirectoryPicker' in window;
@@ -96,7 +113,11 @@ export class FolderIntake {
 
     if (isSupported) {
       try {
-        const dirHandle = await (window as any).showDirectoryPicker();
+        const win = window as Window & {
+          showDirectoryPicker?: () => Promise<FileSystemDirectoryHandleExtended>;
+        };
+        const dirHandle = await win.showDirectoryPicker?.();
+        if (!dirHandle) return { entries: [], cancelled: false };
         const entries = await FolderIntake.scanDirectoryHandle(dirHandle);
 
         // Sort by name
@@ -111,8 +132,8 @@ export class FolderIntake {
         );
         await FolderIntake.saveRecentDirHandle(dirHandle);
         return { entries, dirHandle, cancelled: false };
-      } catch (err: any) {
-        if (err.name === 'AbortError') {
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
           return { entries: [], cancelled: true };
         }
         console.warn('[FolderIntake] showDirectoryPicker failed:', err);
@@ -137,7 +158,9 @@ export class FolderIntake {
     });
   }
 
-  public static async saveRecentDirHandle(dirHandle: any): Promise<void> {
+  public static async saveRecentDirHandle(
+    dirHandle: FileSystemDirectoryHandleExtended,
+  ): Promise<void> {
     try {
       if (dirHandle?.name) {
         localStorage.setItem('fp_recent_folder_name', dirHandle.name);
@@ -162,7 +185,7 @@ export class FolderIntake {
   }
 
   public static async getRecentDirHandle(): Promise<{
-    dirHandle: any;
+    dirHandle: FileSystemDirectoryHandleExtended;
     name: string;
   } | null> {
     try {
@@ -191,14 +214,20 @@ export class FolderIntake {
   }
 
   public static async processDirectoryHandle(
-    dirHandle: any,
+    dirHandle: FileSystemDirectoryHandleExtended,
   ): Promise<PhotoFileEntry[]> {
-    if (dirHandle.queryPermission) {
+    if (typeof dirHandle.queryPermission === 'function') {
       let perm = await dirHandle.queryPermission({ mode: 'readwrite' });
-      if (perm !== 'granted') {
+      if (
+        perm !== 'granted' &&
+        typeof dirHandle.requestPermission === 'function'
+      ) {
         perm = await dirHandle.requestPermission({ mode: 'readwrite' });
       }
-      if (perm !== 'granted') {
+      if (
+        perm !== 'granted' &&
+        typeof dirHandle.requestPermission === 'function'
+      ) {
         perm = await dirHandle.requestPermission({ mode: 'read' });
       }
     }
@@ -241,11 +270,14 @@ export class FolderIntake {
   ): Promise<boolean> {
     if (entry.dirHandle) {
       try {
-        if (entry.dirHandle.queryPermission) {
+        if (typeof entry.dirHandle.queryPermission === 'function') {
           const perm = await entry.dirHandle.queryPermission({
             mode: 'readwrite',
           });
-          if (perm !== 'granted') {
+          if (
+            perm !== 'granted' &&
+            typeof entry.dirHandle.requestPermission === 'function'
+          ) {
             const req = await entry.dirHandle.requestPermission({
               mode: 'readwrite',
             });

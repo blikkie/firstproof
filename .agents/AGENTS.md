@@ -16,6 +16,12 @@
   - **The Steering Loop**: Whenever an error, edge-case failure, or architectural regression is encountered, do not just patch the code or add verbal instructions to a prompt. Feed it back into the harness: add a permanent computational sensor (a unit test, parity assertion, or fitness function) so that class of failure is structurally impossible in the future.
   - **Lifecycle Hooks vs. Prompt Rules Decision Framework**:
     - **When to Use a Lifecycle Hook (`.agents/hooks.json`)**: If a policy can be stated as *"Never execute tool X with argument Y"* (e.g. reading 4,400-line generated files like `firstproof_core.swift`) or *"Always run check Z before action W"*, it MUST be codified as a deterministic lifecycle hook rather than an inferential prompt guideline. Hooks execute out-of-band, cost zero context tokens during normal execution, and physically prevent regressions by denying unauthorized actions or rewriting unsafe invocations.
+    - **Anti-Hedge & First-Party Internal Invariant**:
+      - Never introduce speculative defensive shims, `typeof x === 'function'` existence checks, optional property wrappers (`fn?: ...`), or runtime fallback branches for first-party internal crates (`firstproof-wasm`, `firstproof-core`, UniFFI bridge). First-party modules are compiled from the same monorepo.
+      - Statically import and invoke internal functions directly.
+      - Never degrade functionality through semantic fallbacks (e.g. falling back to 2×2 binned preview when full linear is requested) or dead manual pointer math.
+      - Never swallow Rust UniFFI errors in Swift with `try? FirstProof...`—always propagate or log specific Rust errors via do-catch.
+      - Enforced deterministically by `./scripts/anti_slop_sensor.py`, step 1 of `./scripts/check.sh`, and `.pre-commit-config.yaml` (`pre-commit`).
   - **Inner-Loop vs. Outer-Loop Verification Policy**:
     - **Fast Inner Loop (Targeted Sensors Only)**: During rapid iterative coding, NEVER run the slow full `./scripts/check.sh` or `make check` suite (which runs multi-minute DNG conversions, full opcode matrices, WASM packing, and production bundling). Run strictly targeted, sub-second sensors matching the touched files:
       - Rust core/engine math & parity: `cargo test --manifest-path firstproof-core/Cargo.toml --test <test_name>`

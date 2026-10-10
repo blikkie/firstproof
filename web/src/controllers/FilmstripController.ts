@@ -425,11 +425,11 @@ export class FilmstripController {
         if (cached) {
           if (cached instanceof Blob) {
             previewUrl = URL.createObjectURL(cached);
-          } else if ((cached as any).blob) {
-            previewUrl = URL.createObjectURL((cached as any).blob);
-            cardRot = (cached as any).rotation ?? 0;
-            cardFlipH = (cached as any).flipH ?? false;
-            cardFlipV = (cached as any).flipV ?? false;
+          } else {
+            previewUrl = URL.createObjectURL(cached.blob);
+            cardRot = cached.rotation ?? 0;
+            cardFlipH = cached.flipH ?? false;
+            cardFlipV = cached.flipV ?? false;
           }
           if (previewUrl) {
             this.thumbCache.set(idx, previewUrl);

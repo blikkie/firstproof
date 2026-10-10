@@ -74,6 +74,10 @@ test-parity:
 test-calibration:
 	GIT_CONFIG_GLOBAL=/dev/null cargo run --manifest-path firstproof-core/Cargo.toml --target $(RUST_TARGET) --bin calibrate
 
+setup-hooks:
+	pre-commit install
+	@echo "✅ Pre-commit hooks installed (.git/hooks/pre-commit)"
+
 clean:
 	cargo clean
 	rm -rf FirstProofBridge/Sources/FirstProofBridge/firstproof_*.swift FirstProofBridge/Sources/FirstProofCoreFFI/include/firstproof_*FFI.h FirstProofBridge/Sources/FirstProofCoreFFI/include/module.modulemap FirstProofBridge/Sources/FirstProofCoreFFI/include/libfirstproof_core.a

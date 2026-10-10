@@ -18,7 +18,7 @@ export interface ExportExecutionOptions {
   colorSpace: 'sRGB';
   sizeOption: 'Original' | '2048' | '3840' | 'Custom';
   customDimension: number;
-  destinationDirHandle?: any;
+  destinationDirHandle?: FileSystemDirectoryHandle | null;
   demosaicQuality?: 'Standard' | 'Archival';
 }
 
@@ -35,7 +35,7 @@ export class ExportModal {
   private isExporting: boolean = false;
 
   // Form State matching ExportSheetView.swift @State variables
-  private destinationDirHandle: any = null;
+  private destinationDirHandle: FileSystemDirectoryHandle | null = null;
   private destinationName: string = '~/Downloads (Browser Default)';
   private exportFormat: 'JPEG' | 'TIFF' = 'JPEG';
   private quality: number = 90;
@@ -94,7 +94,10 @@ export class ExportModal {
     btnBrowse?.addEventListener('click', async () => {
       if ('showDirectoryPicker' in window) {
         try {
-          const handle = await (window as any).showDirectoryPicker();
+          const win = window as Window & {
+            showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+          };
+          const handle = await win.showDirectoryPicker?.();
           if (handle) {
             this.destinationDirHandle = handle;
             this.destinationName = handle.name
@@ -103,13 +106,13 @@ export class ExportModal {
             this.resetStatusMessage();
             this.updateDestinationDisplay();
           }
-        } catch (err: any) {
-          if (err.name === 'AbortError') {
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name === 'AbortError') {
             return;
           }
-          const msg = err.message || '';
+          const msg = err instanceof Error ? err.message : String(err);
           if (
-            err.name === 'SecurityError' ||
+            (err instanceof Error && err.name === 'SecurityError') ||
             msg.toLowerCase().includes('system') ||
             msg.toLowerCase().includes('sensitive')
           ) {
@@ -119,8 +122,9 @@ export class ExportModal {
             );
           } else {
             console.warn('[ExportModal] Browse folder failed:', err);
+            const errName = err instanceof Error ? err.name : '';
             this.setStatusMessage(
-              `Could not select folder: ${msg || err.name}`,
+              `Could not select folder: ${msg || errName || 'Unknown error'}`,
               true,
             );
           }
@@ -392,15 +396,13 @@ export class ExportModal {
           true,
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       this.isExporting = false;
       spinner?.classList.add('hidden');
       if (btnPerform) btnPerform.disabled = false;
       if (btnCancel) btnCancel.disabled = false;
-      this.setStatusMessage(
-        `Export failed: ${err?.message || 'Unknown error'}`,
-        true,
-      );
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      this.setStatusMessage(`Export failed: ${errMsg}`, true);
     }
   }
 }

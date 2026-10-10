@@ -1,0 +1,23 @@
+repos:
+  - repo: local
+    hooks:
+      - id: anti-slop-sensor
+        name: Architectural Anti-Slop & Invariant Sensor
+        entry: python3 scripts/anti_slop_sensor.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: web-lint
+        name: Web Biome Linter
+        entry: npm --prefix web run lint
+        language: system
+        pass_filenames: false
+        files: ^web/
+
+      - id: web-typecheck
+        name: Web TypeScript Typecheck
+        entry: npm --prefix web run typecheck
+        language: system
+        pass_filenames: false
+        files: ^web/

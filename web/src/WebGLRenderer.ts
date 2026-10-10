@@ -296,8 +296,8 @@ export class WebGLRenderer {
   ) {
     this.isLinearRec2020 = false;
     this.isIntermediate = false;
-    this.texWidth = (image as any).width || 1920;
-    this.texHeight = (image as any).height || 1080;
+    this.texWidth = image.width || 1920;
+    this.texHeight = image.height || 1080;
     const gl = this.gl;
     if (!this.texture) {
       this.texture = gl.createTexture();
@@ -339,8 +339,8 @@ export class WebGLRenderer {
   ) {
     this.isLinearRec2020 = false;
     this.isIntermediate = true;
-    this.texWidth = (image as any).width || 1920;
-    this.texHeight = (image as any).height || 1080;
+    this.texWidth = image.width || 1920;
+    this.texHeight = image.height || 1080;
     const gl = this.gl;
     if (!this.texture) {
       this.texture = gl.createTexture();
@@ -633,11 +633,11 @@ export class WebGLRenderer {
     gl.uniform1i(this.uLocs['u_isIntermediate'], this.isIntermediate ? 1 : 0);
     gl.uniform1f(
       this.uLocs['u_perspectiveVertical'],
-      (edits as any).perspective_vertical ?? 0.0,
+      edits.perspective_vertical ?? 0.0,
     );
     gl.uniform1f(
       this.uLocs['u_perspectiveHorizontal'],
-      (edits as any).perspective_horizontal ?? 0.0,
+      edits.perspective_horizontal ?? 0.0,
     );
 
     if (this.texture) {
@@ -703,8 +703,8 @@ export class WebGLRenderer {
     };
     const formatMag = formatMagMap[edits.emulsion_format] ?? 1.0;
     gl.uniform1f(this.uLocs['u_formatMagnification'], formatMag);
-    const grainSize = (edits as any).grain_size ?? edits.grain_scale ?? 1.0;
-    const grainAmount = (edits as any).grain_amount ?? 1.0;
+    const grainSize = edits.grain_size ?? edits.grain_scale ?? 1.0;
+    const grainAmount = edits.grain_amount ?? 1.0;
     gl.uniform1f(this.uLocs['u_grainScale'], grainSize);
     gl.uniform1f(this.uLocs['u_grainSize'], grainSize);
     gl.uniform1f(this.uLocs['u_grainAmount'], grainAmount);
@@ -716,7 +716,7 @@ export class WebGLRenderer {
     gl.uniform1f(this.uLocs['u_printPaperGrade'], edits.print_paper_grade);
     gl.uniform1f(
       this.uLocs['u_printProcessDepth'],
-      (edits as any).print_process_depth ?? 100.0,
+      edits.print_process_depth ?? 100.0,
     );
     const filterMap: Record<string, number> = {
       NeutralPanchromatic: 0,
@@ -729,7 +729,7 @@ export class WebGLRenderer {
     };
     gl.uniform1i(
       this.uLocs['u_enlargerFilterMode'],
-      filterMap[(edits as any).enlarger_filter] ?? 0,
+      filterMap[edits.enlarger_filter] ?? 0,
     );
 
     gl.uniform1f(this.uLocs['u_splitShadowHue'], edits.split_toning_shadow_hue);

@@ -219,7 +219,8 @@ extension AppViewModel {
                 try? FileManager.default.removeItem(atPath: catalogPath)
                 try? FileManager.default.removeItem(atPath: "\(catalogPath)-wal")
                 try? FileManager.default.removeItem(atPath: "\(catalogPath)-shm")
-                if let retryDb = try? FirstProofDatabase.open(dbPath: catalogPath) {
+                do {
+                    let retryDb = try FirstProofDatabase.open(dbPath: catalogPath)
                     self.db = retryDb
                     _ = retryDb.indexFolder(folderPath: folderPath)
                     let freshPhotos = retryDb.getAllPhotos()
@@ -230,6 +231,8 @@ extension AppViewModel {
                         self.selectPhoto(first)
                     }
                     return
+                } catch {
+                    print("Failed to recreate database at \(catalogPath): \(error)")
                 }
                 self.photos = []
                 self.isScanning = false

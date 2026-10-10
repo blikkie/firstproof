@@ -15,7 +15,12 @@ import { isDebugMode } from './utils/debug';
 import { getDefaultEdits } from './utils/edits';
 import { decodeExifOrientation } from './utils/exifReader';
 import { updateMetadataHeaderElements } from './utils/metadataHeader';
-import { type EditSettingsPayload, WasmBridge } from './WasmBridge';
+import {
+  type EditSettingsPayload,
+  type ImageMetadata,
+  WasmBridge,
+  type XmpPayload,
+} from './WasmBridge';
 import { WebGLRenderer } from './WebGLRenderer';
 
 class DarkroomApp {
@@ -37,13 +42,13 @@ class DarkroomApp {
   private edits: EditSettingsPayload = getDefaultEdits();
   private isOriginalPeek: boolean = false;
   private isCropActive: boolean = false;
-  private currentMetadata: any = {};
+  private currentMetadata: Partial<ImageMetadata> = {};
   private currentRating: number = 0;
   private currentStatus: string = 'Unflagged';
 
   // Selection Pipeline & Active Frame Buffers
   private selectRequestId: number = 0;
-  private selectDebounceTimer: any = null;
+  private selectDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private activeLinearData: Uint16Array | null = null;
   private activeLinearW: number = 0;
   private activeLinearH: number = 0;
@@ -465,7 +470,9 @@ class DarkroomApp {
         try {
           const res = await FolderIntake.openDirectoryPicker();
           if (res.entries.length > 0) {
-            FolderIntake.saveRecentDirHandle(res.dirHandle);
+            if (res.dirHandle) {
+              FolderIntake.saveRecentDirHandle(res.dirHandle);
+            }
             this.filmstripController.loadPhotos(res.entries);
             return;
           }
@@ -819,7 +826,7 @@ class DarkroomApp {
     }, delay);
   }
 
-  private setMetadataFormFields(xmp: any) {
+  private setMetadataFormFields(xmp: Partial<XmpPayload>) {
     if (this.elements['meta-input-title']) {
       (this.elements['meta-input-title'] as HTMLInputElement).value =
         xmp.title || '';

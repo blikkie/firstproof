@@ -7,11 +7,18 @@
  * - Pointer and keyboard input processing
  * - Resetting the browser's "unresponsive script / page hanging" watchdog timer
  */
+interface GlobalWithScheduler {
+  scheduler?: {
+    yield?: () => Promise<void>;
+  };
+}
+
 export async function yieldToMain(): Promise<void> {
+  const globalWithScheduler = globalThis as unknown as GlobalWithScheduler;
   // If modern scheduler.yield is available (Chromium 129+), use it
-  if (typeof (globalThis as any).scheduler?.yield === 'function') {
+  if (typeof globalWithScheduler.scheduler?.yield === 'function') {
     try {
-      await (globalThis as any).scheduler.yield();
+      await globalWithScheduler.scheduler.yield();
       return;
     } catch {
       // Fall through to setTimeout fallback

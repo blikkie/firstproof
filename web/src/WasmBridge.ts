@@ -54,6 +54,31 @@ export type ToneCurvesPayload = ToneCurvesRecord;
 export type CurvePoint = CurvePointRecord;
 export type EvaluatedLut = AllCurvesLutRecord;
 
+export interface ArchivalDevelopResult {
+  linear_offset: number;
+  linear_len: number;
+  width: number;
+  height: number;
+}
+
+export interface ExportResult {
+  output_offset: number;
+  output_len: number;
+  width: number;
+  height: number;
+  format: string;
+}
+
+export interface AutoAdjustmentsResult {
+  exposure: number;
+  contrast: number;
+}
+
+export interface AutoWhiteBalanceResultRecord {
+  temperature: number;
+  tint: number;
+}
+
 export class WasmBridge {
   private static instance: WasmBridge | null = null;
   private wasmMemory: WebAssembly.Memory | null = null;
@@ -64,9 +89,11 @@ export class WasmBridge {
 
   public static async init(capacityMb: number = 256): Promise<WasmBridge> {
     if (!WasmBridge.instance) {
-      const exports = await initWasm();
+      const exports = (await initWasm()) as unknown as {
+        memory?: WebAssembly.Memory;
+      };
       const bridge = new WasmBridge();
-      bridge.wasmMemory = (exports as any)?.memory || null;
+      bridge.wasmMemory = exports?.memory || null;
       bridge.memoryPtr = wasm.init_scratchpad(capacityMb);
       bridge.memoryLen = wasm.get_scratchpad_len();
       console.log(
@@ -101,42 +128,19 @@ export class WasmBridge {
     } else {
       wasm.copy_into_scratchpad(0, bytes);
     }
-
-    const resVal = wasm.decode_preview_from_scratchpad(bytes.length);
-    const preview: PreviewResult = resVal as PreviewResult;
-
-    // Get slice directly from scratchpad memory using typed getter or fallback
-    let imageSlice: Uint8Array;
-    if (typeof (wasm as any).get_scratchpad_u8_slice === 'function') {
-      imageSlice = (wasm as any).get_scratchpad_u8_slice(
-        preview.preview_offset,
-        preview.preview_len,
-      );
-    } else {
-      const freshBuf = this.getWasmMemoryBuffer();
-      if (
-        freshBuf &&
-        ptr + preview.preview_offset + preview.preview_len <=
-          freshBuf.byteLength
-      ) {
-        imageSlice = new Uint8Array(
-          freshBuf,
-          ptr + preview.preview_offset,
-          preview.preview_len,
-        ).slice();
-      } else {
-        imageSlice = bytes.slice(
-          preview.preview_offset,
-          preview.preview_offset + preview.preview_len,
-        );
-      }
-    }
+    const preview: PreviewResult = wasm.decode_preview_from_scratchpad(
+      bytes.length,
+    ) as PreviewResult;
+    const imageSlice = wasm.get_scratchpad_u8_slice(
+      preview.preview_offset,
+      preview.preview_len,
+    );
 
     return { preview, imageSlice };
   }
 
   public decodeRawLinear(bytes: Uint8Array): {
-    res: any;
+    res: RawLinearResultRecord;
     linearData: Uint16Array;
   } {
     const liveBuf = this.getWasmMemoryBuffer();
@@ -147,34 +151,19 @@ export class WasmBridge {
       wasm.copy_into_scratchpad(0, bytes);
     }
 
-    const resVal = wasm.decode_raw_linear_from_scratchpad(bytes.length);
-    const res = resVal as any;
-
-    let linearData: Uint16Array;
-    if (typeof (wasm as any).get_scratchpad_u16_slice === 'function') {
-      linearData = (wasm as any).get_scratchpad_u16_slice(
-        res.linear_offset,
-        res.linear_len / 2,
-      );
-    } else {
-      const freshBuf = this.getWasmMemoryBuffer();
-      const absOffset = ptr + res.linear_offset;
-      if (freshBuf && absOffset + res.linear_len <= freshBuf.byteLength) {
-        linearData = new Uint16Array(
-          freshBuf,
-          absOffset,
-          res.linear_len / 2,
-        ).slice();
-      } else {
-        throw new Error(`WASM memory buffer bounds error`);
-      }
-    }
+    const res: RawLinearResultRecord = wasm.decode_raw_linear_from_scratchpad(
+      bytes.length,
+    ) as RawLinearResultRecord;
+    const linearData = wasm.get_scratchpad_u16_slice(
+      res.linear_offset,
+      res.linear_len / 2,
+    );
 
     return { res, linearData };
   }
 
   public decodeRawFullLinear(bytes: Uint8Array): {
-    res: any;
+    res: RawLinearResultRecord;
     linearData: Uint16Array;
   } {
     const liveBuf = this.getWasmMemoryBuffer();
@@ -185,30 +174,14 @@ export class WasmBridge {
       wasm.copy_into_scratchpad(0, bytes);
     }
 
-    const resVal = (wasm as any).decode_raw_full_linear_from_scratchpad(
-      bytes.length,
+    const res: RawLinearResultRecord =
+      wasm.decode_raw_full_linear_from_scratchpad(
+        bytes.length,
+      ) as RawLinearResultRecord;
+    const linearData = wasm.get_scratchpad_u16_slice(
+      res.linear_offset,
+      res.linear_len / 2,
     );
-    const res = resVal as any;
-
-    let linearData: Uint16Array;
-    if (typeof (wasm as any).get_scratchpad_u16_slice === 'function') {
-      linearData = (wasm as any).get_scratchpad_u16_slice(
-        res.linear_offset,
-        res.linear_len / 2,
-      );
-    } else {
-      const freshBuf = this.getWasmMemoryBuffer();
-      const absOffset = ptr + res.linear_offset;
-      if (freshBuf && absOffset + res.linear_len <= freshBuf.byteLength) {
-        linearData = new Uint16Array(
-          freshBuf,
-          absOffset,
-          res.linear_len / 2,
-        ).slice();
-      } else {
-        throw new Error(`WASM memory buffer bounds error`);
-      }
-    }
 
     return { res, linearData };
   }
@@ -232,37 +205,16 @@ export class WasmBridge {
 
     const editsJson = JSON.stringify(edits);
     const qualityCode = quality === 'Archival' ? 1 : 0;
-    const resVal = (wasm as any).develop_raw_archival_from_scratchpad(
+    const res = wasm.develop_raw_archival_from_scratchpad(
       bytes.length,
       editsJson,
       qualityCode,
-    );
-    const res = resVal as {
-      linear_offset: number;
-      linear_len: number;
-      width: number;
-      height: number;
-    };
+    ) as ArchivalDevelopResult;
 
-    let linearData: Uint16Array;
-    if (typeof (wasm as any).get_scratchpad_u16_slice === 'function') {
-      linearData = (wasm as any).get_scratchpad_u16_slice(
-        res.linear_offset,
-        res.linear_len / 2,
-      );
-    } else {
-      const freshBuf = this.getWasmMemoryBuffer();
-      const absOffset = ptr + res.linear_offset;
-      if (freshBuf && absOffset + res.linear_len <= freshBuf.byteLength) {
-        linearData = new Uint16Array(
-          freshBuf,
-          absOffset,
-          res.linear_len / 2,
-        ).slice();
-      } else {
-        throw new Error(`WASM memory buffer bounds error`);
-      }
-    }
+    const linearData = wasm.get_scratchpad_u16_slice(
+      res.linear_offset,
+      res.linear_len / 2,
+    );
 
     return { width: res.width, height: res.height, linearData };
   }
@@ -286,7 +238,7 @@ export class WasmBridge {
 
     const editsJson = JSON.stringify(edits);
     const qualityCode = demosaicQuality === 'Archival' ? 1 : 0;
-    const resVal = (wasm as any).export_raw_from_scratchpad(
+    const res = wasm.export_raw_from_scratchpad(
       bytes.length,
       editsJson,
       format,
@@ -294,36 +246,9 @@ export class WasmBridge {
       sizeOption,
       customDimension,
       qualityCode,
-    );
-    const res = resVal as {
-      output_offset: number;
-      output_len: number;
-      width: number;
-      height: number;
-      format: string;
-    };
+    ) as ExportResult;
 
-    let outputBytes: Uint8Array;
-    if (typeof (wasm as any).get_scratchpad_u8_slice === 'function') {
-      outputBytes = (wasm as any).get_scratchpad_u8_slice(
-        res.output_offset,
-        res.output_len,
-      );
-    } else {
-      const freshBuf = this.getWasmMemoryBuffer();
-      const absOffset = ptr + res.output_offset;
-      if (freshBuf && absOffset + res.output_len <= freshBuf.byteLength) {
-        outputBytes = new Uint8Array(
-          freshBuf,
-          absOffset,
-          res.output_len,
-        ).slice();
-      } else {
-        throw new Error(`WASM scratchpad buffer bounds error`);
-      }
-    }
-
-    return outputBytes;
+    return wasm.get_scratchpad_u8_slice(res.output_offset, res.output_len);
   }
 
   public evaluateCurves(curves: ToneCurvesPayload): EvaluatedLut {
@@ -347,28 +272,21 @@ export class WasmBridge {
     width: number,
     height: number,
   ): { exposure: number; contrast: number } | null {
-    if (typeof (wasm as any).compute_auto_adjustments_from_u16 === 'function') {
-      const res = (wasm as any).compute_auto_adjustments_from_u16(
-        linearData,
-        width,
-        height,
-      );
-      return res as { exposure: number; contrast: number };
-    }
-    return null;
+    const res = wasm.compute_auto_adjustments_from_u16(
+      linearData,
+      width,
+      height,
+    ) as AutoAdjustmentsResult | null;
+    return res ?? null;
   }
 
   public computeAutoAdjustmentsFromLuminances(
     lums: Float32Array,
   ): { exposure: number; contrast: number } | null {
-    if (
-      typeof (wasm as any).compute_auto_adjustments_from_luminances ===
-      'function'
-    ) {
-      const res = (wasm as any).compute_auto_adjustments_from_luminances(lums);
-      return res as { exposure: number; contrast: number };
-    }
-    return null;
+    const res = wasm.compute_auto_adjustments_from_luminances(
+      lums,
+    ) as AutoAdjustmentsResult | null;
+    return res ?? null;
   }
 
   public computeAutoWhiteBalance(
@@ -376,17 +294,12 @@ export class WasmBridge {
     width: number,
     height: number,
   ): { temperature: number; tint: number } | null {
-    if (
-      typeof (wasm as any).compute_auto_white_balance_from_u16 === 'function'
-    ) {
-      const res = (wasm as any).compute_auto_white_balance_from_u16(
-        linearData,
-        width,
-        height,
-      );
-      return res as { temperature: number; tint: number };
-    }
-    return null;
+    const res = wasm.compute_auto_white_balance_from_u16(
+      linearData,
+      width,
+      height,
+    ) as AutoWhiteBalanceResultRecord | null;
+    return res ?? null;
   }
 
   public calculateWhiteBalanceFromSample(
@@ -394,13 +307,12 @@ export class WasmBridge {
     g: number,
     b: number,
   ): { temperature: number; tint: number } | null {
-    if (
-      typeof (wasm as any).calculate_white_balance_from_sample === 'function'
-    ) {
-      const res = (wasm as any).calculate_white_balance_from_sample(r, g, b);
-      return res as { temperature: number; tint: number };
-    }
-    return null;
+    const res = wasm.calculate_white_balance_from_sample(
+      r,
+      g,
+      b,
+    ) as AutoWhiteBalanceResultRecord | null;
+    return res ?? null;
   }
 
   public decodeExifOrientation(orientation: number): ExifOrientationRecord {

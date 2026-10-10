@@ -17,6 +17,9 @@ import type {
   ColorProfileMode,
   EditSettingsPayload,
   EmulsionArchetype,
+  EmulsionFormat,
+  EmulsionGrainMode,
+  EnlargerFilterMode,
   PrintMediaMode,
   RemjetBackingMode,
 } from '../WasmBridge';
@@ -551,7 +554,7 @@ export class InspectorSyncController {
         });
 
         input.addEventListener('input', (e: Event) => {
-          if ((e as any).shiftKey) return;
+          if ('shiftKey' in e && (e as unknown as MouseEvent).shiftKey) return;
           const val = parseFloat(input.value);
           const edits = this.delegate.getEdits();
           (edits[prop] as number) = val;
@@ -745,7 +748,7 @@ export class InspectorSyncController {
       });
 
       tempInput.addEventListener('input', (e: Event) => {
-        if ((e as any).shiftKey) return;
+        if ('shiftKey' in e && (e as unknown as MouseEvent).shiftKey) return;
         const pos = parseFloat(tempInput.value);
         const kelvin = this.miredPosToKelvin(pos);
         const edits = this.delegate.getEdits();
@@ -857,7 +860,8 @@ export class InspectorSyncController {
     ) as HTMLSelectElement | null;
     selectFormat?.addEventListener('change', (e) => {
       const edits = this.delegate.getEdits();
-      edits.emulsion_format = (e.target as HTMLSelectElement).value as any;
+      edits.emulsion_format = (e.target as HTMLSelectElement)
+        .value as EmulsionFormat;
       this.delegate.renderCanvas();
       this.delegate.autoSaveSidecar();
     });
@@ -878,7 +882,7 @@ export class InspectorSyncController {
     ) as HTMLSelectElement | null;
     selectGrainMode?.addEventListener('change', (e) => {
       const edits = this.delegate.getEdits();
-      const mode = (e.target as HTMLSelectElement).value as any;
+      const mode = (e.target as HTMLSelectElement).value as EmulsionGrainMode;
       edits.emulsion_grain_mode = mode;
       if (
         mode !== 'Off' &&
@@ -933,7 +937,8 @@ export class InspectorSyncController {
     ) as HTMLSelectElement | null;
     selectFilter?.addEventListener('change', (e) => {
       const edits = this.delegate.getEdits();
-      edits.enlarger_filter = (e.target as HTMLSelectElement).value as any;
+      edits.enlarger_filter = (e.target as HTMLSelectElement)
+        .value as EnlargerFilterMode;
       this.delegate.renderCanvas();
       this.delegate.autoSaveSidecar();
     });
@@ -948,9 +953,13 @@ export class InspectorSyncController {
         });
         const target = e.target as HTMLElement;
         target.classList.add('active');
-        const channel = target.getAttribute('data-channel') as any;
+        const channel = target.getAttribute('data-channel') as
+          | 'master'
+          | 'red'
+          | 'green'
+          | 'blue';
         const widget = this.delegate.getCurveWidget();
-        if (widget) widget.setChannel(channel);
+        if (widget && channel) widget.setChannel(channel);
       });
     });
 

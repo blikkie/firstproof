@@ -1,6 +1,7 @@
 import type { ExportExecutionOptions } from '../ExportModal';
 import { FolderIntake, type PhotoFileEntry } from '../FolderIntake';
 import { IntermediateTextureCache } from '../IntermediateTextureCache';
+import type { WorkerResponseMessage } from '../RawDecodeWorker';
 import {
   areCurvesActive,
   getDefaultEdits,
@@ -64,7 +65,8 @@ export class PhotoLoaderService {
   private bridge: WasmBridge;
   private rawWorker: Worker | null = null;
   private workerMsgId: number = 0;
-  private workerPendingMap: Map<number, (res: any) => void> = new Map();
+  private workerPendingMap: Map<number, (res: WorkerResponseMessage) => void> =
+    new Map();
 
   private prewarmedCache: Map<number, PrewarmedPhoto> = new Map();
   private prewarmLoadingSet: Set<number> = new Set();
@@ -476,7 +478,7 @@ export class PhotoLoaderService {
 
   public async loadSidecar(
     entry: PhotoFileEntry,
-  ): Promise<{ xmp: any | null; rawXml: string | null }> {
+  ): Promise<{ xmp: XmpPayload | null; rawXml: string | null }> {
     let sidecarXml = await FolderIntake.readSidecarFromDisk(entry);
     if (!sidecarXml) {
       try {

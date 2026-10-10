@@ -1,9 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  type InspectorDelegate,
+  InspectorSyncController,
+} from '../controllers/InspectorSyncController';
+import {
   isTextInputActive,
   type KeyboardActions,
   KeyboardShortcutController,
 } from '../controllers/KeyboardShortcutController';
+import type { ToneCurveWidget } from '../ToneCurveWidget';
+import { getDefaultEdits } from '../utils/edits';
+import type { EditSettingsPayload } from '../WasmBridge';
 
 describe('Controller & First-Responder Architecture', () => {
   beforeEach(() => {
@@ -110,11 +117,7 @@ describe('Controller & First-Responder Architecture', () => {
   });
 
   describe('InspectorSyncController Format Gate Contextualization', () => {
-    it('contextualizes format dropdown options and labels for Polaroid vs standard film', async () => {
-      const { InspectorSyncController } = await import(
-        '../controllers/InspectorSyncController'
-      );
-
+    it('contextualizes format dropdown options and labels for Polaroid vs standard film', () => {
       // Set up DOM elements
       document.body.innerHTML = `
         <div id="row-remjet"></div>
@@ -130,19 +133,20 @@ describe('Controller & First-Responder Architecture', () => {
         </select>
       `;
 
-      const edits: any = {
+      const edits: EditSettingsPayload = {
+        ...getDefaultEdits(),
         emulsion_archetype: 'CambridgeDiffusion100',
         emulsion_format: 'Super8',
         print_media: 'None',
       };
 
-      const mockDelegate: any = {
+      const mockDelegate: InspectorDelegate = {
         getEdits: () => edits,
         renderCanvas: vi.fn(),
         autoSaveSidecar: vi.fn(),
         isCurrentPhotoRaw: () => true,
         getDefaultEdits: () => ({ ...edits }),
-        getCurveWidget: () => null,
+        getCurveWidget: () => null as unknown as ToneCurveWidget,
         getRating: () => 0,
         getStatus: () => 'None',
         getActiveIndex: () => 0,
@@ -183,10 +187,7 @@ describe('Controller & First-Responder Architecture', () => {
       expect(select.value).toBe('Format35mm');
     });
 
-    it('auto-engages SeedFromSensor grain when selecting a film archetype and resets to Off on None', async () => {
-      const { InspectorSyncController } = await import(
-        '../controllers/InspectorSyncController'
-      );
+    it('auto-engages SeedFromSensor grain when selecting a film archetype and resets to Off on None', () => {
       document.body.innerHTML = `
         <div id="row-remjet"></div>
         <div id="row-enlarger-filter"></div>
@@ -209,21 +210,22 @@ describe('Controller & First-Responder Architecture', () => {
         <span id="val-grain-amount">1.00x</span>
       `;
 
-      const edits: any = {
-        emulsion_archetype: 'None',
-        emulsion_grain_mode: 'Off',
+      const edits = {
+        ...getDefaultEdits(),
+        emulsion_archetype: 'None' as const,
+        emulsion_grain_mode: 'Off' as const,
         grain_size: 1.0,
         grain_amount: 1.0,
-        print_media: 'None',
+        print_media: 'None' as const,
       };
 
-      const mockDelegate: any = {
+      const mockDelegate: InspectorDelegate = {
         getEdits: () => edits,
         renderCanvas: vi.fn(),
         autoSaveSidecar: vi.fn(),
         isCurrentPhotoRaw: () => true,
         getDefaultEdits: () => ({ ...edits }),
-        getCurveWidget: () => null,
+        getCurveWidget: () => null as unknown as ToneCurveWidget,
         getRating: () => 0,
         getStatus: () => 'None',
         getActiveIndex: () => 0,

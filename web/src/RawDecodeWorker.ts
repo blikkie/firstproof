@@ -10,14 +10,31 @@ import initWasm, {
   decode_raw_full_linear_from_scratchpad,
   decode_raw_linear_from_scratchpad,
   export_raw_from_scratchpad,
-  get_scratchpad_ptr,
   get_scratchpad_u8_slice,
   get_scratchpad_u16_slice,
   init_scratchpad,
+  type PreviewResultRecord,
 } from 'firstproof-wasm';
 
+interface ExportResultRecord {
+  output_offset: number;
+  output_len: number;
+  width: number;
+  height: number;
+  format: string;
+}
+
+type ExportRawFn = (
+  inputLen: number,
+  editsJson: string,
+  format: string,
+  quality: number,
+  sizeOption: string,
+  customDim: number,
+  demosaicQuality: number,
+) => ExportResultRecord;
+
 let wasmInitialized = false;
-let workerWasmMemory: WebAssembly.Memory | null = null;
 
 interface WorkerDecodeMessage {
   type?: 'decode' | 'export';
@@ -33,7 +50,7 @@ interface WorkerDecodeMessage {
   demosaicQuality?: number;
 }
 
-interface WorkerResponseMessage {
+export interface WorkerResponseMessage {
   id: number;
   success: boolean;
   isExport?: boolean;
@@ -41,7 +58,7 @@ interface WorkerResponseMessage {
   width?: number;
   height?: number;
   format?: string;
-  preview?: any;
+  preview?: PreviewResultRecord;
   imageSlice?: Uint8Array;
   linearData?: Uint16Array;
   linearW?: number;
@@ -52,6 +69,12 @@ interface WorkerResponseMessage {
     inputBytes: number;
   };
 }
+
+interface WorkerScope {
+  postMessage(message: WorkerResponseMessage, transfer?: Transferable[]): void;
+}
+
+const ctx = self as unknown as WorkerScope;
 
 self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
   const data = e.data;
@@ -66,9 +89,7 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
 
   try {
     if (!wasmInitialized) {
-      const exports = await initWasm();
-      workerWasmMemory =
-        (exports as any)?.memory || (initWasm as any)?.memory || null;
+      await initWasm();
       init_scratchpad(256); // 256MB scratchpad buffer for 50MP+ RAW files
       wasmInitialized = true;
     }
@@ -77,7 +98,8 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
       const inputBytes = new Uint8Array(arrayBuffer);
       copy_into_scratchpad(0, inputBytes);
 
-      const res = (export_raw_from_scratchpad as any)(
+      const exportFn = export_raw_from_scratchpad as unknown as ExportRawFn;
+      const res = exportFn(
         inputBytes.length,
         data.editsJson || '{}',
         data.format || 'JPEG',
@@ -87,28 +109,10 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
         data.demosaicQuality ?? 0,
       );
 
-      let outputBytes: Uint8Array;
-      if (typeof get_scratchpad_u8_slice === 'function') {
-        outputBytes = get_scratchpad_u8_slice(
-          res.output_offset,
-          res.output_len,
-        );
-      } else {
-        const ptr = get_scratchpad_ptr();
-        const wasmMem = workerWasmMemory?.buffer;
-        if (
-          wasmMem &&
-          ptr + res.output_offset + res.output_len <= wasmMem.byteLength
-        ) {
-          outputBytes = new Uint8Array(
-            wasmMem,
-            ptr + res.output_offset,
-            res.output_len,
-          ).slice();
-        } else {
-          throw new Error('Scratchpad buffer memory bounds error');
-        }
-      }
+      const outputBytes = get_scratchpad_u8_slice(
+        res.output_offset,
+        res.output_len,
+      );
 
       const response: WorkerResponseMessage = {
         id,
@@ -120,7 +124,7 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
         format: res.format,
       };
 
-      (self as any).postMessage(response, [outputBytes.buffer]);
+      ctx.postMessage(response, [outputBytes.buffer]);
       return;
     }
 
@@ -128,31 +132,10 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
     copy_into_scratchpad(0, inputBytes);
 
     const preview = decode_preview_from_scratchpad(inputBytes.length);
-    let imageSlice: Uint8Array;
-    if (typeof get_scratchpad_u8_slice === 'function') {
-      imageSlice = get_scratchpad_u8_slice(
-        preview.preview_offset,
-        preview.preview_len,
-      );
-    } else {
-      const ptr = get_scratchpad_ptr();
-      const wasmMem = workerWasmMemory?.buffer;
-      if (
-        wasmMem &&
-        ptr + preview.preview_offset + preview.preview_len <= wasmMem.byteLength
-      ) {
-        imageSlice = new Uint8Array(
-          wasmMem,
-          ptr + preview.preview_offset,
-          preview.preview_len,
-        ).slice();
-      } else {
-        imageSlice = inputBytes.slice(
-          preview.preview_offset,
-          preview.preview_offset + preview.preview_len,
-        );
-      }
-    }
+    const imageSlice = get_scratchpad_u8_slice(
+      preview.preview_offset,
+      preview.preview_len,
+    );
 
     // Off-main-thread 16-bit Linear Rec.2020 sensor frame decode for RAW files
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
@@ -180,12 +163,10 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
         if (rawLin && rawLin.linear_len > 0) {
           linearW = rawLin.width;
           linearH = rawLin.height;
-          if (typeof get_scratchpad_u16_slice === 'function') {
-            linearData = get_scratchpad_u16_slice(
-              rawLin.linear_offset,
-              rawLin.linear_len / 2,
-            );
-          }
+          linearData = get_scratchpad_u16_slice(
+            rawLin.linear_offset,
+            rawLin.linear_len / 2,
+          );
         }
       } catch (rawErr) {
         console.warn(
@@ -222,21 +203,27 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
     if (linearData?.buffer) {
       transferables.push(linearData.buffer);
     }
-    (self as any).postMessage(response, transferables);
-  } catch (err: any) {
+    ctx.postMessage(response, transferables);
+  } catch (err: unknown) {
     performance.mark(markEnd);
     const decodeMs = performance.now() - startTime;
+    const errMsg =
+      err instanceof Error
+        ? err.message
+        : typeof err === 'string'
+          ? err
+          : 'Worker RAW decoding failed';
 
     const response: WorkerResponseMessage = {
       id,
       success: false,
-      error: err?.toString() || 'Worker RAW decoding failed',
+      error: errMsg,
       metrics: {
         decodeMs,
         inputBytes: arrayBuffer.byteLength,
       },
     };
 
-    (self as any).postMessage(response);
+    ctx.postMessage(response);
   }
 };
