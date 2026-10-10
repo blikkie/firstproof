@@ -40,6 +40,20 @@ This document strictly tracks pending and deferred features calibrated against o
   - Evaluate physical densitometry ($D_{\text{max}}$) under standard gallery illumination ($D_{50}$ / $D_{65}$) against digital screen rendering.
   - Benchmark shadow floor formulations across physical prints: compare physical reflective carbon ink depth vs emissive display floor lift (Option A: natural restrained floor $\sim 0.004$; Option B: micro-contrast compression without additive lift; Option C: current localized Hermite toe).
   - Tune paper grade and process depth default presets to guarantee 1:1 perceptual fidelity between darkroom viewport and physical framed gallery print.
+
+### 3.24 Sensitometric EV Zone Histogram & Sensor Clipping HUD (P2 - Post v0.1)
+- **Log₂ EV Stop Dynamic Range Scale**:
+  - Horizontal axis calibrated in physical EV stops relative to 18% middle grey ($-8\text{ EV}$ to $+4\text{ EV}$) rather than an arbitrary 0–255 integer scale.
+  - Evaluates linear scene radiance in Linear Rec.2020 prior to display tone-mapping, measuring true sensor exposure and optical dynamic range.
+- **Ansel Adams Zone System Reference Overlay**:
+  - Discrete, understated tick markers indicating Zones 0 through X (Zone 0 = pure print carbon black $D_{\max}$, Zone V = 18% middle grey, Zone VIII = textured high-value white, Zone X = specular clip).
+- **Sensor Saturation vs. Display Roll-Off Telemetry**:
+  - Distinct clipping sensors distinguishing between true hardware Bayer photosite saturation (blown raw sensor highlights) and AgX filmic shoulder compression (preserved highlights rolled off into display white).
+- **Dual-Domain Performance Asymmetry & Decoupled Execution**:
+  - Never runs in the fast 10–15ms burst culling or carousel navigation loop.
+  - Evaluated asynchronously on a background worker or via GPU texture downsampling only when paused in the develop inspector or when toggled on demand via shortcut (`H`).
+- **Quiet Darkroom Visuals**:
+  - Monochrome tone density fill or muted desaturated channel traces rendered in dark slate (`#1E1E1E`); zero primary-colored mountain graphs or dancing waveforms.
 ### 3.7 WebAssembly Darkroom Engine & Static Web Launch (P0 / P1 - Pulled Forward)
 - **`firstproof-wasm` Core Crate Scaffolding**:
   - Extract lightweight WebAssembly bindings target using `wasm-bindgen` and `wasm-pack`.
@@ -89,6 +103,15 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
   - Verify that shared domain models, coordinate transforms, and state transitions are homed strictly in `firstproof-engine` rather than duplicated or drifted across Swift and TypeScript host wrappers.
 - **Lens 5: Dependency & Asset Hygiene**:
   - Remove dead test fixtures, orphan scratch files, unused npm/Cargo packages, and temporary build detritus to keep the codebase razor-sharp and minimal.
+- **Lens 6: Marketing Copy & Tone De-Slop Pass**:
+  - Audit all user-facing copy across native macOS AppKit/SwiftUI (`FirstProofApp/`), web darkroom (`web/index.html`, UI labels, tooltips), `README.md`, and release documentation.
+  - Weed out breathless startup-pitch tropes, hyperbolic marketing adjectives (*"revolutionary"*, *"blazing-fast"*, *"game-changing"*, *"next-generation"*), and conversion/growth-hacking urgency.
+  - Enforce First Proof's brand voice: quiet, warm, factual, understated, and grounded in photographic craft. *"Less is more; people can take it or leave it."*
+- **Lens 7: Dual-Domain Performance Asymmetry & Archival Fidelity Calibration ("Hangs on Your Wall for 10 Years")**:
+  - **The Asymmetry Principle**: *"You only export it once, and then it hangs on your wall for 10 years."* In the archival export/high-fidelity path, deep computational rigor is almost by definition worthwhile. In the viewport/culling loop, friction is death.
+  - **Interactive Culling & Viewport Domain**: Audit fast paths (RAW ingestion, burst culling, slider scrubbing, thumbnail caching) to aggressively cut unnecessary computational corners, guaranteeing locked 60 FPS and 10–15ms photo transitions (e.g. 2×2 Bayer box binning, intermediate GPU snapshots, texture cache reuse).
+  - **Archival & Fidelity Domain**: Audit full-resolution rendering and export pipelines (`export/`, `RawDecodeWorker`, `WebGLRenderer`). Allow photographers to opt into slower, uncompromising decoding processes (e.g. higher-order AHD/AMaZE demosaicing, full bilateral tone recovery, chromatic aberration compensation, LittleCMS2 16-bit ICC proofing) so maximum optical fidelity is preserved for print and archival displays.
+  - Weed out inverted trade-offs: ensure fast interactive paths never perform unneeded full-res computation, and archival export paths never compromise optical fidelity for vanity export benchmarks.
 
 ### 4.1 Open Source IP, Security & License Compliance Gate (P1)
 - **License Compliance & Copyleft Gate (`cargo-deny`)**:
