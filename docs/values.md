@@ -31,7 +31,7 @@ First Proof exists to restore **photographic honesty and creative restraint**. W
 * A streamlined control deck: Exposure, Balance, Filmic Tone Curves, Restrained Saturation, Detail, Optics, and Crop.
 
 ### III. Speed as Craft (Engineered for macOS & Apple Silicon)
-* **Native Rust Core & Metal Compute:** LibRaw sensor unpacking, parallelized rayon CPU export pipelines, and sub-millisecond Metal GPU compute shaders.
+* **Native Rust Core & Metal Compute:** Pure-Rust `rawler` sensor unpacking, parallelized rayon CPU export pipelines, and sub-millisecond Metal GPU compute shaders.
 * **Instant In-Memory Viewport Snapshots:** Thumbnail updates and slider scrubbing run at 60–120 fps on the GPU without thrashing disk I/O.
 * **Sub-Second Launch:** No splash screens, no cloud authentication checks, no loading spinners.
 

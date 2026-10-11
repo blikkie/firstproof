@@ -11,7 +11,7 @@ graph TD
     UI[LumenBox SwiftUI macOS App] -->|UniFFI Binding Bridge| Core[LumenBox Rust Core Library]
     Core --> DB[(SQLite Database<br>Metadata Index & Cache)]
     Core --> FileSys[Local Filesystem<br>RAWs + XMP Sidecars]
-    Core --> LibRaw[LibRaw / rawloader<br>RAW decoding & Preview Extract]
+    Core --> Rawler[rawler<br>Pure-Rust RAW decoding & Preview Extract]
     Core --> Lensfun[Lensfun DB Parser<br>Lens correction coefficients]
 ```
 
@@ -150,7 +150,7 @@ To prevent deferred tasks (P1, P2, and roadmap items) from being forgotten, we w
 To achieve "snappy" rating and culling, we must avoid full RAW bayer demosaicing when browsing. Full decoding can take 0.5 to 2 seconds per photo.
 *   **Supported Formats**: Canon `.CR2`, Panasonic `.RW2` (used by Lumix LX-3), and Adobe `.DNG` (Digital Negative) files. DNG metadata and embedded previews will be extracted in the same fast path.
 *   **Culling Path (Grid and Fit-to-Screen)**:
-    1. Parse the RAW/DNG file (using `rawloader` or `rsraw`/`LibRaw`) to find the embedded preview image.
+    1. Parse the RAW/DNG file (using `rawler`) to find the embedded preview image or unpack the CFA buffer.
     2. Extract this JPEG (takes < 10ms).
     3. Cache and display this JPEG. This makes switching photos during culling feel instantaneous.
 *   **Editing Path (Detailed Adjustments)**:

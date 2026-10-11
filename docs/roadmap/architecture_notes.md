@@ -72,7 +72,7 @@ To maintain 60fps responsiveness as the user drags exposure and temperature slid
 ```
 +------------------+     Decoded 16-bit RGB Buffer       +-----------------------+
 |  Rust Core (CPU) | ----------------------------------> | Swift MTKView (Metal) |
-|  - LibRaw Decode |                                     | - Load texture        |
+|  - rawler Decode |                                     | - Load texture        |
 |  - WB matrices   |                                     | - Bind EditSettings   |
 +------------------+                                     +-----------------------+
                                                                      |
@@ -85,7 +85,7 @@ To maintain 60fps responsiveness as the user drags exposure and temperature slid
 ```
 
 ### Data Pipeline
-1. **Demosaicing (CPU)**: When the edit view opens, Rust decodes the full RAW file using `rawloader` or `LibRaw`. It runs demosaicing (converting the Bayer grid to RGB pixels) and returns a flat float array (16-bit half-float or 32-bit float RGB values).
+1. **Demosaicing (CPU)**: When the edit view opens, Rust decodes the full RAW file using `rawler`. It runs demosaicing (converting the Bayer grid to RGB pixels) and returns a flat float array (16-bit half-float or 32-bit float RGB values).
 2. **Texture Creation (Metal/Swift)**: Swift reads the float array pointer from the Rust bridge and loads it into an `MTLTexture`:
    ```swift
    let descriptor = MTLTextureDescriptor.texture2DDescriptor(

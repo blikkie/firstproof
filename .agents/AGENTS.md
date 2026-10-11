@@ -116,7 +116,7 @@
   - Conflating the two produces slop: artificial heuristics that destroy wide-gamut filmic highlights and crush shadows.
 
 - **Real-Time Viewport Thumbnail Invalidation**:
-  - Viewport adjustments (sliders, curves, rotation) must never trigger slow disk re-renders or LibRaw demosaicing.
+  - Viewport adjustments (sliders, curves, rotation) must never trigger slow disk re-renders or CPU demosaicing.
   - Thumbnails are updated via sub-millisecond GPU viewport snapshots (`captureThumbnailSnapshot`) into in-memory `ThumbnailCache`, followed by `NotificationCenter.default.post(name: .thumbnailDidChange, object: path)`. Disk serialization is deferred until save or closing the photo.
 
 - **Zero Camera-JPEG Viewport Flashing & High-Res Intermediates**:
