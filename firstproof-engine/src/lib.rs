@@ -37,9 +37,9 @@ pub use curve::{
     ToneCurvesRecord,
 };
 pub use modes::{
-    ColorProfileMode, DemosaicQuality, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode,
-    EnlargerFilterMode, ExportColorSpace, ExportRenderingIntent, PrintMediaMode, RemjetBackingMode,
-    RenderTier,
+    ColorProfileMode, CropAspectRatioPreset, DemosaicQuality, EmulsionArchetype, EmulsionFormat,
+    EmulsionGrainMode, EnlargerFilterMode, ExportColorSpace, ExportRenderingIntent, PrintMediaMode,
+    RemjetBackingMode, RenderTier, WhiteBalancePreset,
 };
 pub use preview::{
     decode_exif_orientation, extract_metadata_from_bytes, extract_preview_slice,

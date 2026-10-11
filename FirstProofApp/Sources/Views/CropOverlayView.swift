@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import FirstProofBridge
 
 public struct CropOverlayView: View {
     @Environment(AppViewModel.self) private var viewModel
@@ -308,21 +309,14 @@ public struct CropOverlayView: View {
         let isCurrentlyPortrait = (currentW * imageAspect) < currentH
         let isPortrait = (dragStartCrop.left < 0.01 && dragStartCrop.top < 0.01 && dragStartCrop.right > 0.99 && dragStartCrop.bottom > 0.99) ? (imageAspect < 1.0) : isCurrentlyPortrait
         
-        switch viewModel.cropAspectRatioPreset {
-        case .original:
-            let isBasePortrait = imageAspect < 1.0
-            return (isPortrait == isBasePortrait) ? imageAspect : (1.0 / imageAspect)
-        case .square:
-            return 1.0
-        case .fourThree:
-            return isPortrait ? (3.0 / 4.0) : (4.0 / 3.0)
-        case .threeTwo:
-            return isPortrait ? (2.0 / 3.0) : (3.0 / 2.0)
-        case .sixteenNine:
-            return isPortrait ? (9.0 / 16.0) : (16.0 / 9.0)
-        case .freeform:
-            return nil
+        if let ratio = calculateTargetCropRatio(
+            preset: viewModel.cropAspectRatioPreset,
+            imageAspect: Float(imageAspect),
+            isPortrait: isPortrait
+        ) {
+            return CGFloat(ratio)
         }
+        return nil
     }
     
     // MARK: - Edge Handle Updates

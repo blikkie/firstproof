@@ -3,6 +3,7 @@ import type {
   AutoAdjustments,
   AutoWhiteBalanceResult,
   ColorProfileMode,
+  CropAspectRatioPreset,
   CurvePointRecord,
   EditSettings,
   EmulsionArchetype,
@@ -18,6 +19,7 @@ import type {
   RawLinearResultRecord,
   RemjetBackingMode,
   ToneCurvesRecord,
+  WhiteBalancePreset,
   XmpData,
 } from 'firstproof-wasm';
 import initWasm, * as wasm from 'firstproof-wasm';
@@ -27,6 +29,7 @@ export type {
   AutoAdjustments,
   AutoWhiteBalanceResult,
   ColorProfileMode,
+  CropAspectRatioPreset,
   CurvePointRecord,
   EditSettings,
   EmulsionArchetype,
@@ -42,6 +45,7 @@ export type {
   RawLinearResultRecord,
   RemjetBackingMode,
   ToneCurvesRecord,
+  WhiteBalancePreset,
   XmpData,
 };
 
@@ -373,5 +377,45 @@ export class WasmBridge {
   ): number {
     const editsJson = JSON.stringify(edits);
     return wasm.evaluate_display_luma(r, g, b, isLinearRec2020, editsJson);
+  }
+
+  public calculateTargetCropRatio(
+    preset: string,
+    imageAspect: number,
+    isPortrait: boolean,
+  ): number | null {
+    const res = wasm.calculate_target_crop_ratio(
+      preset,
+      imageAspect,
+      isPortrait,
+    );
+    return res !== undefined ? res : null;
+  }
+
+  public getWhiteBalancePresetValues(preset: string): [number, number] | null {
+    const res = wasm.get_white_balance_preset_values(preset);
+    return res ? [res[0], res[1]] : null;
+  }
+
+  public detectWhiteBalancePreset(
+    temperature: number,
+    tint: number,
+    asShotTemp: number,
+    asShotTint: number,
+  ): string {
+    return wasm.detect_white_balance_preset(
+      temperature,
+      tint,
+      asShotTemp,
+      asShotTint,
+    );
+  }
+
+  public kelvinToMiredPos(kelvin: number): number {
+    return wasm.convert_kelvin_to_mired_norm(kelvin);
+  }
+
+  public miredPosToKelvin(pos: number): number {
+    return wasm.convert_mired_norm_to_kelvin(pos);
   }
 }

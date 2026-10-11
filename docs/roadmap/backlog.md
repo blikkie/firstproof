@@ -7,7 +7,7 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up (v0.1 Release Gate)
-1. **Story 4.0: Comprehensive AI Slop Audit & Codebase De-Slop Pass** (P0)
+1. **Story 4.0: Comprehensive AI Slop Audit & Codebase De-Slop Pass** (P0) - COMPLETED
 2. **Story 4.5: Swift Desktop Parameter Schema & Behavioral Interaction Parity** (P0)
 3. **Story 4.1: Open Source IP, Security & License Compliance Gate** (P1)
 4. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P1)
@@ -85,33 +85,8 @@ All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](c
 
 ## Phase 4: Pre-Release IP Audit, Code Cleanliness & Distribution (P0 / P1)
 
-### 4.0 Comprehensive AI Slop Audit & Codebase De-Slop Pass (P0 - Immediate Quality Gate)
-- **Lens 1: Anti-Magic Number & Formula Derivation Audit**:
-  - Rigorously inspect every numerical constant, localized multiplier, threshold, and curve evaluation across Rust (`firstproof-core`, `firstproof-engine`), Metal (`ColorScience.metal`, `Shaders.metal`, `Geometry.metal`), and TypeScript/WebGL (`ColorScience.ts`, `WebGLRenderer.ts`).
-  - Weed out arbitrary heuristics, trial-and-error fudge factors, and localized piecewise offsets.
-  - Guarantee all mathematical parameters trace directly to published sensitometric standards (DNG specification, Troy Sobotka's AgX specification, CIE photopic luminance, ISO 6846).
-- **Lens 2: Hallucinated / Defensive Boilerplate Slop Purge & Strict Typing**:
-  - **Strict `noExplicitAny` Enforcement (`web/biome.json`)**:
-    - Promote Biome's `suspicious/noExplicitAny` rule from `"off"` to `"error"`.
-    - Systematically eliminate the ~81 `any` types across `web/src`: convert `catch (err: any)` to `catch (err: unknown)` with error-narrowing helpers, type web workers with `DedicatedWorkerGlobalScope`, replace loose file system handles with `FileSystemDirectoryHandle` / `FileSystemFileHandle`, and type WASM memory and exports via `FirstProofWasmExports`.
-    - Where external FFI or third-party dynamics strictly prevent static typing, require documented `// biome-ignore lint/suspicious/noExplicitAny: <rationale>` comments.
-  - **Defensive Boilerplate & Ghost Branches**:
-    - Purge speculative AI-generated abstraction layers, redundant null-checks / unreachable defensive branches (`obj?.val !== undefined && obj.val`), verbose conversational docstrings that merely restate code (`// Sets x to 5`), and single-use helper utilities that obscure flow.
-- **Lens 3: Visual & UX Plastic Slop Purge**:
-  - Audit UI components in both native macOS SwiftUI (`FirstProofApp`) and Web darkroom (`web/`) against First Proof's darkroom aesthetic: opaque `#181818` / `#1E1E1E` dark slate, monospaced lining numbers, tactile controls, and zero digital plastic (no generic gradients, gratuitous bounces, or ungrounded UI chrome).
-- **Lens 4: Architectural Symmetry & Single Source of Truth**:
-  - Verify that shared domain models, coordinate transforms, and state transitions are homed strictly in `firstproof-engine` rather than duplicated or drifted across Swift and TypeScript host wrappers.
-- **Lens 5: Dependency & Asset Hygiene**:
-  - Remove dead test fixtures, orphan scratch files, unused npm/Cargo packages, and temporary build detritus to keep the codebase razor-sharp and minimal.
-- **Lens 6: Marketing Copy & Tone De-Slop Pass**:
-  - Audit all user-facing copy across native macOS AppKit/SwiftUI (`FirstProofApp/`), web darkroom (`web/index.html`, UI labels, tooltips), `README.md`, and release documentation.
-  - Weed out breathless startup-pitch tropes, hyperbolic marketing adjectives (*"revolutionary"*, *"blazing-fast"*, *"game-changing"*, *"next-generation"*), and conversion/growth-hacking urgency.
-  - Enforce First Proof's brand voice: quiet, warm, factual, understated, and grounded in photographic craft. *"Less is more; people can take it or leave it."*
-- **Lens 7: Dual-Domain Performance Asymmetry & Archival Fidelity Calibration ("Hangs on Your Wall for 10 Years")**:
-  - **The Asymmetry Principle**: *"You only export it once, and then it hangs on your wall for 10 years."* In the archival export/high-fidelity path, deep computational rigor is almost by definition worthwhile. In the viewport/culling loop, friction is death.
-  - **Interactive Culling & Viewport Domain**: Audit fast paths (RAW ingestion, burst culling, slider scrubbing, thumbnail caching) to aggressively cut unnecessary computational corners, guaranteeing locked 60 FPS and 10–15ms photo transitions (e.g. 2×2 Bayer box binning, intermediate GPU snapshots, texture cache reuse).
-  - **Archival & Fidelity Domain**: Audit full-resolution rendering and export pipelines (`export/`, `RawDecodeWorker`, `WebGLRenderer`). Allow photographers to opt into slower, uncompromising decoding processes (e.g. higher-order AHD/AMaZE demosaicing, full bilateral tone recovery, chromatic aberration compensation, LittleCMS2 16-bit ICC proofing) so maximum optical fidelity is preserved for print and archival displays.
-  - Weed out inverted trade-offs: ensure fast interactive paths never perform unneeded full-res computation, and archival export paths never compromise optical fidelity for vanity export benchmarks.
+### 4.0 Comprehensive AI Slop Audit & Codebase De-Slop Pass (P0) - COMPLETED
+All 7 lenses (Lenses 1 through 7) completed and archived in [completed.md](completed.md).
 
 ### 4.1 Open Source IP, Security & License Compliance Gate (P1)
 - **License Compliance & Copyleft Gate (`cargo-deny`)**:

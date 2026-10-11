@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 import AppKit
 import ImageIO
-import FirstProofBridge
+@_exported import FirstProofBridge
 
 extension PhotoRecord {
     public var isRaw: Bool {
@@ -92,31 +92,42 @@ public enum EditSliderType {
     }
 }
 
-public enum CropAspectRatioPreset: String, CaseIterable, Identifiable {
-    case original = "Original"
-    case square = "1:1"
-    case fourThree = "4:3"
-    case threeTwo = "3:2"
-    case sixteenNine = "16:9"
-    case freeform = "Free"
-    
+extension CropAspectRatioPreset: @retroactive CaseIterable, @retroactive Identifiable {
+    public static var allCases: [CropAspectRatioPreset] {
+        [.original, .square, .fourThree, .threeTwo, .sixteenNine, .freeform]
+    }
     public var id: String { rawValue }
+    public var rawValue: String {
+        switch self {
+        case .original: return "Original"
+        case .square: return "1:1"
+        case .fourThree: return "4:3"
+        case .threeTwo: return "3:2"
+        case .sixteenNine: return "16:9"
+        case .freeform: return "Free"
+        }
+    }
 }
 
-public enum WhiteBalancePreset: String, CaseIterable, Identifiable {
-    case asShot = "As Shot"
-    case auto = "Auto"
-    case daylight = "Daylight"
-    case cloudy = "Cloudy"
-    case shade = "Shade"
-    case tungsten = "Tungsten"
-    case fluorescent = "Fluorescent"
-    case sodiumVapor = "Sodium Vapor"
-    case flash = "Flash"
-    case custom = "Custom"
-    
-    public var id: String { rawValue }
-    public var displayName: String { rawValue }
+extension WhiteBalancePreset: @retroactive CaseIterable, @retroactive Identifiable {
+    public static var allCases: [WhiteBalancePreset] {
+        [.asShot, .auto, .daylight, .cloudy, .shade, .tungsten, .fluorescent, .sodiumVapor, .flash, .custom]
+    }
+    public var id: String { displayName }
+    public var displayName: String {
+        switch self {
+        case .asShot: return "As Shot"
+        case .auto: return "Auto"
+        case .daylight: return "Daylight"
+        case .cloudy: return "Cloudy"
+        case .shade: return "Shade"
+        case .tungsten: return "Tungsten"
+        case .fluorescent: return "Fluorescent"
+        case .sodiumVapor: return "Sodium Vapor"
+        case .flash: return "Flash"
+        case .custom: return "Custom"
+        }
+    }
 }
 
 public enum CanvasMode: Hashable {
@@ -338,39 +349,12 @@ public final class AppViewModel {
     public var tint: Float = 0.0          // -200 .. +200
     
     public var activeWhiteBalancePreset: WhiteBalancePreset {
-        // Compare against As Shot
-        if abs(temperature - asShotTemperature) < 25.0 && abs(tint - asShotTint) < 1.0 {
-            return .asShot
-        }
-        // Daylight: 5500K, +10
-        if abs(temperature - 5500.0) < 25.0 && abs(tint - 10.0) < 1.0 {
-            return .daylight
-        }
-        // Cloudy: 6500K, +10
-        if abs(temperature - 6500.0) < 25.0 && abs(tint - 10.0) < 1.0 {
-            return .cloudy
-        }
-        // Shade: 7500K, +10
-        if abs(temperature - 7500.0) < 25.0 && abs(tint - 10.0) < 1.0 {
-            return .shade
-        }
-        // Tungsten: 2850K, 0
-        if abs(temperature - 2850.0) < 25.0 && abs(tint - 0.0) < 1.0 {
-            return .tungsten
-        }
-        // Fluorescent: 3800K, +45
-        if abs(temperature - 3800.0) < 25.0 && abs(tint - 45.0) < 1.0 {
-            return .fluorescent
-        }
-        // Sodium Vapor: 2200K, +160
-        if abs(temperature - 2200.0) < 25.0 && abs(tint - 160.0) < 1.0 {
-            return .sodiumVapor
-        }
-        // Flash: 5500K, 0
-        if abs(temperature - 5500.0) < 25.0 && abs(tint - 0.0) < 1.0 {
-            return .flash
-        }
-        return .custom
+        detectWhiteBalancePreset(
+            temperature: Double(temperature),
+            tint: Double(tint),
+            asShotTemp: Double(asShotTemperature),
+            asShotTint: Double(asShotTint)
+        )
     }
     public var straightenAngle: Float = 0.0 // -45 .. +45 deg
     public var cropLeft: Float = 0.0

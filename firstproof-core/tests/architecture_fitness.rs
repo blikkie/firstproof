@@ -229,3 +229,24 @@ fn test_rec2020_luminance_coefficient_purity() {
     assert!(rust_pipeline.contains(g_coeff), "pipeline.rs must evaluate Rec.2020 Green coeff 0.6780");
     assert!(rust_pipeline.contains(b_coeff), "pipeline.rs must evaluate Rec.2020 Blue coeff 0.0593");
 }
+
+#[test]
+fn test_dual_domain_performance_asymmetry_invariants() {
+    let export_batch = fs::read_to_string(repo_root().join("firstproof-core/src/export/batch.rs")).unwrap();
+    let export_lib = fs::read_to_string(repo_root().join("firstproof-core/src/lib.rs")).unwrap();
+    let export_encoders = fs::read_to_string(repo_root().join("firstproof-core/src/export/encoders.rs")).unwrap();
+
+    // 1. Export pipelines must default to RenderTier::ArchivalExport ("hangs on wall for 10 years")
+    assert!(
+        export_batch.contains("unwrap_or(crate::RenderTier::ArchivalExport)"),
+        "Export batch must default to ArchivalExport tier"
+    );
+    assert!(
+        export_lib.contains("unwrap_or(RenderTier::ArchivalExport)"),
+        "export_photo in firstproof-core must default to ArchivalExport tier"
+    );
+    assert!(
+        export_encoders.contains("RenderTier::ArchivalExport"),
+        "export_photo_to_disk must execute with ArchivalExport tier"
+    );
+}

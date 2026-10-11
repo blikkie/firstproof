@@ -22,9 +22,10 @@ pub use firstproof_engine::{
     all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,
     AdjustmentDescriptor, ScaleMode, WorkspaceCategory,
     evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, ColorProfileMode,
-    CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat,
-    EmulsionGrainMode, EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace,
-    ExportRenderingIntent, PrintMediaMode, RemjetBackingMode, RenderTier, ToneCurvesRecord, WhiteBalanceResult,
+    CropAspectRatioPreset, CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype,
+    EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace,
+    ExportRenderingIntent, PrintMediaMode, RemjetBackingMode, RenderTier, ToneCurvesRecord,
+    WhiteBalancePreset, WhiteBalanceResult,
 };
 
 pub use lensfun::LensCorrectionCoefficients;
@@ -217,6 +218,39 @@ pub fn convert_kelvin_to_mired_norm(kelvin: f64) -> f64 {
 #[uniffi::export]
 pub fn convert_mired_norm_to_kelvin(norm: f64) -> f64 {
     mired_norm_to_kelvin(norm)
+}
+
+#[derive(uniffi::Record, Clone, Debug, PartialEq)]
+pub struct WhiteBalancePresetValuesRecord {
+    pub temperature: f64,
+    pub tint: f64,
+}
+
+#[uniffi::export]
+pub fn calculate_target_crop_ratio(
+    preset: CropAspectRatioPreset,
+    image_aspect: f32,
+    is_portrait: bool,
+) -> Option<f32> {
+    preset.target_ratio(image_aspect, is_portrait)
+}
+
+#[uniffi::export]
+pub fn get_white_balance_preset_values(preset: WhiteBalancePreset) -> Option<WhiteBalancePresetValuesRecord> {
+    preset.kelvin_and_tint().map(|(temperature, tint)| WhiteBalancePresetValuesRecord {
+        temperature,
+        tint,
+    })
+}
+
+#[uniffi::export]
+pub fn detect_white_balance_preset(
+    temperature: f64,
+    tint: f64,
+    as_shot_temp: f64,
+    as_shot_tint: f64,
+) -> WhiteBalancePreset {
+    WhiteBalancePreset::detect(temperature, tint, as_shot_temp, as_shot_tint)
 }
 
 #[derive(uniffi::Record)]

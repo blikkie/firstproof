@@ -58,6 +58,130 @@ pub enum DemosaicQuality {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[derive(Default)]
+pub enum CropAspectRatioPreset {
+    #[default]
+    Original,
+    Square,
+    FourThree,
+    ThreeTwo,
+    SixteenNine,
+    Freeform,
+}
+
+impl CropAspectRatioPreset {
+    #[inline]
+    pub fn target_ratio(&self, image_aspect: f32, is_portrait: bool) -> Option<f32> {
+        match self {
+            Self::Original => {
+                let is_base_portrait = image_aspect < 1.0;
+                Some(if is_portrait == is_base_portrait {
+                    image_aspect
+                } else {
+                    1.0 / image_aspect
+                })
+            }
+            Self::Square => Some(1.0),
+            Self::FourThree => Some(if is_portrait { 3.0 / 4.0 } else { 4.0 / 3.0 }),
+            Self::ThreeTwo => Some(if is_portrait { 2.0 / 3.0 } else { 3.0 / 2.0 }),
+            Self::SixteenNine => Some(if is_portrait { 9.0 / 16.0 } else { 16.0 / 9.0 }),
+            Self::Freeform => None,
+        }
+    }
+
+    #[inline]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Original => "Original",
+            Self::Square => "1:1",
+            Self::FourThree => "4:3",
+            Self::ThreeTwo => "3:2",
+            Self::SixteenNine => "16:9",
+            Self::Freeform => "Free",
+        }
+    }
+}
+
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
+pub enum WhiteBalancePreset {
+    #[default]
+    AsShot,
+    Auto,
+    Daylight,
+    Cloudy,
+    Shade,
+    Tungsten,
+    Fluorescent,
+    SodiumVapor,
+    Flash,
+    Custom,
+}
+
+impl WhiteBalancePreset {
+    #[inline]
+    pub fn kelvin_and_tint(&self) -> Option<(f64, f64)> {
+        match self {
+            Self::Daylight => Some((5500.0, 10.0)),
+            Self::Cloudy => Some((6500.0, 10.0)),
+            Self::Shade => Some((7500.0, 10.0)),
+            Self::Tungsten => Some((2850.0, 0.0)),
+            Self::Fluorescent => Some((3800.0, 45.0)),
+            Self::SodiumVapor => Some((2200.0, 160.0)),
+            Self::Flash => Some((5500.0, 0.0)),
+            Self::AsShot | Self::Auto | Self::Custom => None,
+        }
+    }
+
+    #[inline]
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::AsShot => "As Shot",
+            Self::Auto => "Auto",
+            Self::Daylight => "Daylight",
+            Self::Cloudy => "Cloudy",
+            Self::Shade => "Shade",
+            Self::Tungsten => "Tungsten",
+            Self::Fluorescent => "Fluorescent",
+            Self::SodiumVapor => "Sodium Vapor",
+            Self::Flash => "Flash",
+            Self::Custom => "Custom",
+        }
+    }
+
+    #[inline]
+    pub fn detect(temperature: f64, tint: f64, as_shot_temp: f64, as_shot_tint: f64) -> Self {
+        if (temperature - as_shot_temp).abs() < 25.0 && (tint - as_shot_tint).abs() < 1.0 {
+            return Self::AsShot;
+        }
+        if (temperature - 5500.0).abs() < 25.0 && (tint - 10.0).abs() < 1.0 {
+            return Self::Daylight;
+        }
+        if (temperature - 6500.0).abs() < 25.0 && (tint - 10.0).abs() < 1.0 {
+            return Self::Cloudy;
+        }
+        if (temperature - 7500.0).abs() < 25.0 && (tint - 10.0).abs() < 1.0 {
+            return Self::Shade;
+        }
+        if (temperature - 2850.0).abs() < 25.0 && (tint - 0.0).abs() < 1.0 {
+            return Self::Tungsten;
+        }
+        if (temperature - 3800.0).abs() < 25.0 && (tint - 45.0).abs() < 1.0 {
+            return Self::Fluorescent;
+        }
+        if (temperature - 2200.0).abs() < 25.0 && (tint - 160.0).abs() < 1.0 {
+            return Self::SodiumVapor;
+        }
+        if (temperature - 5500.0).abs() < 25.0 && (tint - 0.0).abs() < 1.0 {
+            return Self::Flash;
+        }
+        Self::Custom
+    }
+}
+
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum EmulsionGrainMode {
     #[default]
     Off,
@@ -348,5 +472,60 @@ impl EnlargerFilterMode {
             Self::GreenX1 => (0.15, 0.80, 0.05),
             Self::Orthochromatic => (0.00, 0.60, 0.40),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_crop_aspect_ratio_presets() {
+        assert_eq!(CropAspectRatioPreset::Square.target_ratio(1.5, false), Some(1.0));
+        assert_eq!(CropAspectRatioPreset::FourThree.target_ratio(1.5, false), Some(4.0 / 3.0));
+        assert_eq!(CropAspectRatioPreset::FourThree.target_ratio(1.5, true), Some(3.0 / 4.0));
+        assert_eq!(CropAspectRatioPreset::ThreeTwo.target_ratio(1.5, false), Some(3.0 / 2.0));
+        assert_eq!(CropAspectRatioPreset::ThreeTwo.target_ratio(1.5, true), Some(2.0 / 3.0));
+        assert_eq!(CropAspectRatioPreset::SixteenNine.target_ratio(1.5, false), Some(16.0 / 9.0));
+        assert_eq!(CropAspectRatioPreset::SixteenNine.target_ratio(1.5, true), Some(9.0 / 16.0));
+        assert_eq!(CropAspectRatioPreset::Freeform.target_ratio(1.5, false), None);
+
+        // Original with landscape image (1.5)
+        assert_eq!(CropAspectRatioPreset::Original.target_ratio(1.5, false), Some(1.5));
+        assert_eq!(CropAspectRatioPreset::Original.target_ratio(1.5, true), Some(1.0 / 1.5));
+
+        // Original with portrait image (0.6667)
+        assert_eq!(CropAspectRatioPreset::Original.target_ratio(0.6667, true), Some(0.6667));
+        assert_eq!(CropAspectRatioPreset::Original.target_ratio(0.6667, false), Some(1.0 / 0.6667));
+    }
+
+    #[test]
+    fn test_white_balance_presets_and_detection() {
+        assert_eq!(WhiteBalancePreset::Daylight.kelvin_and_tint(), Some((5500.0, 10.0)));
+        assert_eq!(WhiteBalancePreset::Tungsten.kelvin_and_tint(), Some((2850.0, 0.0)));
+        assert_eq!(WhiteBalancePreset::SodiumVapor.kelvin_and_tint(), Some((2200.0, 160.0)));
+        assert_eq!(WhiteBalancePreset::AsShot.kelvin_and_tint(), None);
+
+        // Detection
+        assert_eq!(
+            WhiteBalancePreset::detect(5200.0, 3.0, 5200.0, 3.0),
+            WhiteBalancePreset::AsShot
+        );
+        assert_eq!(
+            WhiteBalancePreset::detect(5500.0, 10.0, 4000.0, 0.0),
+            WhiteBalancePreset::Daylight
+        );
+        assert_eq!(
+            WhiteBalancePreset::detect(2850.0, 0.0, 4000.0, 0.0),
+            WhiteBalancePreset::Tungsten
+        );
+        assert_eq!(
+            WhiteBalancePreset::detect(2200.0, 160.0, 4000.0, 0.0),
+            WhiteBalancePreset::SodiumVapor
+        );
+        assert_eq!(
+            WhiteBalancePreset::detect(9999.0, 50.0, 4000.0, 0.0),
+            WhiteBalancePreset::Custom
+        );
     }
 }

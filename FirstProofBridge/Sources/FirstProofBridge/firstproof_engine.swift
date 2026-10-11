@@ -2105,6 +2105,98 @@ extension ColorProfileMode: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum CropAspectRatioPreset {
+    
+    case original
+    case square
+    case fourThree
+    case threeTwo
+    case sixteenNine
+    case freeform
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCropAspectRatioPreset: FfiConverterRustBuffer {
+    typealias SwiftType = CropAspectRatioPreset
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CropAspectRatioPreset {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .original
+        
+        case 2: return .square
+        
+        case 3: return .fourThree
+        
+        case 4: return .threeTwo
+        
+        case 5: return .sixteenNine
+        
+        case 6: return .freeform
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CropAspectRatioPreset, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .original:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .square:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .fourThree:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .threeTwo:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .sixteenNine:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .freeform:
+            writeInt(&buf, Int32(6))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCropAspectRatioPreset_lift(_ buf: RustBuffer) throws -> CropAspectRatioPreset {
+    return try FfiConverterTypeCropAspectRatioPreset.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCropAspectRatioPreset_lower(_ value: CropAspectRatioPreset) -> RustBuffer {
+    return FfiConverterTypeCropAspectRatioPreset.lower(value)
+}
+
+
+
+extension CropAspectRatioPreset: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * RAW CFA Bayer demosaicing precision quality mode.
  */
@@ -2979,6 +3071,126 @@ public func FfiConverterTypeScaleMode_lower(_ value: ScaleMode) -> RustBuffer {
 
 
 extension ScaleMode: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum WhiteBalancePreset {
+    
+    case asShot
+    case auto
+    case daylight
+    case cloudy
+    case shade
+    case tungsten
+    case fluorescent
+    case sodiumVapor
+    case flash
+    case custom
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWhiteBalancePreset: FfiConverterRustBuffer {
+    typealias SwiftType = WhiteBalancePreset
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhiteBalancePreset {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .asShot
+        
+        case 2: return .auto
+        
+        case 3: return .daylight
+        
+        case 4: return .cloudy
+        
+        case 5: return .shade
+        
+        case 6: return .tungsten
+        
+        case 7: return .fluorescent
+        
+        case 8: return .sodiumVapor
+        
+        case 9: return .flash
+        
+        case 10: return .custom
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WhiteBalancePreset, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .asShot:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .auto:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .daylight:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .cloudy:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .shade:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .tungsten:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .fluorescent:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .sodiumVapor:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .flash:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .custom:
+            writeInt(&buf, Int32(10))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhiteBalancePreset_lift(_ buf: RustBuffer) throws -> WhiteBalancePreset {
+    return try FfiConverterTypeWhiteBalancePreset.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhiteBalancePreset_lower(_ value: WhiteBalancePreset) -> RustBuffer {
+    return FfiConverterTypeWhiteBalancePreset.lower(value)
+}
+
+
+
+extension WhiteBalancePreset: Equatable, Hashable {}
 
 
 

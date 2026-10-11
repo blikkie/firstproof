@@ -7,11 +7,12 @@ pub use firstproof_engine::{
     all_adjustments, evaluate_all_curves_lut, evaluate_curve_lut, extract_preview_slice,
     generate_xmp_sidecar, get_adjustment, get_jpeg_dimensions, kelvin_to_mired_norm,
     mired_norm_to_kelvin, parse_xmp_sidecar, AdjustmentDescriptor, AllCurvesLutRecord,
-    AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode, CurvePointRecord,
-    DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat, EnlargerFilterMode,
-    ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent, f16_to_f32, ImageMetadataRecord,
-    PreviewResultRecord, PrintMediaMode, RawLinearResultRecord, RawSensorFrame, RemjetBackingMode, RenderTier,
-    ScaleMode, ToneCurvesRecord, WorkspaceCategory, XmpData,
+    AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode, CropAspectRatioPreset,
+    CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat,
+    EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent, f16_to_f32,
+    ImageMetadataRecord, PreviewResultRecord, PrintMediaMode, RawLinearResultRecord, RawSensorFrame,
+    RemjetBackingMode, RenderTier, ScaleMode, ToneCurvesRecord, WhiteBalancePreset, WorkspaceCategory,
+    XmpData,
 };
 use scratchpad::with_scratchpad;
 
@@ -687,8 +688,87 @@ pub fn convert_mired_norm_to_kelvin(norm: f64) -> f64 {
     mired_norm_to_kelvin(norm)
 }
 
+#[wasm_bindgen]
+pub fn calculate_target_crop_ratio(
+    preset_name: &str,
+    image_aspect: f32,
+    is_portrait: bool,
+) -> Option<f32> {
+    let preset = match preset_name {
+        "original" | "Original" => CropAspectRatioPreset::Original,
+        "1:1" | "square" | "Square" => CropAspectRatioPreset::Square,
+        "4:3" | "fourThree" | "FourThree" => CropAspectRatioPreset::FourThree,
+        "3:2" | "threeTwo" | "ThreeTwo" => CropAspectRatioPreset::ThreeTwo,
+        "16:9" | "sixteenNine" | "SixteenNine" => CropAspectRatioPreset::SixteenNine,
+        _ => CropAspectRatioPreset::Freeform,
+    };
+    preset.target_ratio(image_aspect, is_portrait)
+}
+
+#[wasm_bindgen]
+pub fn get_white_balance_preset_values(preset_name: &str) -> Option<js_sys::Float64Array> {
+    let preset = match preset_name {
+        "Daylight" | "daylight" => WhiteBalancePreset::Daylight,
+        "Cloudy" | "cloudy" => WhiteBalancePreset::Cloudy,
+        "Shade" | "shade" => WhiteBalancePreset::Shade,
+        "Tungsten" | "tungsten" => WhiteBalancePreset::Tungsten,
+        "Fluorescent" | "fluorescent" => WhiteBalancePreset::Fluorescent,
+        "SodiumVapor" | "sodiumVapor" | "sodium_vapor" => WhiteBalancePreset::SodiumVapor,
+        "Flash" | "flash" => WhiteBalancePreset::Flash,
+        _ => return None,
+    };
+    preset.kelvin_and_tint().map(|(t, tint)| {
+        let arr = js_sys::Float64Array::new_with_length(2);
+        arr.set_index(0, t);
+        arr.set_index(1, tint);
+        arr
+    })
+}
+
+#[wasm_bindgen]
+pub fn detect_white_balance_preset(
+    temperature: f64,
+    tint: f64,
+    as_shot_temp: f64,
+    as_shot_tint: f64,
+) -> String {
+    let preset = WhiteBalancePreset::detect(temperature, tint, as_shot_temp, as_shot_tint);
+    match preset {
+        WhiteBalancePreset::AsShot => "AsShot".to_string(),
+        WhiteBalancePreset::Auto => "Auto".to_string(),
+        WhiteBalancePreset::Daylight => "Daylight".to_string(),
+        WhiteBalancePreset::Cloudy => "Cloudy".to_string(),
+        WhiteBalancePreset::Shade => "Shade".to_string(),
+        WhiteBalancePreset::Tungsten => "Tungsten".to_string(),
+        WhiteBalancePreset::Fluorescent => "Fluorescent".to_string(),
+        WhiteBalancePreset::SodiumVapor => "SodiumVapor".to_string(),
+        WhiteBalancePreset::Flash => "Flash".to_string(),
+        WhiteBalancePreset::Custom => "Custom".to_string(),
+    }
+}
+
 #[wasm_bindgen(typescript_custom_section)]
 const TS_DEFINITIONS: &'static str = r#"
+export type CropAspectRatioPreset =
+    | 'Original'
+    | '1:1'
+    | '4:3'
+    | '3:2'
+    | '16:9'
+    | 'Free';
+
+export type WhiteBalancePreset =
+    | 'AsShot'
+    | 'Auto'
+    | 'Daylight'
+    | 'Cloudy'
+    | 'Shade'
+    | 'Tungsten'
+    | 'Fluorescent'
+    | 'SodiumVapor'
+    | 'Flash'
+    | 'Custom';
+
 export interface ExifOrientationRecord {
     rotation: number;
     flip_horizontal: boolean;

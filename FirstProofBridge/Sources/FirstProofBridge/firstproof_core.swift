@@ -2668,6 +2668,72 @@ public func FfiConverterTypeTakeoutMetadataRecord_lower(_ value: TakeoutMetadata
 }
 
 
+public struct WhiteBalancePresetValuesRecord {
+    public var temperature: Double
+    public var tint: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(temperature: Double, tint: Double) {
+        self.temperature = temperature
+        self.tint = tint
+    }
+}
+
+
+
+extension WhiteBalancePresetValuesRecord: Equatable, Hashable {
+    public static func ==(lhs: WhiteBalancePresetValuesRecord, rhs: WhiteBalancePresetValuesRecord) -> Bool {
+        if lhs.temperature != rhs.temperature {
+            return false
+        }
+        if lhs.tint != rhs.tint {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(temperature)
+        hasher.combine(tint)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWhiteBalancePresetValuesRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhiteBalancePresetValuesRecord {
+        return
+            try WhiteBalancePresetValuesRecord(
+                temperature: FfiConverterDouble.read(from: &buf), 
+                tint: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WhiteBalancePresetValuesRecord, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.temperature, into: &buf)
+        FfiConverterDouble.write(value.tint, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhiteBalancePresetValuesRecord_lift(_ buf: RustBuffer) throws -> WhiteBalancePresetValuesRecord {
+    return try FfiConverterTypeWhiteBalancePresetValuesRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhiteBalancePresetValuesRecord_lower(_ value: WhiteBalancePresetValuesRecord) -> RustBuffer {
+    return FfiConverterTypeWhiteBalancePresetValuesRecord.lower(value)
+}
+
+
 public struct XmpDataRecord {
     public var rating: Int32?
     public var status: String
@@ -3239,6 +3305,30 @@ fileprivate struct FfiConverterOptionTypeTakeoutMetadataRecord: FfiConverterRust
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeWhiteBalancePresetValuesRecord: FfiConverterRustBuffer {
+    typealias SwiftType = WhiteBalancePresetValuesRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeWhiteBalancePresetValuesRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeWhiteBalancePresetValuesRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeXmpDataRecord: FfiConverterRustBuffer {
     typealias SwiftType = XmpDataRecord?
 
@@ -3625,6 +3715,19 @@ fileprivate struct FfiConverterSequenceTypeCurvePointRecord: FfiConverterRustBuf
 
 
 
+
+
+
+
+public func calculateTargetCropRatio(preset: CropAspectRatioPreset, imageAspect: Float, isPortrait: Bool) -> Float? {
+    return try!  FfiConverterOptionFloat.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_calculate_target_crop_ratio(
+        FfiConverterTypeCropAspectRatioPreset_lower(preset),
+        FfiConverterFloat.lower(imageAspect),
+        FfiConverterBool.lower(isPortrait),$0
+    )
+})
+}
 /**
  * Calculates photographic Kelvin temperature and tint from an unadjusted neutral pixel sample.
  */
@@ -3708,6 +3811,16 @@ public func decodeRawPreviewBinned(path: String) -> RawPreviewRecord? {
     return try!  FfiConverterOptionTypeRawPreviewRecord.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_decode_raw_preview_binned(
         FfiConverterString.lower(path),$0
+    )
+})
+}
+public func detectWhiteBalancePreset(temperature: Double, tint: Double, asShotTemp: Double, asShotTint: Double) -> WhiteBalancePreset {
+    return try!  FfiConverterTypeWhiteBalancePreset_lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_detect_white_balance_preset(
+        FfiConverterDouble.lower(temperature),
+        FfiConverterDouble.lower(tint),
+        FfiConverterDouble.lower(asShotTemp),
+        FfiConverterDouble.lower(asShotTint),$0
     )
 })
 }
@@ -3836,6 +3949,13 @@ public func getBuiltinCubeLutTitles() -> [String] {
     )
 })
 }
+public func getWhiteBalancePresetValues(preset: WhiteBalancePreset) -> WhiteBalancePresetValuesRecord? {
+    return try!  FfiConverterOptionTypeWhiteBalancePresetValuesRecord.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_get_white_balance_preset_values(
+        FfiConverterTypeWhiteBalancePreset_lower(preset),$0
+    )
+})
+}
 public func hasUltraHdrGainMap(filePath: String) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_has_ultra_hdr_gain_map(
@@ -3919,6 +4039,9 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_firstproof_core_checksum_func_calculate_target_crop_ratio() != 7171) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_func_calculate_white_balance_from_sample() != 12127) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3950,6 +4073,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_decode_raw_preview_binned() != 554) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_detect_white_balance_preset() != 44784) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_edits_cache_signature() != 39649) {
@@ -3992,6 +4118,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut_titles() != 727) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_get_white_balance_preset_values() != 46047) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_has_ultra_hdr_gain_map() != 37776) {

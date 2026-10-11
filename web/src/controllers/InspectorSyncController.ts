@@ -11,6 +11,10 @@
  * - Emulsion workspace conditional visibility
  */
 
+import {
+  convert_kelvin_to_mired_norm,
+  convert_mired_norm_to_kelvin,
+} from 'firstproof-wasm';
 import type { ToneCurveWidget } from '../ToneCurveWidget';
 import { formatExposure } from '../utils/formatters';
 import type {
@@ -120,21 +124,11 @@ export class InspectorSyncController {
   // 5500 K  -> 181.8 Mireds (pos = 0.707)
   // 20000 K -> 50 Mireds (pos = 1.0)
   public kelvinToMiredPos(kelvin: number): number {
-    const k = Math.min(Math.max(kelvin, 2000.0), 20000.0);
-    const mired = 1_000_000.0 / k;
-    const pos = (500.0 - mired) / 450.0;
-    return Math.min(Math.max(pos, 0.0), 1.0);
+    return convert_kelvin_to_mired_norm(kelvin);
   }
 
   public miredPosToKelvin(pos: number): number {
-    const p = Math.min(Math.max(pos, 0.0), 1.0);
-    const mired = 500.0 - p * 450.0;
-    const rawK = 1_000_000.0 / mired;
-    const steppedK =
-      rawK < 10000.0
-        ? Math.round(rawK / 50.0) * 50.0
-        : Math.round(rawK / 200.0) * 200.0;
-    return Math.min(Math.max(steppedK, 2000.0), 20000.0);
+    return convert_mired_norm_to_kelvin(pos);
   }
 
   public bind(): void {

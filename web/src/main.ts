@@ -588,42 +588,17 @@ class DarkroomApp {
     // Light Source Presets
     this.elements['select-wb-preset']?.addEventListener('change', (e) => {
       const preset = (e.target as HTMLSelectElement).value;
-      switch (preset) {
-        case 'AsShot':
-          this.edits.temperature = 5500.0;
-          this.edits.tint = 0.0;
-          break;
-        case 'Auto':
-          this.applyAutoWhiteBalance();
-          break;
-        case 'Daylight':
-          this.edits.temperature = 5500.0;
-          this.edits.tint = 10.0;
-          break;
-        case 'Cloudy':
-          this.edits.temperature = 6500.0;
-          this.edits.tint = 10.0;
-          break;
-        case 'Shade':
-          this.edits.temperature = 7500.0;
-          this.edits.tint = 10.0;
-          break;
-        case 'Tungsten':
-          this.edits.temperature = 2850.0;
-          this.edits.tint = 0.0;
-          break;
-        case 'Fluorescent':
-          this.edits.temperature = 3800.0;
-          this.edits.tint = 45.0;
-          break;
-        case 'SodiumVapor':
-          this.edits.temperature = 2200.0;
-          this.edits.tint = 160.0;
-          break;
-        case 'Flash':
-          this.edits.temperature = 5500.0;
-          this.edits.tint = 0.0;
-          break;
+      if (preset === 'AsShot') {
+        this.edits.temperature = 5500.0;
+        this.edits.tint = 0.0;
+      } else if (preset === 'Auto') {
+        this.applyAutoWhiteBalance();
+      } else {
+        const values = this.bridge.getWhiteBalancePresetValues(preset);
+        if (values) {
+          this.edits.temperature = values[0];
+          this.edits.tint = values[1];
+        }
       }
       this.inspectorController.syncSliderUI();
       this.renderCanvas();

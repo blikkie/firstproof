@@ -11,6 +11,8 @@
  * - Continuous smooth updates with 60fps SVG rendering.
  */
 
+import { calculate_target_crop_ratio } from 'firstproof-wasm';
+
 export interface CropRect {
   left: number; // 0.0 .. 1.0 (normalized)
   top: number; // 0.0 .. 1.0
@@ -970,24 +972,12 @@ export class CropController {
       isPortrait = !isPortrait;
     }
 
-    switch (this.aspectMode) {
-      case 'original': {
-        const isBasePortrait = this.imageAspect < 1.0;
-        return isPortrait === isBasePortrait
-          ? this.imageAspect
-          : 1.0 / this.imageAspect;
-      }
-      case '1:1':
-        return 1.0;
-      case '4:3':
-        return isPortrait ? 3.0 / 4.0 : 4.0 / 3.0;
-      case '3:2':
-        return isPortrait ? 2.0 / 3.0 : 3.0 / 2.0;
-      case '16:9':
-        return isPortrait ? 9.0 / 16.0 : 16.0 / 9.0;
-      default:
-        return null;
-    }
+    const target = calculate_target_crop_ratio(
+      this.aspectMode,
+      this.imageAspect,
+      isPortrait,
+    );
+    return target !== undefined ? target : null;
   }
 
   private applyAspectConstraint() {

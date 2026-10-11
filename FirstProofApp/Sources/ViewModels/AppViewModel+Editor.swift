@@ -697,59 +697,20 @@ extension AppViewModel {
     
     public func applyWhiteBalancePreset(_ preset: WhiteBalancePreset) {
         let before = currentEdits
-        switch preset {
-        case .asShot:
+        if preset == .asShot {
             withAnimation(.easeInOut(duration: 0.15)) {
                 self.temperature = self.asShotTemperature
                 self.tint = self.asShotTint
             }
             registerDiscreteEdit(title: "White Balance: As Shot", before: before)
-        case .auto:
+        } else if preset == .auto {
             applyAutoWhiteBalance()
-        case .daylight:
+        } else if let values = getWhiteBalancePresetValues(preset: preset) {
             withAnimation(.easeInOut(duration: 0.15)) {
-                self.temperature = 5500.0
-                self.tint = 10.0
+                self.temperature = Float(values.temperature)
+                self.tint = Float(values.tint)
             }
-            registerDiscreteEdit(title: "White Balance: Daylight", before: before)
-        case .cloudy:
-            withAnimation(.easeInOut(duration: 0.15)) {
-                self.temperature = 6500.0
-                self.tint = 10.0
-            }
-            registerDiscreteEdit(title: "White Balance: Cloudy", before: before)
-        case .shade:
-            withAnimation(.easeInOut(duration: 0.15)) {
-                self.temperature = 7500.0
-                self.tint = 10.0
-            }
-            registerDiscreteEdit(title: "White Balance: Shade", before: before)
-        case .tungsten:
-            withAnimation(.easeInOut(duration: 0.15)) {
-                self.temperature = 2850.0
-                self.tint = 0.0
-            }
-            registerDiscreteEdit(title: "White Balance: Tungsten", before: before)
-        case .fluorescent:
-            withAnimation(.easeInOut(duration: 0.15)) {
-                self.temperature = 3800.0
-                self.tint = 45.0
-            }
-            registerDiscreteEdit(title: "White Balance: Fluorescent", before: before)
-        case .sodiumVapor:
-            withAnimation(.easeInOut(duration: 0.15)) {
-                self.temperature = 2200.0
-                self.tint = 160.0
-            }
-            registerDiscreteEdit(title: "White Balance: Sodium Vapor", before: before)
-        case .flash:
-            withAnimation(.easeInOut(duration: 0.15)) {
-                self.temperature = 5500.0
-                self.tint = 0.0
-            }
-            registerDiscreteEdit(title: "White Balance: Flash", before: before)
-        case .custom:
-            break
+            registerDiscreteEdit(title: "White Balance: \(preset.displayName)", before: before)
         }
     }
     
