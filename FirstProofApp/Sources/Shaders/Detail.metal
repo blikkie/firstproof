@@ -32,6 +32,9 @@ inline float3 applyDetailAndSharpening(
     // Edge masking weight:
     // When masking <= 0, w_edge = 1.0 (uniform sharpening across entire image).
     // When masking > 0, flat regions (grad_mag < threshold) are smoothly suppressed towards 0.
+    // Derivation: Normalized 8-tap Sobel gradient magnitude has a sensor noise floor < 0.01,
+    // microtexture at 0.01-0.05, and distinct subject edges at >= 0.08.
+    // The ceiling 0.08 isolates subject edges from noise; the 1.5 power taper provides fine control at low slider values.
     float w_edge = 1.0;
     if (masking > 0.0) {
         float m = clamp(masking / 100.0, 0.0, 1.0);

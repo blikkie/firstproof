@@ -17,6 +17,8 @@ LumenBoxBridge/Sources/LumenBoxCoreFFI/include/*.a
 # Web & WebAssembly
 **/pkg*/
 **/node_modules/
+.vite/
+web/.vite/
 web/dist/
 web/parity_report.json
 parity_report.json

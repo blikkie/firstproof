@@ -26,6 +26,7 @@ inline float2 transformGeometry(float2 uv, constant ShaderUniforms &uniforms) {
     float angle = uniforms.straightenAngle;
     float cosA = cos(angle);
     float sinA = sin(angle);
+    // Perspective keystone coefficients: 0.005 scales [-100, +100] to a max backward homography tilt coefficient of [-0.5, +0.5] (~28.6 deg)
     float cV = uniforms.perspectiveVertical * 0.005;
     float cH = uniforms.perspectiveHorizontal * 0.005;
     

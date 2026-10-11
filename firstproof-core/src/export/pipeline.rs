@@ -254,8 +254,11 @@ pub fn apply_edits_with_tier(
                         if let Some(ref lut) = camera_curve_lut {
                             let lut_size_f = (lut.len() - 1) as f32;
                             let apply_curve = |v: f32| -> f32 {
-                                let idx = (v.clamp(0.0, 1.0) * lut_size_f).round() as usize;
-                                lut[idx]
+                                let pos = v.clamp(0.0, 1.0) * lut_size_f;
+                                let i0 = pos.floor() as usize;
+                                let i1 = (i0 + 1).min(lut.len() - 1);
+                                let frac = pos - i0 as f32;
+                                lut[i0] * (1.0 - frac) + lut[i1] * frac
                             };
                             r = apply_curve(c_srgb.r().max(0.0));
                             g = apply_curve(c_srgb.g().max(0.0));
@@ -419,8 +422,11 @@ pub fn apply_edits_with_tier(
                         if let Some(ref lut) = camera_curve_lut {
                             let lut_size_f = (lut.len() - 1) as f32;
                             let apply_curve = |v: f32| -> f32 {
-                                let idx = (v.clamp(0.0, 1.0) * lut_size_f).round() as usize;
-                                lut[idx]
+                                let pos = v.clamp(0.0, 1.0) * lut_size_f;
+                                let i0 = pos.floor() as usize;
+                                let i1 = (i0 + 1).min(lut.len() - 1);
+                                let frac = pos - i0 as f32;
+                                lut[i0] * (1.0 - frac) + lut[i1] * frac
                             };
                             r = apply_curve(c_srgb.r().max(0.0));
                             g = apply_curve(c_srgb.g().max(0.0));

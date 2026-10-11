@@ -246,7 +246,10 @@ fragment float4 fragmentShader(
         float sinJ = sin(jitter);
         float2x2 rot = float2x2(float2(cosJ, sinJ), float2(-sinJ, cosJ));
 
-        // 16-tap Fermat golden spiral with exponential distance weighting
+        // 16-tap Fermat golden spiral with exponential back-scatter distance weighting:
+        // Sampling: r_i = sqrt((i + 0.5) / 16), theta_i = i * phi (golden angle phi = pi * (3 - sqrt(5)) ~ 137.507764 deg)
+        // Optical PSF: exponential decay w_i = exp(-2.5 * r_i) modeling diffuse photon transmission through film base.
+        // Weight normalization: sum(w_i) = 3.6187 used directly below for energy-conserving diffuse glow.
         constexpr float2 fermatDisk[16] = {
             float2( 0.1768,  0.0000), float2(-0.2258,  0.2068), float2( 0.0346, -0.3938), float2( 0.2846,  0.3712),
             float2(-0.5222, -0.0924), float2( 0.4947, -0.3147), float2(-0.1655,  0.6155), float2(-0.3156, -0.6076),
