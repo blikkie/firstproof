@@ -1,6 +1,154 @@
 import SwiftUI
 import AppKit
 
+public struct TactileSlider: View {
+    @Binding public var value: Float
+    public let range: ClosedRange<Float>
+    public var onReset: (() -> Void)? = nil
+    public var onEditingChanged: ((Bool) -> Void)? = nil
+    
+    @State private var isDragging: Bool = false
+    @State private var dragStartValue: Float = 0
+    @State private var dragStartLocationX: CGFloat = 0
+    
+    public init(
+        value: Binding<Float>,
+        range: ClosedRange<Float>,
+        onReset: (() -> Void)? = nil,
+        onEditingChanged: ((Bool) -> Void)? = nil
+    ) {
+        self._value = value
+        self.range = range
+        self.onReset = onReset
+        self.onEditingChanged = onEditingChanged
+    }
+    
+    private func normalizedPosition(for val: Float) -> CGFloat {
+        let span = range.upperBound - range.lowerBound
+        guard span > 0 else { return 0.5 }
+        let clamped = min(max(val, range.lowerBound), range.upperBound)
+        return CGFloat((clamped - range.lowerBound) / span)
+    }
+    
+    private func valueForNormalized(_ norm: CGFloat) -> Float {
+        let span = range.upperBound - range.lowerBound
+        let clamped = min(max(norm, 0.0), 1.0)
+        return min(max(range.lowerBound + Float(clamped) * span, range.lowerBound), range.upperBound)
+    }
+    
+    private var isBipolar: Bool {
+        range.lowerBound < 0 && range.upperBound > 0
+    }
+    
+    public var body: some View {
+        GeometryReader { geo in
+            let totalWidth = geo.size.width
+            let knobDiameter: CGFloat = 16
+            let usableTrackWidth = max(totalWidth - knobDiameter, 1)
+            let norm = normalizedPosition(for: value)
+            let knobCenterX = knobDiameter / 2 + norm * usableTrackWidth
+            let zeroNorm = isBipolar ? normalizedPosition(for: 0.0) : 0.0
+            let zeroCenterX = knobDiameter / 2 + zeroNorm * usableTrackWidth
+            
+            ZStack(alignment: .leading) {
+                // 1. Recessed High-Contrast Groove Track
+                RoundedRectangle(cornerRadius: 3.5)
+                    .fill(Color(red: 0.04, green: 0.04, blue: 0.06))
+                    .frame(height: 7)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3.5)
+                            .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.8), radius: 1, x: 0, y: 1)
+                    .padding(.horizontal, knobDiameter / 2)
+                
+                // 2. Active Fill (Machined Silver)
+                if isBipolar {
+                    let fillLeft = min(zeroCenterX, knobCenterX)
+                    let fillWidth = abs(knobCenterX - zeroCenterX)
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.white.opacity(0.40))
+                        .frame(width: fillWidth, height: 3.5)
+                        .offset(x: fillLeft)
+                } else if norm > 0.001 {
+                    let fillWidth = norm * usableTrackWidth
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.white.opacity(0.40))
+                        .frame(width: fillWidth, height: 3.5)
+                        .offset(x: knobDiameter / 2)
+                }
+                
+                // 3. Center Detent Tick (for Bipolar Sliders)
+                if isBipolar {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.50))
+                        .frame(width: 1.5, height: 7)
+                        .offset(x: zeroCenterX - 0.75)
+                }
+                
+                // 4. Solid Opaque Bead-Blasted Aluminum Knob (Zero Translucency / Zero Glass)
+                ZStack {
+                    Circle()
+                        .fill(Color(white: 0.94))
+                        .frame(width: knobDiameter, height: knobDiameter)
+                        .overlay(
+                            Circle()
+                                .stroke(Color(red: 0.08, green: 0.08, blue: 0.10), lineWidth: 1.5)
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.8), lineWidth: 0.5)
+                                .padding(1)
+                        )
+                        .shadow(color: Color.black.opacity(0.7), radius: 2.5, x: 0, y: 1.5)
+                    
+                    // Tactile center pip
+                    Circle()
+                        .fill(Color(white: 0.35))
+                        .frame(width: 3, height: 3)
+                }
+                .scaleEffect(isDragging ? 1.12 : 1.0)
+                .offset(x: knobCenterX - knobDiameter / 2)
+            }
+            .frame(height: 20)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        if !isDragging {
+                            isDragging = true
+                            dragStartValue = value
+                            dragStartLocationX = gesture.startLocation.x
+                            onEditingChanged?(true)
+                        }
+                        
+                        let isShift = NSEvent.modifierFlags.contains(.shift)
+                        if isShift {
+                            let deltaX = gesture.location.x - dragStartLocationX
+                            let fineRatio: CGFloat = 0.10
+                            let deltaNorm = (deltaX * fineRatio) / usableTrackWidth
+                            let baseNorm = normalizedPosition(for: dragStartValue)
+                            let newNorm = min(max(baseNorm + deltaNorm, 0.0), 1.0)
+                            value = self.valueForNormalized(newNorm)
+                        } else {
+                            let clickLocationX = gesture.location.x
+                            let newNorm = min(max((clickLocationX - knobDiameter / 2) / usableTrackWidth, 0.0), 1.0)
+                            value = self.valueForNormalized(newNorm)
+                        }
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                        onEditingChanged?(false)
+                    }
+            )
+            .onTapGesture(count: 2) {
+                onReset?()
+            }
+        }
+        .frame(height: 20)
+    }
+}
+
 public struct SliderRow: View {
     public let label: String
     @Binding public var value: Float
@@ -41,9 +189,12 @@ public struct SliderRow: View {
                     .foregroundColor(.secondary)
             }
             
-            Slider(value: $value, in: range) { isEditing in
-                onEditingChanged?(isEditing)
-            }
+            TactileSlider(
+                value: $value,
+                range: range,
+                onReset: onReset,
+                onEditingChanged: onEditingChanged
+            )
         }
     }
 }
@@ -106,9 +257,12 @@ public struct TemperatureSliderRow: View {
                     .foregroundColor(.secondary)
             }
             
-            Slider(value: sliderPosition, in: 0.0...1.0) { isEditing in
-                onEditingChanged?(isEditing)
-            }
+            TactileSlider(
+                value: sliderPosition,
+                range: 0.0...1.0,
+                onReset: onReset,
+                onEditingChanged: onEditingChanged
+            )
         }
     }
 }
@@ -149,9 +303,12 @@ public struct HueSliderRow: View {
                     .foregroundColor(.secondary)
             }
             
-            Slider(value: $hue, in: 0.0...360.0) { isEditing in
-                onEditingChanged?(isEditing)
-            }
+            TactileSlider(
+                value: $hue,
+                range: 0.0...360.0,
+                onReset: onReset,
+                onEditingChanged: onEditingChanged
+            )
         }
     }
 }

@@ -306,8 +306,7 @@ struct CanvasView: View {
                                                 }
                                                 .padding(.horizontal, 14)
                                                 .padding(.vertical, 8)
-                                                .background(.ultraThinMaterial)
-                                                .background(Color.black.opacity(0.65))
+                                                .background(Color(red: 0.11, green: 0.11, blue: 0.12).opacity(0.92))
                                                 .cornerRadius(20)
                                                 .overlay(
                                                     RoundedRectangle(cornerRadius: 20)
@@ -364,8 +363,7 @@ struct CanvasView: View {
                             }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 7)
-                            .background(.ultraThinMaterial)
-                            .background(Color.black.opacity(0.65))
+                            .background(Color(red: 0.11, green: 0.11, blue: 0.12).opacity(0.92))
                             .cornerRadius(20)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 20)
@@ -408,8 +406,7 @@ struct CanvasView: View {
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(.ultraThinMaterial)
-                            .background(Color.black.opacity(0.75))
+                            .background(Color(red: 0.11, green: 0.11, blue: 0.12).opacity(0.95))
                             .cornerRadius(16)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16)
@@ -444,8 +441,7 @@ struct CanvasView: View {
                             .foregroundColor(.white.opacity(0.8))
                     }
                     .padding(24)
-                    .background(.ultraThinMaterial)
-                    .background(Color.black.opacity(0.7))
+                    .background(Color(red: 0.11, green: 0.11, blue: 0.12).opacity(0.95))
                     .cornerRadius(16)
                     .shadow(radius: 20)
                 }

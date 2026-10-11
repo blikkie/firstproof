@@ -358,11 +358,11 @@ vec3 applyToneRecovery(vec3 color, float highlights, float shadows, float whites
 //
 // 2. Deep Blue (Rayleigh Sky Component & Optical Polarizing Attenuation):
 //    Sky signal is the blue chromatic excess above warm scene radiance (b - max(r, g)), isolating
-//    unpolarized Rayleigh scattered skylight (I \propto \lambda^-4).
+//    unpolarized Rayleigh scattered skylight (I \\propto \\lambda^-4).
 //    Polarizing attenuation follows Malus' law and Brewster-angle sky polarization P(\theta).
 //    Subtractive attenuation coefficients [0.28, 0.18, 0.15] selectively absorb warm diffuse haze
 //    more strongly than blue wavelengths, deepening the sky without color cast inversion.
-//    Perceptual exponent 1.6 follows Stevens' power law for human brightness perception (S \propto I^0.5),
+//    Perceptual exponent 1.6 follows Stevens' power law for human brightness perception (S \\propto I^0.5),
 //    yielding fine sub-stop adjustment near neutral with decisive control at extreme slider travel.
 //
 // 3. Foliage (Chlorophyll Spectral Absorption Isolation):

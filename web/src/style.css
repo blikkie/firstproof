@@ -181,8 +181,7 @@ body.darkroom-body {
 .spinner-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(5, 6, 8, 0.75);
-  backdrop-filter: blur(4px);
+  background: rgba(5, 6, 8, 0.82);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -381,7 +380,6 @@ body.darkroom-body {
 
 .thumb-card.active {
   border-color: var(--accent-silver);
-  box-shadow: 0 0 8px rgba(226, 232, 240, 0.25);
 }
 
 .thumb-icon-placeholder {
@@ -854,77 +852,84 @@ input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 5px;
-  background: #1e1e24;
+  height: 6px;
+  background: #0a0b0e;
   border-radius: 3px;
   outline: none;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.04);
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.slider-row:hover input[type="range"],
+.control-row:hover input[type="range"] {
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 input[type="range"]:focus {
-  border-color: rgba(85, 153, 255, 0.4);
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(245, 158, 11, 0.25);
 }
 
 /* Custom Tactile Thumb (Webkit) */
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: #d8d8dc;
-  border: 1.5px solid #141417;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  background: linear-gradient(180deg, #ffffff 0%, #d4d8e0 100%);
+  border: 1.5px solid #101216;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.35);
   cursor: grab;
   transition: transform 0.1s ease, background-color 0.1s ease, box-shadow 0.1s ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
   background: #ffffff;
-  transform: scale(1.15);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.4);
+  transform: scale(1.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.9), inset 0 1px 1px #ffffff, 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 input[type="range"]:active::-webkit-slider-thumb {
   cursor: grabbing;
   background: #ffffff;
-  transform: scale(1.2);
-  box-shadow: 0 0 0 3px rgba(85, 153, 255, 0.35), 0 1px 4px rgba(0, 0, 0, 0.9);
+  transform: scale(1.18);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4), 0 2px 6px rgba(0, 0, 0, 0.95);
 }
 
 /* Custom Tactile Thumb (Firefox) */
 input[type="range"]::-moz-range-track {
-  height: 5px;
-  background: #1e1e24;
+  height: 6px;
+  background: #0a0b0e;
   border-radius: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: #d8d8dc;
-  border: 1.5px solid #141417;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  background: linear-gradient(180deg, #ffffff 0%, #d4d8e0 100%);
+  border: 1.5px solid #101216;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.35);
   cursor: grab;
   transition: transform 0.1s ease, background-color 0.1s ease, box-shadow 0.1s ease;
 }
 
 input[type="range"]::-moz-range-thumb:hover {
   background: #ffffff;
-  transform: scale(1.15);
+  transform: scale(1.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.9), inset 0 1px 1px #ffffff, 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 input[type="range"]:active::-moz-range-thumb {
   cursor: grabbing;
   background: #ffffff;
-  transform: scale(1.2);
-  box-shadow: 0 0 0 3px rgba(85, 153, 255, 0.35), 0 1px 4px rgba(0, 0, 0, 0.9);
+  transform: scale(1.18);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4), 0 2px 6px rgba(0, 0, 0, 0.95);
 }
 
 .select-input, .text-input, .textarea-input {
@@ -1002,8 +1007,7 @@ input[type="range"]:active::-moz-range-thumb {
 }
 
 .dialog-modal::backdrop {
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.78);
 }
 
 .modal-card {
@@ -1076,8 +1080,7 @@ kbd {
 }
 
 .parity-modal::backdrop {
-  background-color: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.78);
 }
 
 .parity-modal-content {
@@ -1464,10 +1467,8 @@ kbd {
   position: absolute;
   top: 14px;
   left: 14px;
-  background: rgba(14, 16, 20, 0.78);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(18, 20, 25, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   color: #e2e4e9;
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
@@ -1478,18 +1479,18 @@ kbd {
   user-select: none;
   transition: all 0.15s ease;
   z-index: 10;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 .zoom-badge:hover {
-  background: rgba(26, 30, 38, 0.92);
+  background: rgba(26, 30, 38, 0.98);
   border-color: rgba(255, 255, 255, 0.28);
   color: #ffffff;
 }
 .zoom-badge.is-zoomed,
 .zoom-badge.zoomed {
-  border-color: rgba(59, 130, 246, 0.5);
+  border-color: var(--accent-blue);
   color: #60a5fa;
-  background: rgba(14, 25, 45, 0.85);
+  background: rgba(18, 24, 36, 0.95);
 }
 
 /* Floating Peek Readout Badge */
@@ -1498,9 +1499,7 @@ kbd {
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(14, 16, 20, 0.85);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(18, 20, 25, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.18);
   color: #e2e4e9;
   font-family: 'JetBrains Mono', monospace;
@@ -1513,12 +1512,12 @@ kbd {
   pointer-events: none;
   user-select: none;
   z-index: 10;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 .peek-badge.original-negative {
-  border-color: rgba(59, 130, 246, 0.6);
+  border-color: var(--accent-blue);
   color: #60a5fa;
-  background: rgba(14, 25, 45, 0.9);
+  background: rgba(18, 24, 36, 0.95);
 }
 
 /* General utility */
@@ -1593,13 +1592,11 @@ kbd {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(14, 16, 20, 0.90);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(18, 20, 25, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   padding: 8px 16px;
   border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   z-index: 35;
   color: #ffffff;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -1621,13 +1618,11 @@ kbd {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: rgba(14, 16, 20, 0.88);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(18, 20, 25, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.18);
   padding: 8px 14px;
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   z-index: 30;
   white-space: nowrap;
 }
@@ -1670,8 +1665,6 @@ kbd {
 }
 .crop-straighten-slider {
   width: 170px;
-  height: 4px;
-  accent-color: var(--accent-blue);
   cursor: pointer;
 }
 .crop-straighten-val {
@@ -1719,12 +1712,10 @@ kbd {
 /* --- Filmstrip Multi-Selection --- */
 .thumb-card.selected {
   border-color: var(--accent-blue);
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.35);
 }
 
 .thumb-card.active.selected {
   border-color: var(--accent-blue);
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.55);
 }
 
 /* --- Export Modal (macOS ExportSheetView Parity) --- */
@@ -1740,8 +1731,7 @@ kbd {
 }
 
 .export-modal::backdrop {
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.78);
 }
 
 .export-modal-card {
@@ -1966,7 +1956,7 @@ kbd {
 
 .radio-label input[type="radio"],
 .checkbox-label input[type="checkbox"] {
-  accent-color: var(--accent-blue);
+  accent-color: var(--accent-amber);
   cursor: pointer;
 }
 

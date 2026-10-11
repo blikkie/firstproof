@@ -104,6 +104,38 @@ def check_swift_ffi_swallowing():
             
     return violations
 
+def check_no_liquid_glass():
+    """Ensure views do not use translucent liquid glass / refractive materials that bleed background radiance."""
+    violations = []
+    
+    # 1. Swift Views: No ultraThinMaterial / thinMaterial
+    swift_views = ROOT_DIR / "FirstProofApp" / "Sources" / "Views"
+    if swift_views.exists():
+        pattern_swift = re.compile(r"(\.ultraThinMaterial|Material\.ultraThinMaterial|\.thinMaterial|Material\.thinMaterial)")
+        for path in swift_views.rglob("*.swift"):
+            try:
+                content = path.read_text(encoding="utf-8")
+                for idx, line in enumerate(content.splitlines(), start=1):
+                    if pattern_swift.search(line):
+                        violations.append(f"{path.relative_to(ROOT_DIR)}:{idx} -> Translucent liquid glass violates neutral chromatic adaptation: {line.strip()}")
+            except Exception as e:
+                violations.append(f"Could not read {path}: {e}")
+                
+    # 2. Web CSS: No backdrop-filter blur
+    web_src = ROOT_DIR / "web" / "src"
+    if web_src.exists():
+        pattern_web = re.compile(r"backdrop-filter:\s*blur")
+        for path in web_src.rglob("*.css"):
+            try:
+                content = path.read_text(encoding="utf-8")
+                for idx, line in enumerate(content.splitlines(), start=1):
+                    if pattern_web.search(line):
+                        violations.append(f"{path.relative_to(ROOT_DIR)}:{idx} -> Web backdrop-filter blur violates darkroom matte slate standard: {line.strip()}")
+            except Exception as e:
+                violations.append(f"Could not read {path}: {e}")
+                
+    return violations
+
 def main():
     all_violations = []
     
@@ -122,6 +154,10 @@ def main():
     ffi_violations = check_swift_ffi_swallowing()
     if ffi_violations:
         all_violations.extend(["[Swift Rust-FFI Error Swallowing Violations]", *ffi_violations])
+
+    glass_violations = check_no_liquid_glass()
+    if glass_violations:
+        all_violations.extend(["[Liquid Glass & Translucency Violations]", *glass_violations])
 
     if all_violations:
         print("❌ Architectural Anti-Slop & Invariant Sensor FAILED:")

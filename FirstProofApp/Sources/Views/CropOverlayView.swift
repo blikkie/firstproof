@@ -95,8 +95,7 @@ public struct CropOverlayView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(Material.ultraThinMaterial)
-                        .background(Color.black.opacity(0.6))
+                        .background(Color(red: 0.11, green: 0.11, blue: 0.12).opacity(0.92))
                         .cornerRadius(20)
                         .padding(.bottom, 80)
                     }
@@ -553,7 +552,7 @@ public struct CropOverlayView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .background(Color.accentColor)
-                .foregroundColor(.white)
+                .foregroundColor(Color(red: 0.10, green: 0.10, blue: 0.12))
                 .cornerRadius(6)
             }
             .buttonStyle(.plain)
@@ -561,8 +560,7 @@ public struct CropOverlayView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .background(Color.black.opacity(0.45))
+        .background(Color(red: 0.11, green: 0.11, blue: 0.12).opacity(0.92))
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)

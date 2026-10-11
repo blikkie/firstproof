@@ -51,6 +51,8 @@ struct FirstProofApp: App {
         WindowGroup {
             MainView()
                 .environment(viewModel)
+                .tint(Color(white: 0.85))
+                .accentColor(Color(white: 0.85))
                 .navigationTitle("First Proof - Editorial RAW Developer")
                 .onAppear {
                     DebugIPCService.shared.start(with: viewModel)
