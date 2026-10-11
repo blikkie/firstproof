@@ -22,7 +22,17 @@ export function updateMetadataHeaderElements(
     );
   }
   if (elements['meta-camera']) {
-    elements['meta-camera'].innerText = `${meta.camera_model || 'Bayer Raw'}`;
+    const make = meta.camera_make?.trim() || '';
+    const model = meta.camera_model?.trim() || '';
+    if (make && model) {
+      elements['meta-camera'].innerText = model
+        .toLowerCase()
+        .includes(make.toLowerCase())
+        ? model
+        : `${make} ${model}`;
+    } else {
+      elements['meta-camera'].innerText = model || make || 'Bayer Raw';
+    }
   }
   if (elements['meta-iso']) {
     elements['meta-iso'].innerText = formatISO(meta.iso);

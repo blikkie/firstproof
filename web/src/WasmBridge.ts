@@ -1,4 +1,5 @@
 import type {
+  AdjustmentDescriptor,
   AllCurvesLutRecord,
   AutoAdjustments,
   AutoWhiteBalanceResult,
@@ -18,13 +19,16 @@ import type {
   PrintMediaMode,
   RawLinearResultRecord,
   RemjetBackingMode,
+  ScaleMode,
   ToneCurvesRecord,
   WhiteBalancePreset,
+  WorkspaceCategory,
   XmpData,
 } from 'firstproof-wasm';
 import initWasm, * as wasm from 'firstproof-wasm';
 
 export type {
+  AdjustmentDescriptor,
   AllCurvesLutRecord,
   AutoAdjustments,
   AutoWhiteBalanceResult,
@@ -44,8 +48,10 @@ export type {
   PrintMediaMode,
   RawLinearResultRecord,
   RemjetBackingMode,
+  ScaleMode,
   ToneCurvesRecord,
   WhiteBalancePreset,
+  WorkspaceCategory,
   XmpData,
 };
 
@@ -417,5 +423,13 @@ export class WasmBridge {
 
   public miredPosToKelvin(pos: number): number {
     return wasm.convert_mired_norm_to_kelvin(pos);
+  }
+
+  public getAllAdjustments(): AdjustmentDescriptor[] {
+    return (wasm.get_all_adjustments() as AdjustmentDescriptor[]) || [];
+  }
+
+  public getAdjustmentDescriptor(id: string): AdjustmentDescriptor | null {
+    return (wasm.get_adjustment_descriptor(id) as AdjustmentDescriptor) || null;
   }
 }

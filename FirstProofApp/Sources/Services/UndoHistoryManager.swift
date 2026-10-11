@@ -262,6 +262,12 @@ public final class UndoHistoryManager {
         return nil
     }
     
+    /// Cancels pending slider or gesture scrubbing without recording an undo entry.
+    public func cancelScrub() {
+        scrubStartEdits = nil
+        scrubPhotoPath = nil
+    }
+    
     /// Records an atomic darkroom edit to the specific photo's scoped stack.
     public func registerEdit(title: String, photoPath: String, before: EditSettings, after: EditSettings) {
         guard before != after else { return }

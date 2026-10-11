@@ -7,21 +7,25 @@ public struct TactileSlider: View {
     public let range: ClosedRange<Float>
     public var onReset: (() -> Void)? = nil
     public var onEditingChanged: ((Bool) -> Void)? = nil
+    public var onCancel: (() -> Void)? = nil
     
     @State private var isDragging: Bool = false
     @State private var dragStartValue: Float = 0
     @State private var dragStartLocationX: CGFloat = 0
+    @State private var keyMonitor: Any? = nil
     
     public init(
         value: Binding<Float>,
         range: ClosedRange<Float>,
         onReset: (() -> Void)? = nil,
-        onEditingChanged: ((Bool) -> Void)? = nil
+        onEditingChanged: ((Bool) -> Void)? = nil,
+        onCancel: (() -> Void)? = nil
     ) {
         self._value = value
         self.range = range
         self.onReset = onReset
         self.onEditingChanged = onEditingChanged
+        self.onCancel = onCancel
     }
     
     private func normalizedPosition(for val: Float) -> CGFloat {
@@ -35,6 +39,13 @@ public struct TactileSlider: View {
         let span = range.upperBound - range.lowerBound
         let clamped = min(max(norm, 0.0), 1.0)
         return min(max(range.lowerBound + Float(clamped) * span, range.lowerBound), range.upperBound)
+    }
+    
+    private func teardownMonitor() {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
     }
     
     private var isBipolar: Bool {
@@ -121,6 +132,18 @@ public struct TactileSlider: View {
                             dragStartValue = value
                             dragStartLocationX = gesture.startLocation.x
                             onEditingChanged?(true)
+                            
+                            teardownMonitor()
+                            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                                if event.keyCode == 53 { // Escape: Rollback pending drag scrub
+                                    value = dragStartValue
+                                    isDragging = false
+                                    teardownMonitor()
+                                    onCancel?()
+                                    return nil
+                                }
+                                return event
+                            }
                         }
                         
                         let isShift = NSEvent.modifierFlags.contains(.shift)
@@ -138,12 +161,16 @@ public struct TactileSlider: View {
                         }
                     }
                     .onEnded { _ in
+                        teardownMonitor()
                         isDragging = false
                         onEditingChanged?(false)
                     }
             )
             .onTapGesture(count: 2) {
                 onReset?()
+            }
+            .onDisappear {
+                teardownMonitor()
             }
         }
         .frame(height: 20)
@@ -155,10 +182,39 @@ public struct SliderRow: View {
     @Binding public var value: Float
     public let range: ClosedRange<Float>
     public let format: String
+    public let descriptor: AdjustmentDescriptor?
     public let onReset: () -> Void
     public var onEditingChanged: ((Bool) -> Void)? = nil
+    public var onCancel: (() -> Void)? = nil
     public var multiplier: Float = 1.0
     
+    /// Schema-driven initializer deriving range, step, label, and format from Rust AdjustmentDescriptor
+    public init(
+        slider: EditSliderType,
+        value: Binding<Float>,
+        onReset: @escaping () -> Void,
+        onEditingChanged: ((Bool) -> Void)? = nil,
+        onCancel: (() -> Void)? = nil,
+        customLabel: String? = nil,
+        multiplier: Float = 1.0
+    ) {
+        let desc = slider.descriptor
+        self.label = customLabel ?? desc?.name ?? slider.displayName
+        self._value = value
+        self.descriptor = desc
+        if let desc = desc {
+            self.range = Float(desc.min)...Float(desc.max)
+        } else {
+            self.range = slider.defaultRange
+        }
+        self.format = slider.formatString
+        self.onReset = onReset
+        self.onEditingChanged = onEditingChanged
+        self.onCancel = onCancel
+        self.multiplier = multiplier
+    }
+    
+    /// Memberwise fallback initializer
     public init(
         label: String,
         value: Binding<Float>,
@@ -166,25 +222,36 @@ public struct SliderRow: View {
         format: String,
         onReset: @escaping () -> Void,
         onEditingChanged: ((Bool) -> Void)? = nil,
+        onCancel: (() -> Void)? = nil,
         multiplier: Float = 1.0
     ) {
         self.label = label
         self._value = value
         self.range = range
         self.format = format
+        self.descriptor = nil
         self.onReset = onReset
         self.onEditingChanged = onEditingChanged
+        self.onCancel = onCancel
         self.multiplier = multiplier
     }
     
     public var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let displayString: String = {
+            if let desc = descriptor {
+                return desc.formatValue(Double(value * multiplier))
+            } else {
+                return String(format: format, value * multiplier)
+            }
+        }()
+        
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(label)
                     .font(.subheadline)
-                    .onTapGesture(count: 2, perform: onReset) // Double click label to reset!
+                    .onTapGesture(count: 2, perform: onReset) // Double click label to reset
                 Spacer()
-                Text(String(format: format, value * multiplier))
+                Text(displayString)
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundColor(.secondary)
@@ -194,7 +261,8 @@ public struct SliderRow: View {
                 value: $value,
                 range: range,
                 onReset: onReset,
-                onEditingChanged: onEditingChanged
+                onEditingChanged: onEditingChanged,
+                onCancel: onCancel
             )
         }
     }
@@ -205,17 +273,20 @@ public struct TemperatureSliderRow: View {
     @Binding public var kelvin: Float
     public let onReset: () -> Void
     public var onEditingChanged: ((Bool) -> Void)? = nil
+    public var onCancel: (() -> Void)? = nil
     
     public init(
         label: String,
         kelvin: Binding<Float>,
         onReset: @escaping () -> Void,
-        onEditingChanged: ((Bool) -> Void)? = nil
+        onEditingChanged: ((Bool) -> Void)? = nil,
+        onCancel: (() -> Void)? = nil
     ) {
         self.label = label
         self._kelvin = kelvin
         self.onReset = onReset
         self.onEditingChanged = onEditingChanged
+        self.onCancel = onCancel
     }
     
     private var sliderPosition: Binding<Float> {
@@ -246,7 +317,8 @@ public struct TemperatureSliderRow: View {
                 value: sliderPosition,
                 range: 0.0...1.0,
                 onReset: onReset,
-                onEditingChanged: onEditingChanged
+                onEditingChanged: onEditingChanged,
+                onCancel: onCancel
             )
         }
     }

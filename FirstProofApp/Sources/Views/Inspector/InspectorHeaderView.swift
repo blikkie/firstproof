@@ -13,45 +13,62 @@ public struct PermanentHeaderCard: View {
         let filename = URL(fileURLWithPath: photo.filePath).lastPathComponent
         let ext = URL(fileURLWithPath: photo.filePath).pathExtension.uppercased()
         
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(filename)
-                .font(.headline)
-                .fontWeight(.bold)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .allowsTightening(true)
-                .help(photo.filePath)
-                .contextMenu {
-                    Button("Copy Filename") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(filename, forType: .string)
+        return VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(filename)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .allowsTightening(true)
+                    .help(photo.filePath)
+                    .contextMenu {
+                        Button("Copy Filename") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(filename, forType: .string)
+                        }
+                        Button("Copy Full Path") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(photo.filePath, forType: .string)
+                        }
+                        Button("Reveal in Finder") {
+                            NSWorkspace.shared.selectFile(photo.filePath, inFileViewerRootedAtPath: "")
+                        }
                     }
-                    Button("Copy Full Path") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(photo.filePath, forType: .string)
-                    }
-                    Button("Reveal in Finder") {
-                        NSWorkspace.shared.selectFile(photo.filePath, inFileViewerRootedAtPath: "")
+                
+                HStack(spacing: 6) {
+                    Text(ext)
+                        .font(.system(size: 9, weight: .bold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.18))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(3)
+                    
+                    if let focal = formatFocalLength(photo.focalLength) {
+                        Text(focal)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
                     }
                 }
+            }
             
-            HStack(spacing: 6) {
-                Text(ext)
-                    .font(.system(size: 9, weight: .bold))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.accentColor.opacity(0.18))
-                    .foregroundColor(.accentColor)
-                    .cornerRadius(3)
+            // Persistent Heads-Up EXIF Block
+            VStack(spacing: 5) {
+                // Wide Camera Badge with generous width and 2-line wraparound
+                ExifBadgeView(
+                    label: "CAMERA",
+                    value: formatCamera(photo),
+                    lineLimit: 2,
+                    alignment: .leading
+                )
                 
-                let cameraMake = photo.cameraMake ?? ""
-                let cameraModel = photo.cameraModel ?? ""
-                let fullCamera = "\(cameraMake) \(cameraModel)".trimmingCharacters(in: .whitespaces)
-                if !fullCamera.isEmpty {
-                    Text(fullCamera)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                // 3-Column Exposure Triangle Badges
+                HStack(spacing: 5) {
+                    ExifBadgeView(label: "ISO", value: formatISO(photo.iso))
+                    ExifBadgeView(label: "APERTURE", value: formatAperture(photo.aperture))
+                    ExifBadgeView(label: "SHUTTER", value: formatShutterSpeed(photo.shutterSpeed))
                 }
             }
         }
@@ -62,6 +79,115 @@ public struct PermanentHeaderCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
+        )
+    }
+    
+    private func formatCamera(_ photo: PhotoRecord) -> String {
+        let make = photo.cameraMake?.trimmingCharacters(in: .whitespaces) ?? ""
+        let model = photo.cameraModel?.trimmingCharacters(in: .whitespaces) ?? ""
+        if !make.isEmpty && !model.isEmpty {
+            if model.localizedCaseInsensitiveContains(make) {
+                return model
+            }
+            return "\(make) \(model)"
+        }
+        if !model.isEmpty {
+            return model
+        }
+        if !make.isEmpty {
+            return make
+        }
+        return "—"
+    }
+    
+    private func formatFocalLength(_ val: Float?) -> String? {
+        guard let val = val, val > 0, !val.isNaN else { return nil }
+        let rounded = Int(val.rounded())
+        return "\(rounded)mm"
+    }
+    
+    private func formatISO(_ iso: UInt32?) -> String {
+        guard let iso = iso, iso > 0 else { return "—" }
+        return "\(iso)"
+    }
+    
+    private static let standardFStops: [Float] = [
+        1.0, 1.1, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.5, 2.8, 3.2, 3.5, 4.0, 4.5, 5.0,
+        5.6, 6.3, 7.1, 8.0, 9.0, 10, 11, 13, 14, 16, 18, 20, 22, 25, 29, 32, 45, 64
+    ]
+    
+    private func formatAperture(_ val: Float?) -> String {
+        guard let val = val, val > 0, !val.isNaN else { return "—" }
+        for fstop in Self.standardFStops {
+            if abs(val - fstop) / fstop < 0.03 {
+                return fstop == Float(Int(fstop)) ? "f/\(Int(fstop))" : String(format: "f/%.1f", fstop)
+            }
+        }
+        let rounded = (val * 10).rounded() / 10
+        return rounded == Float(Int(rounded)) ? "f/\(Int(rounded))" : String(format: "f/%.1f", rounded)
+    }
+    
+    private func formatShutterSpeed(_ shutter: String?) -> String {
+        guard let shutter = shutter?.trimmingCharacters(in: .whitespaces), !shutter.isEmpty else {
+            return "—"
+        }
+        if shutter.hasSuffix("s") {
+            return shutter
+        }
+        if shutter.contains("/") {
+            return "\(shutter)s"
+        }
+        if let val = Double(shutter) {
+            if val >= 0.4 {
+                let rounded = (val * 10).rounded() / 10
+                return rounded == Double(Int(rounded)) ? "\(Int(rounded))s" : String(format: "%.1fs", rounded)
+            }
+            let denom = Int((1.0 / val).rounded())
+            return "1/\(denom)s"
+        }
+        return "\(shutter)s"
+    }
+}
+
+public struct ExifBadgeView: View {
+    public let label: String
+    public let value: String
+    public var lineLimit: Int?
+    public var alignment: HorizontalAlignment
+    
+    public init(
+        label: String,
+        value: String,
+        lineLimit: Int? = 1,
+        alignment: HorizontalAlignment = .center
+    ) {
+        self.label = label
+        self.value = value
+        self.lineLimit = lineLimit
+        self.alignment = alignment
+    }
+    
+    public var body: some View {
+        VStack(alignment: alignment, spacing: 2) {
+            Text(label)
+                .font(.system(size: 8, weight: .bold))
+                .foregroundColor(.secondary.opacity(0.8))
+            Text(value)
+                .font(.system(size: 10, weight: .semibold))
+                .monospacedDigit()
+                .foregroundColor(.primary)
+                .lineLimit(lineLimit)
+                .multilineTextAlignment(alignment == .leading ? .leading : .center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: alignment == .leading ? .leading : .center)
+        .padding(.vertical, 4)
+        .padding(.horizontal, alignment == .leading ? 8 : 4)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(4)
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.secondary.opacity(0.18), lineWidth: 0.5)
         )
     }
 }

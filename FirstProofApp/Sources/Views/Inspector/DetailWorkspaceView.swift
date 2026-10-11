@@ -36,30 +36,30 @@ public struct DetailWorkspaceView: View {
                     .foregroundColor(.secondary)
                 
                 SliderRow(
-                    label: "Amount",
+                    slider: .sharpeningAmount,
                     value: $viewModel.sharpeningAmount,
-                    range: 0.0...100.0,
-                    format: "%.0f",
                     onReset: { viewModel.resetSlider(.sharpeningAmount) },
-                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .sharpeningAmount) }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .sharpeningAmount) },
+                    onCancel: { viewModel.cancelSliderScrub() },
+                    customLabel: "Amount"
                 )
                 
                 SliderRow(
-                    label: "Radius",
+                    slider: .sharpeningRadius,
                     value: $viewModel.sharpeningRadius,
-                    range: 0.5...3.0,
-                    format: "%.1f px",
                     onReset: { viewModel.resetSlider(.sharpeningRadius) },
-                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .sharpeningRadius) }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .sharpeningRadius) },
+                    onCancel: { viewModel.cancelSliderScrub() },
+                    customLabel: "Radius"
                 )
                 
                 SliderRow(
-                    label: "Masking",
+                    slider: .sharpeningMasking,
                     value: $viewModel.sharpeningMasking,
-                    range: 0.0...100.0,
-                    format: "%.0f",
                     onReset: { viewModel.resetSlider(.sharpeningMasking) },
-                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .sharpeningMasking) }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .sharpeningMasking) },
+                    onCancel: { viewModel.cancelSliderScrub() },
+                    customLabel: "Masking"
                 )
             }
             
@@ -72,12 +72,12 @@ public struct DetailWorkspaceView: View {
                     .foregroundColor(.secondary)
                 
                 SliderRow(
-                    label: "Luminance",
+                    slider: .noiseReduction,
                     value: $viewModel.noiseReduction,
-                    range: 0.0...100.0,
-                    format: "%.0f",
                     onReset: { viewModel.resetSlider(.noiseReduction) },
-                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .noiseReduction) }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .noiseReduction) },
+                    onCancel: { viewModel.cancelSliderScrub() },
+                    customLabel: "Luminance"
                 )
             }
         }

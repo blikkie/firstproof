@@ -265,4 +265,142 @@ describe('Controller & First-Responder Architecture', () => {
       expect(selectGrainMode.value).toBe('Off');
     });
   });
+
+  describe('InspectorSyncController Canonical Schema Hydration', () => {
+    it('hydrates slider min, max, step from AdjustmentDescriptor and formats readouts', () => {
+      document.body.innerHTML = `
+        <div class="slider-row">
+          <label>Exposure <span id="val-exposure" class="slider-val">0.00 EV</span></label>
+          <input type="range" id="slider-exposure" min="-10" max="10" step="1" value="0.0" />
+        </div>
+        <div class="slider-row">
+          <label>Sharpening Radius <span id="val-sharpen-radius" class="slider-val">1.0 px</span></label>
+          <input type="range" id="slider-sharpen-radius" min="0" max="10" step="1" value="1.0" />
+        </div>
+        <div class="slider-row">
+          <label>Process Depth <span id="val-process-depth" class="slider-val">100%</span></label>
+          <input type="range" id="slider-process-depth" min="0" max="10" step="10" value="100" />
+        </div>
+      `;
+
+      const edits = {
+        ...getDefaultEdits(),
+        exposure: 0.75,
+        sharpening_radius: 1.8,
+        print_process_depth: 85,
+      };
+
+      const mockDelegate: InspectorDelegate = {
+        getEdits: () => edits,
+        renderCanvas: vi.fn(),
+        autoSaveSidecar: vi.fn(),
+        isCurrentPhotoRaw: () => true,
+        getDefaultEdits: () => ({ ...edits }),
+        getCurveWidget: () => null as unknown as ToneCurveWidget,
+        getRating: () => 0,
+        getStatus: () => 'None',
+        getActiveIndex: () => 0,
+      };
+
+      const controller = new InspectorSyncController(mockDelegate);
+
+      // Inject mock schema descriptors simulating WASM initialization
+      (
+        controller as unknown as {
+          descriptors: Map<string, unknown>;
+        }
+      ).descriptors.set('exposure', {
+        id: 'exposure',
+        name: 'Exposure',
+        category: 'Light',
+        min: -3.0,
+        max: 3.0,
+        step: 0.05,
+        default: 0.0,
+        scale_mode: 'Linear',
+        unit: 'EV',
+        precision: 2,
+      });
+      (
+        controller as unknown as {
+          descriptors: Map<string, unknown>;
+        }
+      ).descriptors.set('sharpen_radius', {
+        id: 'sharpen_radius',
+        name: 'Radius',
+        category: 'Detail',
+        min: 0.5,
+        max: 3.0,
+        step: 0.1,
+        default: 1.0,
+        scale_mode: 'Linear',
+        unit: 'px',
+        precision: 1,
+      });
+      (
+        controller as unknown as {
+          descriptors: Map<string, unknown>;
+        }
+      ).descriptors.set('process_depth', {
+        id: 'process_depth',
+        name: 'Process Depth',
+        category: 'Emulsion',
+        min: 0.0,
+        max: 100.0,
+        step: 1.0,
+        default: 100.0,
+        scale_mode: 'Linear',
+        unit: '%',
+        precision: 0,
+      });
+
+      controller.bind();
+
+      const expInput = document.getElementById(
+        'slider-exposure',
+      ) as HTMLInputElement;
+      const radInput = document.getElementById(
+        'slider-sharpen-radius',
+      ) as HTMLInputElement;
+      const depthInput = document.getElementById(
+        'slider-process-depth',
+      ) as HTMLInputElement;
+
+      // 1. Verify input attributes are dynamically hydrated from schema
+      expect(expInput.min).toBe('-3');
+      expect(expInput.max).toBe('3');
+      expect(expInput.step).toBe('0.05');
+
+      expect(radInput.min).toBe('0.5');
+      expect(radInput.max).toBe('3');
+      expect(radInput.step).toBe('0.1');
+
+      expect(depthInput.min).toBe('0');
+      expect(depthInput.max).toBe('100');
+      expect(depthInput.step).toBe('1');
+
+      // 2. Sync UI and verify formatting
+      controller.syncSliderUI();
+      const expVal = document.getElementById('val-exposure')!;
+      const radVal = document.getElementById('val-sharpen-radius')!;
+      const depthVal = document.getElementById('val-process-depth')!;
+
+      expect(expVal.textContent).toBe('+0.75 EV');
+      expect(radVal.textContent).toBe('1.8 px');
+      expect(depthVal.textContent).toBe('85%');
+
+      // 3. Double-click reset restores schema default
+      expInput.dispatchEvent(new MouseEvent('dblclick'));
+      expect(edits.exposure).toBe(0.0);
+      expect(expVal.textContent).toBe('0.00 EV');
+
+      radInput.dispatchEvent(new MouseEvent('dblclick'));
+      expect(edits.sharpening_radius).toBe(1.0);
+      expect(radVal.textContent).toBe('1.0 px');
+
+      depthInput.dispatchEvent(new MouseEvent('dblclick'));
+      expect(edits.print_process_depth).toBe(100.0);
+      expect(depthVal.textContent).toBe('100%');
+    });
+  });
 });

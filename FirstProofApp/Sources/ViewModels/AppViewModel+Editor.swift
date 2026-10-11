@@ -198,9 +198,26 @@ extension AppViewModel {
     }
     
     // MARK: - Undo/Redo & Coalesced Scrubbing
+    public var hasActiveSliderScrub: Bool {
+        undoHistory.scrubStartEdits != nil
+    }
+    
     public func beginSliderScrub() {
         guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
         undoHistory.beginScrub(photoPath: path, currentEdits: currentEdits)
+    }
+    
+    public func cancelSliderScrub() {
+        guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath,
+              let startEdits = undoHistory.scrubStartEdits else {
+            undoHistory.cancelScrub()
+            return
+        }
+        undoHistory.cancelScrub()
+        applyEdits(startEdits)
+        if let intermediate = captureIntermediateSnapshot?() {
+            ThumbnailCache.shared.saveIntermediate(intermediate, for: path, edits: currentEdits)
+        }
     }
     
     public func endSliderScrub(actionName: String) {

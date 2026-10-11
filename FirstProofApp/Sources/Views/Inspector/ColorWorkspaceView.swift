@@ -75,16 +75,16 @@ public struct ColorWorkspaceView: View {
                 label: "Temperature",
                 kelvin: $viewModel.temperature,
                 onReset: { viewModel.resetSlider(.temperature) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .temperature) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .temperature) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             SliderRow(
-                label: "Tint",
+                slider: .tint,
                 value: $viewModel.tint,
-                range: -200.0...200.0,
-                format: "%.0f",
                 onReset: { viewModel.resetSlider(.tint) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .tint) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .tint) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             Divider()
@@ -95,39 +95,35 @@ public struct ColorWorkspaceView: View {
                 .foregroundColor(.secondary)
             
             SliderRow(
-                label: "Vibrance",
+                slider: .vibrance,
                 value: $viewModel.vibrance,
-                range: -100.0...100.0,
-                format: "%.0f",
                 onReset: { viewModel.resetSlider(.vibrance) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .vibrance) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .vibrance) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             SliderRow(
-                label: "Saturation",
+                slider: .saturation,
                 value: $viewModel.saturation,
-                range: -100.0...100.0,
-                format: "%.0f",
                 onReset: { viewModel.resetSlider(.saturation) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .saturation) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .saturation) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             SliderRow(
-                label: "Deep Blue",
+                slider: .deepBlue,
                 value: $viewModel.deepBlue,
-                range: -100.0...100.0,
-                format: "%.0f",
                 onReset: { viewModel.resetSlider(.deepBlue) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .deepBlue) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .deepBlue) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             SliderRow(
-                label: "Foliage",
+                slider: .foliage,
                 value: $viewModel.foliage,
-                range: -100.0...100.0,
-                format: "%.0f",
                 onReset: { viewModel.resetSlider(.foliage) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .foliage) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .foliage) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             Divider()
@@ -199,12 +195,12 @@ public struct ColorWorkspaceView: View {
                     .padding(.vertical, 2)
                     
                     SliderRow(
-                        label: "Balance",
+                        slider: .splitToningBalance,
                         value: $viewModel.splitToningBalance,
-                        range: -100.0...100.0,
-                        format: "%+.0f",
                         onReset: { viewModel.resetSlider(.splitToningBalance) },
-                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .splitToningBalance) }
+                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .splitToningBalance) },
+                        onCancel: { viewModel.cancelSliderScrub() },
+                        customLabel: "Balance"
                     )
                 }
                 .padding(.top, 6)
@@ -289,6 +285,7 @@ public struct ColorWorkspaceView: View {
                     format: "%.0f%%",
                     onReset: { viewModel.resetSlider(.lutIntensity) },
                     onEditingChanged: { viewModel.handleSliderEditing($0, slider: .lutIntensity) },
+                    onCancel: { viewModel.cancelSliderScrub() },
                     multiplier: 100.0
                 )
             }

@@ -231,8 +231,11 @@ struct MainView: View {
                     viewModel.enterDetailMode()
                     return nil
                 }
-            case 53: // Escape: cancel Crop mode, return to Grid mode, or exit bulk selection mode
-                if viewModel.isCropToolActive {
+            case 53: // Escape: rollback slider scrub, cancel Crop mode, return to Grid mode, or exit bulk selection mode
+                if viewModel.hasActiveSliderScrub {
+                    viewModel.cancelSliderScrub()
+                    return nil
+                } else if viewModel.isCropToolActive {
                     viewModel.cancelCrop()
                     return nil
                 } else if viewModel.canvasMode == .detail {

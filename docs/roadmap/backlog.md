@@ -8,7 +8,7 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ## 🚀 Immediate Next Up (v0.1 Release Gate)
 1. **Story 4.0: Comprehensive AI Slop Audit & Codebase De-Slop Pass** (P0) - COMPLETED
-2. **Story 4.5: Swift Desktop Parameter Schema & Behavioral Interaction Parity** (P0)
+2. **Story 4.5: Swift Desktop Parameter Schema & Behavioral Interaction Parity** (P0) - COMPLETED
 3. **Story 4.1: Open Source IP, Security & License Compliance Gate** (P1)
 4. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P1)
 5. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P1)

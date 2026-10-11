@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDefaultEdits, hasModifications } from '../utils/edits';
 import {
+  formatAdjustmentValue,
   formatAperture,
   formatFocalLength,
   formatISO,
@@ -168,6 +169,116 @@ describe('Edit Settings & Modification Invariants', () => {
       expect(formatISO(100)).toBe('100');
       expect(formatISO(1600)).toBe('1600');
       expect(formatISO(undefined)).toBe('—');
+    });
+
+    it('formats canonical AdjustmentDescriptors with photographic unit precision', () => {
+      expect(
+        formatAdjustmentValue(
+          {
+            id: 'exposure',
+            name: 'Exposure',
+            category: 'Light',
+            min: -3,
+            max: 3,
+            step: 0.05,
+            default: 0,
+            scale_mode: 'Linear',
+            unit: 'EV',
+            precision: 2,
+          },
+          1.25,
+        ),
+      ).toBe('+1.25 EV');
+
+      expect(
+        formatAdjustmentValue(
+          {
+            id: 'exposure',
+            name: 'Exposure',
+            category: 'Light',
+            min: -3,
+            max: 3,
+            step: 0.05,
+            default: 0,
+            scale_mode: 'Linear',
+            unit: 'EV',
+            precision: 2,
+          },
+          -0.5,
+        ),
+      ).toBe('-0.50 EV');
+
+      expect(
+        formatAdjustmentValue(
+          {
+            id: 'exposure',
+            name: 'Exposure',
+            category: 'Light',
+            min: -3,
+            max: 3,
+            step: 0.05,
+            default: 0,
+            scale_mode: 'Linear',
+            unit: 'EV',
+            precision: 2,
+          },
+          0,
+        ),
+      ).toBe('0.00 EV');
+
+      expect(
+        formatAdjustmentValue(
+          {
+            id: 'sharpen_radius',
+            name: 'Radius',
+            category: 'Detail',
+            min: 0.5,
+            max: 3,
+            step: 0.1,
+            default: 1,
+            scale_mode: 'Linear',
+            unit: 'px',
+            precision: 1,
+          },
+          1.5,
+        ),
+      ).toBe('1.5 px');
+
+      expect(
+        formatAdjustmentValue(
+          {
+            id: 'process_depth',
+            name: 'Process Depth',
+            category: 'Emulsion',
+            min: 0,
+            max: 100,
+            step: 1,
+            default: 100,
+            scale_mode: 'Linear',
+            unit: '%',
+            precision: 0,
+          },
+          100,
+        ),
+      ).toBe('100%');
+
+      expect(
+        formatAdjustmentValue(
+          {
+            id: 'temperature',
+            name: 'Warmth (Temp)',
+            category: 'Color',
+            min: 2000,
+            max: 20000,
+            step: 50,
+            default: 5500,
+            scale_mode: 'Mired',
+            unit: 'K',
+            precision: 0,
+          },
+          5500,
+        ),
+      ).toBe('5500 K');
     });
   });
 });

@@ -90,6 +90,81 @@ public enum EditSliderType {
         case .printProcessDepth: return "Process Depth"
         }
     }
+    
+    public var descriptorId: String? {
+        switch self {
+        case .exposure: return "exposure"
+        case .contrast: return "contrast"
+        case .highlights: return "highlights"
+        case .shadows: return "shadows"
+        case .whites: return "whites"
+        case .blacks: return "blacks"
+        case .temperature: return "temperature"
+        case .tint: return "tint"
+        case .vibrance: return "vibrance"
+        case .saturation: return "saturation"
+        case .deepBlue: return "deep_blue"
+        case .foliage: return "foliage"
+        case .sharpeningAmount: return "sharpen_amount"
+        case .sharpeningRadius: return "sharpen_radius"
+        case .sharpeningMasking: return "sharpen_masking"
+        case .noiseReduction: return "noise_reduction"
+        case .printPaperGrade: return "paper_grade"
+        case .printProcessDepth: return "process_depth"
+        default: return nil
+        }
+    }
+    
+    public var descriptor: AdjustmentDescriptor? {
+        guard let id = descriptorId else { return nil }
+        return getAdjustmentDescriptor(id: id)
+    }
+    
+    public var defaultRange: ClosedRange<Float> {
+        if let desc = descriptor {
+            return Float(desc.min)...Float(desc.max)
+        }
+        switch self {
+        case .straighten: return -45.0...45.0
+        case .perspectiveVertical, .perspectiveHorizontal: return -100.0...100.0
+        case .lutIntensity: return 0.0...100.0
+        case .grainScale: return 0.5...2.0
+        case .grainSize: return 0.5...2.5
+        case .grainAmount: return 0.0...2.0
+        case .splitToningShadowHue, .splitToningHighlightHue: return 0.0...360.0
+        case .splitToningShadowSat, .splitToningHighlightSat: return 0.0...100.0
+        case .splitToningBalance: return -100.0...100.0
+        default: return -100.0...100.0
+        }
+    }
+    
+    public var formatString: String {
+        switch self {
+        case .straighten: return "%.1f°"
+        case .grainScale: return "%.1fx"
+        case .grainSize, .grainAmount: return "%.2fx"
+        case .lutIntensity: return "%.0f%%"
+        case .splitToningShadowHue, .splitToningHighlightHue: return "%.0f°"
+        default: return "%.0f"
+        }
+    }
+}
+
+extension AdjustmentDescriptor {
+    public func formatValue(_ val: Double) -> String {
+        switch scaleMode {
+        case .mired:
+            return String(format: "%.0f K", val)
+        case .linear:
+            let prefix = (unit == "EV" && val > 0.0) ? "+" : ""
+            let unitSuffix = unit.isEmpty ? "" : (unit == "%" ? "%" : " \(unit)")
+            if precision == 0 {
+                return String(format: "%@%.0f%@", prefix, val, unitSuffix)
+            } else {
+                return String(format: "%@%.*f%@", prefix, Int(precision), val, unitSuffix)
+            }
+        }
+    }
 }
 
 extension CropAspectRatioPreset: @retroactive CaseIterable, @retroactive Identifiable {

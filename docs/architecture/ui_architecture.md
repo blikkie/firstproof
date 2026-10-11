@@ -67,7 +67,6 @@ Every develop adjustment is declared in a single, authoritative descriptor in `f
 | `noise_reduction`| Detail | `[0, 100]` | `1.0` | `0.0` | `Linear` | `0` |
 | `emulsion_exp` | Emulsion | `[-2.0, +2.0]` | `0.1` | `0.0` | `Linear` | `+0.00 EV` |
 | `paper_grade` | Emulsion | `[-2.0, +2.0]` | `0.1` | `0.0` | `Linear` | `0.0` |
-| `base_warmth` | Emulsion | `[-100, +100]` | `1.0` | `0.0` | `Linear` | `0` |
 | `process_depth`| Emulsion | `[0, 100]` | `1.0` | `100.0` | `Linear` | `100%` |
 
 ### Non-Linear Mired Scale Formulation:

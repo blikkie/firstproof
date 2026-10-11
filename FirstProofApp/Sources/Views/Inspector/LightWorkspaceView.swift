@@ -26,21 +26,19 @@ public struct LightWorkspaceView: View {
             }
             
             SliderRow(
-                label: "Exposure",
+                slider: .exposure,
                 value: $viewModel.exposure,
-                range: -3.0...3.0,
-                format: "%.2f EV",
                 onReset: { viewModel.resetSlider(.exposure) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .exposure) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .exposure) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             SliderRow(
-                label: "Contrast",
+                slider: .contrast,
                 value: $viewModel.contrast,
-                range: -100.0...100.0,
-                format: "%.0f",
                 onReset: { viewModel.resetSlider(.contrast) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .contrast) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .contrast) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             Divider()
@@ -51,39 +49,35 @@ public struct LightWorkspaceView: View {
                 .foregroundColor(.secondary)
             
             SliderRow(
-                label: "Highlights",
+                slider: .highlights,
                 value: $viewModel.highlights,
-                range: -100.0...100.0,
-                format: "%.0f",
                 onReset: { viewModel.resetSlider(.highlights) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .highlights) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .highlights) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             SliderRow(
-                label: "Shadows",
+                slider: .shadows,
                 value: $viewModel.shadows,
-                range: -100.0...100.0,
-                format: "%.0f",
                 onReset: { viewModel.resetSlider(.shadows) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .shadows) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .shadows) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             SliderRow(
-                label: "Whites",
+                slider: .whites,
                 value: $viewModel.whites,
-                range: -100.0...100.0,
-                format: "%.0f",
                 onReset: { viewModel.resetSlider(.whites) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .whites) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .whites) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             SliderRow(
-                label: "Blacks",
+                slider: .blacks,
                 value: $viewModel.blacks,
-                range: -100.0...100.0,
-                format: "%.0f",
                 onReset: { viewModel.resetSlider(.blacks) },
-                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .blacks) }
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .blacks) },
+                onCancel: { viewModel.cancelSliderScrub() }
             )
             
             Divider()

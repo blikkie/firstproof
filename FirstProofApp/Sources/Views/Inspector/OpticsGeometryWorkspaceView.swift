@@ -62,30 +62,29 @@ public struct OpticsGeometryWorkspaceView: View {
                 }
                 
                 SliderRow(
-                    label: "Straighten",
+                    slider: .straighten,
                     value: $viewModel.straightenAngle,
-                    range: -45.0...45.0,
-                    format: "%.1f°",
                     onReset: { viewModel.resetSlider(.straighten) },
-                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .straighten) }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .straighten) },
+                    onCancel: { viewModel.cancelSliderScrub() }
                 )
                 
                 SliderRow(
-                    label: "Vertical",
+                    slider: .perspectiveVertical,
                     value: $viewModel.perspectiveVertical,
-                    range: -100.0...100.0,
-                    format: "%.0f",
                     onReset: { viewModel.resetSlider(.perspectiveVertical) },
-                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .perspectiveVertical) }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .perspectiveVertical) },
+                    onCancel: { viewModel.cancelSliderScrub() },
+                    customLabel: "Vertical"
                 )
                 
                 SliderRow(
-                    label: "Horizontal",
+                    slider: .perspectiveHorizontal,
                     value: $viewModel.perspectiveHorizontal,
-                    range: -100.0...100.0,
-                    format: "%.0f",
                     onReset: { viewModel.resetSlider(.perspectiveHorizontal) },
-                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .perspectiveHorizontal) }
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .perspectiveHorizontal) },
+                    onCancel: { viewModel.cancelSliderScrub() },
+                    customLabel: "Horizontal"
                 )
                 
                 Toggle("Constrain Crop (Auto-Crop)", isOn: Binding<Bool>(

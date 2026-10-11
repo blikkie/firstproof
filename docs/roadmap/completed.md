@@ -432,6 +432,21 @@ This archive tracks completed stories and features moved from the active backlog
   - *Lens 5 (Dependency & Asset Hygiene)*: Pruned zombie dependencies (`kamadak-exif`, `glam`, `roxmltree`, `xmp-writer`, `rawler`) from `firstproof-wasm/Cargo.toml`, keeping crate closure minimal and sharp.
   - *Lens 6 (Marketing Copy & Tone De-Slop Pass)*: Audited user-facing copy in native AppKit/SwiftUI and web darkroom against First Proof's brand voice: quiet, warm, factual, understated, and grounded in photographic craft. Replaced colloquial buzzwords with authentic darkroom terms (e.g. `100% Zoom (1:1 Resolution)`).
   - *Lens 7 (Dual-Domain Performance Asymmetry & Archival Fidelity Invariant)*: Enforced the *"wall for 10 years"* invariant through automated architectural fitness functions (`test_dual_domain_performance_asymmetry_invariants`). Export pipelines strictly default to `RenderTier::ArchivalExport` with full demosaicing fidelity, while interactive culling stays in `RenderTier::Viewport` with sub-15ms 2×2 Bayer binning and intermediate GPU texture caches.
+- **Story 4.5: Parameter Schema Bridge & Behavioral Interaction Parity Across Swift Desktop & Web Darkroom (`SliderRow.swift`, `InspectorHeaderView.swift`, `AppViewModel.swift`, `AppViewModel+Editor.swift`, `UndoHistoryManager.swift`, `InspectorSyncController.ts`, `WasmBridge.ts`, `formatters.ts`, `index.html`)**:
+  - *Canonical Rust Schema Consumption (Swift Desktop)*: Eliminated all hardcoded slider ranges, steps, and formats across Swift views (`LightWorkspaceView`, `ColorWorkspaceView`, `DetailWorkspaceView`, `OpticsGeometryWorkspaceView`, `EmulsionWorkspaceView`). Mapped `EditSliderType` dynamically to `AdjustmentDescriptor` (`getAdjustmentDescriptor(id:)`), deriving min, max, step, default, unit, and formatting directly from the canonical Rust schema.
+  - *Web Darkroom Progressive Schema Hydration*:
+    - Hydrated slider input attributes (`min`, `max`, `step`, defaults) at controller initialization directly from `wasm.get_all_adjustments()`, guaranteeing zero slider range or step drift between desktop, web, and Rust core without virtual DOM or client framework bloat.
+    - Implemented `formatAdjustmentValue` in TypeScript mirroring `AdjustmentDescriptor::format_value`, unifying EV, %, px, and Mired Kelvin formatting across viewport syncing and drag scrubbing.
+    - Added the missing `row-emulsion-exp` Push/Pull development slider in `index.html` hooked to the `emulsion_exp` schema descriptor.
+    - Supported dynamic defaults (e.g. archetype-calibrated grain defaults) while falling back cleanly to `desc.default`.
+  - *Full Interaction State Machine Parity*:
+    - Implemented <kbd>Escape</kbd> key drag rollback across both local `TactileSlider` drag monitors and `MainView` window dispatch: restores parameter to `dragStartValue` and cancels pending scrub via `cancelSliderScrub()`, leaving the photo's undo stack completely clean. Matches web `rollbackActiveScrub()`.
+    - Preserved <kbd>Shift</kbd>+drag fine-scrubbing ($0.1\times$ precision damper) across linear and Mired scales on both platforms.
+    - Verified double-click to reset across both slider thumbs and row label headers on both platforms.
+    - Enforced `.monospacedDigit()` tabular lining numbers across all inspector readouts to eliminate layout jitter.
+  - *Persistent Heads-Up EXIF Badges (CAM / ISO / APERTURE / SHUTTER)*: Ported the web darkroom's fixed 4-badge EXIF summary display (`ExifBadgeView`) directly into `PermanentHeaderCard` in `InspectorHeaderView.swift`, keeping camera model, ISO, standard f-stop aperture, and shutter speed visible at a glance above the segmented workspace tabs.
+  - *Substrate Decoupling*: Retained the architectural invariant retiring the redundant `Base Warmth` slider, preserving the Rule of Three Darkroom Controls (Paper Grade, Process Depth, Enlarger Filtration) in the Emulsion tab.
+  - *Verification*: Full 9-stage pre-flight verification suite (`./scripts/check.sh`) passed 100% cleanly (Anti-Slop sensor, Rust workspace tests, Rust Clippy, Web typecheck, Biome linter, Vitest 35 behavioral tests, WASM build & Node integration, Web production bundle, Swift AppKit builds).
 
 
 

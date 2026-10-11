@@ -11,12 +11,14 @@
  * - Emulsion workspace conditional visibility
  */
 
+import type { AdjustmentDescriptor } from 'firstproof-wasm';
 import {
   convert_kelvin_to_mired_norm,
   convert_mired_norm_to_kelvin,
+  get_all_adjustments,
 } from 'firstproof-wasm';
 import type { ToneCurveWidget } from '../ToneCurveWidget';
-import { formatExposure } from '../utils/formatters';
+import { formatAdjustmentValue } from '../utils/formatters';
 import type {
   ColorProfileMode,
   EditSettingsPayload,
@@ -76,14 +78,34 @@ export class InspectorSyncController {
   private delegate: InspectorDelegate;
   private activeScrub: ActiveSliderScrub | null = null;
   private isBound: boolean = false;
+  private descriptors = new Map<string, AdjustmentDescriptor>();
+  private sliderFormatters = new Map<string, (val: number) => string>();
 
   private boundPointerUp: () => void;
   private boundPointerCancel: () => void;
 
   constructor(delegate: InspectorDelegate) {
     this.delegate = delegate;
+    this.initDescriptors();
     this.boundPointerUp = () => this.handleGlobalPointerUp();
     this.boundPointerCancel = () => this.handleGlobalPointerCancel();
+  }
+
+  public getDescriptor(id: string): AdjustmentDescriptor | undefined {
+    return this.descriptors.get(id);
+  }
+
+  private initDescriptors(): void {
+    try {
+      const all = get_all_adjustments() as AdjustmentDescriptor[];
+      if (Array.isArray(all)) {
+        for (const desc of all) {
+          this.descriptors.set(desc.id, desc);
+        }
+      }
+    } catch {
+      // Gracefully handles test environments where WASM runtime is absent
+    }
   }
 
   public hasActiveScrub(): boolean {
@@ -298,88 +320,56 @@ export class InspectorSyncController {
     const setVal = (
       id: string,
       val: number | undefined,
-      format: (v: number) => string,
+      overrideFormat?: (v: number) => string,
     ) => {
-      const input = document.getElementById(`slider-${id}`) as HTMLInputElement;
-      const label = document.getElementById(`val-${id}`) as HTMLElement;
+      const input = document.getElementById(
+        `slider-${id}`,
+      ) as HTMLInputElement | null;
+      const label = document.getElementById(`val-${id}`) as HTMLElement | null;
       if (input && label && val !== undefined) {
         input.value = `${val}`;
-        label.innerText = format(val);
+        const format = overrideFormat || this.sliderFormatters.get(id);
+        label.innerText = format ? format(val) : `${val}`;
       }
     };
 
-    setVal('exposure', edits.exposure, (v) => formatExposure(v));
-    setVal('contrast', edits.contrast, (v) => `${Math.round(v)}`);
-    setVal('highlights', edits.highlights, (v) => `${Math.round(v)}`);
-    setVal('shadows', edits.shadows, (v) => `${Math.round(v)}`);
-    setVal('whites', edits.whites, (v) => `${Math.round(v)}`);
-    setVal('blacks', edits.blacks, (v) => `${Math.round(v)}`);
+    setVal('exposure', edits.exposure);
+    setVal('contrast', edits.contrast);
+    setVal('highlights', edits.highlights);
+    setVal('shadows', edits.shadows);
+    setVal('whites', edits.whites);
+    setVal('blacks', edits.blacks);
 
     const tempInput = document.getElementById(
       'slider-temp',
-    ) as HTMLInputElement;
-    const tempLabel = document.getElementById('val-temp') as HTMLElement;
+    ) as HTMLInputElement | null;
+    const tempLabel = document.getElementById('val-temp') as HTMLElement | null;
     if (tempInput && tempLabel && edits.temperature !== undefined) {
       tempInput.value = this.kelvinToMiredPos(edits.temperature).toFixed(4);
       tempLabel.innerText = `${Math.round(edits.temperature)} K`;
     }
 
-    setVal('tint', edits.tint, (v) => `${Math.round(v)}`);
-    setVal('vibrance', edits.vibrance, (v) => `${Math.round(v)}`);
-    setVal('saturation', edits.saturation, (v) => `${Math.round(v)}`);
-    setVal('deep-blue', edits.deep_blue, (v) => `${Math.round(v)}`);
-    setVal('foliage', edits.foliage, (v) => `${Math.round(v)}`);
-    setVal('grain-scale', edits.grain_scale, (v) => `${v.toFixed(2)}x`);
-    setVal('grain-size', edits.grain_size, (v) => `${v.toFixed(2)}x`);
-    setVal('grain-amount', edits.grain_amount, (v) => `${v.toFixed(2)}x`);
-    setVal('paper-grade', edits.print_paper_grade, (v) => `${v.toFixed(1)}`);
-    setVal(
-      'process-depth',
-      edits.print_process_depth,
-      (v) => `${Math.round(v)}%`,
-    );
-    setVal(
-      'sharpen-amount',
-      edits.sharpening_amount,
-      (v) => `${Math.round(v)}`,
-    );
-    setVal(
-      'sharpen-radius',
-      edits.sharpening_radius,
-      (v) => `${v.toFixed(1)} px`,
-    );
-    setVal(
-      'sharpen-masking',
-      edits.sharpening_masking,
-      (v) => `${Math.round(v)}`,
-    );
-    setVal('noise-reduction', edits.noise_reduction, (v) => `${Math.round(v)}`);
+    setVal('tint', edits.tint);
+    setVal('vibrance', edits.vibrance);
+    setVal('saturation', edits.saturation);
+    setVal('deep-blue', edits.deep_blue);
+    setVal('foliage', edits.foliage);
+    setVal('emulsion-exp', edits.emulsion_exposure);
+    setVal('grain-scale', edits.grain_scale);
+    setVal('grain-size', edits.grain_size);
+    setVal('grain-amount', edits.grain_amount);
+    setVal('paper-grade', edits.print_paper_grade);
+    setVal('process-depth', edits.print_process_depth);
+    setVal('sharpen-amount', edits.sharpening_amount);
+    setVal('sharpen-radius', edits.sharpening_radius);
+    setVal('sharpen-masking', edits.sharpening_masking);
+    setVal('noise-reduction', edits.noise_reduction);
 
-    setVal(
-      'shadow-hue',
-      edits.split_toning_shadow_hue,
-      (v) => `${Math.round(v)}°`,
-    );
-    setVal(
-      'shadow-sat',
-      edits.split_toning_shadow_sat,
-      (v) => `${Math.round(v)}`,
-    );
-    setVal(
-      'highlight-hue',
-      edits.split_toning_highlight_hue,
-      (v) => `${Math.round(v)}°`,
-    );
-    setVal(
-      'highlight-sat',
-      edits.split_toning_highlight_sat,
-      (v) => `${Math.round(v)}`,
-    );
-    setVal(
-      'split-balance',
-      edits.split_toning_balance,
-      (v) => `${Math.round(v)}`,
-    );
+    setVal('shadow-hue', edits.split_toning_shadow_hue);
+    setVal('shadow-sat', edits.split_toning_shadow_sat);
+    setVal('highlight-hue', edits.split_toning_highlight_hue);
+    setVal('highlight-sat', edits.split_toning_highlight_sat);
+    setVal('split-balance', edits.split_toning_balance);
 
     this.updateSplitToningHint();
 
@@ -493,12 +483,45 @@ export class InspectorSyncController {
     const bindSlider = (
       id: string,
       prop: keyof EditSettingsPayload,
-      format: (val: number) => string,
-      defaultVal: number | (() => number) = 0,
+      descriptorId?: string,
+      customFormat?: (val: number) => string,
+      customDefaultVal?: number | (() => number),
     ) => {
-      const input = document.getElementById(`slider-${id}`) as HTMLInputElement;
-      const label = document.getElementById(`val-${id}`) as HTMLElement;
+      const input = document.getElementById(
+        `slider-${id}`,
+      ) as HTMLInputElement | null;
+      const label = document.getElementById(`val-${id}`) as HTMLElement | null;
       const rowLabel = input?.closest('.slider-row')?.querySelector('label');
+
+      // 1. Resolve canonical schema descriptor
+      const desc = descriptorId
+        ? this.descriptors.get(descriptorId)
+        : undefined;
+
+      // 2. Hydrate input min/max/step dynamically from schema
+      if (input && desc) {
+        input.min = `${desc.min}`;
+        input.max = `${desc.max}`;
+        input.step = `${desc.step}`;
+      }
+
+      // 3. Resolve default value and formatting dynamically
+      const defaultVal =
+        customDefaultVal !== undefined
+          ? customDefaultVal
+          : desc
+            ? desc.default
+            : 0.0;
+
+      const format =
+        customFormat !== undefined
+          ? customFormat
+          : desc
+            ? (val: number) => formatAdjustmentValue(desc, val)
+            : (val: number) => `${Math.round(val)}`;
+
+      this.sliderFormatters.set(id, format);
+
       if (input && label) {
         input.addEventListener('pointerdown', (e: PointerEvent) => {
           const edits = this.delegate.getEdits();
@@ -580,22 +603,40 @@ export class InspectorSyncController {
       }
     };
 
-    bindSlider('exposure', 'exposure', (v) => formatExposure(v), 0.0);
-    bindSlider('contrast', 'contrast', (v) => `${Math.round(v)}`, 0.0);
-    bindSlider('highlights', 'highlights', (v) => `${Math.round(v)}`, 0.0);
-    bindSlider('shadows', 'shadows', (v) => `${Math.round(v)}`, 0.0);
-    bindSlider('whites', 'whites', (v) => `${Math.round(v)}`, 0.0);
-    bindSlider('blacks', 'blacks', (v) => `${Math.round(v)}`, 0.0);
+    bindSlider('exposure', 'exposure', 'exposure');
+    bindSlider('contrast', 'contrast', 'contrast');
+    bindSlider('highlights', 'highlights', 'highlights');
+    bindSlider('shadows', 'shadows', 'shadows');
+    bindSlider('whites', 'whites', 'whites');
+    bindSlider('blacks', 'blacks', 'blacks');
 
-    bindSlider('tint', 'tint', (v) => `${Math.round(v)}`, 0.0);
-    bindSlider('vibrance', 'vibrance', (v) => `${Math.round(v)}`, 0.0);
-    bindSlider('saturation', 'saturation', (v) => `${Math.round(v)}`, 0.0);
-    bindSlider('deep-blue', 'deep_blue', (v) => `${Math.round(v)}`, 0.0);
-    bindSlider('foliage', 'foliage', (v) => `${Math.round(v)}`, 0.0);
-    bindSlider('grain-scale', 'grain_scale', (v) => `${v.toFixed(2)}x`, 1.0);
+    bindSlider('tint', 'tint', 'tint');
+    bindSlider('vibrance', 'vibrance', 'vibrance');
+    bindSlider('saturation', 'saturation', 'saturation');
+    bindSlider('deep-blue', 'deep_blue', 'deep_blue');
+    bindSlider('foliage', 'foliage', 'foliage');
+    bindSlider('emulsion-exp', 'emulsion_exposure', 'emulsion_exp');
+
+    bindSlider('paper-grade', 'print_paper_grade', 'paper_grade');
+    bindSlider('process-depth', 'print_process_depth', 'process_depth');
+
+    bindSlider('sharpen-amount', 'sharpening_amount', 'sharpen_amount');
+    bindSlider('sharpen-radius', 'sharpening_radius', 'sharpen_radius');
+    bindSlider('sharpen-masking', 'sharpening_masking', 'sharpen_masking');
+    bindSlider('noise-reduction', 'noise_reduction', 'noise_reduction');
+
+    // Secondary controls without primary schema descriptors:
+    bindSlider(
+      'grain-scale',
+      'grain_scale',
+      undefined,
+      (v) => `${v.toFixed(2)}x`,
+      1.0,
+    );
     bindSlider(
       'grain-size',
       'grain_size',
+      undefined,
       (v) => `${v.toFixed(2)}x`,
       () => {
         const edits = this.delegate.getEdits();
@@ -608,6 +649,7 @@ export class InspectorSyncController {
     bindSlider(
       'grain-amount',
       'grain_amount',
+      undefined,
       (v) => `${v.toFixed(2)}x`,
       () => {
         const edits = this.delegate.getEdits();
@@ -618,68 +660,37 @@ export class InspectorSyncController {
       },
     );
     bindSlider(
-      'paper-grade',
-      'print_paper_grade',
-      (v) => `${v.toFixed(1)}`,
-      0.0,
-    );
-    bindSlider(
-      'process-depth',
-      'print_process_depth',
-      (v) => `${Math.round(v)}%`,
-      100.0,
-    );
-    bindSlider(
-      'sharpen-amount',
-      'sharpening_amount',
-      (v) => `${Math.round(v)}`,
-      0.0,
-    );
-    bindSlider(
-      'sharpen-radius',
-      'sharpening_radius',
-      (v) => `${v.toFixed(1)} px`,
-      1.0,
-    );
-    bindSlider(
-      'sharpen-masking',
-      'sharpening_masking',
-      (v) => `${Math.round(v)}`,
-      0.0,
-    );
-    bindSlider(
-      'noise-reduction',
-      'noise_reduction',
-      (v) => `${Math.round(v)}`,
-      0.0,
-    );
-    bindSlider(
       'shadow-hue',
       'split_toning_shadow_hue',
+      undefined,
       (v) => `${Math.round(v)}°`,
       215.0,
     );
     bindSlider(
       'shadow-sat',
       'split_toning_shadow_sat',
+      undefined,
       (v) => `${Math.round(v)}`,
       0.0,
     );
     bindSlider(
       'highlight-hue',
       'split_toning_highlight_hue',
+      undefined,
       (v) => `${Math.round(v)}°`,
       45.0,
     );
     bindSlider(
       'highlight-sat',
       'split_toning_highlight_sat',
+      undefined,
       (v) => `${Math.round(v)}`,
       0.0,
     );
     bindSlider(
       'split-balance',
       'split_toning_balance',
+      undefined,
       (v) => `${Math.round(v)}`,
       0.0,
     );
@@ -693,6 +704,7 @@ export class InspectorSyncController {
     const tempRowLabel = tempInput
       ?.closest('.slider-row')
       ?.querySelector('label');
+    this.sliderFormatters.set('temp', (v) => `${Math.round(v)} K`);
     if (tempInput && tempLabel) {
       tempInput.addEventListener('pointerdown', (e: PointerEvent) => {
         const edits = this.delegate.getEdits();
@@ -759,11 +771,13 @@ export class InspectorSyncController {
         this.delegate.autoSaveSidecar(),
       );
 
+      const tempDesc = this.descriptors.get('temperature');
+      const defaultKelvin = tempDesc ? tempDesc.default : 5500.0;
       const resetTemp = () => {
         const edits = this.delegate.getEdits();
-        edits.temperature = 5500.0;
-        tempInput.value = this.kelvinToMiredPos(5500.0).toFixed(4);
-        tempLabel.innerText = '5500 K';
+        edits.temperature = defaultKelvin;
+        tempInput.value = this.kelvinToMiredPos(defaultKelvin).toFixed(4);
+        tempLabel.innerText = `${Math.round(defaultKelvin)} K`;
         const wbSelect = document.getElementById(
           'select-wb-preset',
         ) as HTMLSelectElement | null;

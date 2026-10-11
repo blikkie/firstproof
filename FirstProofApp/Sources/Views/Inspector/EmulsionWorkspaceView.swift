@@ -184,20 +184,20 @@ public struct EmulsionWorkspaceView: View {
                 
                 if viewModel.emulsionGrainMode != .off {
                     SliderRow(
-                        label: "Grain Size",
+                        slider: .grainSize,
                         value: $viewModel.grainSize,
-                        range: 0.2...3.0,
-                        format: "%.2fx",
                         onReset: { viewModel.resetSlider(.grainSize) },
-                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .grainSize) }
+                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .grainSize) },
+                        onCancel: { viewModel.cancelSliderScrub() },
+                        customLabel: "Grain Size"
                     )
                     SliderRow(
-                        label: "Grain Amount",
+                        slider: .grainAmount,
                         value: $viewModel.grainAmount,
-                        range: 0.0...2.0,
-                        format: "%.2fx",
                         onReset: { viewModel.resetSlider(.grainAmount) },
-                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .grainAmount) }
+                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .grainAmount) },
+                        onCancel: { viewModel.cancelSliderScrub() },
+                        customLabel: "Grain Amount"
                     )
                 }
             }
@@ -317,12 +317,11 @@ public struct EmulsionWorkspaceView: View {
                     // 1. Paper Grade / Hardness
                     VStack(alignment: .leading, spacing: 2) {
                         SliderRow(
-                            label: "Paper Grade",
+                            slider: .printPaperGrade,
                             value: $viewModel.printPaperGrade,
-                            range: -2.0...2.0,
-                            format: "%+.1f",
                             onReset: { viewModel.resetSlider(.printPaperGrade) },
-                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printPaperGrade) }
+                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printPaperGrade) },
+                            onCancel: { viewModel.cancelSliderScrub() }
                         )
                         HStack {
                             Text("Grade 0 (Soft)")
@@ -338,12 +337,11 @@ public struct EmulsionWorkspaceView: View {
                     // 2. Process Depth
                     VStack(alignment: .leading, spacing: 2) {
                         SliderRow(
-                            label: "Process Depth",
+                            slider: .printProcessDepth,
                             value: $viewModel.printProcessDepth,
-                            range: 0.0...100.0,
-                            format: "%.0f%%",
                             onReset: { viewModel.resetSlider(.printProcessDepth) },
-                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printProcessDepth) }
+                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .printProcessDepth) },
+                            onCancel: { viewModel.cancelSliderScrub() }
                         )
                         HStack {
                             Text(isMonochromeActive ? "Untuned Silver" : "Base Dye")

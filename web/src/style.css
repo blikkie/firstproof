@@ -498,7 +498,7 @@ body.darkroom-body {
 
 .meta-exif-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.4rem;
 }
 
@@ -508,6 +508,22 @@ body.darkroom-body {
   border-radius: 4px;
   text-align: center;
   border: 1px solid var(--border-color);
+}
+
+.exif-badge.camera-badge {
+  grid-column: 1 / -1;
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+}
+
+.exif-badge.camera-badge .exif-val {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .exif-label {
@@ -1397,7 +1413,7 @@ kbd {
     padding: 0.5rem 0.8rem;
   }
   .meta-exif-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 0.25rem;
   }
   .exif-badge {

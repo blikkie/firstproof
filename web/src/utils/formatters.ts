@@ -3,6 +3,8 @@
  * Zero magic numbers, zero plastic rounding artifacts.
  */
 
+import type { AdjustmentDescriptor } from 'firstproof-wasm';
+
 const STANDARD_FSTOPS = [
   1.0, 1.1, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.5, 2.8, 3.2, 3.5, 4.0, 4.5, 5.0,
   5.6, 6.3, 7.1, 8.0, 9.0, 10, 11, 13, 14, 16, 18, 20, 22, 25, 29, 32, 45, 64,
@@ -88,4 +90,25 @@ export function formatDimensions(
   const w = rawW && rawW >= previewW ? rawW : previewW;
   const h = rawH && rawH >= previewH ? rawH : previewH;
   return `${w} × ${h}`;
+}
+
+/**
+ * Format any adjustment slider value dynamically derived from its canonical AdjustmentDescriptor.
+ * Bit-for-bit parity with firstproof-engine schema::format_value.
+ */
+export function formatAdjustmentValue(
+  desc: AdjustmentDescriptor,
+  val: number,
+): string {
+  if (desc.scale_mode === 'Mired') {
+    return `${Math.round(val)} K`;
+  }
+  const prefix = desc.unit === 'EV' && val > 0 ? '+' : '';
+  const unitSuffix =
+    desc.unit === '' ? '' : desc.unit === '%' ? '%' : ` ${desc.unit}`;
+  const formattedNum =
+    desc.precision === 0
+      ? Math.round(val).toString()
+      : val.toFixed(desc.precision);
+  return `${prefix}${formattedNum}${unitSuffix}`;
 }
