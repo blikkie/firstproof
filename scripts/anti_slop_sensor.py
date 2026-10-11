@@ -48,11 +48,11 @@ def check_boundary_anchoring():
     """Ensure no additive floor lifts (+ 0.016, + 0.035) in tone shaders."""
     violations = []
     targets = [
-        ROOT_DIR / "FirstProofApp" / "Sources" / "Metal",
+        ROOT_DIR / "FirstProofApp" / "Sources" / "Shaders",
         ROOT_DIR / "web" / "src" / "shaders",
         ROOT_DIR / "firstproof-engine" / "src",
     ]
-    pattern = re.compile(r"\+\s*0\.016|\+\s*0\.035")
+    pattern = re.compile(r"\+\s*0\.016|\+\s*0\.035|\bbase_?refl\b", re.IGNORECASE)
     
     for target in targets:
         if not target.exists():

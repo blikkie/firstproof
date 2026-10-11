@@ -788,14 +788,11 @@ inline float3 applyRecordingEmulsion(
         }
         case 7: { // CambridgeDiffusion100 - Ref: Polaroid Corp Polacolor ER / Type 669 & Land PNAS
             float3 dir = applyDirChemicalCoupling(curRgb, -0.03, 0.02, -0.04, 0.03, 0.01, -0.03);
-            float3 curv = float3(
+            return float3(
                 applyFilmCharacteristicCurve(dir.r, 0.98, 0.35, 0.12),
                 applyFilmCharacteristicCurve(dir.g, 0.98, 0.35, 0.12),
                 applyFilmCharacteristicCurve(dir.b, 0.98, 0.35, 0.12)
             );
-            float lum = 0.2627 * curv.r + 0.6780 * curv.g + 0.0593 * curv.b;
-            float baseRefl = 0.025 * max(1.0 - lum, 0.0);
-            return min(curv + baseRefl * float3(1.02, 1.00, 0.94), 2.0);
         }
         case 8: { // LeverkusenPortrait160 - Ref: Agfa TDS F-PF4-E (Optima 160) & Fischer Patent US 2,179,244
             float3 dir = applyDirChemicalCoupling(curRgb, -0.05, 0.01, -0.07, 0.02, 0.02, -0.04);

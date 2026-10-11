@@ -145,15 +145,11 @@ fn metal_shader_emulsion_sim(
         }
         7 => { // CambridgeDiffusion100
             let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.03, 0.02, -0.04, 0.03, 0.01, -0.03);
-            let c_r = metal_film_curve(dir.0, 0.98, 0.35, 0.12);
-            let c_g = metal_film_curve(dir.1, 0.98, 0.35, 0.12);
-            let c_b = metal_film_curve(dir.2, 0.98, 0.35, 0.12);
-            let lum = 0.2627 * c_r + 0.6780 * c_g + 0.0593 * c_b;
-            let base_refl = 0.025 * (1.0 - lum).max(0.0);
-            let tio2_r = (c_r + base_refl * 1.02).min(2.0);
-            let tio2_g = (c_g + base_refl * 1.00).min(2.0);
-            let tio2_b = (c_b + base_refl * 0.94).min(2.0);
-            (tio2_r, tio2_g, tio2_b)
+            (
+                metal_film_curve(dir.0, 0.98, 0.35, 0.12),
+                metal_film_curve(dir.1, 0.98, 0.35, 0.12),
+                metal_film_curve(dir.2, 0.98, 0.35, 0.12),
+            )
         }
         8 => { // LeverkusenPortrait160
             let dir = metal_dir_coupling((cur_r, cur_g, cur_b), -0.05, 0.01, -0.07, 0.02, 0.02, -0.04);
@@ -234,14 +230,51 @@ fn test_achromatic_neutral_axis_preservation_under_dir() {
 
 #[test]
 fn test_sensitometric_dmax_absorption() {
-    // In deep black (0.0), D-max absorption ensures pure black stays 0.0
-    let (rb, gb, bb) = apply_recording_emulsion(
-        0.0, 0.0, 0.0,
+    // In deep black (0.0), D-max absorption ensures pure black stays 0.0 across all emulsions!
+    // Strict Boundary Anchoring Invariant: f(0.0) == 0.0
+    let all_archetypes = [
+        EmulsionArchetype::None,
         EmulsionArchetype::RochesterPortrait400,
-        0.0,
-        EnlargerFilterMode::NeutralPanchromatic,
-    );
-    assert_eq!((rb, gb, bb), (0.0, 0.0, 0.0));
+        EmulsionArchetype::AshigaraChrome50,
+        EmulsionArchetype::RochesterK14Chrome64,
+        EmulsionArchetype::RochesterCinema500,
+        EmulsionArchetype::RochesterDaylight200,
+        EmulsionArchetype::MobberleySilver400,
+        EmulsionArchetype::CambridgeDiffusion100,
+        EmulsionArchetype::LeverkusenPortrait160,
+        EmulsionArchetype::AshigaraPortrait400,
+        EmulsionArchetype::LiguriaCinema80,
+        EmulsionArchetype::BaodingSilver100,
+    ];
+
+    for archetype in all_archetypes {
+        let (rb, gb, bb) = apply_recording_emulsion(
+            0.0, 0.0, 0.0,
+            archetype,
+            0.0,
+            EnlargerFilterMode::NeutralPanchromatic,
+        );
+        assert_eq!(
+            (rb, gb, bb),
+            (0.0, 0.0, 0.0),
+            "{:?} violated strict boundary anchoring at D-max: expected (0.0, 0.0, 0.0), got ({}, {}, {})",
+            archetype, rb, gb, bb
+        );
+
+        // Also verify metal simulation matches zero anchor
+        let (m_r, m_g, m_b) = metal_shader_emulsion_sim(
+            0.0, 0.0, 0.0,
+            archetype.id_number(),
+            0.0,
+            EnlargerFilterMode::NeutralPanchromatic.id_number(),
+        );
+        assert_eq!(
+            (m_r, m_g, m_b),
+            (0.0, 0.0, 0.0),
+            "Metal shader simulation for {:?} violated strict boundary anchoring: got ({}, {}, {})",
+            archetype, m_r, m_g, m_b
+        );
+    }
 }
 
 #[test]

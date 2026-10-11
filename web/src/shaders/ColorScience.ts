@@ -600,17 +600,10 @@ vec3 applyRecordingEmulsion(vec3 rgb, int archetype, float pushPullEv, int filte
         return vec3(mono);
     } else if (archetype == 7) { // Cambridge Instant Diffusion 100
         vec3 dir = applyDirChemicalCoupling(cur, -0.03, 0.02, -0.04, 0.03, 0.01, -0.03);
-        vec3 curv = vec3(
+        return vec3(
             applyFilmCharacteristicCurve(dir.r, 0.98, 0.35, 0.12),
             applyFilmCharacteristicCurve(dir.g, 0.98, 0.35, 0.12),
             applyFilmCharacteristicCurve(dir.b, 0.98, 0.35, 0.12)
-        );
-        float lum = dot(curv, vec3(0.2627, 0.6780, 0.0593));
-        float baseRefl = 0.025 * max(1.0 - lum, 0.0);
-        return vec3(
-            min(curv.r + baseRefl * 1.02, 2.0),
-            min(curv.g + baseRefl * 1.00, 2.0),
-            min(curv.b + baseRefl * 0.94, 2.0)
         );
     } else if (archetype == 8) { // Leverkusen Portrait 160 (Agfa Optima 160)
         vec3 dir = applyDirChemicalCoupling(cur, -0.05, 0.01, -0.07, 0.02, 0.02, -0.04);

@@ -392,7 +392,7 @@ public struct EmulsionWorkspaceView: View {
         case .mobberleySilver400:
             return "Panchromatic Silver Halide: Pure monochromatic collapse in linear Rec.2020, linear midtone acutance, and rich shadow micro-contrast."
         case .cambridgeDiffusion100:
-            return "Instant Dye Diffusion Reversal: Instant peel-apart chemistry, soft highlight roll-off, reflective TiO2 base tone, and pastel greens."
+            return "Instant Dye Diffusion Reversal: Instant peel-apart chemistry, soft highlight roll-off, and pastel greens."
         case .leverkusenPortrait160:
             return "C-41 Color Negative: Earthy ochre skin tones, restrained saturation, pastel greens, and gentle highlight roll-off."
         case .ashigaraPortrait400:

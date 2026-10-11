@@ -227,8 +227,8 @@ pub fn apply_recording_emulsion(
 
         // 7. Cambridge Diffusion 100 (Instant Dye Diffusion, Kendall Square, Cambridge MA)
         // Technical Reference: Polaroid Corporation Technical Data Sheet (Polacolor ER / Type 669) & Edwin H. Land PNAS Publication.
-        // Characteristics: Reversal dye-developer diffusion transfer, ~5-6 stops latitude, reflective TiO2 highlight base tone (0.025),
-        // and pastel greens from phthalocyanine cyan dye couplers.
+        // Characteristics: Reversal dye-developer diffusion transfer, ~5-6 stops latitude, soft shoulder roll-off,
+        // and pastel greens from phthalocyanine cyan dye couplers. Strictly boundary-anchored (f(0.0) == 0.0).
         EmulsionArchetype::CambridgeDiffusion100 => {
             let (r_dir, g_dir, b_dir) = apply_dir_chemical_coupling(
                 cur_r, cur_g, cur_b,
@@ -241,14 +241,7 @@ pub fn apply_recording_emulsion(
             let g_curv = apply_film_characteristic_curve(g_dir, 0.98, 0.35, 0.12);
             let b_curv = apply_film_characteristic_curve(b_dir, 0.98, 0.35, 0.12);
 
-            // Reflective TiO2 base tone: gentle cream/pastel reflection in high densities (Linear Rec.2020 luma)
-            let lum = 0.2627 * r_curv + 0.6780 * g_curv + 0.0593 * b_curv;
-            let base_refl = 0.025 * (1.0 - lum).max(0.0);
-            let r_tio2 = (r_curv + base_refl * 1.02).min(2.0);
-            let g_tio2 = (g_curv + base_refl * 1.00).min(2.0);
-            let b_tio2 = (b_curv + base_refl * 0.94).min(2.0);
-
-            (r_tio2, g_tio2, b_tio2)
+            (r_curv, g_curv, b_curv)
         }
 
         // 8. Leverkusen Portrait 160 (Agfa Agfacolor / Vista, Leverkusen, Germany)
