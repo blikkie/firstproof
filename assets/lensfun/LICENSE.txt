@@ -1,0 +1,13 @@
+Lensfun Lens Calibration Database
+License: Creative Commons Attribution-ShareAlike 3.0 Unported (CC-BY-SA 3.0)
+Upstream: https://github.com/lensfun/lensfun
+
+This dataset contains optical distortion, transverse chromatic aberration, and vignetting
+calibration profiles created and curated by the open-source Lensfun Project contributors.
+
+In accordance with collective work / aggregation legal provisions, this dataset is quarantined
+within assets/lensfun/ as a distinct data collection and does not alter the MIT license of
+First Proof software code.
+
+Attribution notice:
+Lens profiles provided by the open-source Lensfun Project (CC-BY-SA 3.0).

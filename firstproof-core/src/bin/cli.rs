@@ -789,6 +789,27 @@ fn cmd_dng(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn cmd_bundle_lensfun(args: &[String]) -> Result<(), String> {
+    if args.len() < 2 {
+        return Err("Usage: firstproof-cli bundle-lensfun <INPUT_XML_DIR> <OUTPUT_JSON>".to_string());
+    }
+    let input_dir = Path::new(&args[0]);
+    let output_json = Path::new(&args[1]);
+
+    println!("==> Compiling Lensfun database from {:?}...", input_dir);
+    let mut db = LensfunDatabase::default();
+    let loaded = db.load_directory(input_dir)?;
+    println!("    Parsed {} XML files ({} cameras, {} lenses)", loaded, db.cameras.len(), db.lenses.len());
+
+    if let Some(parent) = output_json.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    db.save_json_file(output_json)?;
+    let meta = std::fs::metadata(output_json).map_err(|e| e.to_string())?;
+    println!("    ✅ Wrote compiled database to {:?} ({:.2} MB)", output_json, meta.len() as f64 / 1_048_576.0);
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -803,6 +824,7 @@ fn main() {
         "develop" | "dev" => cmd_develop(rest),
         "inspect" | "info" => cmd_inspect(rest),
         "dng" | "convert" => cmd_dng(rest),
+        "bundle-lensfun" => cmd_bundle_lensfun(rest),
         "help" | "--help" | "-h" => {
             if !rest.is_empty() {
                 match rest[0].as_str() {

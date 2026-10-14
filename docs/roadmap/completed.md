@@ -466,3 +466,18 @@ This archive tracks completed stories and features moved from the active backlog
   - *Open Baseline for Community PRs*:
     - Established that our pure-Rust baseline provides solid coverage for over 95% of mainstream interchangeable-lens camera bodies.
     - Left exotic/rare formats (Hasselblad 3FR, Phase One IIQ, leaf-shutter cinema cameras) and full 3-pass Markesteijn demosaicing open for future community PR contributions post-v0.1, preventing scope creep while securing a rock-solid foundation.
+- **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline (`Makefile`, `firstproof-cli`, `scripts/harvest_hardware_data.sh`, `assets/lensfun/`, `.github/workflows/release.yml`)**:
+  - *Automated Hardware & Lens Calibration Harvester (`scripts/harvest_hardware_data.sh`)*:
+    - Built headless extraction and indexing tool downloading upstream Lensfun CC-BY-SA 3.0 database (56 XML files, 1,057 cameras, 1,571 lenses).
+    - Quarantined the dataset under `assets/lensfun/` with CC-BY-SA 3.0 quarantine notice (`LICENSE.txt`) adhering to collective work / mere aggregation provisions.
+    - Compiled all XMLs into a single pre-indexed, compact `assets/lensfun/lensfun.json` (3.8 MB) using `firstproof-cli bundle-lensfun`.
+    - Enhanced `normalize_str` with alphanumeric boundary tokenization, guaranteeing robust fuzzy matching between EXIF lens tags (`EF28mm`, `AF-S50mm`) and spaced database models (`EF 28mm`, `AF-S 50mm`).
+    - Added instant (<2ms) bundled JSON deserialization to `LensfunDatabase::new()`, completely deprecating the old dependency on local Homebrew `/opt/homebrew/share/lensfun` installations.
+  - *Distributable macOS Disk Image (`make package-dmg`)*:
+    - Automated compressed `.dmg` container creation via `hdiutil` (`dist/FirstProof-0.1.0-macos-arm64.dmg`, 13 MB), bundling `FirstProof.app` (with codesigned Mach-O binary, Metal shaders, app icons, and bundled `lensfun.json`) alongside an `/Applications` drag-and-drop symlink.
+  - *Headless Multi-Arch CLI Release Binary (`make package-cli`)*:
+    - Added release compilation target for `firstproof-cli` (`dist/firstproof-cli`, 10 MB stripped release binary).
+    - Packaged distributable release tarball `dist/firstproof-cli-0.1.0-macos-arm64.tar.gz` (3.4 MB) with automated cryptographic verification (`dist/SHA256SUMS.txt`).
+  - *GitHub Actions Automated Release Workflow (`.github/workflows/release.yml`)*:
+    - Configured multi-platform CI workflow triggered on version tags (`v*`) to build macOS DMG and Linux release binaries on GitHub's infrastructure and publish releases via `softprops/action-gh-release@v2`.
+

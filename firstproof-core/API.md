@@ -42,6 +42,7 @@
 ## Optics & Film Emulation
 - `FirstProofLensfun::new() -> Arc<Self>`
   - `.load_directory(dir_path) -> u32`
+  - `.load_json_file(path) -> bool`
   - `.resolve_coefficients(camera_make, camera_model, lens_model, focal_length, aperture) -> LensCorrectionCoefficientsRecord`
 - `get_builtin_cube_lut_titles() -> Vec<String>`
 - `get_builtin_cube_lut(title, size) -> Option<CubeLutRecord>`

@@ -151,7 +151,7 @@ public struct OpticsGeometryWorkspaceView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
                 
-                Toggle("Lens Correction (Lensfun)", isOn: $viewModel.lensCorrectionEnabled)
+                Toggle("Lens Correction", isOn: $viewModel.lensCorrectionEnabled)
                     .toggleStyle(.switch)
                 
                 if let coeff = viewModel.lensCoefficients {
@@ -171,6 +171,10 @@ public struct OpticsGeometryWorkspaceView: View {
                     .background(Color.secondary.opacity(0.08))
                     .cornerRadius(4)
                 }
+                
+                Text("Lens metadata comes from [Lensfun](https://lensfun.github.io) under the [CC-BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) license.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
         }
         .padding(.top, 4)

@@ -191,18 +191,22 @@ vec2 transformGeometry(vec2 uv) {
 
     float autoCropScale = 1.0;
     if (u_cropConstrain != 0) {
-        vec2 corners[4];
-        corners[0] = vec2( A,  1.0);
-        corners[1] = vec2( A, -1.0);
-        corners[2] = vec2(-A, -1.0);
-        corners[3] = vec2(-A,  1.0);
-        for (int i = 0; i < 4; i++) {
-            vec2 p = corners[i];
+        vec2 testPoints[12];
+        testPoints[0] = vec2( A,  1.0); testPoints[1] = vec2(-A,  1.0);
+        testPoints[2] = vec2( A, -1.0); testPoints[3] = vec2(-A, -1.0);
+        testPoints[4] = vec2( A,  0.0); testPoints[5] = vec2(-A,  0.0);
+        testPoints[6] = vec2(0.0,  1.0); testPoints[7] = vec2(0.0, -1.0);
+        testPoints[8] = vec2( A,  0.5); testPoints[9] = vec2(-A,  0.5);
+        testPoints[10] = vec2( A, -0.5); testPoints[11] = vec2(-A, -0.5);
+        for (int i = 0; i < 12; i++) {
+            vec2 p = testPoints[i];
             vec2 r = vec2(
                 p.x * cosA - p.y * sinA,
                 p.x * sinA + p.y * cosA
             );
-            float req = max(abs(r.x) / A, abs(r.y)) - (cV * r.y + cH * r.x);
+            float denom = max(1.0 + cV * r.y + cH * r.x, 0.1);
+            vec2 g = r / denom;
+            float req = max(abs(g.x) / A, abs(g.y));
             if (req > autoCropScale) {
                 autoCropScale = req;
             }

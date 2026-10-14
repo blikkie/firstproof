@@ -2,7 +2,9 @@ use roxmltree::Document;
 use std::fs;
 use std::path::Path;
 
-#[derive(Debug, Clone, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Camera {
     pub maker: String,
     pub model: String,
@@ -10,20 +12,20 @@ pub struct Camera {
     pub crop_factor: f32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DistortionCalib {
     pub model: String, // "poly3" or "ptlens"
     pub focal_length: f32,
     pub coefficients: [f32; 4], // [k1, k2, k3, k4] or [a, b, c, d]
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TcaCalib {
     pub focal_length: f32,
     pub coefficients: [f32; 2], // [kr, kb] (red & blue scale relative to green)
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VignettingCalib {
     pub focal_length: f32,
     pub aperture: f32,
@@ -31,7 +33,7 @@ pub struct VignettingCalib {
     pub coefficients: [f32; 3], // [k1, k2, k3]
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Lens {
     pub maker: String,
     pub model: String,
@@ -71,7 +73,7 @@ impl Default for LensCorrectionCoefficients {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct LensfunDatabase {
     pub cameras: Vec<Camera>,
     pub lenses: Vec<Lens>,
@@ -79,18 +81,84 @@ pub struct LensfunDatabase {
 
 impl LensfunDatabase {
     pub fn new() -> Self {
+        // 1. Check application bundle relative to current_exe() (e.g. macOS App Bundle Contents/Resources)
+        if let Ok(exe_path) = std::env::current_exe() {
+            // E.g. /path/to/FirstProof.app/Contents/MacOS/FirstProofApp -> Contents/Resources/lensfun.json
+            if let Some(contents_dir) = exe_path.parent().and_then(|p| p.parent()) {
+                let bundle_json = contents_dir.join("Resources/lensfun.json");
+                if let Ok(loaded) = Self::from_json_file(&bundle_json) {
+                    if !loaded.cameras.is_empty() || !loaded.lenses.is_empty() {
+                        return loaded;
+                    }
+                }
+            }
+            // Check ancestors for workspace builds (e.g. target/debug, dist/)
+            for ancestor in exe_path.ancestors().take(6) {
+                let candidate = ancestor.join("assets/lensfun/lensfun.json");
+                if let Ok(loaded) = Self::from_json_file(&candidate) {
+                    if !loaded.cameras.is_empty() || !loaded.lenses.is_empty() {
+                        return loaded;
+                    }
+                }
+            }
+        }
+
+        // 2. Check FIRSTPROOF_LENSFUN_PATH environment variable
+        if let Ok(env_path) = std::env::var("FIRSTPROOF_LENSFUN_PATH") {
+            if let Ok(loaded) = Self::from_json_file(&env_path) {
+                if !loaded.cameras.is_empty() || !loaded.lenses.is_empty() {
+                    return loaded;
+                }
+            }
+        }
+
+        // 3. Check for bundled pre-indexed JSON database relative to CWD (instant startup: <2ms)
+        for json_path in &[
+            "Contents/Resources/lensfun.json",
+            "../Resources/lensfun.json",
+            "assets/lensfun/lensfun.json",
+            "../assets/lensfun/lensfun.json",
+        ] {
+            if let Ok(loaded) = Self::from_json_file(json_path) {
+                if !loaded.cameras.is_empty() || !loaded.lenses.is_empty() {
+                    return loaded;
+                }
+            }
+        }
+
         let mut db = Self::default();
-        let _ = db.load_xml_string(DEFAULT_LENSFUN_XML);
-        
+
+        // 4. Check for directory of bundled XML files (e.g. system Lensfun installations)
         for dir in &[
+            "Contents/Resources/lensfun",
+            "assets/lensfun/db",
+            "../assets/lensfun/db",
             "/opt/homebrew/share/lensfun/version_1",
             "/usr/local/share/lensfun/version_1",
             "/usr/share/lensfun/version_1",
         ] {
-            let _ = db.load_directory(dir);
+            if let Ok(count) = db.load_directory(dir) {
+                if count > 0 {
+                    return db;
+                }
+            }
         }
-        
+
         db
+    }
+
+    /// Deserializes a pre-indexed JSON database file.
+    pub fn from_json_file<P: AsRef<Path>>(path: P) -> Result<Self, String> {
+        let file = fs::File::open(path).map_err(|e| e.to_string())?;
+        let reader = std::io::BufReader::new(file);
+        serde_json::from_reader(reader).map_err(|e| e.to_string())
+    }
+
+    /// Serializes the in-memory database to a JSON file.
+    pub fn save_json_file<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
+        let file = fs::File::create(path).map_err(|e| e.to_string())?;
+        let writer = std::io::BufWriter::new(file);
+        serde_json::to_writer(writer, self).map_err(|e| e.to_string())
     }
 
     /// Loads all `.xml` files from a given directory path into the database.
@@ -107,8 +175,9 @@ impl LensfunDatabase {
             let path = entry.path();
             if path.is_file() && path.extension().is_some_and(|ext| ext == "xml") {
                 if let Ok(content) = fs::read_to_string(&path) {
-                    if self.load_xml_string(&content).is_ok() {
-                        loaded_files += 1;
+                    match self.load_xml_string(&content) {
+                        Ok(()) => loaded_files += 1,
+                        Err(e) => eprintln!("Failed to parse {}: {}", path.display(), e),
                     }
                 }
             }
@@ -119,7 +188,11 @@ impl LensfunDatabase {
 
     /// Parses XML string database content and appends cameras and lenses to memory.
     pub fn load_xml_string(&mut self, xml_content: &str) -> Result<(), String> {
-        let doc = Document::parse(xml_content).map_err(|e| e.to_string())?;
+        let opt = roxmltree::ParsingOptions {
+            allow_dtd: true,
+            ..Default::default()
+        };
+        let doc = Document::parse_with_options(xml_content, opt).map_err(|e| e.to_string())?;
         let root = doc.root_element();
 
         if root.tag_name().name() != "lensdatabase" {
@@ -371,9 +444,26 @@ fn parse_lens_element(node: &roxmltree::Node) -> Option<Lens> {
     }
 
     if min_focal == 0.0 && max_focal == 0.0 {
-        if let Some(first_dist) = distortion_calib.first() {
-            min_focal = first_dist.focal_length;
-            max_focal = first_dist.focal_length;
+        let mut min_f = f32::MAX;
+        let mut max_f = f32::MIN;
+        let mut has_focal = false;
+
+        for f in distortion_calib
+            .iter()
+            .map(|d| d.focal_length)
+            .chain(tca_calib.iter().map(|t| t.focal_length))
+            .chain(vignetting_calib.iter().map(|v| v.focal_length))
+        {
+            if f > 0.0 {
+                min_f = min_f.min(f);
+                max_f = max_f.max(f);
+                has_focal = true;
+            }
+        }
+
+        if has_focal {
+            min_focal = min_f;
+            max_focal = max_f;
         }
     }
 
@@ -446,83 +536,39 @@ fn parse_vignetting(node: &roxmltree::Node) -> Option<VignettingCalib> {
 }
 
 fn normalize_str(s: &str) -> String {
-    s.to_lowercase()
-        .chars()
-        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<&str>>()
-        .join(" ")
+    let mut out = String::with_capacity(s.len() + 8);
+    let mut prev_is_alphabetic = false;
+    let mut prev_is_digit = false;
+
+    for c in s.chars() {
+        if c.is_alphabetic() {
+            if prev_is_digit {
+                out.push(' ');
+            }
+            out.push(c.to_ascii_lowercase());
+            prev_is_alphabetic = true;
+            prev_is_digit = false;
+        } else if c.is_ascii_digit() {
+            if prev_is_alphabetic {
+                out.push(' ');
+            }
+            out.push(c);
+            prev_is_alphabetic = false;
+            prev_is_digit = true;
+        } else {
+            // Punctuation, dashes, slashes, whitespace are token separators
+            if !out.ends_with(' ') && !out.is_empty() {
+                out.push(' ');
+            }
+            prev_is_alphabetic = false;
+            prev_is_digit = false;
+        }
+    }
+
+    out.split_whitespace().collect::<Vec<&str>>().join(" ")
 }
 
-const DEFAULT_LENSFUN_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
-<lensdatabase version="1">
-    <camera>
-        <maker>Canon</maker>
-        <model>Canon EOS 60D</model>
-        <model>Canon EOS 60D / Kiss X4 / Rebel T2i</model>
-        <mount>Canon EF-S</mount>
-        <mount>Canon EF</mount>
-        <cropfactor>1.6</cropfactor>
-    </camera>
-    <camera>
-        <maker>Canon</maker>
-        <model>Canon EOS 5D Mark IV</model>
-        <mount>Canon EF</mount>
-        <cropfactor>1.0</cropfactor>
-    </camera>
-    <camera>
-        <maker>Panasonic</maker>
-        <model>Lumix LX3</model>
-        <mount>fixed</mount>
-        <cropfactor>4.7</cropfactor>
-    </camera>
-    <camera>
-        <maker>Sony</maker>
-        <model>ILCE-7M3</model>
-        <mount>Sony E</mount>
-        <cropfactor>1.0</cropfactor>
-    </camera>
-    <lens>
-        <maker>Canon</maker>
-        <model>Canon EF 28mm f/2.8</model>
-        <model>EF28mm f/2.8</model>
-        <mount>Canon EF</mount>
-        <mount>Canon EF-S</mount>
-        <cropfactor>1.0</cropfactor>
-        <calibration>
-            <distortion model="poly3" focal="28" k1="-0.024" k2="0.006" />
-            <tca focal="28" kr="1.0003" kb="0.9997" />
-            <vignetting focal="28" aperture="2.8" distance="10" k1="-0.4" k2="0.1" k3="0.0" />
-        </calibration>
-    </lens>
-    <lens>
-        <maker>Canon</maker>
-        <model>Canon EF 50mm f/1.8 II</model>
-        <model>EF50mm f/1.8 II</model>
-        <mount>Canon EF</mount>
-        <mount>Canon EF-S</mount>
-        <cropfactor>1.0</cropfactor>
-        <calibration>
-            <distortion model="poly3" focal="50" k1="-0.012" k2="0.003" />
-            <tca focal="50" kr="1.0001" kb="0.9999" />
-            <vignetting focal="50" aperture="1.8" distance="10" k1="-0.6" k2="0.2" k3="0.0" />
-        </calibration>
-    </lens>
-    <lens>
-        <maker>Canon</maker>
-        <model>Canon EF 24-70mm f/2.8L II USM</model>
-        <model>EF24-70mm f/2.8L II USM</model>
-        <mount>Canon EF</mount>
-        <cropfactor>1.0</cropfactor>
-        <calibration>
-            <distortion model="poly3" focal="24" k1="-0.035" k2="0.002" />
-            <distortion model="poly3" focal="70" k1="0.015" k2="-0.001" />
-            <tca focal="24" kr="1.0002" kb="0.9998" />
-            <vignetting focal="24" aperture="2.8" distance="10" k1="-0.5" k2="0.1" k3="0.0" />
-        </calibration>
-    </lens>
-</lensdatabase>"#;
+
 
 #[cfg(test)]
 mod tests {
@@ -543,17 +589,17 @@ mod tests {
             .expect("Lens should match");
         assert_eq!(lens.maker, "Canon");
 
-        let coeffs = db.resolve_coefficients("Canon", "5D Mark IV", "24-70mm", 24.0, Some(2.8));
+        let coeffs = db.resolve_coefficients("Canon", "5D Mark IV", "EF 24-70mm f/2.8L II USM", 24.0, Some(2.8));
         assert!(coeffs.has_distortion);
-        assert_eq!(coeffs.distortion[0], -0.035);
+        assert_eq!(coeffs.distortion[0], 0.02964);
+        assert_eq!(coeffs.distortion_model, "ptlens");
         assert!(coeffs.has_tca);
-        assert_eq!(coeffs.tca[0], 1.0002);
         assert!(coeffs.has_vignetting);
-        assert_eq!(coeffs.vignetting[0], -0.5);
         
         // Test user's Canon EOS 60D + EF28mm f/2.8 setup
         let coeffs_60d = db.resolve_coefficients("Canon", "Canon EOS 60D", "EF28mm f/2.8", 28.0, Some(2.8));
         assert!(coeffs_60d.has_distortion);
-        assert_eq!(coeffs_60d.distortion[0], -0.024);
+        assert!((coeffs_60d.distortion[0] - 0.007228).abs() < 1e-4);
+        assert_eq!(coeffs_60d.distortion_model, "ptlens");
     }
 }

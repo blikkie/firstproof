@@ -31,20 +31,43 @@ inline float2 transformGeometry(float2 uv, constant ShaderUniforms &uniforms) {
     float cH = uniforms.perspectiveHorizontal * 0.005;
     
     float autoCropScale = 1.0;
-    if (uniforms.cropConstrain != 0) {
-        float2 corners[4] = {
-            float2( A,  1.0),
-            float2( A, -1.0),
-            float2(-A, -1.0),
-            float2(-A,  1.0)
+    if (uniforms.cropConstrain != 0 || uniforms.lensCorrectionEnabled != 0) {
+        float2 testPoints[12] = {
+            float2( A,  1.0), float2(-A,  1.0),
+            float2( A, -1.0), float2(-A, -1.0),
+            float2( A,  0.0), float2(-A,  0.0),
+            float2(0.0,  1.0), float2(0.0, -1.0),
+            float2( A,  0.5), float2(-A,  0.5),
+            float2( A, -0.5), float2(-A, -0.5)
         };
-        for (int i = 0; i < 4; i++) {
-            float2 p = corners[i];
+        for (int i = 0; i < 12; i++) {
+            float2 p = testPoints[i];
             float2 r = float2(
                 p.x * cosA - p.y * sinA,
                 p.x * sinA + p.y * cosA
             );
-            float req = max(abs(r.x) / A, abs(r.y)) - (cV * r.y + cH * r.x);
+            float denom = max(1.0 + cV * r.y + cH * r.x, 0.1);
+            float2 g = r / denom;
+            
+            if (uniforms.lensCorrectionEnabled != 0) {
+                float r2 = dot(g, g);
+                float rad = sqrt(r2);
+                if (rad > 0.0001) {
+                    float r_corr = rad;
+                    if (uniforms.distortionModel == 0) {
+                        r_corr = rad * (1.0 + uniforms.k1 * r2 + uniforms.k2 * (r2 * r2));
+                    } else if (uniforms.distortionModel == 1) {
+                        float a = uniforms.k1;
+                        float b = uniforms.k2;
+                        float c = uniforms.k3;
+                        float d = 1.0 - (a + b + c);
+                        r_corr = a * (r2 * r2) + b * (r2 * rad) + c * r2 + d * rad;
+                    }
+                    g *= (r_corr / rad);
+                }
+            }
+            
+            float req = max(abs(g.x) / A, abs(g.y));
             if (req > autoCropScale) {
                 autoCropScale = req;
             }

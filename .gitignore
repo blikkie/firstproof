@@ -35,3 +35,9 @@ parity_report.json
 *.njsproj
 *.sln
 *.sw?
+
+# Lensfun raw XML cache & mirrored copies
+assets/lensfun/db/
+FirstProofApp/Resources/lensfun.json
+web/public/lensfun.json
+

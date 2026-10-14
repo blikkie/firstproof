@@ -786,6 +786,8 @@ public protocol FirstProofLensfunProtocol : AnyObject {
     
     func loadDirectory(dirPath: String)  -> UInt32
     
+    func loadJsonFile(path: String)  -> Bool
+    
     func loadXmlString(xmlContent: String)  -> Bool
     
     func resolveCoefficients(cameraMake: String, cameraModel: String, lensModel: String, focalLength: Float, aperture: Float?)  -> LensCorrectionCoefficientsRecord
@@ -853,6 +855,14 @@ open func loadDirectory(dirPath: String) -> UInt32 {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
     uniffi_firstproof_core_fn_method_firstprooflensfun_load_directory(self.uniffiClonePointer(),
         FfiConverterString.lower(dirPath),$0
+    )
+})
+}
+    
+open func loadJsonFile(path: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_method_firstprooflensfun_load_json_file(self.uniffiClonePointer(),
+        FfiConverterString.lower(path),$0
     )
 })
 }
@@ -4178,6 +4188,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_method_firstprooflensfun_load_directory() != 64715) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_method_firstprooflensfun_load_json_file() != 64211) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_method_firstprooflensfun_load_xml_string() != 32455) {

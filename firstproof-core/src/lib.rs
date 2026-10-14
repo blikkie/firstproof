@@ -844,6 +844,16 @@ impl FirstProofLensfun {
             .unwrap_or(0)
     }
 
+    pub fn load_json_file(&self, path: String) -> bool {
+        if let Ok(loaded) = lensfun::LensfunDatabase::from_json_file(&path) {
+            let mut guard = self.inner.lock().unwrap();
+            *guard = loaded;
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn load_xml_string(&self, xml_content: String) -> bool {
         self.inner
             .lock()

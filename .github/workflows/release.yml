@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Harvest Lensfun Database
+        run: ./scripts/harvest_hardware_data.sh
+
+      - name: Build macOS DMG and CLI
+        run: |
+          make package
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-artifacts
+          path: |
+            dist/*.dmg
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y liblcms2-dev libsqlite3-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Linux CLI
+        run: |
+          cargo build --release -p firstproof-core --bin firstproof-cli
+          mkdir -p dist
+          cp target/release/firstproof-cli dist/
+          tar -czf dist/firstproof-cli-linux-x86_64.tar.gz -C dist firstproof-cli
+          (cd dist && shasum -a 256 firstproof-cli-linux-x86_64.tar.gz > SHA256SUMS_linux.txt)
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release-artifacts
+          path: |
+            dist/firstproof-cli-linux-x86_64.tar.gz
+            dist/SHA256SUMS_linux.txt
+
+  publish-release:
+    needs: [build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release_assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true

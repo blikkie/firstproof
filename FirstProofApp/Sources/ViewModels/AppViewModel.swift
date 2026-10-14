@@ -522,6 +522,9 @@ public final class AppViewModel {
     
     public init() {
         self.lensfun = FirstProofLensfun()
+        if let bundlePath = Bundle.main.path(forResource: "lensfun", ofType: "json") {
+            _ = self.lensfun?.loadJsonFile(path: bundlePath)
+        }
         self.availableLutTitles = getBuiltinCubeLutTitles()
         
         // Restore multi-project opened folder list (preserves disconnected external drive sessions)

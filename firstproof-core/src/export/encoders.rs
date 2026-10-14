@@ -111,24 +111,6 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     let c_v = edits.perspective_vertical * 0.005;
     let c_h = edits.perspective_horizontal * 0.005;
     
-    let mut auto_crop_scale = 1.0f32;
-    if edits.crop_constrain {
-        let corners = [
-            (aspect_ratio, 1.0),
-            (aspect_ratio, -1.0),
-            (-aspect_ratio, -1.0),
-            (-aspect_ratio, 1.0),
-        ];
-        for (px, py) in corners {
-            let rx = px * cos_theta - py * sin_theta;
-            let ry = px * sin_theta + py * cos_theta;
-            let req = (rx.abs() / aspect_ratio).max(ry.abs()) - (c_v * ry + c_h * rx);
-            if req > auto_crop_scale {
-                auto_crop_scale = req;
-            }
-        }
-    }
-    
     let (has_dist, k1, k2, k3, is_ptlens) = if let Some((coeffs, model)) = lens_distortion {
         if !coeffs.is_empty() {
             let k1 = coeffs[0];
@@ -141,6 +123,52 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     } else {
         (false, 0.0, 0.0, 0.0, false)
     };
+
+    let mut auto_crop_scale = 1.0f32;
+    if edits.crop_constrain || has_dist {
+        let test_points = [
+            ( aspect_ratio,  1.0), (-aspect_ratio,  1.0),
+            ( aspect_ratio, -1.0), (-aspect_ratio, -1.0),
+            ( aspect_ratio,  0.0), (-aspect_ratio,  0.0),
+            ( 0.0,           1.0), ( 0.0,          -1.0),
+            ( aspect_ratio,  0.5), (-aspect_ratio,  0.5),
+            ( aspect_ratio, -0.5), (-aspect_ratio, -0.5),
+        ];
+        for (px, py) in test_points {
+            let rx = px * cos_theta - py * sin_theta;
+            let ry = px * sin_theta + py * cos_theta;
+            let denom = (1.0 + c_v * ry + c_h * rx).max(0.1);
+            let mut gx = rx / denom;
+            let mut gy = ry / denom;
+
+            if has_dist {
+                let r2 = gx * gx + gy * gy;
+                let r = r2.sqrt();
+                if r > 0.0001 {
+                    let rd = if is_ptlens {
+                        let a = k1;
+                        let b = k2;
+                        let c = k3;
+                        let d = 1.0 - (a + b + c);
+                        let r3 = r2 * r;
+                        let r4 = r2 * r2;
+                        a * r4 + b * r3 + c * r2 + d * r
+                    } else {
+                        let r4 = r2 * r2;
+                        r * (1.0 + k1 * r2 + k2 * r4)
+                    };
+                    let scale_factor = rd / r;
+                    gx *= scale_factor;
+                    gy *= scale_factor;
+                }
+            }
+
+            let req = (gx.abs() / aspect_ratio).max(gy.abs());
+            if req > auto_crop_scale {
+                auto_crop_scale = req;
+            }
+        }
+    }
     
     let active_lut: Option<crate::lut::CubeLut> = if let Some(ref lut_name) = edits.lut_name {
         if edits.lut_intensity > 0.0 {

@@ -1,4 +1,4 @@
-.PHONY: all check build-core build-bridge build-wasm build-web clean test test-all run
+.PHONY: all check build-core build-bridge build-wasm build-web clean test test-all run bundle build-cli package-dmg package-cli package harvest-hardware
 
 ARCH := $(shell uname -m)
 ifeq ($(ARCH),arm64)
@@ -46,9 +46,40 @@ bundle: build-app
 	cp FirstProofApp/Resources/AppIcon.icns dist/FirstProof.app/Contents/Resources/
 	cp FirstProofApp/Sources/Shaders/*.metal dist/FirstProof.app/Contents/Resources/
 	cp FirstProofApp/Sources/Shaders/ShaderTypes.h dist/FirstProof.app/Contents/Resources/
+	if [ -f assets/lensfun/lensfun.json ]; then cp assets/lensfun/lensfun.json dist/FirstProof.app/Contents/Resources/; fi
 	cp $(shell swift build --package-path FirstProofApp --show-bin-path)/FirstProofApp dist/FirstProof.app/Contents/MacOS/
 	codesign --force --deep --sign - dist/FirstProof.app
 	@echo "✅ Standalone bundle created at dist/FirstProof.app"
+
+build-cli:
+	GIT_CONFIG_GLOBAL=/dev/null cargo build --release --target $(RUST_TARGET) -p firstproof-core --bin firstproof-cli
+	mkdir -p dist
+	cp target/$(RUST_TARGET)/release/firstproof-cli dist/
+	@echo "✅ Standalone CLI created at dist/firstproof-cli"
+
+package-dmg: bundle
+	@echo "==> Packaging macOS distributable disk image (DMG)..."
+	rm -f dist/FirstProof-*-macos-*.dmg
+	rm -rf dist/dmg_staging
+	mkdir -p dist/dmg_staging
+	cp -R dist/FirstProof.app dist/dmg_staging/
+	ln -s /Applications dist/dmg_staging/Applications
+	hdiutil create -volname "First Proof" -srcfolder dist/dmg_staging -ov -format UDZO dist/FirstProof-0.1.0-macos-$(ARCH).dmg
+	rm -rf dist/dmg_staging
+	@echo "✅ Distributable DMG created at dist/FirstProof-0.1.0-macos-$(ARCH).dmg"
+
+package-cli: build-cli
+	@echo "==> Packaging standalone CLI release tarball..."
+	tar -czf dist/firstproof-cli-0.1.0-macos-$(ARCH).tar.gz -C dist firstproof-cli
+	@echo "✅ Standalone CLI tarball created at dist/firstproof-cli-0.1.0-macos-$(ARCH).tar.gz"
+
+package: package-dmg package-cli
+	@echo "==> Generating release checksums..."
+	(cd dist && shasum -a 256 FirstProof-0.1.0-macos-$(ARCH).dmg firstproof-cli-0.1.0-macos-$(ARCH).tar.gz > SHA256SUMS.txt)
+	@echo "✅ Release package complete with SHA256 checksums in dist/SHA256SUMS.txt"
+
+harvest-hardware:
+	./scripts/harvest_hardware_data.sh
 
 test:
 	GIT_CONFIG_GLOBAL=/dev/null cargo test -p firstproof-core
