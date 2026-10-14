@@ -179,3 +179,169 @@ fn test_synthetic_dual_format_container_parity() {
     assert!((manifest.baseline_exposure.unwrap() - 0.35).abs() < 1e-4);
     assert!((manifest.baseline_sharpness.unwrap() - 1.25).abs() < 1e-4);
 }
+
+#[test]
+fn test_leica_q2_matrix_parity() {
+    use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder, RawSensorFrameExt};
+    let path = Path::new("../target/raw_samples/leica_q2.dng");
+    if !path.exists() {
+        return;
+    }
+    let decoder = RawlerDecoder;
+    let frame = RawDecoder::decode(&decoder, path).expect("Decode Leica Q2 frame");
+    let temp = frame.as_shot_temperature();
+    let m_binned = frame.compute_sensor_to_rec2020();
+    let m_ext = frame.sensor_to_rec2020_matrix_at(temp);
+    assert_eq!(m_binned, m_ext.0, "Binned viewport matrix and demosaic export matrix must be bit-identical");
+}
+
+#[test]
+fn test_fuji_xt3_decode() {
+    use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
+    let path = Path::new("../target/raw_samples/fuji_xt3.raf");
+    if !path.exists() {
+        println!("Fuji file not found at {:?}", path);
+        return;
+    }
+    let decoder = RawlerDecoder;
+    let frame = RawDecoder::decode(&decoder, path).expect("Decode Fuji XT3 frame");
+    println!("CFA pattern: {:?}", frame.cfa_pattern);
+    println!("Dimensions: full {}x{}, active {}x{}, offset {},{}",
+        frame.full_width, frame.full_height, frame.active_width, frame.active_height, frame.active_x, frame.active_y);
+    println!("Black levels: {:?}", frame.black_levels);
+    println!("White levels: {:?}", frame.white_levels);
+    println!("WB: {:?}", frame.as_shot_wb());
+    println!("Color matrix: {:?}", frame.color_matrix);
+    println!("Camera model: {}", frame.camera_model);
+
+    // Verify 1: decode_raw_preview_binned_buffer produces a valid, balanced preview
+    let (bw, bh, binned_bytes) = firstproof_core::export::decode_raw_preview_binned_buffer(path)
+        .expect("binned preview decode");
+    assert!(bw > 0 && bh > 0, "Binned preview must have non-zero dimensions");
+    println!("Binned preview: {}x{}, bytes: {}", bw, bh, binned_bytes.len());
+
+    use firstproof_core::export::f16_to_f32;
+    // Check pixel at (100, 100) in binned preview
+    let b_idx = (100 * bw as usize + 100) * 8;
+    let b_r = f16_to_f32(u16::from_le_bytes([binned_bytes[b_idx], binned_bytes[b_idx + 1]]));
+    let b_g = f16_to_f32(u16::from_le_bytes([binned_bytes[b_idx + 2], binned_bytes[b_idx + 3]]));
+    let b_b = f16_to_f32(u16::from_le_bytes([binned_bytes[b_idx + 4], binned_bytes[b_idx + 5]]));
+    println!("Binned preview pixel (100, 100): R={:.4}, G={:.4}, B={:.4}", b_r, b_g, b_b);
+    assert!(b_g > 0.0, "Green channel must be positive");
+    assert!((b_r / b_g - 1.0).abs() < 0.5, "Red/Green ratio must be balanced, not pink/magenta blowout: R/G={}", b_r / b_g);
+    assert!((b_b / b_g - 1.0).abs() < 0.5, "Blue/Green ratio must be balanced, not pink/magenta blowout: B/G={}", b_b / b_g);
+
+    // Verify 2: Full demosaic via decode_image produces matching balanced colors
+    let demosaiced = firstproof_core::export::decode_image(path).expect("full demosaic");
+    let d_idx = (300 * demosaiced.width + 300) * 3;
+    let d_r = demosaiced.data[d_idx];
+    let d_g = demosaiced.data[d_idx + 1];
+    let d_b = demosaiced.data[d_idx + 2];
+    println!("Full demosaic pixel (300, 300): R={:.4}, G={:.4}, B={:.4}", d_r, d_g, d_b);
+    assert!(d_g > 0.0, "Green channel must be positive");
+    assert!((d_r / d_g - 1.0).abs() < 0.5, "Red/Green ratio in full demosaic must be balanced: R/G={}", d_r / d_g);
+    assert!((d_b / d_g - 1.0).abs() < 0.5, "Blue/Green ratio in full demosaic must be balanced: B/G={}", d_b / d_g);
+}
+
+#[test]
+fn test_sample_metadata_extraction() {
+    let files = [
+        "canon_5div.cr2",
+        "canon_r5.cr3",
+        "fuji_xt3.raf",
+        "leica_q2.dng",
+        "nikon_z6.nef",
+        "olympus_em1.orf",
+        "panasonic_s5.rw2",
+        "sony_a7iii.arw",
+    ];
+
+    for f in &files {
+        let path = format!("../target/raw_samples/{}", f);
+        if !Path::new(&path).exists() {
+            continue;
+        }
+        let meta = firstproof_core::raw::extract_metadata(&path).expect("extract metadata");
+        println!("=== File: {} ===", f);
+        println!("  Make/Model: {:?} / {:?}", meta.camera_make, meta.camera_model);
+        println!("  Lens: {:?}", meta.lens_model);
+        println!("  ISO: {:?}", meta.iso);
+        println!("  Aperture: {:?}", meta.aperture);
+        println!("  Shutter: {:?}", meta.shutter_speed);
+        println!("  Focal length: {:?}", meta.focal_length);
+
+        assert!(meta.camera_make.is_some(), "Camera make must be present for {}", f);
+        assert!(meta.camera_model.is_some(), "Camera model must be present for {}", f);
+        assert!(meta.iso.is_some(), "ISO must be present for {}", f);
+        assert!(meta.aperture.is_some(), "Aperture must be present for {}", f);
+        assert!(meta.shutter_speed.is_some(), "Shutter speed must be present for {}", f);
+        assert!(meta.focal_length.is_some(), "Focal length must be present for {}", f);
+    }
+}
+
+#[test]
+fn test_olympus_color_chart_engine_parity_and_stability() {
+    let path = Path::new("../target/raw_samples/olympus_em1.orf");
+    if !path.exists() {
+        return;
+    }
+
+    use firstproof_core::export::{decode_image, decode_raw_preview_binned_buffer, f16_to_f32};
+
+    // 1. Decode binned (fast viewport) and full archival demosaic
+    let (bw, bh, binned_bytes) = decode_raw_preview_binned_buffer(path).expect("binned preview decode");
+    let full_img = decode_image(path).expect("full demosaic decode");
+
+    assert!(bw > 0 && bh > 0);
+    assert!(full_img.width > 0 && full_img.height > 0);
+
+    // 2. Spatial Grid Parity Audit across 25 probe locations (5x5 grid across active area)
+    let mut total_delta_r = 0.0f32;
+    let mut total_delta_g = 0.0f32;
+    let mut total_delta_b = 0.0f32;
+    let mut sample_count = 0;
+
+    for gy in 1..6 {
+        for gx in 1..6 {
+            let rx = (gx as f32) / 6.0;
+            let ry = (gy as f32) / 6.0;
+
+            let bx = ((bw as f32) * rx) as usize;
+            let by = ((bh as f32) * ry) as usize;
+            let b_idx = (by * (bw as usize) + bx) * 8;
+            let b_r = f16_to_f32(u16::from_le_bytes([binned_bytes[b_idx], binned_bytes[b_idx + 1]]));
+            let b_g = f16_to_f32(u16::from_le_bytes([binned_bytes[b_idx + 2], binned_bytes[b_idx + 3]]));
+            let b_b = f16_to_f32(u16::from_le_bytes([binned_bytes[b_idx + 4], binned_bytes[b_idx + 5]]));
+
+            let fx = ((full_img.width as f32) * rx) as usize;
+            let fy = ((full_img.height as f32) * ry) as usize;
+            let f_idx = (fy * full_img.width + fx) * 3;
+            let f_r = full_img.data[f_idx];
+            let f_g = full_img.data[f_idx + 1];
+            let f_b = full_img.data[f_idx + 2];
+
+            // Invariants: No NaN/Inf, strictly non-negative
+            assert!(b_r.is_finite() && b_g.is_finite() && b_b.is_finite(), "Binned values must be finite");
+            assert!(f_r.is_finite() && f_g.is_finite() && f_b.is_finite(), "Full demosaic values must be finite");
+            assert!(b_r >= 0.0 && b_g >= 0.0 && b_b >= 0.0, "Binned values must be non-negative");
+            assert!(f_r >= 0.0 && f_g >= 0.0 && f_b >= 0.0, "Full demosaic values must be non-negative");
+
+            total_delta_r += (b_r - f_r).abs();
+            total_delta_g += (b_g - f_g).abs();
+            total_delta_b += (b_b - f_b).abs();
+            sample_count += 1;
+        }
+    }
+
+    let avg_dr = total_delta_r / sample_count as f32;
+    let avg_dg = total_delta_g / sample_count as f32;
+    let avg_db = total_delta_b / sample_count as f32;
+
+    println!("Olympus Color Chart Field Parity (25 points): avg delta R={:.5}, G={:.5}, B={:.5}", avg_dr, avg_dg, avg_db);
+
+    // Dual-domain parity invariant: Mean delta across field must remain under 0.02
+    assert!(avg_dr < 0.02, "Red channel parity must be within 0.02, got {}", avg_dr);
+    assert!(avg_dg < 0.02, "Green channel parity must be within 0.02, got {}", avg_dg);
+    assert!(avg_db < 0.02, "Blue channel parity must be within 0.02, got {}", avg_db);
+}
+

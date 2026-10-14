@@ -220,16 +220,8 @@ impl Database {
             .filter_map(std::result::Result::ok)
         {
             let path = entry.path();
-            if path.is_file() {
-                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    let ext_lower = ext.to_lowercase();
-                    if matches!(
-                        ext_lower.as_str(),
-                        "cr2" | "rw2" | "dng" | "jpg" | "jpeg" | "png" | "heic" | "arw" | "nef" | "tiff" | "tif"
-                    ) {
-                        candidates.push(path.to_path_buf());
-                    }
-                }
+            if path.is_file() && is_supported_image(path) {
+                candidates.push(path.to_path_buf());
             }
         }
 
@@ -1259,7 +1251,22 @@ fn is_supported_image(path: &Path) -> bool {
         let ext_lower = ext.to_lowercase();
         matches!(
             ext_lower.as_str(),
-            "cr2" | "rw2" | "dng" | "jpg" | "jpeg" | "png" | "heic" | "arw" | "nef" | "tiff" | "tif"
+            "cr2"
+                | "cr3"
+                | "nef"
+                | "arw"
+                | "dng"
+                | "orf"
+                | "rw2"
+                | "raf"
+                | "pef"
+                | "raw"
+                | "jpg"
+                | "jpeg"
+                | "png"
+                | "heic"
+                | "tiff"
+                | "tif"
         )
     } else {
         false
@@ -1269,7 +1276,10 @@ fn is_supported_image(path: &Path) -> bool {
 fn is_raw_format(path: &Path) -> bool {
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         let ext_lower = ext.to_lowercase();
-        matches!(ext_lower.as_str(), "cr2" | "rw2" | "dng" | "arw" | "nef")
+        matches!(
+            ext_lower.as_str(),
+            "cr2" | "cr3" | "nef" | "arw" | "dng" | "orf" | "rw2" | "raf" | "pef" | "raw"
+        )
     } else {
         false
     }
@@ -1670,5 +1680,41 @@ mod tests {
 
         let _ = fs::remove_dir_all(&src_dir);
         let _ = fs::remove_dir_all(&dst_dir);
+    }
+
+    #[test]
+    fn test_supported_raw_extensions_indexing() {
+        let temp_dir = std::env::temp_dir().join("firstproof_test_raw_extensions");
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+
+        let test_files = [
+            "canon_5div.cr2",
+            "canon_r5.cr3",
+            "fuji_xt3.raf",
+            "leica_q2.dng",
+            "nikon_z6.nef",
+            "olympus_em1.orf",
+            "panasonic_s5.rw2",
+            "sony_a7iii.arw",
+            "pentax_k1.pef",
+            "panasonic_lx3.raw",
+        ];
+
+        for name in &test_files {
+            let p = temp_dir.join(name);
+            fs::write(&p, b"dummy raw data").unwrap();
+            assert!(is_supported_image(&p), "Failed to recognize {}", name);
+            assert!(is_raw_format(&p), "Failed to identify as raw format {}", name);
+        }
+
+        let db = Database::open_in_memory().unwrap();
+        let count = db.index_folder(&temp_dir).unwrap();
+        assert_eq!(count as usize, test_files.len());
+
+        let all = db.get_all_photos().unwrap();
+        assert_eq!(all.len(), test_files.len());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

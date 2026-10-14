@@ -233,6 +233,44 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_metadata_rw2_magic_fallback() {
+        // Construct minimal Panasonic RW2 container with magic 0x55 (IIU\0)
+        let mut bytes = vec![0u8; 256];
+        bytes[0..4].copy_from_slice(b"II\x55\x00"); // Panasonic RW2 magic
+        bytes[4..8].copy_from_slice(&8u32.to_le_bytes()); // IFD0 at offset 8
+
+        // IFD0 at offset 8: 2 entries (Make = 0x010F, Model = 0x0110)
+        let entry_count = 2u16;
+        bytes[8..10].copy_from_slice(&entry_count.to_le_bytes());
+
+        // Make at offset 64: "Panasonic\0"
+        let make_offset = 64u32;
+        let make_str = b"Panasonic\0";
+        bytes[64..64 + make_str.len()].copy_from_slice(make_str);
+
+        // Entry 1: Make (0x010F), ASCII (2), count 10, offset 64
+        bytes[10..12].copy_from_slice(&0x010Fu16.to_le_bytes());
+        bytes[12..14].copy_from_slice(&2u16.to_le_bytes());
+        bytes[14..18].copy_from_slice(&(make_str.len() as u32).to_le_bytes());
+        bytes[18..22].copy_from_slice(&make_offset.to_le_bytes());
+
+        // Model at offset 80: "DMC-LX3\0"
+        let model_offset = 80u32;
+        let model_str = b"DMC-LX3\0";
+        bytes[80..80 + model_str.len()].copy_from_slice(model_str);
+
+        // Entry 2: Model (0x0110), ASCII (2), count 8, offset 80
+        bytes[22..24].copy_from_slice(&0x0110u16.to_le_bytes());
+        bytes[24..26].copy_from_slice(&2u16.to_le_bytes());
+        bytes[26..30].copy_from_slice(&(model_str.len() as u32).to_le_bytes());
+        bytes[30..34].copy_from_slice(&model_offset.to_le_bytes());
+
+        let meta = extract_metadata_from_bytes(&bytes);
+        assert_eq!(meta.camera_make.as_deref(), Some("Panasonic"));
+        assert_eq!(meta.camera_model.as_deref(), Some("DMC-LX3"));
+    }
+
+    #[test]
     fn test_as_shot_temperature_and_dual_illuminant_matrix() {
         use crate::raw::{RawSensorFrame, CfaPattern};
 

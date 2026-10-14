@@ -3,6 +3,16 @@ pub const CFA_COLOR_RED: usize = 0;
 pub const CFA_COLOR_GREEN: usize = 1;
 pub const CFA_COLOR_BLUE: usize = 2;
 
+/// Standard Fujifilm X-Trans 6x6 CFA pattern: 0=Red, 1=Green, 2=Blue
+pub const XTRANS_CFA_PATTERN: [[usize; 6]; 6] = [
+    [1, 1, 0, 1, 1, 2], // G G R G G B
+    [1, 1, 2, 1, 1, 0], // G G B G G R
+    [2, 0, 1, 0, 2, 1], // B R G R B G
+    [1, 1, 2, 1, 1, 0], // G G B G G R
+    [1, 1, 0, 1, 1, 2], // G G R G G B
+    [0, 2, 1, 2, 0, 1], // R B G B R G
+];
+
 /// Standard Color Filter Array patterns
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CfaPattern {
@@ -171,17 +181,21 @@ impl RawSensorFrame {
             (0, 0, raw.width & !1, raw.height & !1)
         };
 
-        let c00 = raw.camera.cfa.color_at(0, 0);
-        let c01 = raw.camera.cfa.color_at(0, 1);
-        let c10 = raw.camera.cfa.color_at(1, 0);
-        let c11 = raw.camera.cfa.color_at(1, 1);
+        let cfa_pattern = if raw.camera.cfa.width == 6 && raw.camera.cfa.height == 6 {
+            CfaPattern::XTrans
+        } else {
+            let c00 = raw.camera.cfa.color_at(0, 0);
+            let c01 = raw.camera.cfa.color_at(0, 1);
+            let c10 = raw.camera.cfa.color_at(1, 0);
+            let c11 = raw.camera.cfa.color_at(1, 1);
 
-        let cfa_pattern = match (c00, c01, c10, c11) {
-            (0, 1, 1, 2) => CfaPattern::Rggb,
-            (2, 1, 1, 0) => CfaPattern::Bggr,
-            (1, 2, 0, 1) => CfaPattern::Gbrg,
-            (1, 0, 2, 1) => CfaPattern::Grbg,
-            _ => CfaPattern::Rggb,
+            match (c00, c01, c10, c11) {
+                (0, 1, 1, 2) => CfaPattern::Rggb,
+                (2, 1, 1, 0) => CfaPattern::Bggr,
+                (1, 2, 0, 1) => CfaPattern::Gbrg,
+                (1, 0, 2, 1) => CfaPattern::Grbg,
+                _ => CfaPattern::Rggb,
+            }
         };
 
         let find_matrix = |pattern: &str| -> Option<[[f32; 3]; 3]> {
@@ -542,6 +556,7 @@ impl RawSensorFrame {
                 (1, 1) => CFA_COLOR_GREEN,
                 _ => CFA_COLOR_GREEN,
             },
+            CfaPattern::XTrans => XTRANS_CFA_PATTERN[row % 6][col % 6],
             _ => CFA_COLOR_GREEN,
         }
     }
@@ -748,9 +763,94 @@ impl RawSensorFrame {
     pub fn to_binned_linear_f16(&self) -> (Vec<u16>, u32, u32) {
         let active_w = self.active_width;
         let active_h = self.active_height;
+
+        if self.cfa_pattern == CfaPattern::XTrans {
+            let bin_w = (active_w / 3) as u32;
+            let bin_h = (active_h / 3) as u32;
+            if bin_w == 0 || bin_h == 0 {
+                return (Vec::new(), 0, 0);
+            }
+
+            let (wb_r, wb_b) = self.as_shot_wb();
+            let sensor_to_rec2020 = self.compute_sensor_to_rec2020();
+            let baseline_gain = 2.0f32.powf(self.baseline_exposure);
+            let m00 = sensor_to_rec2020[0][0] * baseline_gain;
+            let m01 = sensor_to_rec2020[0][1] * baseline_gain;
+            let m02 = sensor_to_rec2020[0][2] * baseline_gain;
+            let m10 = sensor_to_rec2020[1][0] * baseline_gain;
+            let m11 = sensor_to_rec2020[1][1] * baseline_gain;
+            let m12 = sensor_to_rec2020[1][2] * baseline_gain;
+            let m20 = sensor_to_rec2020[2][0] * baseline_gain;
+            let m21 = sensor_to_rec2020[2][1] * baseline_gain;
+            let m22 = sensor_to_rec2020[2][2] * baseline_gain;
+
+            let b = self.black_levels[0].max(0.0);
+            let w = self.white_levels[0].max(b + 1.0);
+            let scale = 1.0 / (w - b);
+            let a16 = f32_to_f16(1.0);
+
+            let mut binned_rgb = Vec::with_capacity((bin_w * bin_h) as usize);
+            let sensor = &self.sensor_data;
+            let full_w = self.full_width;
+
+            for by in 0..(bin_h as usize) {
+                let sy = self.active_y + by * 3;
+                for bx in 0..(bin_w as usize) {
+                    let sx = self.active_x + bx * 3;
+                    let mut sum_r = 0.0f32;
+                    let mut sum_g = 0.0f32;
+                    let mut sum_b = 0.0f32;
+
+                    for dy in 0..3 {
+                        let py = sy + dy;
+                        let row_offset = py * full_w;
+                        for dx in 0..3 {
+                            let px = sx + dx;
+                            let idx = row_offset + px;
+                            if idx < sensor.len() {
+                                let norm = ((sensor[idx] as f32 - b) * scale).clamp(0.0, 1.0);
+                                match XTRANS_CFA_PATTERN[py % 6][px % 6] {
+                                    0 => sum_r += norm,
+                                    1 => sum_g += norm,
+                                    2 => sum_b += norm,
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+
+                    // In every 3x3 X-Trans cell, there are exactly 2 R, 5 G, and 2 B photosites.
+                    let r_norm = sum_r * 0.5;
+                    let g_norm = sum_g * 0.2;
+                    let b_norm = sum_b * 0.5;
+
+                    let (r_wb, g_wb, b_wb) =
+                        blend_sensor_highlights(r_norm, g_norm, b_norm, wb_r, wb_b, self.linear_response_limit);
+                    binned_rgb.push([r_wb, g_wb, b_wb]);
+                }
+            }
+
+            apply_chromatic_median_filter_rgb(&mut binned_rgb, bin_w as usize, bin_h as usize, 2);
+
+            let mut u16_pixels = vec![0u16; (bin_w * bin_h * 4) as usize];
+            for (i, &[r_wb, g_wb, b_wb]) in binned_rgb.iter().enumerate() {
+                let r_lin = (m00 * r_wb + m01 * g_wb + m02 * b_wb).max(0.0);
+                let g_lin = (m10 * r_wb + m11 * g_wb + m12 * b_wb).max(0.0);
+                let b_lin = (m20 * r_wb + m21 * g_wb + m22 * b_wb).max(0.0);
+
+                let dst_idx = i * 4;
+                u16_pixels[dst_idx] = f32_to_f16(r_lin);
+                u16_pixels[dst_idx + 1] = f32_to_f16(g_lin);
+                u16_pixels[dst_idx + 2] = f32_to_f16(b_lin);
+                u16_pixels[dst_idx + 3] = a16;
+            }
+
+            return (u16_pixels, bin_w, bin_h);
+        }
+
         let bin_w = (active_w / 2) as u32;
         let bin_h = (active_h / 2) as u32;
-        if bin_w == 0 || bin_h == 0 {
+        if bin_w == 0 || bin_h == 0 || self.cfa_pattern == CfaPattern::LinearRgb {
             return (Vec::new(), 0, 0);
         }
 

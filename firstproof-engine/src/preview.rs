@@ -507,9 +507,13 @@ fn parse_exif_date(date_str: &str) -> Option<i64> {
     Some((days as i64) * 86400 + (hour as i64) * 3600 + (min as i64) * 60 + (sec as i64))
 }
 
+pub fn parse_exif_date_str(date_str: &str) -> Option<i64> {
+    parse_exif_date(date_str)
+}
+
 fn parse_gps(exif: &exif::Exif, tag: Tag, ref_tag: Tag) -> Option<f64> {
-    let field = exif.get_field(tag, In::PRIMARY)?;
-    let ref_field = exif.get_field(ref_tag, In::PRIMARY)?;
+    let field = exif.get_field(tag, In::PRIMARY).or_else(|| exif.fields().find(|f| f.tag == tag))?;
+    let ref_field = exif.get_field(ref_tag, In::PRIMARY).or_else(|| exif.fields().find(|f| f.tag == ref_tag))?;
 
     let rationals = match &field.value {
         Value::Rational(v) => v,
@@ -563,7 +567,12 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
     let mut raw_height = None;
 
     if let Some(ref exif) = exif {
-        if let Some(field) = exif.get_field(Tag::Make, In::PRIMARY) {
+        let find_field = |tag: Tag| {
+            exif.get_field(tag, In::PRIMARY)
+                .or_else(|| exif.fields().find(|f| f.tag == tag))
+        };
+
+        if let Some(field) = find_field(Tag::Make) {
             if let Value::Ascii(ref v) = field.value {
                 if let Some(s) = v.first() {
                     if let Ok(string) = std::str::from_utf8(s) {
@@ -572,7 +581,7 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
                 }
             }
         }
-        if let Some(field) = exif.get_field(Tag::Model, In::PRIMARY) {
+        if let Some(field) = find_field(Tag::Model) {
             if let Value::Ascii(ref v) = field.value {
                 if let Some(s) = v.first() {
                     if let Ok(string) = std::str::from_utf8(s) {
@@ -581,7 +590,7 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
                 }
             }
         }
-        if let Some(field) = exif.get_field(Tag::LensModel, In::PRIMARY) {
+        if let Some(field) = find_field(Tag::LensModel) {
             if let Value::Ascii(ref v) = field.value {
                 if let Some(s) = v.first() {
                     if let Ok(string) = std::str::from_utf8(s) {
@@ -590,14 +599,24 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
                 }
             }
         }
-        if let Some(field) = exif.get_field(Tag::PhotographicSensitivity, In::PRIMARY) {
-            if let Value::Short(ref v) = field.value {
-                if let Some(&iso_val) = v.first() {
-                    iso = Some(iso_val as u32);
+        if let Some(field) = find_field(Tag::PhotographicSensitivity)
+            .or_else(|| find_field(Tag::ISOSpeed))
+        {
+            match field.value {
+                Value::Short(ref v) => {
+                    if let Some(&iso_val) = v.first() {
+                        iso = Some(iso_val as u32);
+                    }
                 }
+                Value::Long(ref v) => {
+                    if let Some(&iso_val) = v.first() {
+                        iso = Some(iso_val);
+                    }
+                }
+                _ => {}
             }
         }
-        if let Some(field) = exif.get_field(Tag::FNumber, In::PRIMARY) {
+        if let Some(field) = find_field(Tag::FNumber) {
             if let Value::Rational(ref v) = field.value {
                 if let Some(ratio) = v.first() {
                     if ratio.denom > 0 {
@@ -606,7 +625,7 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
                 }
             }
         }
-        if let Some(field) = exif.get_field(Tag::FocalLength, In::PRIMARY) {
+        if let Some(field) = find_field(Tag::FocalLength) {
             if let Value::Rational(ref v) = field.value {
                 if let Some(ratio) = v.first() {
                     if ratio.denom > 0 {
@@ -615,7 +634,7 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
                 }
             }
         }
-        if let Some(field) = exif.get_field(Tag::ExposureTime, In::PRIMARY) {
+        if let Some(field) = find_field(Tag::ExposureTime) {
             if let Value::Rational(ref v) = field.value {
                 if let Some(ratio) = v.first() {
                     if ratio.denom > 0 {
@@ -628,7 +647,7 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
                 }
             }
         }
-        if let Some(field) = exif.get_field(Tag::DateTimeOriginal, In::PRIMARY) {
+        if let Some(field) = find_field(Tag::DateTimeOriginal) {
             if let Value::Ascii(ref v) = field.value {
                 if let Some(s) = v.first() {
                     if let Ok(string) = std::str::from_utf8(s) {
@@ -640,7 +659,7 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
         latitude = parse_gps(exif, Tag::GPSLatitude, Tag::GPSLatitudeRef);
         longitude = parse_gps(exif, Tag::GPSLongitude, Tag::GPSLongitudeRef);
 
-        if let Some(field) = exif.get_field(Tag::ImageDescription, In::PRIMARY) {
+        if let Some(field) = find_field(Tag::ImageDescription) {
             if let Value::Ascii(ref v) = field.value {
                 if let Some(s) = v.first() {
                     if let Ok(string) = std::str::from_utf8(s) {
@@ -650,7 +669,7 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
             }
         }
 
-        if let Some(field) = exif.get_field(Tag::Artist, In::PRIMARY) {
+        if let Some(field) = find_field(Tag::Artist) {
             if let Value::Ascii(ref v) = field.value {
                 if let Some(s) = v.first() {
                     if let Ok(string) = std::str::from_utf8(s) {
@@ -660,7 +679,7 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
             }
         }
 
-        if let Some(field) = exif.get_field(Tag::Copyright, In::PRIMARY) {
+        if let Some(field) = find_field(Tag::Copyright) {
             if let Value::Ascii(ref v) = field.value {
                 if let Some(s) = v.first() {
                     if let Ok(string) = std::str::from_utf8(s) {
@@ -669,10 +688,7 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
                 }
             }
         }
-        if let Some(field) = exif
-            .get_field(Tag::Orientation, In::PRIMARY)
-            .or_else(|| exif.fields().find(|f| f.tag == Tag::Orientation))
-        {
+        if let Some(field) = find_field(Tag::Orientation) {
             if let Value::Short(ref v) = field.value {
                 if let Some(&val) = v.first() {
                     orientation = Some(val as u32);
@@ -791,6 +807,17 @@ pub fn extract_metadata_from_bytes(bytes: &[u8]) -> ImageMetadataRecord {
 
         if max_tiff_w > 0 { raw_width = Some(max_tiff_w); }
         if max_tiff_h > 0 { raw_height = Some(max_tiff_h); }
+    }
+
+    if camera_make.is_none() || camera_model.is_none() {
+        if let Some(manifest) = crate::container::RawContainerManifest::parse(bytes) {
+            if camera_make.is_none() {
+                camera_make = manifest.camera_make;
+            }
+            if camera_model.is_none() {
+                camera_model = manifest.camera_model.or(manifest.unique_camera_model);
+            }
+        }
     }
 
     let baseline_sharpness = Some(crate::raw::resolve_baseline_sharpness(

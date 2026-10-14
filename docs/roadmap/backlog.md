@@ -9,9 +9,12 @@ This document strictly tracks pending and deferred features calibrated against o
 ## 🚀 Immediate Next Up (v0.1 Release Gate)
 1. **Story 4.0: Comprehensive AI Slop Audit & Codebase De-Slop Pass** (P0) - COMPLETED
 2. **Story 4.5: Swift Desktop Parameter Schema & Behavioral Interaction Parity** (P0) - COMPLETED
-3. **Story 4.1: Open Source IP, Security & License Compliance Gate** (P1)
-4. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P1)
-5. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P1)
+3. **Story 4.6: Comprehensive Permissive RAW Decoding Matrix (CR2/CR3, ARW, NEF, RAF X-Trans, RW2, ORF, PEF)** (P0) - COMPLETED
+4. **Story 4.1: Open Source IP, Security & License Compliance Gate** (P1)
+5. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P1)
+6. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P1)
+7. **Story 4.8: Unified Shader Pipeline via WGSL & Naga Cross-Compilation** (P1)
+8. **Story 4.9: Robust Headless Command Bus, CLI Parity & Unified MCP Bridge** (P1)
 
 ---
 
@@ -163,6 +166,7 @@ All 7 lenses (Lenses 1 through 7) completed and archived in [completed.md](compl
 - **Cross-Platform Verification Gate**:
   - Verify 1:1 parameter boundaries, visual feedback, and keyboard/mouse interaction parity between native macOS and WebAssembly darkroom targets.
 
+
 ### 4.7 Native macOS Desktop Archival DNG Ingest & Batch Action (P2)
 - **Ingest Flow Integration (`ImportSheetView.swift`, `AppViewModel.swift`)**:
   - Add "Convert to Archival DNG on Ingest" toggle in the intake dialog.
@@ -173,6 +177,37 @@ All 7 lenses (Lenses 1 through 7) completed and archived in [completed.md](compl
   - Non-blocking background worker with progress sheet and cancel safety.
 - **Sidecar & Catalog Sync**:
   - Automatically updates catalog database records (`catalog.db`) pointing photo paths to the new `.dng` file without dropping user ratings, flags, or undo history.
+
+### 4.8 Unified Shader Pipeline via WGSL & Naga Cross-Compilation (P1)
+- **Problem Statement & Maintenance Friction**:
+  - First Proof currently maintains identical color science and rendering algorithms across two divergent shader dialects: Metal Shading Language (`Shaders.metal`, `ColorScience.metal`, `Detail.metal`) for native macOS AppKit and WebGL 2 GLSL (`FragmentShader.ts`, `ColorScience.ts`, `Detail.ts`) for the web darkroom.
+  - Every update to color science, print media, tone curves, or optical grain requires parallel manual implementations, constant synchronization, and defensive parity testing.
+- **Single Source of Truth in WGSL (WebGPU Shading Language)**:
+  - Migrate core fragment and compute shaders into canonical, strongly typed `.wgsl` source modules in `firstproof-engine/shaders/`.
+  - Author all internal optical adjustments (Exposure, Bilateral Tone Recovery, White Balance, Hurter-Driffield curves, AgX filmic tone mapping, and print media) once.
+- **Headless Naga Cross-Compilation Toolchain**:
+  - Leverage `naga` (pure Rust shader compiler from the `wgpu` ecosystem) at build time:
+    - Transpiles canonical WGSL $\to$ Metal Shading Language (`.metal`) for macOS desktop bundle compilation.
+    - Transpiles canonical WGSL $\to$ GLSL 300 ES for WebGL 2 web darkroom runtime, with direct WGSL pass-through for WebGPU targets.
+- **Deterministic Compile-Time Parity Verification**:
+  - Build-time fitness assertions ensure generated MSL and GLSL expose bit-identical uniform buffer structures, scalar alignment, and coordinate math.
+  - Eliminates human transcription error, divergent math, and manual multi-dialect shader maintenance permanently.
+
+### 4.9 Robust Headless Command Bus, CLI Parity & Unified MCP Bridge (P1)
+- **Problem Statement**:
+  - First Proof possesses a high-performance CLI (`firstproof-cli` with `develop`, `inspect`, and `dng` subcommands) and an AppKit debug socket / MCP server (`tools/mcp/firstproof_mcp.py`), but the underlying command and state schemas are partially ad-hoc and decoupled from the web darkroom.
+- **Canonical Command Schema in Shared Rust Engine (`firstproof-engine::command`)**:
+  - Formalize a strongly typed, serializable JSON command enum (`DarkroomCommand`, `DarkroomAction`, `EditDelta`):
+    - Viewport inspection (`GetState`, `SamplePixel`, `InspectMetadata`).
+    - Non-destructive edit commands (`SetExposure`, `ApplyToneCurve`, `SetEmulsion`, `ResetWorkspace`).
+    - Archival batch operations (`DevelopPhoto`, `ConvertToDng`, `BatchExport`).
+- **Triple-Target Command Parity**:
+  - **Native macOS Desktop**: AppKit debug socket (`/tmp/firstproof-debug.sock`) executes the canonical command enum directly, updating UI state without tearing.
+  - **Headless CLI**: `firstproof-cli` accepts piped JSON command streams or flag-driven commands for headless studio automation, ingestion pipelines, and CI regression suites.
+  - **Web Darkroom**: `firstproof-wasm` exposes `execute_command(json_str)` directly to JavaScript, enabling browser automation, test harness orchestration, and web extension integration.
+- **Production MCP Server Refinement & Documentation**:
+  - Elevate `firstproof_mcp.py` to a production-grade Model Context Protocol server exposing formal tools for darkroom automation, live diagnostics, and color parity verification.
+  - Author complete documentation in `docs/architecture/cli_and_mcp.md` detailing CLI usage, socket IPC protocols, and MCP integration for photographers and studio engineers.
 
 ---
 

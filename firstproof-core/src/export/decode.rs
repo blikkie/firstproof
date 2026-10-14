@@ -151,6 +151,58 @@ pub fn decode_image_with_quality<P: AsRef<Path>>(
                     demosaiced_with_soft_adaptive = true;
                 }
             }
+        } else if frame.cfa_pattern == crate::raw_decoder::CfaPattern::XTrans {
+            let full_w = frame.full_width;
+            let full_h = frame.full_height;
+            let total_pixels = full_w * full_h;
+            if total_pixels > 0 && frame.sensor_data.len() >= total_pixels {
+                let mut norm_pixels: Vec<f32> = frame.sensor_data.iter().map(|&v| v as f32).collect();
+                rawler::imgop::raw::correct_blacklevel_cfa(
+                    &mut norm_pixels,
+                    full_w,
+                    full_h,
+                    &frame.black_levels,
+                    &frame.white_levels,
+                );
+
+                use rawler::imgop::sensor::Demosaic;
+                let pixels = rawler::pixarray::PixF32::new_with(norm_pixels, full_w, full_h);
+                let cfa = rawler::cfa::CFA::new("GGRGGBGGBGGRBRGRBGGGBGGRGGRGGBRBGBRG");
+                let roi = rawler::imgop::Rect::new(
+                    rawler::imgop::Point::new(frame.active_x, frame.active_y),
+                    rawler::imgop::Dim2::new(active_w, active_h),
+                );
+                let colors = rawler::cfa::PlaneColor::new("RGB");
+                let xtrans_demosaic = rawler::imgop::sensor::xtrans::bilinear::XTransBilinearDemosaic::new();
+                let mut demosaiced_rgb = xtrans_demosaic.demosaic(&pixels, &cfa, &colors, roi);
+
+                if demosaiced_rgb.data.len() == active_w * active_h {
+                    // Apply chromatic difference median filtering to eliminate residual color fringing
+                    let median_passes = match quality {
+                        DemosaicQuality::Archival => 4,
+                        DemosaicQuality::Standard => 2,
+                    };
+                    apply_chromatic_median_filter(&mut demosaiced_rgb.data, active_w, active_h, median_passes);
+
+                    demosaiced.data.par_chunks_exact_mut(active_w * 3).enumerate().for_each(|(y, row_slice)| {
+                        let row_start = y * active_w;
+                        for x in 0..active_w {
+                            let [r_raw, g_raw, b_raw] = demosaiced_rgb.data[row_start + x];
+                            let (r_clean, g_clean, b_clean) =
+                                firstproof_engine::blend_sensor_highlights(r_raw, g_raw, b_raw, wb_r, wb_b, frame.linear_response_limit);
+                            let c_sensor = Color3::new(r_clean, g_clean, b_clean);
+                            let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
+                            let c_rec2020 = sensor_to_rec2020.multiply_vector(c_sensor).scale(baseline_gain);
+
+                            let out_idx = x * 3;
+                            row_slice[out_idx] = c_rec2020.r().max(0.0);
+                            row_slice[out_idx + 1] = c_rec2020.g().max(0.0);
+                            row_slice[out_idx + 2] = c_rec2020.b().max(0.0);
+                        }
+                    });
+                    demosaiced_with_soft_adaptive = true;
+                }
+            }
         }
 
         if !demosaiced_with_soft_adaptive {

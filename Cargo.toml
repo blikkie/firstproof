@@ -17,3 +17,26 @@ field_reassign_with_default = "allow"
 bool_assert_comparison = "allow"
 manual_range_contains = "allow"
 type_complexity = "allow"
+
+# Targeted optimizations for heavy mathematical & demosaicing routines in debug/test builds
+[profile.dev.package.firstproof-core]
+opt-level = 2
+
+[profile.dev.package.firstproof-engine]
+opt-level = 2
+
+[profile.dev.package.rawler]
+opt-level = 3
+
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.dev.package.jxl-oxide]
+opt-level = 3
+
+[profile.dev.package.bayer]
+opt-level = 3
+

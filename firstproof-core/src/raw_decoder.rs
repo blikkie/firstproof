@@ -10,16 +10,10 @@ pub trait RawSensorFrameExt {
 impl RawSensorFrameExt for RawSensorFrame {
     /// Computes the camera sensor to Linear Rec.2020 matrix dynamically interpolated
     /// for the specified white balance temperature (in Kelvin).
+    /// Delegates directly to firstproof_engine's canonical model to ensure 1:1 parity
+    /// between fast viewport binned previews and full archival demosaic exports.
     fn sensor_to_rec2020_matrix_at(&self, temp_kelvin: f32) -> crate::color::Matrix3x3 {
-        let mut dcp = crate::color::dcp::DcpProfile::built_in_for_camera(&self.camera_model);
-        if let (Some(m_tungsten), Some(m_daylight)) = (self.color_matrix_tungsten, self.color_matrix) {
-            dcp.color_matrix1 = crate::color::Matrix3x3(m_tungsten);
-            dcp.color_matrix2 = Some(crate::color::Matrix3x3(m_daylight));
-        } else if let Some(m_daylight) = self.color_matrix {
-            dcp.color_matrix1 = crate::color::Matrix3x3(m_daylight);
-            dcp.color_matrix2 = None;
-        }
-        dcp.interpolate_sensor_to_rec2020(temp_kelvin)
+        crate::color::Matrix3x3(self.sensor_to_rec2020_at(temp_kelvin))
     }
 }
 

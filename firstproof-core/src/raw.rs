@@ -19,10 +19,141 @@ pub fn decode_exif_orientation(orientation: u32) -> (i32, bool, bool) {
     (rec.rotation, rec.flip_horizontal, rec.flip_vertical)
 }
 
+fn parse_rawler_gps(gps: &Option<rawler::exif::ExifGPS>) -> (Option<f64>, Option<f64>) {
+    let gps = match gps {
+        Some(g) => g,
+        None => return (None, None),
+    };
+    let lat = gps.gps_latitude.as_ref().and_then(|r| {
+        if r[0].d > 0 && r[1].d > 0 && r[2].d > 0 {
+            let deg = r[0].n as f64 / r[0].d as f64;
+            let min = r[1].n as f64 / r[1].d as f64;
+            let sec = r[2].n as f64 / r[2].d as f64;
+            let mut val = deg + (min / 60.0) + (sec / 3600.0);
+            if let Some(ref r_str) = gps.gps_latitude_ref {
+                if r_str.starts_with('S') || r_str.starts_with('s') {
+                    val = -val;
+                }
+            }
+            Some(val)
+        } else {
+            None
+        }
+    });
+    let lon = gps.gps_longitude.as_ref().and_then(|r| {
+        if r[0].d > 0 && r[1].d > 0 && r[2].d > 0 {
+            let deg = r[0].n as f64 / r[0].d as f64;
+            let min = r[1].n as f64 / r[1].d as f64;
+            let sec = r[2].n as f64 / r[2].d as f64;
+            let mut val = deg + (min / 60.0) + (sec / 3600.0);
+            if let Some(ref r_str) = gps.gps_longitude_ref {
+                if r_str.starts_with('W') || r_str.starts_with('w') {
+                    val = -val;
+                }
+            }
+            Some(val)
+        } else {
+            None
+        }
+    });
+    (lat, lon)
+}
+
+fn raw_metadata_to_record(rm: &rawler::decoders::RawMetadata) -> ImageMetadataRecord {
+    let camera_make = if !rm.make.is_empty() { Some(rm.make.clone()) } else { None };
+    let camera_model = if !rm.model.is_empty() { Some(rm.model.clone()) } else { None };
+    let lens_model = rm.exif.lens_model.clone()
+        .or_else(|| rm.lens.as_ref().and_then(|l| l.identifiers.name.clone()))
+        .or_else(|| rm.exif.lens_make.clone());
+    let iso = rm.exif.iso_speed.or_else(|| rm.exif.iso_speed_ratings.map(|v| v as u32));
+    let aperture = rm.exif.fnumber.as_ref().and_then(|r| {
+        if r.d > 0 { Some(r.n as f32 / r.d as f32) } else { None }
+    }).or_else(|| {
+        rm.exif.aperture_value.as_ref().and_then(|r| {
+            if r.d > 0 { Some(2.0f32.powf((r.n as f32 / r.d as f32) * 0.5)) } else { None }
+        })
+    });
+    let shutter_speed = rm.exif.exposure_time.as_ref().and_then(|r| {
+        if r.d > 0 {
+            if r.n >= r.d {
+                Some(format!("{}", r.n / r.d))
+            } else {
+                Some(format!("{}/{}", r.n, r.d))
+            }
+        } else {
+            None
+        }
+    });
+    let focal_length = rm.exif.focal_length.as_ref().and_then(|r| {
+        if r.d > 0 { Some(r.n as f32 / r.d as f32) } else { None }
+    });
+    let taken_time = rm.exif.date_time_original.as_deref().and_then(firstproof_engine::preview::parse_exif_date_str);
+    let (latitude, longitude) = parse_rawler_gps(&rm.exif.gps);
+    let creator = rm.exif.artist.clone();
+    let copyright = rm.exif.copyright.clone();
+    let orientation = rm.exif.orientation.map(|o| o as u32);
+
+    ImageMetadataRecord {
+        camera_make,
+        camera_model,
+        lens_model,
+        iso,
+        aperture,
+        shutter_speed,
+        focal_length,
+        taken_time,
+        latitude,
+        longitude,
+        description: rm.exif.user_comment.clone(),
+        creator,
+        copyright,
+        orientation,
+        raw_width: None,
+        raw_height: None,
+        baseline_sharpness: None,
+    }
+}
+
 /// Extracts metadata from the RAW/DNG file path.
 pub fn extract_metadata<P: AsRef<Path>>(path: P) -> std::io::Result<ImageMetadataRecord> {
-    let bytes = std::fs::read(&path)?;
-    Ok(extract_metadata_from_bytes(&bytes))
+    let path_ref = path.as_ref();
+    let mut rec = if let Ok(raw_source) = rawler::rawsource::RawSource::new(path_ref) {
+        if let Ok(dec) = rawler::get_decoder(&raw_source) {
+            if let Ok(rm) = dec.raw_metadata(&raw_source, &rawler::decoders::RawDecodeParams::default()) {
+                Some(raw_metadata_to_record(&rm))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    if let Ok(bytes) = std::fs::read(path_ref) {
+        let byte_rec = extract_metadata_from_bytes(&bytes);
+        if let Some(ref mut r) = rec {
+            if r.camera_make.is_none() { r.camera_make = byte_rec.camera_make; }
+            if r.camera_model.is_none() { r.camera_model = byte_rec.camera_model; }
+            if r.lens_model.is_none() { r.lens_model = byte_rec.lens_model; }
+            if r.iso.is_none() { r.iso = byte_rec.iso; }
+            if r.aperture.is_none() { r.aperture = byte_rec.aperture; }
+            if r.shutter_speed.is_none() { r.shutter_speed = byte_rec.shutter_speed; }
+            if r.focal_length.is_none() { r.focal_length = byte_rec.focal_length; }
+            if r.taken_time.is_none() { r.taken_time = byte_rec.taken_time; }
+            if r.latitude.is_none() { r.latitude = byte_rec.latitude; }
+            if r.longitude.is_none() { r.longitude = byte_rec.longitude; }
+            if r.description.is_none() { r.description = byte_rec.description; }
+            if r.creator.is_none() { r.creator = byte_rec.creator; }
+            if r.copyright.is_none() { r.copyright = byte_rec.copyright; }
+            if r.orientation.is_none() { r.orientation = byte_rec.orientation; }
+        } else {
+            rec = Some(byte_rec);
+        }
+    }
+
+    rec.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Failed to extract metadata"))
 }
 
 /// Scans the file bytes to extract the largest embedded RGB JPEG preview.

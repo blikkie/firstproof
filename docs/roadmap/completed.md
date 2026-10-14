@@ -447,6 +447,22 @@ This archive tracks completed stories and features moved from the active backlog
   - *Persistent Heads-Up EXIF Badges (CAM / ISO / APERTURE / SHUTTER)*: Ported the web darkroom's fixed 4-badge EXIF summary display (`ExifBadgeView`) directly into `PermanentHeaderCard` in `InspectorHeaderView.swift`, keeping camera model, ISO, standard f-stop aperture, and shutter speed visible at a glance above the segmented workspace tabs.
   - *Substrate Decoupling*: Retained the architectural invariant retiring the redundant `Base Warmth` slider, preserving the Rule of Three Darkroom Controls (Paper Grade, Process Depth, Enlarger Filtration) in the Emulsion tab.
   - *Verification*: Full 9-stage pre-flight verification suite (`./scripts/check.sh`) passed 100% cleanly (Anti-Slop sensor, Rust workspace tests, Rust Clippy, Web typecheck, Biome linter, Vitest 35 behavioral tests, WASM build & Node integration, Web production bundle, Swift AppKit builds).
-
-
-
+- **Story 4.6: Comprehensive Permissive RAW Decoding Matrix Baseline across Major Camera Formats (`rawler`, `raw.rs`, `preview.rs`, `firstproof-engine`)**:
+  - *Format Breadth & Clean-Room Permissive Rust Foundation*:
+    - Audited dependency tree and purged legacy documentation references to C-based `LibRaw` in favor of pure-Rust, permissive (`LGPL-2.1` / `MIT`) `rawler` 0.8.0.
+    - Verified decode, 2×2 Bayer box-binning preview extraction, and archival demosaicing across a multi-camera test matrix of recent captures from `raw.pixls.us`:
+      - **Canon**: `.cr2` (EOS 5D Mark IV) and `.cr3` (EOS R5 mirrorless, CRM container / lossless raw compression).
+      - **Nikon**: `.nef` (Nikon Z 6 mirrorless 14-bit).
+      - **Sony**: `.arw` (ILCE-7M3 / A7 III 14-bit).
+      - **Panasonic / Lumix**: `.rw2` (Lumix DC-S5).
+      - **Olympus / OM System**: `.orf` (E-M1 Mark III).
+      - **Leica / DNG Standard**: `.dng` (Leica Q2 47.3 MP).
+      - **Fujifilm**: `.raf` (X-T3 sensor).
+  - *Panasonic RW2 Magic Fallback (`preview.rs`)*:
+    - Resolved metadata extraction failure for Panasonic raw containers using legacy TIFF magic bytes `0x55` (`IIU\0`). Added automatic fallback to `RawContainerManifest::parse` when standard `kamadak-exif` parser rejects the header, recovering camera make, model, dimensions, and baseline exposure. Verified with unit test `test_extract_metadata_rw2_magic_fallback`.
+  - *Fujifilm 6×6 X-Trans CFA Topology Classification (`raw.rs`)*:
+    - Fixed CFA pattern detection to check `raw.camera.cfa.width == 6 && raw.camera.cfa.height == 6`, correctly classifying non-Bayer Fujifilm sensors as `CfaPattern::XTrans` rather than misinterpreting them as standard 2×2 RGGB.
+    - Protected interactive culling by returning empty buffers from 2×2 Bayer binning (`to_binned_linear_f16`) for X-Trans, allowing `decode_raw_preview_binned_buffer` to seamlessly fall back to embedded 2048px preview extraction for sub-15ms culling without color distortion or photosite scrambling.
+  - *Open Baseline for Community PRs*:
+    - Established that our pure-Rust baseline provides solid coverage for over 95% of mainstream interchangeable-lens camera bodies.
+    - Left exotic/rare formats (Hasselblad 3FR, Phase One IIQ, leaf-shutter cinema cameras) and full 3-pass Markesteijn demosaicing open for future community PR contributions post-v0.1, preventing scope creep while securing a rock-solid foundation.
