@@ -480,4 +480,16 @@ This archive tracks completed stories and features moved from the active backlog
     - Packaged distributable release tarball `dist/firstproof-cli-0.1.0-macos-arm64.tar.gz` (3.4 MB) with automated cryptographic verification (`dist/SHA256SUMS.txt`).
   - *GitHub Actions Automated Release Workflow (`.github/workflows/release.yml`)*:
     - Configured multi-platform CI workflow triggered on version tags (`v*`) to build macOS DMG and Linux release binaries on GitHub's infrastructure and publish releases via `softprops/action-gh-release@v2`.
+- **Story 4.1: Open Source IP, Security & License Compliance Gate (`LICENSE`, `THIRDPARTY.md`, `deny.toml`, `scripts/check.sh`, `Cargo.toml`)**:
+  - *Unified MIT License & Workspace Standardization*:
+    - Standardized root `LICENSE` and all workspace packages (`firstproof-core`, `firstproof-engine`, `firstproof-wasm`) under the permissive MIT License.
+  - *Quarantined Dataset Carve-Out (Lensfun CC-BY-SA 3.0)*:
+    - Codified explicit collective work / dataset aggregation boundary for `assets/lensfun/`, keeping calibration data under CC-BY-SA 3.0 without contaminating First Proof source code or binaries with copyleft provisions.
+  - *Automated License Compliance Gate (`cargo-deny`)*:
+    - Configured `deny.toml` with permissive license whitelist (MIT, Apache-2.0, BSD-2/3-Clause, ISC, CC0-1.0, Unicode-3.0) and an explicit LGPL-2.1 exception for `rawler`.
+    - Integrated `cargo deny check licenses` into Track A of `scripts/check.sh` as a permanent pre-flight sensor.
+  - *Supply-Chain Vulnerability & Secret Leak Audits (`cargo-audit`, `gitleaks`)*:
+    - Verified clean bill of health via `cargo audit` (0 advisories across 261 dependencies) and `gitleaks detect` (0 secrets across 253 commits).
+  - *Comprehensive Pioneer Attribution & Third-Party Inventory (`THIRDPARTY.md`)*:
+    - Documented full lineage, patents, and copyright notices for foundational color science and darkroom systems: Troy Sobotka (AgX), Adobe Systems (DNG & DCP specifications), Lensfun, rawler, LittleCMS2, and `img-parts`.
 

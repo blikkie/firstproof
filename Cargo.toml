@@ -6,6 +6,14 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["First Proof Contributors"]
+repository = "https://github.com/firstproof/firstproof"
+
+
 [workspace.lints.clippy]
 too_many_arguments = "allow"
 needless_range_loop = "allow"

@@ -24,6 +24,8 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 # --- Track A: Rust Core & Engine ---
 (
+    echo "    [Rust] Running license compliance gate..."
+    cargo deny check licenses
     echo "    [Rust] Running workspace tests..."
     cargo test --workspace --quiet
     echo "    [Rust] Running Clippy linter..."
