@@ -492,4 +492,25 @@ This archive tracks completed stories and features moved from the active backlog
     - Verified clean bill of health via `cargo audit` (0 advisories across 261 dependencies) and `gitleaks detect` (0 secrets across 253 commits).
   - *Comprehensive Pioneer Attribution & Third-Party Inventory (`THIRDPARTY.md`)*:
     - Documented full lineage, patents, and copyright notices for foundational color science and darkroom systems: Troy Sobotka (AgX), Adobe Systems (DNG & DCP specifications), Lensfun, rawler, LittleCMS2, and `img-parts`.
+- **Story 4.3: Web Distribution & Release Site (`firstproof.photo`) (`web/`, `web/index.html`, `web/src/style.css`, `web/src/controllers/`, `.github/workflows/pages.yml`)**:
+  - *Craft-First, Restrained Editorial Release Site*:
+    - Designed quiet, typography-driven release presentation at `firstproof.photo` using deep neutral darks (`#0A0A0F`), machined aluminum accents (`#D9D9D9`), and Google Fonts Inter / JetBrains Mono.
+    - Zero email capture forms, zero tracking scripts, zero marketing buzzwords, and zero conversion fluff.
+  - *Direct Standalone Downloads & Cryptographic Verification*:
+    - Published direct download cards for standalone macOS Apple Silicon DMG (`FirstProof-0.1.0-macos-arm64.dmg`, 13 MB) and headless CLI tarball (`firstproof-cli-0.1.0-macos-arm64.tar.gz`, 3.4 MB) hosted under `blikkie/firstproof`.
+    - Embedded SHA256 checksums and verification instructions matching `dist/SHA256SUMS.txt`.
+  - *Interactive Optical Output vs. In-Camera Processing Comparator*:
+    - Built interactive touch/pointer split-slider viewer (`ComparisonSliderController.ts`) comparing 47.3 MP Leica Q2 raw captures:
+      - Cooked In-Camera 8-bit JPEG (clipped specular highlights, harsh sRGB knee, synthetic saturation).
+      - First Proof 16-bit Linear Rec.2020 AgX filmic demodulation (smooth photopic highlight roll-off, authentic melanin skin tones, open shadow density).
+    - Segmented controls for instant switching between In-Camera JPEG, Split 50/50, and First Proof AgX.
+  - *Seamless In-Browser Test Drive Integration*:
+    - Built `PageNavController.ts` supporting instant bidirectional mode switching between Editorial Overview and Web Darkroom.
+    - Auto-promotes to Darkroom when dragging raw captures onto the window, clicking "Launch Darkroom", or selecting photo shoot folders.
+    - Full WebAssembly (`wasm-pack`) + WebGL 2 shader pipeline running 100% on device with zero-copy texture upload.
+  - *On the Shoulders of Giants (Heritage & Pioneer Recognition)*:
+    - Honored open pioneers: Troy Sobotka (AgX color science), Marti Maria (LittleCMS `lcms2`), Dave Coffin & RAW reverse-engineering lineage (`dcraw`, `libraw`, `rawler`), Torsten Bronger & Lensfun community (CC-BY-SA 3.0), and CIE / Adobe standards.
+  - *Automated GitHub Pages Deployment Workflow (`.github/workflows/pages.yml`)*:
+    - Configured GitHub Actions CI workflow triggered on changes to `main` to compile Rust WASM via `wasm-pack`, run web verification tracks, bundle static assets, and deploy to GitHub Pages under `firstproof.photo` (via `web/public/CNAME`).
+
 

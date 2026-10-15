@@ -12,7 +12,7 @@ This document strictly tracks pending and deferred features calibrated against o
 3. **Story 4.6: Comprehensive Permissive RAW Decoding Matrix (CR2/CR3, ARW, NEF, RAF X-Trans, RW2, ORF, PEF)** (P0) - COMPLETED
 4. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P1) - COMPLETED
 5. **Story 4.1: Open Source IP, Security & License Compliance Gate** (P1) - COMPLETED
-6. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P1)
+6. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P1) - COMPLETED
 7. **Story 4.8: Unified Shader Pipeline via WGSL & Naga Cross-Compilation** (P1)
 8. **Story 4.9: Robust Headless Command Bus, CLI Parity & Unified MCP Bridge** (P1)
 

@@ -16,18 +16,39 @@
     <header class="app-header">
       <div class="header-brand">
         <div class="brand-logo">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="9"/>
-            <path d="M12 3a9 9 0 0 0 0 18v-9Z"/>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="18" rx="3"/>
+            <rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/>
+            <path d="M2 12h2"/>
+            <path d="M20 12h2"/>
           </svg>
         </div>
         <div class="brand-titles">
-          <h1 class="brand-name">FIRST PROOF</h1>
-          <span class="brand-tagline">Pure capture. Honest color. Zero digital plastic.</span>
+          <h1 class="brand-name">FIRST PROOF <span class="version-pill">v0.1.0</span></h1>
+          <span class="brand-tagline">An honest RAW photo editor</span>
         </div>
       </div>
 
-      <div class="header-actions">
+      <!-- Mode Switcher (Overview vs Web Darkroom) -->
+      <nav class="header-mode-nav" aria-label="Main Navigation">
+        <button id="btn-nav-overview" class="nav-tab active" type="button">Overview</button>
+        <button id="btn-nav-darkroom" class="nav-tab" type="button">Web Darkroom</button>
+      </nav>
+
+      <!-- Overview Header Navigation -->
+      <div id="overview-header-nav" class="header-nav-links">
+        <a href="#downloads" class="nav-link">Downloads</a>
+        <a href="#comparison" class="nav-link">Comparison</a>
+        <a href="#manifesto" class="nav-link">Principles</a>
+        <a href="#lineage" class="nav-link">Acknowledgments</a>
+        <button id="btn-header-launch-darkroom" class="btn btn-primary btn-sm" type="button">Web Darkroom</button>
+        <a href="https://github.com/blikkie/firstproof" target="_blank" rel="noopener noreferrer" class="btn btn-icon" title="GitHub Repository">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+        </a>
+      </div>
+
+      <!-- Darkroom Header Actions -->
+      <div id="darkroom-header-actions" class="header-actions hidden">
         <button id="btn-open-folder" class="btn btn-primary" title="Open local folder of RAW/JPEG photos">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
           Open Folder...
@@ -72,8 +93,370 @@
       </div>
     </header>
 
-    <!-- Main Content Workspace -->
-    <div class="workspace-container">
+    <!-- Editorial View (Landing, Downloads, Comparison, Lineage) -->
+    <div id="view-editorial" class="editorial-view">
+      <div class="editorial-container">
+        <!-- Hero -->
+        <section class="editorial-hero">
+          <div class="hero-pill">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            Version 0.1.0 • macOS &amp; Web
+          </div>
+          <h2 class="hero-title">FIRST PROOF</h2>
+          <p class="hero-tagline">An honest RAW photo editor.</p>
+          <div class="hero-personal-note">
+            <p>
+              I built this because I wanted a photo editor that was honest. It should show the world as it looks and shouldn’t require a million tweaks to look good—the first proof should come out right.
+            </p>
+            <p>
+              Along the way, I gave myself a strict rule: no magic constants to make photos artificially look "good." Everything had to be grounded either in color science or darkroom chemistry. Because of that, I went a bit down the rabbit hole and spent a lot of innovation tokens on physical film and print media emulation.
+            </p>
+            <p>
+              Finally, I wanted to be less beholden to Adobe and take true ownership of my own photos. (Though to be fair, the library management component right now is rudimental, to put it kindly.)
+            </p>
+          </div>
+          <div class="hero-actions">
+            <button id="btn-hero-launch-darkroom" class="btn btn-primary btn-lg" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Try in Browser (WebAssembly)
+            </button>
+            <a href="#downloads" class="btn btn-secondary btn-lg">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download for Mac
+            </a>
+            <a href="https://github.com/blikkie/firstproof" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-lg">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+              Source on GitHub
+            </a>
+          </div>
+          <div class="hero-trust-row">
+            <span class="hero-trust-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Runs 100% locally
+            </span>
+            <span class="hero-trust-item">•</span>
+            <span class="hero-trust-item">No subscriptions or logins</span>
+            <span class="hero-trust-item">•</span>
+            <span class="hero-trust-item">Open XMP sidecars</span>
+            <span class="hero-trust-item">•</span>
+            <span class="hero-trust-item">Zero telemetry</span>
+          </div>
+        </section>
+
+        <!-- Standalone Downloads -->
+        <section id="downloads" class="editorial-section">
+          <div class="editorial-section-header">
+            <span class="editorial-section-eyebrow">Downloads</span>
+            <h3 class="editorial-section-title">Standalone Apps</h3>
+            <p class="editorial-section-subtitle">
+              Native desktop app and command-line utilities. Completely offline, self-contained, and free.
+            </p>
+          </div>
+
+          <div class="downloads-grid">
+            <!-- macOS Desktop App -->
+            <div class="download-card">
+              <div class="download-card-header">
+                <div class="download-icon-group">
+                  <div class="download-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                  </div>
+                  <div class="download-title-group">
+                    <h4 class="download-title">First Proof for macOS</h4>
+                    <span class="download-version">Version 0.1.0 • 13 MB DMG</span>
+                  </div>
+                </div>
+                <span class="download-badge">Apple Silicon</span>
+              </div>
+              <p class="download-desc">
+                Native macOS darkroom for viewing, culling, and developing RAW folders.
+              </p>
+              <ul class="download-features">
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  Fast preview loading for quick culling through burst shots
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  14-bit CFA demosaicing and 16-bit linear color pipeline
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  Bundled Lensfun database for automatic lens correction
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  Edits saved directly into standard .xmp sidecars
+                </li>
+              </ul>
+              <a href="https://github.com/blikkie/firstproof/releases/download/v0.1.0/FirstProof-0.1.0-macos-arm64.dmg" class="btn btn-primary full-width" style="text-decoration: none; justify-content: center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download macOS DMG
+              </a>
+              <div class="checksum-box">
+                <span class="checksum-label">SHA256:</span>
+                de6e220ac0b39243f0002f721f16c5aeed232ecceaeecfbdf2511d6e2db52be9
+              </div>
+            </div>
+
+            <!-- Headless CLI Utility -->
+            <div class="download-card">
+              <div class="download-card-header">
+                <div class="download-icon-group">
+                  <div class="download-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                  </div>
+                  <div class="download-title-group">
+                    <h4 class="download-title">First Proof CLI</h4>
+                    <span class="download-version">Version 0.1.0 • 3.4 MB Tarball</span>
+                  </div>
+                </div>
+                <span class="download-badge">macOS &amp; Linux</span>
+              </div>
+              <p class="download-desc">
+                Headless command-line utility for batch demosaicing and scriptable workflows.
+              </p>
+              <ul class="download-features">
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  Multi-threaded batch demosaicing across CPU cores
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  Reads and writes the same .xmp sidecars as the app
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  Bundled lens database compiler (<code style="font-family: var(--font-mono); font-size: 0.76rem;">bundle-lensfun</code>)
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  Easy to integrate into shell scripts and automated exports
+                </li>
+              </ul>
+              <a href="https://github.com/blikkie/firstproof/releases/download/v0.1.0/firstproof-cli-0.1.0-macos-arm64.tar.gz" class="btn btn-secondary full-width" style="text-decoration: none; justify-content: center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download CLI Tarball
+              </a>
+              <div class="checksum-box">
+                <span class="checksum-label">SHA256:</span>
+                2d8fb27a4d589af0a0dba58804013bd955c1b5f7988c09a79aaa9acfd936833a
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Optical Comparison -->
+        <section id="comparison" class="editorial-section">
+          <div class="editorial-section-header">
+            <span class="editorial-section-eyebrow">Comparison</span>
+            <h3 class="editorial-section-title">In-Camera JPEG vs. First Proof</h3>
+            <p class="editorial-section-subtitle">
+              Drag the divider to compare the camera's baked 8-bit JPEG against First Proof's render straight from the RAW file.
+            </p>
+          </div>
+
+          <div class="optical-comparison-container">
+            <div class="comparison-toolbar">
+              <div class="comparison-segmented">
+                <button id="btn-compare-jpeg" class="comparison-btn" type="button">In-Camera JPEG</button>
+                <button id="btn-compare-split" class="comparison-btn active" type="button">Split (50 / 50)</button>
+                <button id="btn-compare-firstproof" class="comparison-btn" type="button">First Proof</button>
+              </div>
+              <span class="comparison-hint">Drag divider to compare</span>
+            </div>
+
+            <!-- Film Carrier Frame Motif (Option 1) -->
+            <div class="film-carrier-frame">
+              <div class="film-carrier-rebate film-rebate-top">
+                <div class="film-sprockets">
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                </div>
+                <div class="film-edge-code">
+                  <span class="film-code-meta">FIRST PROOF • 35mm</span>
+                  <span class="film-code-frame">01 ▶</span>
+                </div>
+              </div>
+
+              <div id="optical-comparison-viewer" class="comparison-viewer">
+                <!-- Background: First Proof Master -->
+                <img src="/assets/comparison_firstproof.jpg" alt="First Proof Development" class="comparison-layer comparison-layer-after" />
+                <!-- Foreground: Camera Cooked JPEG -->
+                <img src="/assets/comparison_camera_jpeg.jpg" alt="In-Camera Baked JPEG" class="comparison-layer comparison-layer-before" />
+                <!-- Divider Line & Handle -->
+                <div id="comparison-divider" class="comparison-divider">
+                  <div class="comparison-handle">◂ ▸</div>
+                </div>
+                <!-- Badges -->
+                <div class="comparison-badge-left">In-Camera JPEG</div>
+                <div class="comparison-badge-right">First Proof (RAW)</div>
+              </div>
+
+              <div class="film-carrier-rebate film-rebate-bottom">
+                <div class="film-sprockets">
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                  <span class="sprocket-hole"></span>
+                </div>
+                <div class="film-edge-code">
+                  <span class="film-code-meta">SAFETY FILM • REC.2020</span>
+                  <span class="film-code-frame">01A</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="comparison-notes-grid">
+              <div class="comparison-note-card">
+                <h4 class="note-title">Natural sky &amp; water tones</h4>
+                <p class="note-body">
+                  Camera JPEGs often push blue skies toward cyan to make them look punchier. First Proof preserves the natural depth of the sky and water reflections without shifting hue angles.
+                </p>
+              </div>
+              <div class="comparison-note-card">
+                <h4 class="note-title">True color, not neon saturation</h4>
+                <p class="note-body">
+                  Instead of boosting saturation across the board, colors retain their real-world character: the torii gate stays a deep architectural vermilion, blossoms keep subtle pinks, and foliage looks like real trees.
+                </p>
+              </div>
+              <div class="comparison-note-card">
+                <h4 class="note-title">Clean, unsharpened detail</h4>
+                <p class="note-body">
+                  No artificial edge halos or heavy compression artifacts. Detail in the wood texture and distant branches comes from proper optical demosaicing rather than digital sharpening filters.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Principles -->
+        <section id="manifesto" class="editorial-section">
+          <div class="editorial-section-header">
+            <span class="editorial-section-eyebrow">Principles</span>
+            <h3 class="editorial-section-title">A Few Ground Rules</h3>
+            <p class="editorial-section-subtitle">
+              The constraints that guided how this editor was built.
+            </p>
+          </div>
+
+          <div class="pillars-grid">
+            <div class="pillar-card">
+              <span class="pillar-num">Rule I</span>
+              <h4 class="pillar-title">An Honest Baseline</h4>
+              <p class="pillar-body">
+                A RAW photo should look right the moment you open it. If you need 40 micro-adjustments just to rescue an image from looking dull, the baseline color engine isn't doing its job.
+              </p>
+            </div>
+            <div class="pillar-card">
+              <span class="pillar-num">Rule II</span>
+              <h4 class="pillar-title">No Magic Constants</h4>
+              <p class="pillar-body">
+                No arbitrary multipliers or curve hacks to force photos to look "pop." Every slider and tone model is tied to published optical physics, color science, or darkroom film chemistry.
+              </p>
+            </div>
+            <div class="pillar-card">
+              <span class="pillar-num">Rule III</span>
+              <h4 class="pillar-title">Fast Where It Matters</h4>
+              <p class="pillar-body">
+                Flipping through hundreds of photos during a cull should feel instantaneous. Previews are generated fast with 2×2 Bayer binning so you don't wait on progress bars just to pick your best shots.
+              </p>
+            </div>
+            <div class="pillar-card">
+              <span class="pillar-num">Rule IV</span>
+              <h4 class="pillar-title">Your Files, Your Control</h4>
+              <p class="pillar-body">
+                No cloud locks, no subscription checks, and no proprietary databases. Edits are saved in plain-text XMP sidecars alongside your photos, so your work stays yours forever.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Acknowledgments -->
+        <section id="lineage" class="editorial-section">
+          <div class="editorial-section-header">
+            <span class="editorial-section-eyebrow">Acknowledgments</span>
+            <h3 class="editorial-section-title">Built on Decades of Open Work</h3>
+            <p class="editorial-section-subtitle">
+              First Proof wouldn't exist without decades of shared research, community tools, and public chemistry.
+            </p>
+          </div>
+
+          <div class="lineage-grid">
+            <div class="lineage-card">
+              <h4 class="lineage-pioneer">Film &amp; Paper Chemists</h4>
+              <span class="lineage-domain">Sensitometry &amp; Emulsion Chemistry</span>
+              <p class="lineage-desc">
+                Kodak, Fujifilm, Ilford, and Agfa for decades of published sensitometric data and dye chemistry. Honestly, seeing what it takes to model physical film digitally mostly just makes me want to put down the laptop and take out an actual film camera.
+              </p>
+            </div>
+            <div class="lineage-card">
+              <h4 class="lineage-pioneer">Troy Sobotka</h4>
+              <span class="lineage-domain">AgX Filmic Color Science</span>
+              <p class="lineage-desc">
+                Pioneering research on open-domain filmic tone mapping and highlight desaturation matrices in wide-gamut imagery.
+              </p>
+            </div>
+            <div class="lineage-card">
+              <h4 class="lineage-pioneer">Marti Maria</h4>
+              <span class="lineage-domain">LittleCMS (lcms2)</span>
+              <p class="lineage-desc">
+                Author and maintainer of LittleCMS, the open-source color engine powering ICC profile management and soft proofing.
+              </p>
+            </div>
+            <div class="lineage-card">
+              <h4 class="lineage-pioneer">Dave Coffin &amp; RAW Maintainers</h4>
+              <span class="lineage-domain">dcraw, libraw &amp; rawler</span>
+              <p class="lineage-desc">
+                Decades of reverse-engineering camera sensor formats, allowing photographers to read raw sensor data without proprietary software.
+              </p>
+            </div>
+            <div class="lineage-card">
+              <h4 class="lineage-pioneer">Torsten Bronger &amp; Lensfun</h4>
+              <span class="lineage-domain">Lens Calibration Database</span>
+              <p class="lineage-desc">
+                A community-maintained database of optical distortion, vignetting, and chromatic aberration profiles for thousands of camera lenses.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="editorial-footer">
+          <div class="footer-links">
+            <a href="https://github.com/blikkie/firstproof" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="#downloads">Downloads</a>
+            <a href="#comparison">Comparison</a>
+            <a href="#manifesto">Principles</a>
+            <a href="#lineage">Acknowledgments</a>
+            <a href="https://firstproof.photo">firstproof.photo</a>
+          </div>
+          <p>
+            First Proof is open source under the MIT License. Lens calibration data bundled under CC-BY-SA 3.0.
+          </p>
+          <p style="opacity: 0.6; font-size: 0.72rem;">
+            100% on-device • Zero telemetry • Zero tracking
+          </p>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Main Content Workspace (Darkroom) -->
+    <div id="view-darkroom" class="workspace-container hidden">
       <!-- Center Canvas Viewport -->
       <main class="viewport-main">
         <div class="canvas-wrapper" id="canvas-wrapper">

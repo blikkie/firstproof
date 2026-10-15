@@ -1,8 +1,10 @@
 import { CropController } from './CropController';
 import { CanvasViewportController } from './controllers/CanvasViewportController';
+import { ComparisonSliderController } from './controllers/ComparisonSliderController';
 import { FilmstripController } from './controllers/FilmstripController';
 import { InspectorSyncController } from './controllers/InspectorSyncController';
 import { KeyboardShortcutController } from './controllers/KeyboardShortcutController';
+import { PageNavController } from './controllers/PageNavController';
 import { type ExportExecutionOptions, ExportModal } from './ExportModal';
 import { FolderIntake, type PhotoFileEntry } from './FolderIntake';
 import { ParityModal } from './parity/ParityModal';
@@ -37,6 +39,7 @@ class DarkroomApp {
   private keyboardController!: KeyboardShortcutController;
   private inspectorController!: InspectorSyncController;
   private filmstripController!: FilmstripController;
+  private pageNavController!: PageNavController;
 
   // Active Photo State
   private edits: EditSettingsPayload = getDefaultEdits();
@@ -330,11 +333,20 @@ class DarkroomApp {
               try {
                 initialName = localStorage.getItem('fp_recent_photo_name');
               } catch (_) {}
+              this.pageNavController.setMode('darkroom');
               this.filmstripController.loadPhotos(entries, initialName);
             }
           });
           emptyActions.appendChild(btnRecent);
         }
+      }
+    });
+
+    // 12. Init Comparison Slider & Page Navigation Controllers (Story 4.3)
+    new ComparisonSliderController();
+    this.pageNavController = new PageNavController((mode) => {
+      if (mode === 'darkroom') {
+        this.renderCanvas();
       }
     });
 
@@ -473,6 +485,7 @@ class DarkroomApp {
             if (res.dirHandle) {
               FolderIntake.saveRecentDirHandle(res.dirHandle);
             }
+            this.pageNavController.setMode('darkroom');
             this.filmstripController.loadPhotos(res.entries);
             return;
           }
@@ -503,6 +516,7 @@ class DarkroomApp {
         const target = e.target as HTMLInputElement;
         if (target.files && target.files.length > 0) {
           const entries = FolderIntake.processFileList(target.files);
+          this.pageNavController.setMode('darkroom');
           this.filmstripController.loadPhotos(entries);
         }
       },
