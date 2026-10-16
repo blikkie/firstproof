@@ -258,6 +258,7 @@ class DarkroomApp {
       onResetAllEdits: () => this.resetAllEdits(),
       onApplyAutoTone: () => this.applyAutoTone(),
       onOpenExportModal: () => this.openExportModal(),
+      onToggleMetadata: () => this.toggleMetadataPanel(),
       onSetRating: (rating) => {
         this.currentRating = rating;
         this.syncRatingFlagUI();
@@ -422,6 +423,7 @@ class DarkroomApp {
       'meta-input-creator',
       'meta-input-keywords',
       'btn-crop-tool',
+      'btn-toggle-metadata',
       'btn-rotate-ccw',
       'btn-rotate-cw',
       'zoom-badge',
@@ -583,10 +585,16 @@ class DarkroomApp {
       this.autoSaveSidecar();
     });
 
-    // Header Crop & Rotation Tools
+    // Header Crop, Metadata & Rotation Tools
     this.elements['btn-crop-tool']?.addEventListener('click', () =>
       this.toggleCropMode(),
     );
+    this.elements['btn-toggle-metadata']?.addEventListener('click', () =>
+      this.toggleMetadataPanel(),
+    );
+    document
+      .getElementById('btn-close-metadata')
+      ?.addEventListener('click', () => this.toggleMetadataPanel(false));
     this.elements['btn-rotate-ccw']?.addEventListener('click', () =>
       this.rotateImage(-90),
     );
@@ -852,6 +860,18 @@ class DarkroomApp {
 
   public selectInspectorTab(tab: string) {
     this.inspectorController.selectInspectorTab(tab);
+  }
+
+  public toggleMetadataPanel(show?: boolean) {
+    const sidebar = document.getElementById('metadata-sidebar');
+    if (!sidebar) return;
+    const shouldShow = show ?? sidebar.classList.contains('hidden');
+    sidebar.classList.toggle('hidden', !shouldShow);
+    const btn = this.elements['btn-toggle-metadata'];
+    if (btn) {
+      btn.classList.toggle('active', shouldShow);
+    }
+    this.renderCanvas();
   }
 
   public resetAllEdits() {

@@ -88,6 +88,7 @@ describe('Controller & First-Responder Architecture', () => {
         onResetAllEdits: vi.fn(),
         onApplyAutoTone: vi.fn(),
         onOpenExportModal: vi.fn(),
+        onToggleMetadata: vi.fn(),
         onSetRating: vi.fn(),
         onTogglePick: vi.fn(),
         onToggleReject: vi.fn(),

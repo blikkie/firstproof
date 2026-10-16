@@ -17,6 +17,7 @@ describe('KeyboardShortcutController', () => {
       onResetAllEdits: vi.fn(),
       onApplyAutoTone: vi.fn(),
       onOpenExportModal: vi.fn(),
+      onToggleMetadata: vi.fn(),
       onSetRating: vi.fn(),
       onTogglePick: vi.fn(),
       onToggleReject: vi.fn(),
@@ -165,8 +166,8 @@ describe('KeyboardShortcutController', () => {
   });
 
   describe('Modifier-Based Shortcuts', () => {
-    it('switches tabs with Cmd/Ctrl + 1..5', () => {
-      const tabs = ['light', 'color', 'detail', 'emulsion', 'info'];
+    it('switches tabs with Cmd/Ctrl + 1..3', () => {
+      const tabs = ['develop', 'emulsion', 'detail'];
       tabs.forEach((tab, idx) => {
         window.dispatchEvent(
           new KeyboardEvent('keydown', {
@@ -176,6 +177,14 @@ describe('KeyboardShortcutController', () => {
         );
         expect(actions.onSelectTab).toHaveBeenCalledWith(tab);
       });
+    });
+
+    it('toggles metadata with single key I', () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i' }));
+      expect(actions.onToggleMetadata).toHaveBeenCalledTimes(1);
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'I' }));
+      expect(actions.onToggleMetadata).toHaveBeenCalledTimes(2);
     });
 
     it('opens export modal with Cmd/Ctrl + E', () => {

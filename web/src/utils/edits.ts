@@ -26,7 +26,7 @@ export function getDefaultEdits(_isRaw: boolean = false): EditSettingsPayload {
     rotation: 0,
     flip_horizontal: false,
     flip_vertical: false,
-    tone_profile: 'AgxVivid',
+    tone_profile: 'CameraStandard',
     lut_intensity: 1.0,
     sharpening_amount: 0.0,
     sharpening_radius: 1.0,
@@ -129,7 +129,7 @@ export function hasModifications(
   if (Math.abs(edits.saturation) > 1e-4) return true;
   if (Math.abs(edits.deep_blue) > 1e-4) return true;
   if (Math.abs(edits.foliage) > 1e-4) return true;
-  if (edits.tone_profile !== 'AgxVivid') return true;
+  if (edits.tone_profile !== 'CameraStandard') return true;
   if (edits.emulsion_archetype !== 'None') return true;
   if (edits.remjet_backing === 'Stripped') return true;
   if (edits.emulsion_grain_mode && edits.emulsion_grain_mode !== 'Off')

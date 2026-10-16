@@ -17,7 +17,7 @@ describe('Edit Settings & Modification Invariants', () => {
       expect(edits.contrast).toBe(0.0);
       expect(edits.temperature).toBe(5500.0);
       expect(edits.tint).toBe(0.0);
-      expect(edits.tone_profile).toBe('AgxVivid');
+      expect(edits.tone_profile).toBe('CameraStandard');
       expect(edits.emulsion_archetype).toBe('None');
       expect(edits.print_media).toBe('None');
       expect(edits.crop_left).toBe(0.0);

@@ -114,7 +114,7 @@ export function createDefaultEdits(): EditSettingsPayload {
     rotation: 0,
     flip_horizontal: false,
     flip_vertical: false,
-    tone_profile: 'AgxVivid',
+    tone_profile: 'CameraStandard',
     lut_intensity: 0.0,
     sharpening_amount: 0.0,
     sharpening_radius: 1.0,

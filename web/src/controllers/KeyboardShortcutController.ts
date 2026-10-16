@@ -16,6 +16,7 @@ export interface KeyboardActions {
   onResetAllEdits: () => void;
   onApplyAutoTone: () => void;
   onOpenExportModal: () => void;
+  onToggleMetadata: () => void;
   onSetRating: (rating: number) => void;
   onTogglePick: () => void;
   onToggleReject: () => void;
@@ -90,27 +91,17 @@ export class KeyboardShortcutController {
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey) {
       if (e.key === '1') {
         e.preventDefault();
-        this.actions.onSelectTab('light');
+        this.actions.onSelectTab('develop');
         return;
       }
       if (e.key === '2') {
         e.preventDefault();
-        this.actions.onSelectTab('color');
+        this.actions.onSelectTab('emulsion');
         return;
       }
       if (e.key === '3') {
         e.preventDefault();
         this.actions.onSelectTab('detail');
-        return;
-      }
-      if (e.key === '4') {
-        e.preventDefault();
-        this.actions.onSelectTab('emulsion');
-        return;
-      }
-      if (e.key === '5') {
-        e.preventDefault();
-        this.actions.onSelectTab('info');
         return;
       }
       if (e.key === 'e' || e.key === 'E') {
@@ -175,6 +166,10 @@ export class KeyboardShortcutController {
         if (!this.actions.isCropActive()) {
           this.actions.onTogglePixelPeep();
         }
+        break;
+      case 'i':
+      case 'I':
+        this.actions.onToggleMetadata();
         break;
       case '[':
         this.actions.onRotate(-90);
