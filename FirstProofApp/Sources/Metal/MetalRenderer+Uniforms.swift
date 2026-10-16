@@ -17,10 +17,14 @@ extension MetalRenderer {
         edrHeadroom: Float = 1.0,
         edrEnabled: Bool = true,
         isIntermediate: Bool = false,
-        baselineSharpness: Float = 1.0
+        baselineSharpness: Float = 1.0,
+        asShotTemperature: Float = 5500.0,
+        asShotTint: Float = 0.0
     ) {
         uniforms.isIntermediate = isIntermediate ? 1 : 0
         uniforms.baselineSharpness = baselineSharpness
+        uniforms.asShotTemperature = asShotTemperature
+        uniforms.asShotTint = asShotTint
         uniforms.exposure = edits.exposure
         uniforms.temperature = edits.temperature
         uniforms.tint = edits.tint

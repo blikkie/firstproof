@@ -23,6 +23,8 @@ uniform float u_deepBlue;
 uniform float u_foliage;
 uniform float u_temperature;
 uniform float u_tint;
+uniform float u_asShotTemperature;
+uniform float u_asShotTint;
 
 uniform int u_toneProfileMode; // 0: AgxVivid, 1: AgxFilmic, 2: CamStandard, 3: CamPortrait, 4: CamLandscape, 5: CamVivid
 uniform int u_emulsionArchetype;
@@ -116,11 +118,13 @@ float sampleDisplayLuma(vec2 uv) {
     } else {
         c = LINEAR_SRGB_TO_REC2020 * srgbGammaToLinear3(s.rgb);
     }
-    if (abs(u_temperature - 5500.0) >= 1.0 || u_tint != 0.0) {
-        float tempNorm = clamp(u_temperature / 5500.0, 0.25, 4.0);
+    float baseTemp = (u_isLinearRec2020 == 1 && u_asShotTemperature > 1000.0) ? u_asShotTemperature : 5500.0;
+    float baseTint = (u_isLinearRec2020 == 1) ? u_asShotTint : 0.0;
+    if (abs(u_temperature - baseTemp) >= 1.0 || abs(u_tint - baseTint) >= 0.1) {
+        float tempNorm = clamp(u_temperature / baseTemp, 0.25, 4.0);
         float rScale = pow(tempNorm, 0.75);
         float bScale = pow(1.0 / tempNorm, 0.75);
-        float tintFactor = u_tint * 0.002;
+        float tintFactor = (u_tint - baseTint) * 0.002;
         float gScale = max(1.0 - tintFactor, 0.01);
         rScale = max(rScale + tintFactor * 0.5, 0.01);
         bScale = max(bScale + tintFactor * 0.5, 0.01);
@@ -297,12 +301,14 @@ void main() {
     float rScale = 1.0;
     float gScale = 1.0;
     float bScale = 1.0;
-    if (abs(u_temperature - 5500.0) >= 1.0 || u_tint != 0.0) {
-        float tempNorm = clamp(u_temperature / 5500.0, 0.25, 4.0);
+    float baseTemp = (u_isLinearRec2020 == 1 && u_asShotTemperature > 1000.0) ? u_asShotTemperature : 5500.0;
+    float baseTint = (u_isLinearRec2020 == 1) ? u_asShotTint : 0.0;
+    if (abs(u_temperature - baseTemp) >= 1.0 || abs(u_tint - baseTint) >= 0.1) {
+        float tempNorm = clamp(u_temperature / baseTemp, 0.25, 4.0);
         rScale = pow(tempNorm, 0.75);
         bScale = pow(1.0 / tempNorm, 0.75);
         
-        float tintFactor = u_tint * 0.002;
+        float tintFactor = (u_tint - baseTint) * 0.002;
         gScale = max(1.0 - tintFactor, 0.01);
         rScale = max(rScale + tintFactor * 0.5, 0.01);
         bScale = max(bScale + tintFactor * 0.5, 0.01);
@@ -322,8 +328,10 @@ void main() {
         vec2 texSize = vec2(textureSize(u_texture, 0));
         vec2 texelSize = 1.0 / texSize;
         float maxDim = max(texSize.x, texSize.y);
-        float rInner = 1.0;
-        float rOuter = max(16.0, round(maxDim * 0.016));
+        // Dual-concentric ring stencil: meso-scale inner ring (rInner) skips pores/eyelashes,
+        // macro-scale outer ring (rOuter) estimates ambient illumination field.
+        float rInner = max(3.0, round(maxDim * 0.003));
+        float rOuter = max(24.0, round(maxDim * 0.024));
         vec2 stepInner = texelSize * rInner;
         vec2 stepOuter = texelSize * rOuter;
 
@@ -557,7 +565,7 @@ void main() {
         // Modes 2..5: Camera Matching (2: Standard, 3: Portrait, 4: Landscape, 5: Vivid)
         int camMode = u_toneProfileMode - 1;
         vec3 c_srgb = max(REC2020_TO_LINEAR_SRGB * rec2020Color, vec3(0.0));
-        vec3 rgbAdjusted = c_srgb;
+        vec3 rgbAdjusted = applyCameraHueSatMap(c_srgb, camMode);
         
         // Continuous sensitometric per-channel tone curve (Hurter-Driffield film D-log H model):
         // Evaluates each channel through the smooth C^1 camera spline.

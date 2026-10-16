@@ -474,6 +474,11 @@ RustBuffer uniffi_firstproof_core_fn_func_get_all_adjustments(RustCallStatus *_N
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_AS_SHOT_WHITE_BALANCE
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_AS_SHOT_WHITE_BALANCE
+RustBuffer uniffi_firstproof_core_fn_func_get_as_shot_white_balance(RustBuffer path, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_BUILTIN_CUBE_LUT
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_BUILTIN_CUBE_LUT
 RustBuffer uniffi_firstproof_core_fn_func_get_builtin_cube_lut(RustBuffer _title, uint32_t _size, RustCallStatus *_Nonnull out_status
@@ -962,6 +967,12 @@ uint16_t uniffi_firstproof_core_checksum_func_get_adjustment_descriptor(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_ALL_ADJUSTMENTS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_ALL_ADJUSTMENTS
 uint16_t uniffi_firstproof_core_checksum_func_get_all_adjustments(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_AS_SHOT_WHITE_BALANCE
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_AS_SHOT_WHITE_BALANCE
+uint16_t uniffi_firstproof_core_checksum_func_get_as_shot_white_balance(void
     
 );
 #endif

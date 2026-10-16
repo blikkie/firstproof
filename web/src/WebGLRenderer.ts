@@ -157,6 +157,8 @@ export class WebGLRenderer {
       'u_foliage',
       'u_temperature',
       'u_tint',
+      'u_asShotTemperature',
+      'u_asShotTint',
       'u_toneProfileMode',
       'u_emulsionArchetype',
       'u_emulsionExposure',
@@ -670,6 +672,8 @@ export class WebGLRenderer {
     gl.uniform1f(this.uLocs['u_foliage'], edits.foliage);
     gl.uniform1f(this.uLocs['u_temperature'], edits.temperature);
     gl.uniform1f(this.uLocs['u_tint'], edits.tint);
+    gl.uniform1f(this.uLocs['u_asShotTemperature'], 5500.0);
+    gl.uniform1f(this.uLocs['u_asShotTint'], 0.0);
 
     const modeMap: Record<string, number> = {
       AgxVivid: 0,

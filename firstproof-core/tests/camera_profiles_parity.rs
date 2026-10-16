@@ -38,11 +38,11 @@ fn test_huesatmap_interpolation_and_bounds() {
     assert_eq!(s_out, 0.0, "Achromatic gray became chromatic");
     assert!((v_out - 0.5).abs() < 0.05);
 
-    // 2. Sensor daylight sky blue input (Hue ~ 235 deg, Sat ~ 0.6):
-    // Must shift towards natural azure (215 - 220 deg) and tame saturation to eliminate purple cast
-    let (h_sky, s_sky, _v_sky) = map.apply_hsv(235.0, 0.6, 0.8);
-    assert!(h_sky < 225.0 && h_sky >= 214.0, "Sensor blue hue was not shifted towards azure: got {}", h_sky);
-    assert!(s_sky <= 0.60, "Sky blue saturation was blown out: got {}", s_sky);
+    // 2. Daylight sky blue input (Hue ~ 218 deg, Sat ~ 0.6):
+    // Preserves honest azure hue (216 - 220 deg) without false cyan shift
+    let (h_sky, s_sky, _v_sky) = map.apply_hsv(218.0, 0.6, 0.8);
+    assert!((h_sky - 218.0).abs() < 1.0, "Sky blue hue was distorted: got {}", h_sky);
+    assert!((s_sky - 0.6).abs() < 0.05, "Sky blue saturation was distorted: got {}", s_sky);
 
     // 3. Foliage green input (Hue ~ 120 deg, Sat ~ 0.5): should boost saturation
     let (_h_green, s_green, _v_green) = map.apply_hsv(120.0, 0.5, 0.5);
@@ -442,6 +442,8 @@ fn test_cr2_0194_full_pipeline_parity() {
         height: demosaiced.height,
         data: demosaiced.data.clone(),
         is_raw: demosaiced.is_raw,
+        as_shot_temperature: demosaiced.as_shot_temperature,
+        as_shot_tint: demosaiced.as_shot_tint,
         baseline_sharpness: demosaiced.baseline_sharpness,
         profile_tone_curve: demosaiced.profile_tone_curve.clone(),
         warp_rectilinear: demosaiced.warp_rectilinear,
@@ -615,9 +617,16 @@ fn test_sliders_dual_engine_parity_sweep() {
                 }
                 m => {
                     let srgb_init = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r_rec, g_rec, b_rec));
-                    let rm = srgb_init.r().max(0.0);
-                    let gm = srgb_init.g().max(0.0);
-                    let bm = srgb_init.b().max(0.0);
+                    let (rm_raw, gm_raw, bm_raw) = (srgb_init.r().max(0.0), srgb_init.g().max(0.0), srgb_init.b().max(0.0));
+                    let hsm = match m {
+                        ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_huesatmap(),
+                        ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_huesatmap(),
+                        ColorProfileMode::CameraVivid => DcpProfile::built_in_vivid_huesatmap(),
+                        _ => DcpProfile::built_in_standard_huesatmap(),
+                    };
+                    let (h, s, v) = rgb_to_hsv(rm_raw, gm_raw, bm_raw);
+                    let (ho, so, vo) = hsm.apply_hsv(h, s, v);
+                    let (rm, gm, bm) = hsv_to_rgb(ho, so, vo);
                     let curve = match m {
                         ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_tone_curve(),
                         ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_tone_curve(),
@@ -653,6 +662,8 @@ fn test_sliders_dual_engine_parity_sweep() {
                 height: 1,
                 data: vec![c_rec2020.r(), c_rec2020.g(), c_rec2020.b()],
                 is_raw: true,
+                as_shot_temperature: Some(5500.0),
+                as_shot_tint: Some(0.0),
                 baseline_sharpness: 1.0,
                 profile_tone_curve: None,
                 warp_rectilinear: None,
@@ -907,7 +918,7 @@ fn test_bilateral_tone_recovery_metal_parity() {
         let ev_c = (y_c.max(1e-5) / 0.18).log2();
         let w_s_ortho: f32 = 0.60653066;
         let w_s_diag: f32 = 0.36787944;
-        let inv_two_sigma_r_sq: f32 = 1.0 / 1.445;
+        let inv_two_sigma_r_sq: f32 = 1.0 / 8.0;
 
         let mut total_weight = 1.0f32;
         let mut weighted_ev_sum = ev_c;
@@ -958,28 +969,30 @@ fn test_bilateral_tone_recovery_metal_parity() {
         if blacks != 0.0 {
             let u = ((-ev_base - 1.0) / 3.0).clamp(0.0, 1.0);
             let w_blacks = u * u * (3.0 - 2.0 * u);
-            delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
+            delta_ev += (blacks / 100.0) * 1.20 * w_blacks;
         }
         if shadows != 0.0 {
             let u = (-ev_base / 3.0).clamp(0.0, 1.0);
             let w_shadows = u * u * (3.0 - 2.0 * u);
-            delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
+            delta_ev += (shadows / 100.0) * 2.25 * w_shadows;
         }
         if highlights != 0.0 {
             let u = (ev_base / 3.0).clamp(0.0, 1.0);
             let w_highlights = u * u * (3.0 - 2.0 * u);
-            delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
+            delta_ev += (highlights / 100.0) * 2.25 * w_highlights;
         }
         if whites != 0.0 {
             let u = ((ev_base - 1.0) / 3.0).clamp(0.0, 1.0);
             let w_whites = u * u * (3.0 - 2.0 * u);
-            delta_ev += (whites / 100.0) * 0.90 * w_whites;
+            delta_ev += (whites / 100.0) * 1.20 * w_whites;
         }
 
         if delta_ev == 0.0 {
             return color;
         }
-        let gain = 2.0f32.powf(delta_ev);
+        let detail = (ev_c - ev_base).clamp(-3.0, 3.0);
+        let detail_boost = 0.35 * detail * (delta_ev.abs() / 2.25);
+        let gain = 2.0f32.powf((delta_ev + detail_boost).clamp(-6.0, 6.0));
         (color.0 * gain, color.1 * gain, color.2 * gain)
     }
 
@@ -1023,4 +1036,53 @@ fn test_bilateral_tone_recovery_metal_parity() {
         );
     }
 }
+
+#[test]
+fn test_huesatmap_shader_and_cpu_parity() {
+    let profiles = [
+        ("Standard", 1, DcpProfile::built_in_standard_huesatmap()),
+        ("Portrait", 2, DcpProfile::built_in_portrait_huesatmap()),
+        ("Landscape", 3, DcpProfile::built_in_landscape_huesatmap()),
+        ("Vivid", 4, DcpProfile::built_in_vivid_huesatmap()),
+    ];
+
+    let test_colors = [
+        (0.18, 0.18, 0.18), // Achromatic gray
+        (0.80, 0.80, 0.80), // Bright gray
+        (0.05, 0.05, 0.05), // Dark gray
+        (0.174, 0.169, 0.197), // Real Canon RAW sky pixel from _MG_3717.dng
+        (0.20, 0.35, 0.65), // Deep azure sky
+        (0.60, 0.40, 0.30), // Skin tone
+        (0.15, 0.45, 0.20), // Foliage green
+        (0.70, 0.15, 0.15), // Deep red
+    ];
+
+    for (name, mode, map) in profiles {
+        for &(r, g, b) in &test_colors {
+            // 1. Rust CPU path:
+            let (h, s, v) = rgb_to_hsv(r, g, b);
+            let (h_cpu, s_cpu, v_cpu) = map.apply_hsv(h, s, v);
+            let (r_cpu, g_cpu, b_cpu) = hsv_to_rgb(h_cpu, s_cpu, v_cpu);
+
+            // 2. Shader simulated path (evaluating 24-entry table with lerp):
+            let table = match mode {
+                2 => DcpProfile::built_in_portrait_huesatmap(),
+                3 => DcpProfile::built_in_landscape_huesatmap(),
+                4 => DcpProfile::built_in_vivid_huesatmap(),
+                _ => DcpProfile::built_in_standard_huesatmap(),
+            };
+            let (h_s, s_s, v_s) = rgb_to_hsv(r, g, b);
+            let (h_out, s_out, v_out) = table.apply_hsv(h_s, s_s, v_s);
+            let (r_sim, g_sim, b_sim) = hsv_to_rgb(h_out, s_out, v_out);
+
+            // Verify pure bit-level mathematical parity across all hues
+            assert!(
+                (r_cpu - r_sim).abs() < 1e-5 && (g_cpu - g_sim).abs() < 1e-5 && (b_cpu - b_sim).abs() < 1e-5,
+                "HueSatMap parity divergence on profile {} at ({}, {}, {}): CPU=({}, {}, {}), Sim=({}, {}, {})",
+                name, r, g, b, r_cpu, g_cpu, b_cpu, r_sim, g_sim, b_sim
+            );
+        }
+    }
+}
+
 

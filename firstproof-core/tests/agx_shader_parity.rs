@@ -79,10 +79,13 @@ fn test_metal_rust_dual_engine_parity() {
 
 /// Simulates the exact single-precision Metal shader implementation (`agxToneMapVivid` in ColorScience.metal)
 fn metal_shader_agx_vivid_sim(rec2020_r: f32, rec2020_g: f32, rec2020_b: f32, contrast_gain: f32) -> (f32, f32, f32) {
-    let punchy_contrast = contrast_gain * 1.15;
+    let punchy_contrast = contrast_gain * 1.35;
     let (br, bg, bb) = metal_shader_agx_sim(rec2020_r, rec2020_g, rec2020_b, punchy_contrast);
     let lum = 0.2126 * br + 0.7152 * bg + 0.0722 * bb;
-    let sat = 1.20;
+    let t = ((lum - 0.65) / 0.35).clamp(0.0, 1.0);
+    let h = t * t * (3.0 - 2.0 * t);
+    let base_sat = 1.25 - 0.25 * h;
+    let sat = base_sat;
     (
         (lum + sat * (br - lum)).clamp(0.0, 1.0),
         (lum + sat * (bg - lum)).clamp(0.0, 1.0),

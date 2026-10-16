@@ -7,6 +7,7 @@
 use firstproof_core::color::{
     Color3, agx_tone_map, agx_tone_map_vivid, apply_print_media, apply_recording_emulsion,
     ciede2000::linear_srgb_to_lab, ciede2000::ciede2000,
+    dcp::DcpProfile, dcp::evaluate_tone_curve, REC2020_TO_LINEAR_SRGB,
 };
 use firstproof_core::export::{apply_edits, apply_tone_recovery, f16_to_f32};
 use firstproof_core::synthetic::SyntheticTestChart;
@@ -137,7 +138,44 @@ fn test_synthetic_macbeth_and_neutral_ramp_dual_engine_parity() {
             let tone_mapped = match edits.tone_profile {
                 ColorProfileMode::AgxVivid => agx_tone_map_vivid(Color3::new(r_em, g_em, b_em), contrast_gain),
                 ColorProfileMode::AgxFilmic => agx_tone_map(Color3::new(r_em, g_em, b_em), contrast_gain),
-                _ => agx_tone_map_vivid(Color3::new(r_em, g_em, b_em), contrast_gain),
+                mode => {
+                    let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r_em, g_em, b_em));
+                    let (mut r_adj, mut g_adj, mut b_adj) = (c_srgb.r().max(0.0), c_srgb.g().max(0.0), c_srgb.b().max(0.0));
+                    let huesatmap: Option<firstproof_core::color::DcpHueSatMap> = match mode {
+                        ColorProfileMode::CameraPortrait => Some(DcpProfile::built_in_portrait_huesatmap()),
+                        ColorProfileMode::CameraLandscape => Some(DcpProfile::built_in_landscape_huesatmap()),
+                        ColorProfileMode::CameraVivid => Some(DcpProfile::built_in_vivid_huesatmap()),
+                        _ => Some(DcpProfile::built_in_standard_huesatmap()),
+                    };
+                    if let Some(ref hsm) = huesatmap {
+                        let (h, s, v) = firstproof_core::color::dcp::rgb_to_hsv(r_adj, g_adj, b_adj);
+                        let (h_out, s_out, v_out) = hsm.apply_hsv(h, s, v);
+                        let (r_hsv, g_hsv, b_hsv) = firstproof_core::color::dcp::hsv_to_rgb(h_out, s_out, v_out);
+                        r_adj = r_hsv;
+                        g_adj = g_hsv;
+                        b_adj = b_hsv;
+                    }
+
+                    let curve = match mode {
+                        ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_tone_curve(),
+                        ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_tone_curve(),
+                        ColorProfileMode::CameraVivid => DcpProfile::built_in_vivid_tone_curve(),
+                        _ => DcpProfile::built_in_standard_tone_curve(),
+                    };
+                    let apply_curve = |v: f32| -> f32 {
+                        let curved = evaluate_tone_curve(v.max(0.0), &curve);
+                        if (contrast_gain - 1.0).abs() > 0.001 {
+                            ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
+                        } else {
+                            curved.clamp(0.0, 1.0)
+                        }
+                    };
+                    Color3::new(
+                        apply_curve(r_adj),
+                        apply_curve(g_adj),
+                        apply_curve(b_adj),
+                    )
+                }
             };
 
             let mut gpu_r = tone_mapped.r().clamp(0.0, 1.0);

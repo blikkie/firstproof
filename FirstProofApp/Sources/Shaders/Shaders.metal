@@ -128,12 +128,19 @@ fragment float4 fragmentShader(
     float rScale = 1.0;
     float gScale = 1.0;
     float bScale = 1.0;
-    if (abs(editTemp - 5500.0) >= 1.0 || editTint != 0.0) {
-        float tempNorm = clamp(editTemp / 5500.0, 0.25, 4.0);
+    float baseTemp = (uniforms.isLinearRaw == 1 && uniforms.asShotTemperature > 1000.0)
+        ? uniforms.asShotTemperature
+        : 5500.0;
+    float baseTint = (uniforms.isLinearRaw == 1)
+        ? uniforms.asShotTint
+        : 0.0;
+
+    if (abs(editTemp - baseTemp) >= 1.0 || abs(editTint - baseTint) >= 0.1) {
+        float tempNorm = clamp(editTemp / baseTemp, 0.25, 4.0);
         rScale = pow(tempNorm, 0.75);
         bScale = pow(1.0 / tempNorm, 0.75);
         
-        float tintFactor = editTint * 0.002;
+        float tintFactor = (editTint - baseTint) * 0.002;
         gScale = max(1.0 - tintFactor, 0.01);
         rScale = max(rScale + tintFactor * 0.5, 0.01);
         bScale = max(bScale + tintFactor * 0.5, 0.01);
@@ -156,8 +163,10 @@ fragment float4 fragmentShader(
         float2 texDim = float2(texture.get_width(), texture.get_height());
         float2 texelSize = 1.0 / texDim;
         float maxDim = max(texDim.x, texDim.y);
-        float rInner = 1.0;
-        float rOuter = max(16.0, round(maxDim * 0.016));
+        // Dual-concentric ring stencil: meso-scale inner ring (rInner) skips pores/eyelashes,
+        // macro-scale outer ring (rOuter) estimates ambient illumination field.
+        float rInner = max(3.0, round(maxDim * 0.003));
+        float rOuter = max(24.0, round(maxDim * 0.024));
         float2 stepInner = texelSize * rInner;
         float2 stepOuter = texelSize * rOuter;
         
@@ -452,7 +461,7 @@ fragment float4 fragmentShader(
         // Modes 2..5: Camera Matching (Standard, Portrait, Landscape, Vivid)
         int camMode = uniforms.toneProfileMode - 1; // 2->1 (Standard), 3->2 (Portrait), 4->3 (Landscape), 5->4 (Vivid)
         float3 c_srgb = max(REC2020_TO_LINEAR_SRGB * rec2020Color, float3(0.0));
-        float3 rgbAdjusted = c_srgb;
+        float3 rgbAdjusted = applyCameraHueSatMap(c_srgb, camMode);
         
         // Continuous sensitometric per-channel tone curve (Hurter-Driffield film D-log H model):
         // Evaluates each channel through the smooth C^1 camera spline.

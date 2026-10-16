@@ -241,6 +241,12 @@ extension AppViewModel {
         }
         
         // 2. Resolve target edits from XMP sidecar or baseline defaults
+        let asShotWb = getAsShotWhiteBalance(path: photo.filePath)
+        let asShotTemp = asShotWb?.temperature ?? 5500.0
+        let asShotTint = asShotWb?.tint ?? 0.0
+        self.asShotTemperature = asShotTemp
+        self.asShotTint = asShotTint
+
         let targetEdits: EditSettings
         if let xmp = readXmp(path: photo.filePath) {
             targetEdits = xmp.edits
@@ -249,6 +255,8 @@ extension AppViewModel {
             defaultEdits.rotation = Int32(exifRotation)
             defaultEdits.flipHorizontal = exifFlipH
             defaultEdits.flipVertical = exifFlipV
+            defaultEdits.temperature = asShotTemp
+            defaultEdits.tint = asShotTint
             targetEdits = defaultEdits
         }
         

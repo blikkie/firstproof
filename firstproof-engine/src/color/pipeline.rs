@@ -99,7 +99,9 @@ pub fn apply_bilateral_tone_recovery_rgb(
 
     const W_S_ORTHO: f32 = 0.60653066;
     const W_S_DIAG: f32 = 0.36787944;
-    const INV_TWO_SIGMA_R_SQ: f32 = 1.0 / 1.445;
+    // Ambient illumination spatial separation: sigma_r = 2.0 EV (2 * sigma_r^2 = 8.0)
+    // Prevents soft facial contours from being treated as hard edges, avoiding feature flattening.
+    const INV_TWO_SIGMA_R_SQ: f32 = 1.0 / 8.0;
 
     let mut total_weight = 1.0f32;
     let mut weighted_ev_sum = ev_c;
@@ -154,35 +156,42 @@ pub fn apply_bilateral_tone_recovery_rgb(
     if blacks != 0.0 {
         let u = ((-ev_base - 1.0) / 3.0).clamp(0.0, 1.0);
         let w_blacks = u * u * (3.0 - 2.0 * u);
-        delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
+        delta_ev += (blacks / 100.0) * 1.20 * w_blacks;
     }
 
     // 2. Shadows: Ansel Adams Zones II-IV (-3.0 EV to 0.0 EV, shadow texture, dark skin, dark foliage)
+    // Full photographic headroom (2.25 EV) allows deep shadow lifting matching Lightroom.
     if shadows != 0.0 {
         let u = (-ev_base / 3.0).clamp(0.0, 1.0);
         let w_shadows = u * u * (3.0 - 2.0 * u);
-        delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
+        delta_ev += (shadows / 100.0) * 2.25 * w_shadows;
     }
 
     // 3. Highlights: Ansel Adams Zones VI-IX (0.0 EV to +3.0 EV, light skin, textured snow, cloud detail)
+    // 2.25 EV pull recovers dense sky clouds and prevents chalky highlight blowout.
     if highlights != 0.0 {
         let u = (ev_base / 3.0).clamp(0.0, 1.0);
         let w_highlights = u * u * (3.0 - 2.0 * u);
-        delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
+        delta_ev += (highlights / 100.0) * 2.25 * w_highlights;
     }
 
     // 4. Whites: Ansel Adams Zones VII-X (+1.0 EV to +4.0 EV, specular highlights and maximum printable diffuse white)
     if whites != 0.0 {
         let u = ((ev_base - 1.0) / 3.0).clamp(0.0, 1.0);
         let w_whites = u * u * (3.0 - 2.0 * u);
-        delta_ev += (whites / 100.0) * 0.90 * w_whites;
+        delta_ev += (whites / 100.0) * 1.20 * w_whites;
     }
 
     if delta_ev == 0.0 {
         return (r, g, b);
     }
 
-    let gain = 2.0f32.powf(delta_ev);
+    // Retinex High-Frequency Detail Preservation & Micro-Contrast Restoration:
+    // Preserves local edge ratios (sharpness and texture) across facial features and silhouettes
+    // when compressing dynamic range with large-scale base illumination adjustments.
+    let detail = (ev_c - ev_base).clamp(-3.0, 3.0);
+    let detail_boost = 0.35 * detail * (delta_ev.abs() / 2.25);
+    let gain = 2.0f32.powf((delta_ev + detail_boost).clamp(-6.0, 6.0));
     (r * gain, g * gain, b * gain)
 }
 
@@ -1417,8 +1426,11 @@ pub fn develop_raw_sensor_frame_archival(
                 if let Some(ref lut) = camera_curve_lut {
                     let lut_size_f = (lut.len() - 1) as f32;
                     let apply_curve = |v: f32| -> f32 {
-                        let idx = (v.clamp(0.0, 1.0) * lut_size_f).round() as usize;
-                        lut[idx]
+                        let pos = v.clamp(0.0, 1.0) * lut_size_f;
+                        let i0 = pos.floor() as usize;
+                        let i1 = (i0 + 1).min(lut.len() - 1);
+                        let frac = pos - i0 as f32;
+                        lut[i0] * (1.0 - frac) + lut[i1] * frac
                     };
                     r = apply_curve(c_srgb.r().max(0.0));
                     g = apply_curve(c_srgb.g().max(0.0));

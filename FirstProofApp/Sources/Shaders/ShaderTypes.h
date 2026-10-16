@@ -87,6 +87,8 @@ struct ShaderUniforms {
     float printProcessDepth;       // 0.0 .. 100.0 (default 100.0)
     int32_t halationMode;          // 0 = Off, 1 = Monochrome (BaodingSilver100), 2 = Red-shifted (RochesterCinema500 stripped)
     int32_t rotation;              // 0, 90, 180, 270
+    float asShotTemperature;       // Photo's native correlated color temperature in Kelvin (default 5500K)
+    float asShotTint;              // Photo's native tint (default 0.0)
 };
 
 #endif /* ShaderTypes_h */

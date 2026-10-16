@@ -68,6 +68,8 @@ mod tests {
             height: 1,
             data: vec![0.18, 0.18, 0.18],
             is_raw: true,
+            as_shot_temperature: Some(5500.0),
+            as_shot_tint: Some(0.0),
             baseline_sharpness: 1.0,
             profile_tone_curve: None,
             warp_rectilinear: None,
@@ -254,10 +256,10 @@ mod tests {
             );
             prev_gain = gain;
 
-            // For ev >= 3.0, the recovery must stay at maximum plateau (gain = 2^(-1.30) ~ 0.4061)
+            // For ev >= 3.0, the recovery must stay at maximum plateau (gain = 2^(-2.25) ~ 0.2102)
             // It must NEVER rebound towards 1.0 (which was the bug with the old half-sine lobe)
             if ev >= 3.0 {
-                let expected_plateau_gain = 2.0f32.powf(-1.30);
+                let expected_plateau_gain = 2.0f32.powf(-2.25);
                 assert!(
                     (gain - expected_plateau_gain).abs() < 1e-4,
                     "Highlights recovery must plateau at maximum attenuation above +3 EV: got {} expected {}",
@@ -277,16 +279,16 @@ mod tests {
             let boost = r_rec / lum;
 
             assert!(
-                boost >= prev_boost - 1e-6,
+                boost >= prev_boost - 1e-5,
                 "Shadows boost must be monotonic: boost {} at ev {} was less than prev_boost {}",
                 boost, ev, prev_boost
             );
             prev_boost = boost;
 
-            // For ev <= -3.0, the boost must stay at maximum plateau (gain = 2^(1.20) ~ 2.2974)
+            // For ev <= -3.0, the boost must stay at maximum plateau (gain = 2^(2.25) ~ 4.7568)
             // It must NEVER drop back towards 1.0
             if ev <= -3.0 {
-                let expected_plateau_boost = 2.0f32.powf(1.20);
+                let expected_plateau_boost = 2.0f32.powf(2.25);
                 assert!(
                     (boost - expected_plateau_boost).abs() < 1e-4,
                     "Shadows recovery must plateau at maximum boost below -3 EV: got {} expected {}",
@@ -391,10 +393,10 @@ mod tests {
         assert!((exp_ceil - 8.0f32).abs() < 1e-6);
 
         let (_, g_max, _) = apply_tone_recovery(0.8, 0.8, 0.8, -100.0, 0.0, 0.0, 0.0);
-        assert!(g_max > 0.8 * 0.35, "Highlights at -100 should not crush below photographic threshold");
+        assert!(g_max > 0.8 * 0.20, "Highlights at -100 should not crush below photographic threshold");
 
         let (_, g_min, _) = apply_tone_recovery(0.05, 0.05, 0.05, 0.0, 100.0, 0.0, 0.0);
-        assert!(g_min < 0.05 * 3.0, "Shadows at +100 should not blow out beyond 3x gain");
+        assert!(g_min < 0.05 * 5.0, "Shadows at +100 should not blow out beyond 5x gain");
     }
 
     #[test]

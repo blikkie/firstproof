@@ -207,7 +207,7 @@ fn cmd_develop(args: &[String]) -> Result<(), String> {
 
     // Start with default edits
     let mut edits = EditSettings {
-        tone_profile: ColorProfileMode::AgxVivid,
+        tone_profile: ColorProfileMode::CameraStandard,
         ..Default::default()
     };
 

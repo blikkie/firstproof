@@ -136,6 +136,19 @@ fn main() {
                     if let Ok(ev) = args[i + 1].parse::<f32>() {
                         edits.exposure = ev;
                     }
+                } else if args[i] == "--temperature" && i + 1 < args.len() {
+                    if let Ok(t) = args[i + 1].parse::<f32>() {
+                        edits.temperature = t;
+                    }
+                } else if args[i] == "--tint" && i + 1 < args.len() {
+                    if let Ok(t) = args[i + 1].parse::<f32>() {
+                        edits.tint = t;
+                    }
+                } else if args[i] == "--as-shot" {
+                    if let Ok(frame) = firstproof_core::raw_decoder::RawDecoder::decode(&firstproof_core::raw_decoder::RawlerDecoder, Path::new(&args[2])) {
+                        edits.temperature = frame.as_shot_temperature();
+                        edits.tint = frame.as_shot_tint();
+                    }
                 }
             }
             firstproof_core::export::export_photo_file(
@@ -160,6 +173,436 @@ fn main() {
             std::fs::write(&args[3], jpeg_bytes).expect("Failed to write preview JPEG");
             println!("Extracted embedded preview ({} bytes) to {}", std::fs::metadata(&args[3]).unwrap().len(), args[3]);
         }
+        "compare-passes" => {
+            let path = &args[2];
+            let (bw, bh, binned_bytes) = firstproof_core::export::decode_raw_preview_binned_buffer(path).expect("decode binned");
+            let (fw, fh, full_bytes) = firstproof_core::export::decode_raw_preview_buffer(path, None).expect("decode full");
+            println!("Binned: {}x{}, Full: {}x{}", bw, bh, fw, fh);
+
+            let points = [
+                ("Center", bw / 2, bh / 2),
+                ("Sky / Cloud", (4560 / 2) as u32, (680 / 2) as u32),
+                ("Trellis Sky", (3600 / 2) as u32, (800 / 2) as u32),
+                ("Top-Left Sky", (560 / 2) as u32, (160 / 2) as u32),
+                ("Shadow Grass", (1000 / 2) as u32, (3000 / 2) as u32),
+                ("Midtone Wall", (2000 / 2) as u32, (2000 / 2) as u32),
+            ];
+
+            for (label, bx, by) in points {
+                let b_idx = ((by * bw + bx) * 8) as usize;
+                let rb = f16_to_f32(u16::from_le_bytes([binned_bytes[b_idx], binned_bytes[b_idx + 1]]));
+                let gb = f16_to_f32(u16::from_le_bytes([binned_bytes[b_idx + 2], binned_bytes[b_idx + 3]]));
+                let bb = f16_to_f32(u16::from_le_bytes([binned_bytes[b_idx + 4], binned_bytes[b_idx + 5]]));
+
+                let fx = bx * 2;
+                let fy = by * 2;
+                let f_idx = ((fy * fw + fx) * 8) as usize;
+                let rf = f16_to_f32(u16::from_le_bytes([full_bytes[f_idx], full_bytes[f_idx + 1]]));
+                let gf = f16_to_f32(u16::from_le_bytes([full_bytes[f_idx + 2], full_bytes[f_idx + 3]]));
+                let bf = f16_to_f32(u16::from_le_bytes([full_bytes[f_idx + 4], full_bytes[f_idx + 5]]));
+
+                let (_hb, _sb, _) = firstproof_core::color::rgb_to_hsv(rb, gb, bb);
+                let (_hf, _sf, _) = firstproof_core::color::rgb_to_hsv(rf, gf, bf);
+
+                // Convert both to display sRGB via CameraStandard
+                let cs_disp = |r_lin: f32, g_lin: f32, b_lin: f32| -> (u8, u8, u8, f32, f32) {
+                    let c_srgb = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(firstproof_core::color::Color3::new(r_lin, g_lin, b_lin));
+                    let dcp = firstproof_core::color::dcp::DcpProfile::built_in_for_camera("Canon EOS 60D");
+                    let curve = dcp.tone_curve.as_deref().unwrap_or(&[]);
+                    let curved_r = firstproof_core::color::dcp::evaluate_tone_curve(c_srgb.r().max(0.0), curve);
+                    let curved_g = firstproof_core::color::dcp::evaluate_tone_curve(c_srgb.g().max(0.0), curve);
+                    let curved_b = firstproof_core::color::dcp::evaluate_tone_curve(c_srgb.b().max(0.0), curve);
+                    let dr = (firstproof_core::color::linear_to_srgb_gamma(curved_r) * 255.0).round().clamp(0.0, 255.0) as u8;
+                    let dg = (firstproof_core::color::linear_to_srgb_gamma(curved_g) * 255.0).round().clamp(0.0, 255.0) as u8;
+                    let db = (firstproof_core::color::linear_to_srgb_gamma(curved_b) * 255.0).round().clamp(0.0, 255.0) as u8;
+                    let (h, s, _) = firstproof_core::color::rgb_to_hsv(dr as f32 / 255.0, dg as f32 / 255.0, db as f32 / 255.0);
+                    (dr, dg, db, h, s)
+                };
+                let (dr_b, dg_b, db_b, dh_b, ds_b) = cs_disp(rb, gb, bb);
+                let (dr_f, dg_f, db_f, dh_f, ds_f) = cs_disp(rf, gf, bf);
+
+                let lr_path = Path::new("/Users/blikkie/Pictures/Lightroom Export/2016/2016-03-26/_MG_3717_edited.jpg");
+                let lr_info = if let Ok(lr_img) = image::open(lr_path).map(|i| i.to_rgb8()) {
+                    let lp = lr_img.get_pixel(fx.min(lr_img.width() - 1), fy.min(lr_img.height() - 1));
+                    let (lh, ls, _) = firstproof_core::color::rgb_to_hsv(lp[0] as f32 / 255.0, lp[1] as f32 / 255.0, lp[2] as f32 / 255.0);
+                    format!(" | LR: RGB=({}, {}, {}), H={:.1}°, S={:.3}", lp[0], lp[1], lp[2], lh, ls)
+                } else {
+                    String::new()
+                };
+
+                println!("=== {} (binned bx={}, by={} | full fx={}, fy={}) ===", label, bx, by, fx, fy);
+                println!("  Pass 1 (Binned): Rec=({:.4}, {:.4}, {:.4}) -> CamStd RGB=({}, {}, {}), H={:.1}°, S={:.3}", rb, gb, bb, dr_b, dg_b, db_b, dh_b, ds_b);
+                println!("  Pass 2 (Full):   Rec=({:.4}, {:.4}, {:.4}) -> CamStd RGB=({}, {}, {}), H={:.1}°, S={:.3}{}", rf, gf, bf, dr_f, dg_f, db_f, dh_f, ds_f, lr_info);
+            }
+        }
+        "lr-slice" => {
+            let lr_path = Path::new("/Users/blikkie/Pictures/Lightroom Export/2016/2016-03-26/_MG_3717_edited.jpg");
+            let lr_img = image::open(lr_path).unwrap().to_rgb8();
+            println!("Lightroom JPEG: {}x{}", lr_img.width(), lr_img.height());
+            for x in (4400..4900).step_by(20) {
+                let p = lr_img.get_pixel(x, 0);
+                let (h, s, v) = firstproof_core::color::rgb_to_hsv(p[0] as f32 / 255.0, p[1] as f32 / 255.0, p[2] as f32 / 255.0);
+                println!("x={}: RGB=({}, {}, {}), H={:.1}°, S={:.3}, V={:.3}", x, p[0], p[1], p[2], h, s, v);
+            }
+        }
+        "fp-slice" => {
+            let dng_path = &args[2];
+            let decoder = firstproof_core::raw_decoder::RawlerDecoder;
+            use firstproof_core::raw_decoder::RawDecoder;
+            let frame = decoder.decode(Path::new(dng_path)).expect("decode frame");
+            println!("Frame: {}x{}, pattern={:?}, wb={:?}, black={:?}, white={:?}",
+                frame.active_width, frame.active_height, frame.cfa_pattern, frame.wb_coeffs, frame.black_levels, frame.white_levels);
+            let limit = frame.linear_response_limit;
+            println!("Linear response limit: {}", limit);
+
+            // Print raw RGGB for each 2x2 binned block along y=0
+            let raw_data = &frame.sensor_data;
+            let _w = frame.active_width;
+            for x_full in (4400..4900).step_by(20) {
+                let bx = (x_full / 2) as usize;
+                let by = 0usize;
+                let sy = frame.active_y + by * 2;
+                let sx = frame.active_x + bx * 2;
+                let p00 = raw_data[sy * frame.full_width + sx] as f32;
+                let p01 = raw_data[sy * frame.full_width + sx + 1] as f32;
+                let p10 = raw_data[(sy + 1) * frame.full_width + sx] as f32;
+                let p11 = raw_data[(sy + 1) * frame.full_width + sx + 1] as f32;
+                let norm = |p: f32, ch: usize| -> f32 {
+                    let b = frame.black_levels[ch];
+                    let w = frame.white_levels[ch];
+                    ((p - b) / (w - b)).clamp(0.0, 1.0)
+                };
+                let norm_00 = norm(p00, 0);
+                let norm_01 = norm(p01, 1);
+                let norm_10 = norm(p10, 2);
+                let norm_11 = norm(p11, 3);
+                let (r_norm, g_norm, b_norm) = match frame.cfa_pattern {
+                    firstproof_engine::raw::CfaPattern::Gbrg => (norm_10, (norm_00 + norm_11) * 0.5, norm_01),
+                    _ => (norm_00, (norm_01 + norm_10) * 0.5, norm_11),
+                };
+                let (r_bl, g_bl, b_bl) = firstproof_engine::raw::blend_sensor_highlights(
+                    r_norm, g_norm, b_norm, frame.wb_coeffs[0], frame.wb_coeffs[2], limit
+                );
+                let sensor_to_rec = frame.compute_sensor_to_rec2020();
+                let baseline_gain = 2.0f32.powf(frame.baseline_exposure);
+                let r_lin = (sensor_to_rec[0][0] * r_bl + sensor_to_rec[0][1] * g_bl + sensor_to_rec[0][2] * b_bl) * baseline_gain;
+                let g_lin = (sensor_to_rec[1][0] * r_bl + sensor_to_rec[1][1] * g_bl + sensor_to_rec[1][2] * b_bl) * baseline_gain;
+                let b_lin = (sensor_to_rec[2][0] * r_bl + sensor_to_rec[2][1] * g_bl + sensor_to_rec[2][2] * b_bl) * baseline_gain;
+                let tm = firstproof_core::color::agx_tone_map_vivid(firstproof_core::color::Color3::new(r_lin, g_lin, b_lin), 1.0);
+                let dr = (tm.r().clamp(0.0, 1.0) * 255.0).round() as u8;
+                let dg = (tm.g().clamp(0.0, 1.0) * 255.0).round() as u8;
+                let db = (tm.b().clamp(0.0, 1.0) * 255.0).round() as u8;
+                let (h, s, _v) = firstproof_core::color::rgb_to_hsv(dr as f32 / 255.0, dg as f32 / 255.0, db as f32 / 255.0);
+                let c_srgb = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(firstproof_core::color::Color3::new(r_lin, g_lin, b_lin));
+                let lum = 0.2126 * c_srgb.r().max(0.0) + 0.7152 * c_srgb.g().max(0.0) + 0.0722 * c_srgb.b().max(0.0);
+                let std_curve = firstproof_core::color::dcp::DcpProfile::built_in_standard_tone_curve();
+                let lum_curved = firstproof_core::color::evaluate_tone_curve(lum, &std_curve);
+                let gain = lum_curved / lum.max(1e-6);
+                let srgb_gamma = |c: f32| -> f32 {
+                    if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.max(0.0).powf(1.0 / 2.4) - 0.055 }
+                };
+                let dr_cs = (srgb_gamma(c_srgb.r().max(0.0) * gain).clamp(0.0, 1.0) * 255.0).round() as u8;
+                let dg_cs = (srgb_gamma(c_srgb.g().max(0.0) * gain).clamp(0.0, 1.0) * 255.0).round() as u8;
+                let db_cs = (srgb_gamma(c_srgb.b().max(0.0) * gain).clamp(0.0, 1.0) * 255.0).round() as u8;
+                let (h_cs, s_cs, _v_cs) = firstproof_core::color::rgb_to_hsv(dr_cs as f32 / 255.0, dg_cs as f32 / 255.0, db_cs as f32 / 255.0);
+
+                let ref_path = Path::new("target/mg3731_camera_ref.jpg");
+                let ref_str = if let Ok(ref_img) = image::open(ref_path).map(|i| i.to_rgb8()) {
+                    let rx = ((x_full as f32) * (ref_img.width() as f32 / frame.active_width as f32)) as u32;
+                    let rp = ref_img.get_pixel(rx.min(ref_img.width() - 1), 0);
+                    let (rh, rs, rv) = firstproof_core::color::rgb_to_hsv(rp[0] as f32 / 255.0, rp[1] as f32 / 255.0, rp[2] as f32 / 255.0);
+                    format!(" | Ref=({}, {}, {}), H={:.1}°, S={:.2}, V={:.2}", rp[0], rp[1], rp[2], rh, rs, rv)
+                } else {
+                    String::new()
+                };
+                println!("x={}: Agx=({}, {}, {}), H={:.1}°, S={:.2} | CamStd=({}, {}, {}), H={:.1}°, S={:.2}{}",
+                    x_full, dr, dg, db, h, s, dr_cs, dg_cs, db_cs, h_cs, s_cs, ref_str);
+            }
+        }
+        "trace-point" => {
+            let dng_path = &args[2];
+            let decoder = firstproof_core::raw_decoder::RawlerDecoder;
+            use firstproof_core::raw_decoder::RawDecoder;
+            let frame = decoder.decode(Path::new(dng_path)).expect("decode frame");
+            let raw_data = &frame.sensor_data;
+            let x: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(4560);
+            let y: usize = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(680);
+            let sy = frame.active_y + y;
+            let sx = frame.active_x + x;
+            let p00 = raw_data[sy * frame.full_width + sx] as f32;
+            let p01 = raw_data[sy * frame.full_width + sx + 1] as f32;
+            let p10 = raw_data[(sy + 1) * frame.full_width + sx] as f32;
+            let p11 = raw_data[(sy + 1) * frame.full_width + sx + 1] as f32;
+            let norm = |p: f32, ch: usize| -> f32 {
+                let b = frame.black_levels[ch];
+                let w = frame.white_levels[ch];
+                ((p - b) / (w - b)).clamp(0.0, 1.0)
+            };
+            let (r_raw, g_raw, b_raw) = match frame.cfa_pattern {
+                firstproof_engine::raw::CfaPattern::Gbrg => (norm(p10, 2), (norm(p00, 0) + norm(p11, 3)) * 0.5, norm(p01, 1)),
+                _ => (norm(p00, 0), (norm(p01, 1) + norm(p10, 2)) * 0.5, norm(p11, 3)),
+            };
+            println!("Point ({}, {}):", x, y);
+            println!("  Raw normalized: R={:.4}, G={:.4}, B={:.4}", r_raw, g_raw, b_raw);
+            let wb_r = frame.wb_coeffs[0];
+            let wb_b = frame.wb_coeffs[2];
+            println!("  WB coeffs: wb_r={:.4}, wb_b={:.4}", wb_r, wb_b);
+            let pr = r_raw * wb_r;
+            let pg = g_raw;
+            let pb = b_raw * wb_b;
+            println!("  After WB: P_R={:.4}, P_G={:.4}, P_B={:.4}", pr, pg, pb);
+            let m = frame.compute_sensor_to_rec2020();
+            println!("  Sensor to Rec2020 matrix:\n    {:?}\n    {:?}\n    {:?}", m[0], m[1], m[2]);
+            let r_rec = m[0][0] * pr + m[0][1] * pg + m[0][2] * pb;
+            let g_rec = m[1][0] * pr + m[1][1] * pg + m[1][2] * pb;
+            let b_rec = m[2][0] * pr + m[2][1] * pg + m[2][2] * pb;
+            println!("  Rec2020: R={:.4}, G={:.4}, B={:.4}", r_rec, g_rec, b_rec);
+            let cm2 = glam::Mat3::from_cols_array(&[
+                0.6719, -0.4408, -0.0887,
+                -0.0994, 1.2426, 0.2129,
+                -0.0925, 0.2211, 0.6051,
+            ]);
+            let cam2xyz = cm2.inverse();
+            println!("  ColorMatrix2 inverse (Camera -> XYZ_D65):\n    {:?}\n    {:?}\n    {:?}",
+                cam2xyz.row(0), cam2xyz.row(1), cam2xyz.row(2));
+            let xyz_to_rec = firstproof_core::color::ColorSpacePrimaries::REC2020.xyz_to_rgb_matrix();
+            let xyz_mat = glam::Mat3::from_cols_array(&[
+                xyz_to_rec.0[0][0], xyz_to_rec.0[1][0], xyz_to_rec.0[2][0],
+                xyz_to_rec.0[0][1], xyz_to_rec.0[1][1], xyz_to_rec.0[2][1],
+                xyz_to_rec.0[0][2], xyz_to_rec.0[1][2], xyz_to_rec.0[2][2],
+            ]);
+            let cam2rec = xyz_mat * cam2xyz;
+            println!("  cam2rec via ColorMatrix:\n    {:?}\n    {:?}\n    {:?}",
+                cam2rec.row(0), cam2rec.row(1), cam2rec.row(2));
+            let r_cm = cam2rec.row(0).x * pr + cam2rec.row(0).y * pg + cam2rec.row(0).z * pb;
+            let g_cm = cam2rec.row(1).x * pr + cam2rec.row(1).y * pg + cam2rec.row(1).z * pb;
+            let b_cm = cam2rec.row(2).x * pr + cam2rec.row(2).y * pg + cam2rec.row(2).z * pb;
+            println!("  Rec2020 via ColorMatrix: R={:.4}, G={:.4}, B={:.4}", r_cm, g_cm, b_cm);
+            let srgb_cm = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(firstproof_core::color::Color3::new(r_cm, g_cm, b_cm));
+            println!("  Linear sRGB via ColorMatrix: R={:.4}, G={:.4}, B={:.4}", srgb_cm.r(), srgb_cm.g(), srgb_cm.b());
+
+            let ref_path = Path::new("target/mg3731_camera_ref.jpg");
+            if let Ok(ref_img) = image::open(ref_path).map(|i| i.to_rgb8()) {
+                let rx = ((x as f32) * (ref_img.width() as f32 / frame.active_width as f32)) as u32;
+                let ry = ((y as f32) * (ref_img.height() as f32 / frame.active_height as f32)) as u32;
+                let rp = ref_img.get_pixel(rx.min(ref_img.width() - 1), ry.min(ref_img.height() - 1));
+                let (rh, rs, rv) = firstproof_core::color::rgb_to_hsv(rp[0] as f32 / 255.0, rp[1] as f32 / 255.0, rp[2] as f32 / 255.0);
+                println!("  Camera Ref JPEG: RGB=({}, {}, {}), H={:.1}°, S={:.3}, V={:.3}", rp[0], rp[1], rp[2], rh, rs, rv);
+            }
+        }
+        "inspect-trellis" => {
+            let fp_path = args.get(2).map(|s| Path::new(s.as_str())).unwrap_or(Path::new("target/cam_std.jpg"));
+            let ref_path = Path::new("target/mg3731_camera_ref.jpg");
+            let fp_img = image::open(fp_path).unwrap().to_rgb8();
+            let ref_img = image::open(ref_path).unwrap().to_rgb8();
+            println!("Scanning right side trellis region (x=3500..5100, y=500..1800)...");
+            let mut fp_magenta_count = 0;
+            let mut ref_magenta_count = 0;
+            let sx = ref_img.width() as f32 / fp_img.width() as f32;
+            let sy = ref_img.height() as f32 / fp_img.height() as f32;
+            for y in (500..1800).step_by(20) {
+                for x in (3500..5100).step_by(20) {
+                    let fp = fp_img.get_pixel(x, y);
+                    let rx = ((x as f32) * sx) as u32;
+                    let ry = ((y as f32) * sy) as u32;
+                    let rp = ref_img.get_pixel(rx, ry);
+                    let (fh, fs, _fv) = firstproof_core::color::rgb_to_hsv(fp[0] as f32 / 255.0, fp[1] as f32 / 255.0, fp[2] as f32 / 255.0);
+                    let (rh, rs, _rv) = firstproof_core::color::rgb_to_hsv(rp[0] as f32 / 255.0, rp[1] as f32 / 255.0, rp[2] as f32 / 255.0);
+                    if fh >= 235.0 && fh <= 340.0 && fs > 0.05 {
+                        fp_magenta_count += 1;
+                        if fp_magenta_count <= 8 {
+                            println!("Trellis Magenta at (x={}, y={}): FP=({}, {}, {}), H={:.1}°, S={:.3} | Ref=({}, {}, {}), H={:.1}°, S={:.3}",
+                                x, y, fp[0], fp[1], fp[2], fh, fs, rp[0], rp[1], rp[2], rh, rs);
+                        }
+                    }
+                    if rh >= 235.0 && rh <= 340.0 && rs > 0.05 {
+                        ref_magenta_count += 1;
+                    }
+                }
+            }
+            println!("Trellis region: FP magenta samples={}, Ref magenta samples={}", fp_magenta_count, ref_magenta_count);
+        }
+        "find-magenta" => {
+            let dng_path = &args[2];
+            let (bw, bh, binned_bytes) = decode_raw_preview_binned_buffer(dng_path).expect("decode binned");
+            println!("Scanning binned image {}x{} for magenta (H in 260..340, S > 0.05)...", bw, bh);
+            let mut magenta_count = 0;
+            for by in (0..bh).step_by(10) {
+                for bx in (0..bw).step_by(10) {
+                    let b_idx = ((by * bw + bx) * 8) as usize;
+                    let r_f16 = u16::from_ne_bytes([binned_bytes[b_idx], binned_bytes[b_idx + 1]]);
+                    let g_f16 = u16::from_ne_bytes([binned_bytes[b_idx + 2], binned_bytes[b_idx + 3]]);
+                    let b_f16 = u16::from_ne_bytes([binned_bytes[b_idx + 4], binned_bytes[b_idx + 5]]);
+                    let r_lin = f16_to_f32(r_f16);
+                    let g_lin = f16_to_f32(g_f16);
+                    let b_lin = f16_to_f32(b_f16);
+                    let tm = firstproof_core::color::agx_tone_map_vivid(firstproof_core::color::Color3::new(r_lin, g_lin, b_lin), 1.0);
+                    let dr = tm.r().clamp(0.0, 1.0);
+                    let dg = tm.g().clamp(0.0, 1.0);
+                    let db = tm.b().clamp(0.0, 1.0);
+                    let (h, s, _v) = firstproof_core::color::rgb_to_hsv(dr, dg, db);
+                    if h >= 235.0 && h <= 340.0 && s > 0.05 {
+                        magenta_count += 1;
+                        if magenta_count <= 10 {
+                            println!("Magenta at (x={}, y={}): FP AgxVivid RGB=({:.0}, {:.0}, {:.0}), H={:.1}°, S={:.3}, Rec2020=({:.3}, {:.3}, {:.3})",
+                                bx * 2, by * 2, dr * 255.0, dg * 255.0, db * 255.0, h, s, r_lin, g_lin, b_lin);
+                        }
+                    }
+                    if (bx * 2 == 560 && by * 2 == 160) || (bx * 2 == 360 && by * 2 == 600) {
+                        let lr_path = Path::new("/Users/blikkie/Pictures/Lightroom Export/2016/2016-03-26/_MG_3717_edited.jpg");
+                        if let Ok(lr_img) = image::open(lr_path).map(|i| i.to_rgb8()) {
+                            let lp = lr_img.get_pixel(bx * 2 as u32, by * 2 as u32);
+                            let (lh, ls, _lv) = firstproof_core::color::rgb_to_hsv(lp[0] as f32 / 255.0, lp[1] as f32 / 255.0, lp[2] as f32 / 255.0);
+
+                            println!("POINT (x={}, y={}):", bx * 2, by * 2);
+                            println!("  FP AgxVivid:   RGB=({:.0}, {:.0}, {:.0}), H={:.1}°, S={:.3}", dr * 255.0, dg * 255.0, db * 255.0, h, s);
+                            println!("  LR (Reference):RGB=({}, {}, {}), H={:.1}°, S={:.3}", lp[0], lp[1], lp[2], lh, ls);
+                        }
+                    }
+                }
+            }
+            println!("Total magenta sample points found: {}", magenta_count);
+        }
+        "audit-sky" => {
+            let dng_path = &args[2];
+            let ref_path = Path::new("target/mg3731_camera_ref.jpg");
+            let ref_img = image::open(ref_path).ok().map(|i| i.to_rgb8());
+            let (bw, bh, binned_bytes) = decode_raw_preview_binned_buffer(dng_path).expect("decode binned");
+            println!("Auditing Sky Pixels in {} (binned {}x{})...", dng_path, bw, bh);
+            let mut total_sky_points = 0;
+            let mut agx_magenta_points = 0;
+            let mut camstd_magenta_points = 0;
+            let mut ref_magenta_points = 0;
+            let mut sum_agx_hue = 0.0f32;
+            let mut sum_camstd_hue = 0.0f32;
+            let mut sum_ref_hue = 0.0f32;
+
+            let std_curve = firstproof_core::color::dcp::DcpProfile::built_in_standard_tone_curve();
+
+            for by in (0..bh / 2).step_by(5) {
+                for bx in (0..bw).step_by(5) {
+                    let b_idx = ((by * bw + bx) * 8) as usize;
+                    let r_lin = f16_to_f32(u16::from_ne_bytes([binned_bytes[b_idx], binned_bytes[b_idx + 1]]));
+                    let g_lin = f16_to_f32(u16::from_ne_bytes([binned_bytes[b_idx + 2], binned_bytes[b_idx + 3]]));
+                    let b_lin = f16_to_f32(u16::from_ne_bytes([binned_bytes[b_idx + 4], binned_bytes[b_idx + 5]]));
+
+                    // Sky pixel criteria in Linear Rec.2020: Blue dominant over Red, reasonable brightness
+                    if b_lin > r_lin * 1.15 && b_lin > 0.08 {
+                        total_sky_points += 1;
+
+                        // 1. AgX Vivid
+                        let tm = firstproof_core::color::agx_tone_map_vivid(firstproof_core::color::Color3::new(r_lin, g_lin, b_lin), 1.0);
+                        let (h_agx, s_agx, _) = firstproof_core::color::rgb_to_hsv(tm.r().clamp(0.0, 1.0), tm.g().clamp(0.0, 1.0), tm.b().clamp(0.0, 1.0));
+                        sum_agx_hue += h_agx;
+                        if h_agx >= 230.0 && h_agx <= 340.0 && s_agx > 0.05 {
+                            agx_magenta_points += 1;
+                        }
+
+                        // 2. CameraStandard
+                        let c_srgb = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(firstproof_core::color::Color3::new(r_lin, g_lin, b_lin));
+                        let lum = 0.2126 * c_srgb.r().max(0.0) + 0.7152 * c_srgb.g().max(0.0) + 0.0722 * c_srgb.b().max(0.0);
+                        let lum_curved = firstproof_core::color::evaluate_tone_curve(lum, &std_curve);
+                        let gain = lum_curved / lum.max(1e-6);
+                        let srgb_gamma = |c: f32| -> f32 {
+                            if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.max(0.0).powf(1.0 / 2.4) - 0.055 }
+                        };
+                        let dr_cs = srgb_gamma(c_srgb.r().max(0.0) * gain).clamp(0.0, 1.0);
+                        let dg_cs = srgb_gamma(c_srgb.g().max(0.0) * gain).clamp(0.0, 1.0);
+                        let db_cs = srgb_gamma(c_srgb.b().max(0.0) * gain).clamp(0.0, 1.0);
+                        let (h_cs, s_cs, _) = firstproof_core::color::rgb_to_hsv(dr_cs, dg_cs, db_cs);
+                        sum_camstd_hue += h_cs;
+                        if h_cs >= 230.0 && h_cs <= 340.0 && s_cs > 0.05 {
+                            camstd_magenta_points += 1;
+                        }
+
+                        // 3. Camera Reference JPEG
+                        if let Some(ref r_img) = ref_img {
+                            let rx = ((bx * 2) as f32 * (r_img.width() as f32 / (bw * 2) as f32)) as u32;
+                            let ry = ((by * 2) as f32 * (r_img.height() as f32 / (bh * 2) as f32)) as u32;
+                            let rp = r_img.get_pixel(rx.min(r_img.width() - 1), ry.min(r_img.height() - 1));
+                            let (h_ref, s_ref, _) = firstproof_core::color::rgb_to_hsv(rp[0] as f32 / 255.0, rp[1] as f32 / 255.0, rp[2] as f32 / 255.0);
+                            sum_ref_hue += h_ref;
+                            if h_ref >= 230.0 && h_ref <= 340.0 && s_ref > 0.05 {
+                                ref_magenta_points += 1;
+                            }
+                        }
+
+                        if total_sky_points <= 5 || total_sky_points == 200 || total_sky_points == 27400 || total_sky_points == 39600 {
+                            println!("Sky Point #{} (x={}, y={}): Rec2020=({:.3}, {:.3}, {:.3}) | AgxVivid H={:.1}°, S={:.2} | CamStd H={:.1}°, S={:.2}",
+                                total_sky_points, bx * 2, by * 2, r_lin, g_lin, b_lin, h_agx, s_agx, h_cs, s_cs);
+                        }
+                    }
+                }
+            }
+            if total_sky_points > 0 {
+                let n = total_sky_points as f32;
+                println!("\n=== SKY AUDIT RESULTS across {} sky sample points ===", total_sky_points);
+                println!("AgX Vivid:        Mean Hue = {:.1}°, Points with H >= 230°: {} ({:.1}%)",
+                    sum_agx_hue / n, agx_magenta_points, (agx_magenta_points as f32 / n) * 100.0);
+                println!("CameraStandard:   Mean Hue = {:.1}°, Points with H >= 230°: {} ({:.1}%)",
+                    sum_camstd_hue / n, camstd_magenta_points, (camstd_magenta_points as f32 / n) * 100.0);
+                println!("Camera Ref JPEG:  Mean Hue = {:.1}°, Points with H >= 230°: {} ({:.1}%)",
+                    sum_ref_hue / n, ref_magenta_points, (ref_magenta_points as f32 / n) * 100.0);
+
+                println!("\n=== TINT SWEEP AUDIT (AgX Vivid & CameraStandard) ===");
+                for test_tint in [-15.0, -12.0, -10.0, -8.0, -6.0, -4.0, -2.0, 0.0, 2.0, 5.0] {
+                    let tint_factor = test_tint as f32 * 0.002f32;
+                    let g_scale = (1.0f32 - tint_factor).max(0.01);
+                    let r_scale = (1.0f32 + tint_factor * 0.5).max(0.01);
+                    let b_scale = (1.0f32 + tint_factor * 0.5).max(0.01);
+
+                    let mut agx_mag = 0;
+                    let mut cam_mag = 0;
+                    let mut agx_sum_h = 0.0f32;
+                    let mut cam_sum_h = 0.0f32;
+
+                    for by in (0..bh / 2).step_by(10) {
+                        for bx in (0..bw).step_by(10) {
+                            let b_idx = ((by * bw + bx) * 8) as usize;
+                            let r_lin = f16_to_f32(u16::from_ne_bytes([binned_bytes[b_idx], binned_bytes[b_idx + 1]]));
+                            let g_lin = f16_to_f32(u16::from_ne_bytes([binned_bytes[b_idx + 2], binned_bytes[b_idx + 3]]));
+                            let b_lin = f16_to_f32(u16::from_ne_bytes([binned_bytes[b_idx + 4], binned_bytes[b_idx + 5]]));
+
+                            if b_lin > r_lin * 1.15 && b_lin > 0.08 {
+                                let r_adj = r_lin * r_scale;
+                                let g_adj = g_lin * g_scale;
+                                let b_adj = b_lin * b_scale;
+
+                                // AgX Vivid
+                                let tm = firstproof_core::color::agx_tone_map_vivid(firstproof_core::color::Color3::new(r_adj, g_adj, b_adj), 1.0);
+                                let (h_a, s_a, _) = firstproof_core::color::rgb_to_hsv(tm.r().clamp(0.0, 1.0), tm.g().clamp(0.0, 1.0), tm.b().clamp(0.0, 1.0));
+                                agx_sum_h += h_a;
+                                if h_a >= 230.0 && h_a <= 340.0 && s_a > 0.05 {
+                                    agx_mag += 1;
+                                }
+
+                                // CamStd
+                                let c_srgb = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(firstproof_core::color::Color3::new(r_adj, g_adj, b_adj));
+                                let lum = 0.2126 * c_srgb.r().max(0.0) + 0.7152 * c_srgb.g().max(0.0) + 0.0722 * c_srgb.b().max(0.0);
+                                let lum_curved = firstproof_core::color::evaluate_tone_curve(lum, &std_curve);
+                                let gain = lum_curved / lum.max(1e-6);
+                                let srgb_gamma = |c: f32| -> f32 {
+                                    if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.max(0.0).powf(1.0 / 2.4) - 0.055 }
+                                };
+                                let (h_c, s_c, _) = firstproof_core::color::rgb_to_hsv(
+                                    srgb_gamma(c_srgb.r().max(0.0) * gain).clamp(0.0, 1.0),
+                                    srgb_gamma(c_srgb.g().max(0.0) * gain).clamp(0.0, 1.0),
+                                    srgb_gamma(c_srgb.b().max(0.0) * gain).clamp(0.0, 1.0),
+                                );
+                                cam_sum_h += h_c;
+                                if h_c >= 230.0 && h_c <= 340.0 && s_c > 0.05 {
+                                    cam_mag += 1;
+                                }
+                            }
+                        }
+                    }
+                    let count = (n / 4.0).max(1.0);
+                    println!("Tint {:+5.1}: AgX Mean H={:5.1}°, Mag={:4} ({:4.1}%) | CamStd Mean H={:5.1}°, Mag={:4} ({:4.1}%)",
+                        test_tint, agx_sum_h / count, agx_mag, (agx_mag as f32 / count) * 100.0,
+                        cam_sum_h / count, cam_mag, (cam_mag as f32 / count) * 100.0);
+                }
+            }
+        }
         "dump-dng-profile" => {
             let path = Path::new(&args[2]);
             let bytes = std::fs::read(path).unwrap();
@@ -174,10 +617,10 @@ fn main() {
                     println!("Forward Matrix 2:\n{:?}", profile.forward_matrix2.map(|m| m.0));
                     let m_fwd = profile.interpolate_sensor_to_rec2020(2856.0);
                     println!("Derived Sensor to Rec.2020 at 2856K with ForwardMatrix:\n{:?}", m_fwd.0);
-                    let d50_to_d65 = firstproof_core::color::cat16_adaptation_matrix((0.3457, 0.3585), (0.3127, 0.3290));
+                    let d50_to_d65 = firstproof_core::color::bradford_adaptation_matrix((0.3457, 0.3585), (0.3127, 0.3290));
                     let xyz_to_rec2020 = firstproof_core::color::ColorSpacePrimaries::REC2020.xyz_to_rgb_matrix();
                     let d50_to_rec2020 = xyz_to_rec2020.multiply_matrix(&d50_to_d65);
-                    println!("Universal XYZ_D50 -> Linear Rec.2020 Matrix:\n{:?}", d50_to_rec2020.0);
+                    println!("Universal Bradford XYZ_D50 -> Linear Rec.2020 Matrix:\n{:?}", d50_to_rec2020.0);
                     println!("Tone curve present: {}", profile.tone_curve.is_some());
                     println!("HueSatMap 1 present: {}", profile.hue_sat_map1.is_some());
                     println!("HueSatMap 2 present: {}", profile.hue_sat_map2.is_some());

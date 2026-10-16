@@ -139,11 +139,18 @@ pub fn agx_tone_map(c: Color3, contrast_gain: f32) -> Color3 {
 /// This eliminates all non-linear HSV singularities, hue-angle twisting, circular threshold jumps,
 /// and shadow noise amplification, preserving smooth, continuous skin tones and noise-safe shadows.
 pub fn agx_tone_map_vivid(c: Color3, contrast_gain: f32) -> Color3 {
-    let punchy_contrast = contrast_gain * 1.15;
+    let punchy_contrast = contrast_gain * 1.35;
     let base = agx_tone_map(c, punchy_contrast);
 
     let lum = 0.2126 * base.r() + 0.7152 * base.g() + 0.0722 * base.b();
-    let sat = 1.20;
+    let sat = if lum > 0.65 {
+        let t = ((lum - 0.65) / 0.35).min(1.0);
+        let h = t * t * (3.0 - 2.0 * t);
+        1.25 - 0.25 * h
+    } else {
+        1.25
+    };
+
     Color3::new(
         (lum + sat * (base.r() - lum)).clamp(0.0, 1.0),
         (lum + sat * (base.g() - lum)).clamp(0.0, 1.0),

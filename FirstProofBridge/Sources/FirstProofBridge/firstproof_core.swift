@@ -3945,6 +3945,13 @@ public func getAllAdjustments() -> [AdjustmentDescriptor] {
     )
 })
 }
+public func getAsShotWhiteBalance(path: String) -> WhiteBalanceResult? {
+    return try!  FfiConverterOptionTypeWhiteBalanceResult.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_get_as_shot_white_balance(
+        FfiConverterString.lower(path),$0
+    )
+})
+}
 public func getBuiltinCubeLut(title: String, size: UInt32) -> CubeLutRecord? {
     return try!  FfiConverterOptionTypeCubeLutRecord.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_get_builtin_cube_lut(
@@ -4122,6 +4129,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_get_all_adjustments() != 61677) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_get_as_shot_white_balance() != 29959) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut() != 34257) {

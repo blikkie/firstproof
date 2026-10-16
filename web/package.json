@@ -10,7 +10,7 @@
     "lint": "biome check src",
     "lint:fix": "biome check --write src",
     "format": "biome format --write src",
-    "test": "vitest run",
+    "test": "vitest run --environment happy-dom",
     "preview": "vite preview"
   },
   "devDependencies": {

@@ -85,18 +85,14 @@ struct InspectorView: View {
                 
                 // Active Workspace Tab View
                 switch viewModel.selectedInspectorTab {
-                case .light:
-                    LightWorkspaceView()
-                case .color:
-                    ColorWorkspaceView()
+                case .develop:
+                    DevelopWorkspaceView()
                 case .optics:
                     OpticsGeometryWorkspaceView()
-                case .detail:
-                    DetailWorkspaceView()
                 case .emulsion:
                     EmulsionWorkspaceView()
-                case .metadata:
-                    MetadataWorkspaceView(photo: photo)
+                case .detail:
+                    DetailWorkspaceView()
                 }
                 
                 Divider()

@@ -180,6 +180,8 @@ impl SyntheticTestChart {
             height: self.height as usize,
             data: self.rec2020_data.clone(),
             is_raw: true,
+            as_shot_temperature: Some(5500.0),
+            as_shot_tint: Some(0.0),
             baseline_sharpness: 1.0,
             profile_tone_curve: None,
             warp_rectilinear: None,

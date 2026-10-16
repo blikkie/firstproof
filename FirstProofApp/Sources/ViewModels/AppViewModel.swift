@@ -216,23 +216,19 @@ public enum LibraryScope: Hashable, Equatable {
 }
 
 public enum InspectorTab: String, CaseIterable, Identifiable {
-    case light = "Light"
-    case color = "Color"
+    case develop = "Develop"
     case optics = "Optics"
-    case detail = "Detail"
     case emulsion = "Emulsion"
-    case metadata = "Info"
+    case detail = "Detail"
     
     public var id: String { rawValue }
     
     public var iconName: String {
         switch self {
-        case .light: return "sun.max.fill"
-        case .color: return "paintpalette.fill"
+        case .develop: return "slider.horizontal.3"
         case .optics: return "crop.rotate"
-        case .detail: return "slider.horizontal.2.square"
         case .emulsion: return "film"
-        case .metadata: return "info.circle.fill"
+        case .detail: return "slider.horizontal.2.square"
         }
     }
 }
@@ -443,7 +439,7 @@ public final class AppViewModel {
     public var cropAspectRatioPreset: CropAspectRatioPreset = .original
     @ObservationIgnored public var cropSessionSnapshot: CropSessionSnapshot? = nil
     public var lensCorrectionEnabled: Bool = true
-    public var toneProfile: ColorProfileMode = .agxVivid
+    public var toneProfile: ColorProfileMode = .cameraStandard
     public var selectedLutName: String? = nil
     public var lutIntensity: Float = 1.0
     public var availableLutTitles: [String] = []
@@ -451,7 +447,7 @@ public final class AppViewModel {
     public var curves: ToneCurvesRecord = .defaultIdentity
     
     // MARK: - Workspace Navigation & Tabs
-    public var selectedInspectorTab: InspectorTab = .light
+    public var selectedInspectorTab: InspectorTab = .develop
     public var rotationDegrees: Int = 0 // 0, 90, 180, 270
     public var flipHorizontal: Bool = false
     public var flipVertical: Bool = false

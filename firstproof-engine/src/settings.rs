@@ -93,7 +93,7 @@ impl Default for EditSettings {
             rotation: 0,
             flip_horizontal: false,
             flip_vertical: false,
-            tone_profile: ColorProfileMode::AgxVivid,
+            tone_profile: ColorProfileMode::CameraStandard,
             lut_name: None,
             lut_intensity: 1.0,
             sharpening_amount: 0.0,

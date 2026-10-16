@@ -156,7 +156,9 @@ public struct MetalCanvasView: NSViewRepresentable {
             lensCoefficients: viewModel.isIntermediatePreviewActive ? nil : viewModel.lensCoefficients,
             edrHeadroom: viewModel.isScreenHdrCapable ? viewModel.edrHeadroom : 1.0,
             edrEnabled: viewModel.isScreenHdrCapable && viewModel.isHdrEnabled,
-            isIntermediate: viewModel.isIntermediatePreviewActive
+            isIntermediate: viewModel.isIntermediatePreviewActive,
+            asShotTemperature: viewModel.asShotTemperature,
+            asShotTint: viewModel.asShotTint
         )
         
         // 3. Update 3D LUT texture if LUT selection changed
@@ -226,7 +228,9 @@ public struct MetalCanvasView: NSViewRepresentable {
                 isOriginal: false,
                 isCropToolActive: false,
                 lensCorrectionEnabled: vm.lensCorrectionEnabled,
-                lensCoefficients: vm.lensCoefficients
+                lensCoefficients: vm.lensCoefficients,
+                asShotTemperature: vm.asShotTemperature,
+                asShotTint: vm.asShotTint
             )
             return renderer.renderThumbnailSnapshot(maxDimension: 320)
         }
@@ -255,7 +259,9 @@ public struct MetalCanvasView: NSViewRepresentable {
                 isOriginal: false,
                 isCropToolActive: false,
                 lensCorrectionEnabled: vm.lensCorrectionEnabled,
-                lensCoefficients: vm.lensCoefficients
+                lensCoefficients: vm.lensCoefficients,
+                asShotTemperature: vm.asShotTemperature,
+                asShotTint: vm.asShotTint
             )
             return renderer.renderThumbnailSnapshot(maxDimension: 2560)
         }

@@ -209,6 +209,17 @@ All 7 lenses (Lenses 1 through 7) completed and archived in [completed.md](compl
   - Elevate `firstproof_mcp.py` to a production-grade Model Context Protocol server exposing formal tools for darkroom automation, live diagnostics, and color parity verification.
   - Author complete documentation in `docs/architecture/cli_and_mcp.md` detailing CLI usage, socket IPC protocols, and MCP integration for photographers and studio engineers.
 
+### 4.10 Optical Chromatic Aberration Correction: Lateral TCA & Longitudinal Defringe (P1)
+- **Problem Statement & Physical Sensitometrics**:
+  - High-contrast optical transitions (e.g. tree branches, window frames, architectural slats, and trellis wood against high-radiance sky) exhibit physical chromatic dispersion. Lateral (transverse) chromatic aberration manifests as radial color separation (red/cyan or blue/yellow fringes), while longitudinal (axial) chromatic aberration produces out-of-focus purple or green fringing.
+  - When filmic tone mappers or wide-gamut saturation boosts (`AgxVivid`) are applied, subtle 2–3 count optical color fringes are amplified into visible unnatural halos.
+- **Transverse Chromatic Aberration (TCA) Pipeline Integration**:
+  - Consume pre-indexed Lensfun TCA polynomial coefficients ($r' = [v_0 + v_1 r^2] \cdot r$) already parsed in `firstproof-core/src/lensfun.rs` (`has_tca`, `tca: Vec<f32>`).
+  - Implement radial coordinate scaling per channel in the vertex and fragment pipeline (`Geometry.metal`, `FragmentShader.ts`) and archival demosaic export engine (`export/pipeline.rs`) to geometrically realign Red and Blue channel samples to Green before demosaicing and viewport rendering.
+- **Longitudinal / Axial Purple Defringing**:
+  - Implement edge-directed chromaticity attenuation on high-contrast specular borders to suppress residual purple/violet fringing.
+  - Anchor defringe qualification to physical hue bands ($260^\circ - 340^\circ$) with smooth analytical edge-luminance weighting, preventing desaturation of legitimate subject colors (flowers, fabrics).
+
 ---
 
 ## Phase 5: Post-v1 & Long-Term Vision

@@ -358,7 +358,8 @@ public struct AsyncThumbnailView: View {
     
     private func loadThumbnail() {
         let xmp = readXmp(path: filePath)
-        let hasEdits = xmp.map { editsHasModifications(edits: $0.edits, asShotTemp: 5500.0, asShotTint: 0.0) } ?? false
+        let asShot = getAsShotWhiteBalance(path: filePath)
+        let hasEdits = xmp.map { editsHasModifications(edits: $0.edits, asShotTemp: asShot?.temperature ?? 5500.0, asShotTint: asShot?.tint ?? 0.0) } ?? false
         
         // Exact edited thumbnail hit (RAM or Disk)
         if let cached = ThumbnailCache.shared.image(for: filePath, edits: xmp?.edits) {

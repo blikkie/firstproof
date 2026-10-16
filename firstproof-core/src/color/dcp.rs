@@ -26,6 +26,9 @@ pub const TAG_PROFILE_HUE_SAT_MAP_DATA_2: u16 = 50941; // 0xC6FD
 pub const TAG_PROFILE_HUE_SAT_MAP_ENCODING: u16 = 50942; // 0xC6FE
 pub const TAG_FORWARD_MATRIX_1: u16 = 50964;     // 0xC714
 pub const TAG_FORWARD_MATRIX_2: u16 = 50965;     // 0xC715
+pub const TAG_PROFILE_LOOK_TABLE_DIMS: u16 = 50981;   // 0xC725
+pub const TAG_PROFILE_LOOK_TABLE_DATA: u16 = 50982;   // 0xC726
+pub const TAG_PROFILE_LOOK_TABLE_ENCODING: u16 = 50983; // 0xC727
 
 // Standard DNG Illuminant IDs
 pub const ILLUMINANT_DAYLIGHT: u16 = 1;
@@ -232,7 +235,7 @@ impl DcpHueSatMap {
             h_out += 360.0;
         }
         let s_out = (s * ds).clamp(0.0, 1.0);
-        let v_out = (v * dv).clamp(0.0, 1.0);
+        let v_out = (v * dv).max(0.0);
         (h_out, s_out, v_out)
     }
 
@@ -275,6 +278,7 @@ pub struct DcpProfile {
     pub tone_curve: Option<Vec<(f32, f32)>>,
     pub hue_sat_map1: Option<DcpHueSatMap>,
     pub hue_sat_map2: Option<DcpHueSatMap>,
+    pub look_table: Option<DcpHueSatMap>,
 }
 
 impl DcpProfile {
@@ -347,6 +351,8 @@ impl DcpProfile {
         let mut hue_sat_dims: Option<(usize, usize, usize)> = None;
         let mut hue_sat_data1: Option<Vec<(f32, f32, f32)>> = None;
         let mut hue_sat_data2: Option<Vec<(f32, f32, f32)>> = None;
+        let mut look_table_dims: Option<(usize, usize, usize)> = None;
+        let mut look_table_data: Option<Vec<(f32, f32, f32)>> = None;
 
         for _ in 0..num_entries {
             if entry_offset + 12 > data.len() {
@@ -476,6 +482,39 @@ impl DcpProfile {
                         }
                         hue_sat_data2 = Some(triplets);
                     }
+                TAG_PROFILE_LOOK_TABLE_DIMS => {
+                    if count == 3 {
+                        let bytes_needed = if field_type == 3 { 6 } else { 12 };
+                        let byte_offset = resolve_offset(bytes_needed)?;
+                        let (h, s, v) = if field_type == 3 {
+                            (
+                                read_u16(byte_offset)? as usize,
+                                read_u16(byte_offset + 2)? as usize,
+                                read_u16(byte_offset + 4)? as usize,
+                            )
+                        } else {
+                            (
+                                read_u32(byte_offset)? as usize,
+                                read_u32(byte_offset + 4)? as usize,
+                                read_u32(byte_offset + 8)? as usize,
+                            )
+                        };
+                        look_table_dims = Some((h, s, v));
+                    }
+                }
+                TAG_PROFILE_LOOK_TABLE_DATA
+                    if field_type == 11 && count >= 3 && count.is_multiple_of(3) => {
+                        let byte_offset = resolve_offset(count * 4)?;
+                        let num_triplets = count / 3;
+                        let mut triplets = Vec::with_capacity(num_triplets);
+                        for i in 0..num_triplets {
+                            let dh = read_f32(byte_offset + (i * 3) * 4)?;
+                            let ds = read_f32(byte_offset + (i * 3 + 1) * 4)?;
+                            let dv = read_f32(byte_offset + (i * 3 + 2) * 4)?;
+                            triplets.push((dh, ds, dv));
+                        }
+                        look_table_data = Some(triplets);
+                    }
                 _ => {}
             }
 
@@ -504,6 +543,16 @@ impl DcpProfile {
             None
         };
 
+        let look_table = if let (Some(dims), Some(data)) = (look_table_dims, look_table_data) {
+            if data.len() == dims.0 * dims.1 * dims.2 {
+                Some(DcpHueSatMap::new(dims.0, dims.1, dims.2, data))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Ok(DcpProfile {
             profile_name,
             illuminant1,
@@ -515,6 +564,7 @@ impl DcpProfile {
             tone_curve,
             hue_sat_map1,
             hue_sat_map2,
+            look_table,
         })
     }
 
@@ -584,13 +634,22 @@ impl DcpProfile {
     /// - If only ColorMatrix is present:
     ///   Derives normalized $\text{Sensor} \to \text{Rec.2020}$ inverse per Adobe DNG specification.
     pub fn interpolate_sensor_to_rec2020(&self, temp_kelvin: f32) -> Matrix3x3 {
-        // D50 chromaticity (0.3457, 0.3585) -> D65 chromaticity (0.3127, 0.3290) CAT16 matrix
-        let d50_to_d65 = crate::color::cat16_adaptation_matrix((0.3457, 0.3585), (0.3127, 0.3290));
+        // D50 chromaticity (0.3457, 0.3585) -> D65 chromaticity (0.3127, 0.3290) Bradford CAT matrix (per DNG Spec §6)
+        let d50_to_d65 = crate::color::bradford_adaptation_matrix((0.3457, 0.3585), (0.3127, 0.3290));
         let xyz_to_rec2020 = crate::color::ColorSpacePrimaries::REC2020.xyz_to_rgb_matrix();
         let rec2020_to_xyz = crate::color::ColorSpacePrimaries::REC2020.rgb_to_xyz_matrix();
 
-        if let Some(fm) = self.interpolate_forward_matrix(temp_kelvin) {
-            // Sensor -> XYZ D50 -> CAT16 XYZ D65 -> Dynamic Linear Rec.2020
+        if let Some(mut fm) = self.interpolate_forward_matrix(temp_kelvin) {
+            // DCamProf Deep Blue Stability Invariant (per Anders Torger DCamProf specification):
+            // Bounding aggressive negative blue-channel crosstalk in photopic luminance (Y)
+            // prevents deep blue instability (erratic violet/magenta skew in daylight skies)
+            // while strictly preserving the neutral axis by shifting the difference to green.
+            let max_negative_blue_y = -0.15f32;
+            if fm.0[1][2] < max_negative_blue_y {
+                let excess = fm.0[1][2] - max_negative_blue_y;
+                fm.0[1][2] = max_negative_blue_y;
+                fm.0[1][1] += excess;
+            }
             let sensor_to_xyz_d65 = d50_to_d65.multiply_matrix(&fm);
             xyz_to_rec2020.multiply_matrix(&sensor_to_xyz_d65)
         } else {
@@ -690,12 +749,6 @@ impl DcpProfile {
         // 120 deg (Green/Foliage): slightly richer green
         deltas[4 * 2 + 0] = (1.5, 1.06, 0.99);
         deltas[4 * 2 + 1] = (2.0, 1.10, 0.98);
-        // 210 deg (Sky Blue): shift towards azure/cyan
-        deltas[7 * 2 + 0] = (-8.0, 0.92, 0.98);
-        deltas[7 * 2 + 1] = (-12.0, 0.86, 0.97);
-        // 240 deg (Sensor Blue): strong shift towards azure to eliminate purple cast
-        deltas[8 * 2 + 0] = (-15.0, 0.82, 0.98);
-        deltas[8 * 2 + 1] = (-20.0, 0.78, 0.97);
         DcpHueSatMap::new(12, 2, 1, deltas)
     }
 
@@ -710,11 +763,6 @@ impl DcpProfile {
         // Yellow (60 deg)
         deltas[2 * 2 + 0] = (-1.5, 0.96, 1.02);
         deltas[2 * 2 + 1] = (-2.0, 0.94, 1.03);
-        // Blue (210 & 240 deg): natural sky tone
-        deltas[7 * 2 + 0] = (-8.0, 0.88, 0.98);
-        deltas[7 * 2 + 1] = (-12.0, 0.82, 0.97);
-        deltas[8 * 2 + 0] = (-15.0, 0.80, 0.98);
-        deltas[8 * 2 + 1] = (-20.0, 0.75, 0.97);
         DcpHueSatMap::new(12, 2, 1, deltas)
     }
 
@@ -723,21 +771,17 @@ impl DcpProfile {
         // Green (120 deg)
         deltas[4 * 2 + 0] = (2.5, 1.15, 0.97);
         deltas[4 * 2 + 1] = (3.5, 1.22, 0.95);
-        // Sky blue (210 & 240 deg): rich azure sky without violet shift
-        deltas[7 * 2 + 0] = (-10.0, 0.98, 0.96);
-        deltas[7 * 2 + 1] = (-15.0, 0.92, 0.94);
-        deltas[8 * 2 + 0] = (-15.0, 0.88, 0.96);
-        deltas[8 * 2 + 1] = (-20.0, 0.82, 0.94);
+        // Sky blue (210 & 240 deg): rich natural azure sky saturation without cyan shift
+        deltas[7 * 2 + 0] = (0.0, 1.05, 1.00);
+        deltas[7 * 2 + 1] = (0.0, 1.05, 1.00);
+        deltas[8 * 2 + 0] = (0.0, 1.05, 1.00);
+        deltas[8 * 2 + 1] = (0.0, 1.05, 1.00);
         DcpHueSatMap::new(12, 2, 1, deltas)
     }
 
     pub fn built_in_vivid_huesatmap() -> DcpHueSatMap {
         let mut deltas = vec![(0.0, 1.15, 1.02); 24];
         deltas[4 * 2 + 1] = (2.0, 1.25, 0.96);
-        deltas[7 * 2 + 0] = (-10.0, 1.02, 0.96);
-        deltas[7 * 2 + 1] = (-15.0, 0.98, 0.94);
-        deltas[8 * 2 + 0] = (-15.0, 0.95, 0.96);
-        deltas[8 * 2 + 1] = (-20.0, 0.88, 0.94);
         DcpHueSatMap::new(12, 2, 1, deltas)
     }
 
@@ -774,6 +818,7 @@ impl DcpProfile {
             tone_curve: Some(Self::built_in_standard_tone_curve()),
             hue_sat_map1: Some(Self::built_in_standard_huesatmap()),
             hue_sat_map2: Some(Self::built_in_standard_huesatmap()),
+            look_table: None,
         }
     }
 
@@ -806,6 +851,7 @@ impl DcpProfile {
             tone_curve: Some(Self::built_in_standard_tone_curve()),
             hue_sat_map1: Some(Self::built_in_standard_huesatmap()),
             hue_sat_map2: Some(Self::built_in_standard_huesatmap()),
+            look_table: None,
         }
     }
 
@@ -838,6 +884,7 @@ impl DcpProfile {
             tone_curve: Some(Self::built_in_standard_tone_curve()),
             hue_sat_map1: Some(Self::built_in_standard_huesatmap()),
             hue_sat_map2: Some(Self::built_in_standard_huesatmap()),
+            look_table: None,
         }
     }
 

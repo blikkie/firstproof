@@ -84,22 +84,66 @@ pub fn blend_sensor_highlights(
     linear_response_limit: f32,
 ) -> (f32, f32, f32) {
     let limit = linear_response_limit.clamp(0.90, 0.99);
-    let s_max = r.max(g).max(b);
-    let p_r = r * wb_r;
-    let p_g = g;
-    let p_b = b * wb_b;
-    if s_max > limit {
-        let t = ((s_max - limit) / (1.0 - limit)).clamp(0.0, 1.0);
+    let mut p_r = r * wb_r;
+    let mut p_g = g;
+    let mut p_b = b * wb_b;
+
+    // 1. Asymmetric Channel Headroom & Optical Invariance Restoration:
+    // Green channel restoration:
+    // When green clips on the sensor (g > limit):
+    // In daylight skies (p_b > p_r), green must be restored above red to prevent false purple haze,
+    // while remaining beneath blue in atmospheric proportion (p_r + 0.38*(p_b - p_r)) to preserve
+    // pure azure sky hue (216°-220°) without collapsing into neon cyan (G = B).
+    // In neutral clouds/highlights (where p_r >= p_b or both saturate), green must never lag behind
+    // the brightest channel, preventing fluorescent magenta cloud discoloration.
+    if g > limit {
+        let target_g = if p_b > p_r {
+            p_r + 0.44 * (p_b - p_r)
+        } else {
+            p_r.max(p_b)
+        };
+        if target_g > p_g {
+            let t = ((g - limit) / (1.0 - limit)).clamp(0.0, 1.0);
+            let alpha = t * t * (3.0 - 2.0 * t);
+            p_g = (1.0 - alpha) * p_g + alpha * target_g;
+        }
+    }
+
+    // Blue channel restoration:
+    // If blue clips on the sensor, it must not lag behind red or green in bright highlights.
+    if b > limit {
+        let target_b = p_g.max(p_r);
+        if target_b > p_b {
+            let t = ((b - limit) / (1.0 - limit)).clamp(0.0, 1.0);
+            let alpha = t * t * (3.0 - 2.0 * t);
+            p_b = (1.0 - alpha) * p_b + alpha * target_b;
+        }
+    }
+
+    // Red channel restoration:
+    // If red clips on the sensor (e.g. tungsten lighting or warm sunsets), smoothly restore towards headroom.
+    if r > limit {
+        let target_r = p_g.max(p_b);
+        if target_r > p_r {
+            let t = ((r - limit) / (1.0 - limit)).clamp(0.0, 1.0);
+            let alpha = t * t * (3.0 - 2.0 * t);
+            p_r = (1.0 - alpha) * p_r + alpha * target_r;
+        }
+    }
+
+    // 2. Specular Blowout Convergence:
+    // Only desaturate to neutral white when ALL THREE channels have saturated the physical sensor well.
+    let s_min = r.min(g).min(b);
+    if s_min > limit {
+        let t = ((s_min - limit) / (1.0 - limit)).clamp(0.0, 1.0);
         let alpha = t * t * (3.0 - 2.0 * t);
         let l_target = p_r.max(p_g).max(p_b);
-        (
-            (1.0 - alpha) * p_r + alpha * l_target,
-            (1.0 - alpha) * p_g + alpha * l_target,
-            (1.0 - alpha) * p_b + alpha * l_target,
-        )
-    } else {
-        (p_r, p_g, p_b)
+        p_r = (1.0 - alpha) * p_r + alpha * l_target;
+        p_g = (1.0 - alpha) * p_g + alpha * l_target;
+        p_b = (1.0 - alpha) * p_b + alpha * l_target;
     }
+
+    (p_r, p_g, p_b)
 }
 
 /// A library-agnostic raw sensor frame representation.
@@ -310,6 +354,7 @@ impl RawSensorFrame {
         let linear_response_limit = manifest
             .as_ref()
             .and_then(|m| m.linear_response_limit)
+            .filter(|&lim| lim < 0.999)
             .unwrap_or(cal.linear_response_limit);
 
         let forward_matrix_tungsten = manifest
@@ -640,6 +685,94 @@ impl RawSensorFrame {
         }
     }
 
+    /// Computes the camera as-shot Tint (-150.0 to +150.0, Green to Magenta)
+    /// based on the sensor neutral's physical deviation (green excess)
+    /// from the Planckian/Daylight blackbody locus at the as-shot correlated color temperature.
+    pub fn as_shot_tint(&self) -> f32 {
+        let (wb_r, wb_b) = self.as_shot_wb();
+        let cal = crate::calibration::CameraCalibrationRegistry::lookup_or_fallback("", &self.camera_model);
+        let (cm1, cm2) = if let (Some(m_tungsten), Some(m_daylight)) = (self.color_matrix_tungsten, self.color_matrix) {
+            (m_tungsten, m_daylight)
+        } else if let Some(m_daylight) = self.color_matrix {
+            (m_daylight, m_daylight)
+        } else {
+            (
+                cal.color_matrix_tungsten.unwrap_or(crate::calibration::registry::CANON_COLOR_MATRIX_TUNGSTEN),
+                cal.color_matrix_daylight.unwrap_or(crate::calibration::registry::CANON_COLOR_MATRIX_DAYLIGHT),
+            )
+        };
+
+        let m1 = glam::Mat3::from_cols_array(&[
+            cm1[0][0], cm1[1][0], cm1[2][0],
+            cm1[0][1], cm1[1][1], cm1[2][1],
+            cm1[0][2], cm1[1][2], cm1[2][2],
+        ]);
+        let m2 = glam::Mat3::from_cols_array(&[
+            cm2[0][0], cm2[1][0], cm2[2][0],
+            cm2[0][1], cm2[1][1], cm2[2][1],
+            cm2[0][2], cm2[1][2], cm2[2][2],
+        ]);
+
+        let xyz_a = glam::Vec3::new(1.09867, 1.0, 0.35592);
+        let xyz_d65 = glam::Vec3::new(0.95045, 1.0, 1.08906);
+
+        let n_a = m1 * xyz_a;
+        let n_d65 = m2 * xyz_d65;
+
+        let r1 = (n_a.x / n_a.z.max(1e-6)).max(1e-6);
+        let r2 = (n_d65.x / n_d65.z.max(1e-6)).max(1e-6);
+        let r_shot = (wb_b / wb_r.max(1e-6)).max(1e-6);
+
+        let m_inv1 = 1.0 / 2856.0;
+        let m_inv2 = 1.0 / 6504.0;
+        let w = if (r2 - r1).abs() > 1e-5 {
+            ((r_shot - r1) / (r2 - r1)).clamp(0.0, 1.0)
+        } else {
+            0.5
+        };
+        let m_inv = m_inv1 + w * (m_inv2 - m_inv1);
+        let temp = (1.0 / m_inv).clamp(2000.0, 25000.0);
+
+        let cm = glam::Mat3::from_cols_array(&[
+            (1.0 - w) * cm1[0][0] + w * cm2[0][0],
+            (1.0 - w) * cm1[1][0] + w * cm2[1][0],
+            (1.0 - w) * cm1[2][0] + w * cm2[2][0],
+            (1.0 - w) * cm1[0][1] + w * cm2[0][1],
+            (1.0 - w) * cm1[1][1] + w * cm2[1][1],
+            (1.0 - w) * cm1[2][1] + w * cm2[2][1],
+            (1.0 - w) * cm1[0][2] + w * cm2[0][2],
+            (1.0 - w) * cm1[1][2] + w * cm2[1][2],
+            (1.0 - w) * cm1[2][2] + w * cm2[2][2],
+        ]);
+
+        let (xd, yd) = if temp >= 4000.0 {
+            let xd = -4.6070e9 / (temp * temp * temp) + 2.9678e6 / (temp * temp) + 0.09911e3 / temp + 0.244063;
+            let yd = -3.000 * xd * xd + 2.870 * xd - 0.275;
+            (xd, yd)
+        } else {
+            let xd = -2.0064e9 / (temp * temp * temp) + 1.9018e6 / (temp * temp) + 0.24748e3 / temp + 0.237040;
+            let yd = -3.000 * xd * xd + 2.870 * xd - 0.275;
+            (xd, yd)
+        };
+        let zd = (1.0 - xd - yd).max(1e-6);
+        let yd_safe = yd.max(1e-6);
+        let xyz_locus = glam::Vec3::new(xd / yd_safe, 1.0, zd / yd_safe);
+
+        let s_locus = cm * xyz_locus;
+        let r_exp = s_locus.x / s_locus.y.max(1e-6);
+        let b_exp = s_locus.z / s_locus.y.max(1e-6);
+
+        let wb_r_exp = 1.0 / r_exp.max(1e-6);
+        let wb_b_exp = 1.0 / b_exp.max(1e-6);
+
+        let ratio_r = wb_r / wb_r_exp.max(1e-6);
+        let ratio_b = wb_b / wb_b_exp.max(1e-6);
+        let g_excess = 1.0 / (ratio_r * ratio_b).max(1e-6).sqrt();
+
+        let tint = -333.33 * (g_excess - 1.0);
+        tint.clamp(-150.0, 150.0)
+    }
+
     /// Computes the normalized camera Sensor to Linear Rec.2020 3x3 matrix interpolated
     /// for the specified Kelvin temperature along the Planckian reciprocal temperature locus.
     /// Preserves neutral axis [1, 1, 1] per Adobe DNG / First Proof color science.
@@ -670,11 +803,22 @@ impl RawSensorFrame {
                 }
             }
 
-            // Universal XYZ D50 -> CAT16 -> Linear Rec.2020 matrix:
+            // DCamProf Deep Blue Stability Invariant (per Anders Torger DCamProf specification):
+            // Bounding aggressive negative blue-channel crosstalk in photopic luminance (Y)
+            // prevents deep blue instability (erratic violet/magenta skew in daylight skies)
+            // while preserving neutral axis preservation by shifting difference to green.
+            let max_negative_blue_y = -0.15f32;
+            if fm[1][2] < max_negative_blue_y {
+                let excess = fm[1][2] - max_negative_blue_y;
+                fm[1][2] = max_negative_blue_y;
+                fm[1][1] += excess;
+            }
+
+            // Universal XYZ D50 -> Bradford CAT -> Linear Rec.2020 matrix (per Adobe DNG Specification §6):
             let d50_to_rec2020 = glam::Mat3::from_cols_array(&[
-                1.700_593, -0.66840535, 0.017304685,
-                -0.43057728, 1.6541731, -0.029557694,
-                -0.25366065, -0.01167498, 1.2275668,
+                1.647185, -0.682664, 0.029669,
+                -0.393682, 1.647714, -0.062926,
+                -0.235959, 0.012818, 1.253558,
             ]);
             let fm_mat = glam::Mat3::from_cols_array(&[
                 fm[0][0], fm[1][0], fm[2][0],

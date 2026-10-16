@@ -13,6 +13,8 @@ pub struct DemosaicedImage {
     pub baseline_sharpness: f32,
     pub profile_tone_curve: Option<Vec<(f32, f32)>>,
     pub warp_rectilinear: Option<([f64; 4], [f64; 2])>,
+    pub as_shot_temperature: Option<f32>,
+    pub as_shot_tint: Option<f32>,
 }
 
 impl DemosaicedImage {
@@ -25,6 +27,8 @@ impl DemosaicedImage {
             baseline_sharpness: 1.0,
             profile_tone_curve: None,
             warp_rectilinear: None,
+            as_shot_temperature: None,
+            as_shot_tint: None,
         }
     }
 }
@@ -55,6 +59,8 @@ pub fn decode_image_with_quality<P: AsRef<Path>>(
         // Derive Camera -> Linear Rec.2020 matrix dynamically interpolated
         // along the Planckian blackbody locus for the photo's as-shot temperature.
         let as_shot_temp = frame.as_shot_temperature();
+        demosaiced.as_shot_temperature = Some(as_shot_temp);
+        demosaiced.as_shot_tint = Some(frame.as_shot_tint());
         let sensor_to_rec2020 = {
             use crate::raw_decoder::RawSensorFrameExt;
             frame.sensor_to_rec2020_matrix_at(as_shot_temp)

@@ -364,6 +364,40 @@ pub fn cat16_adaptation_matrix(source_xy: (f32, f32), target_xy: (f32, f32)) -> 
     cat16_inv.multiply_matrix(&step)
 }
 
+/// Computes the Bradford chromatic adaptation transform matrix from source (x, y) to target (x, y)
+/// per Adobe DNG Specification §6 and CIE / ICC specifications.
+pub fn bradford_adaptation_matrix(source_xy: (f32, f32), target_xy: (f32, f32)) -> Matrix3x3 {
+    let bfd = Matrix3x3([
+        [ 0.8951,  0.2664, -0.1614],
+        [-0.7502,  1.7135,  0.0367],
+        [ 0.0389, -0.0685,  1.0296],
+    ]);
+    let bfd_inv = bfd.inverse().unwrap_or(Matrix3x3::IDENTITY);
+
+    let (x1, y1) = source_xy;
+    let (x2, y2) = target_xy;
+
+    let xyz1 = Color3::new(x1 / y1, 1.0, (1.0 - x1 - y1) / y1);
+    let xyz2 = Color3::new(x2 / y2, 1.0, (1.0 - x2 - y2) / y2);
+
+    let rgb1 = bfd.multiply_vector(xyz1);
+    let rgb2 = bfd.multiply_vector(xyz2);
+
+    let diag = Matrix3x3([
+        [rgb2.r() / rgb1.r().max(1e-6), 0.0, 0.0],
+        [0.0, rgb2.g() / rgb1.g().max(1e-6), 0.0],
+        [0.0, 0.0, rgb2.b() / rgb1.b().max(1e-6)],
+    ]);
+
+    let step = diag.multiply_matrix(&bfd);
+    bfd_inv.multiply_matrix(&step)
+}
+
+/// Returns dynamic Bradford chromatic adaptation matrix mapping CIE XYZ (D50) -> CIE XYZ (D65)
+pub fn d50_to_d65_bradford_matrix() -> Matrix3x3 {
+    bradford_adaptation_matrix((0.3457, 0.3585), (0.3127, 0.3290))
+}
+
 /// Computes CIE 1931 (x, y) chromaticity for a given correlated color temperature (Kelvin) and green-magenta tint.
 pub fn kelvin_and_tint_to_xy(temp_kelvin: f32, tint: f32) -> (f32, f32) {
     let t = temp_kelvin.clamp(2000.0, 50000.0);

@@ -87,7 +87,7 @@ extension EditSettings {
             rotation: 0,
             flipHorizontal: false,
             flipVertical: false,
-            toneProfile: .agxVivid,
+            toneProfile: .cameraStandard,
             lutName: nil,
             lutIntensity: 1.0,
             sharpeningAmount: 0.0,
@@ -865,7 +865,7 @@ extension AppViewModel {
         remjetBacking = .intact
         flipHorizontal = defaultExifFlipH
         flipVertical = defaultExifFlipV
-        toneProfile = .agxVivid
+        toneProfile = .cameraStandard
         selectedLutName = nil
         lutIntensity = 1.0
         curves = .defaultIdentity

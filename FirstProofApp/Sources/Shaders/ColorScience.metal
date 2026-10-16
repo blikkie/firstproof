@@ -28,13 +28,25 @@ inline float3 linearToSrgbGamma3(float3 c) {
 // MARK: - RGB <-> HSV Color Transform Helpers
 
 inline float3 rgb2hsv(float3 c) {
-    float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-    float4 p = mix(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
-    float4 q = mix(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
-
-    float d = q.x - min(q.w, q.y);
-    float e = 1.0e-10;
-    return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)) * 360.0, d / (q.x + e), q.x);
+    float maxV = max(c.r, max(c.g, c.b));
+    float minV = min(c.r, min(c.g, c.b));
+    float delta = maxV - minV;
+    
+    float h = 0.0;
+    if (delta > 1e-5) {
+        if (maxV == c.r) {
+            h = (c.g - c.b) / delta;
+            if (h < 0.0) h += 6.0;
+        } else if (maxV == c.g) {
+            h = (c.b - c.r) / delta + 2.0;
+        } else {
+            h = (c.r - c.g) / delta + 4.0;
+        }
+        h *= 60.0;
+    }
+    
+    float s = (maxV > 1e-5) ? (delta / maxV) : 0.0;
+    return float3(h, s, maxV);
 }
 
 inline float3 hsv2rgb(float3 c) {
@@ -114,6 +126,115 @@ inline float applyCameraToneCurve(float x, int mode) {
     }
 }
 
+// MARK: - Calibrated Camera-Matching HueSatMaps (Memory Color & Optical Sensor Crosstalk Correction)
+
+constant float3 DCP_HSM_STANDARD[24] = {
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 0 deg (Red)
+    float3(0.0, 1.03, 1.02), float3(0.0, 1.05, 1.03),     // 30 deg (Orange/Skin)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 60 deg (Yellow)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 90 deg
+    float3(1.5, 1.06, 0.99), float3(2.0, 1.10, 0.98),     // 120 deg (Green/Foliage)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 150 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 180 deg (Cyan)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 210 deg (Sky Blue - neutral, no cyan shift)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 240 deg (Sensor Blue - neutral, no cyan shift)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 270 deg (Violet - neutral)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 300 deg (Magenta)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00)      // 330 deg (Rose)
+};
+
+constant float3 DCP_HSM_PORTRAIT[24] = {
+    float3(1.5, 0.96, 1.02), float3(2.0, 0.94, 1.03),     // 0 deg (Red)
+    float3(0.0, 0.96, 1.03), float3(0.0, 0.94, 1.04),     // 30 deg (Orange/Skin)
+    float3(-1.5, 0.96, 1.02), float3(-2.0, 0.94, 1.03),   // 60 deg (Yellow)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 90 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 120 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 150 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 180 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 210 deg (Sky Blue)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 240 deg (Sensor Blue)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 270 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 300 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00)      // 330 deg
+};
+
+constant float3 DCP_HSM_LANDSCAPE[24] = {
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 0 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 30 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 60 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 90 deg
+    float3(2.5, 1.15, 0.97), float3(3.5, 1.22, 0.95),     // 120 deg (Green/Foliage)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 150 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 180 deg
+    float3(0.0, 1.05, 1.00), float3(0.0, 1.05, 1.00),     // 210 deg (Sky Blue)
+    float3(0.0, 1.05, 1.00), float3(0.0, 1.05, 1.00),     // 240 deg (Sensor Blue)
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 270 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00),     // 300 deg
+    float3(0.0, 1.00, 1.00), float3(0.0, 1.00, 1.00)      // 330 deg
+};
+
+constant float3 DCP_HSM_VIVID[24] = {
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02),     // 0 deg
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02),     // 30 deg
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02),     // 60 deg
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02),     // 90 deg
+    float3(0.0, 1.15, 1.02), float3(2.0, 1.25, 0.96),     // 120 deg (Green/Foliage)
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02),     // 150 deg
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02),     // 180 deg
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02),     // 210 deg (Sky Blue)
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02),     // 240 deg (Sensor Blue)
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02),     // 270 deg
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02),     // 300 deg
+    float3(0.0, 1.15, 1.02), float3(0.0, 1.15, 1.02)      // 330 deg
+};
+
+inline float3 evalHueSatMapDelta(float h_deg, float s, constant float3* table) {
+    float h_norm = fract(h_deg / 360.0);
+    if (h_norm < 0.0) h_norm += 1.0;
+    float h_coord = h_norm * 12.0;
+    int h0 = int(floor(h_coord)) % 12;
+    int h1 = (h0 + 1) % 12;
+    float h_frac = h_coord - floor(h_coord);
+
+    float s_clamped = clamp(s, 0.0, 1.0);
+    
+    float3 c00 = table[h0 * 2 + 0];
+    float3 c01 = table[h0 * 2 + 1];
+    float3 c10 = table[h1 * 2 + 0];
+    float3 c11 = table[h1 * 2 + 1];
+
+    float3 c0 = mix(c00, c01, s_clamped);
+    float3 c1 = mix(c10, c11, s_clamped);
+
+    return mix(c0, c1, h_frac);
+}
+
+inline float3 applyCameraHueSatMap(float3 c_srgb, int mode) {
+    if (max(max(c_srgb.r, c_srgb.g), c_srgb.b) <= 1e-6) {
+        return c_srgb;
+    }
+    float3 hsv = rgb2hsv(c_srgb);
+    if (hsv.y <= 1e-6) {
+        return c_srgb;
+    }
+    float3 delta;
+    if (mode == 2) {
+        delta = evalHueSatMapDelta(hsv.x, hsv.y, DCP_HSM_PORTRAIT);
+    } else if (mode == 3) {
+        delta = evalHueSatMapDelta(hsv.x, hsv.y, DCP_HSM_LANDSCAPE);
+    } else if (mode == 4) {
+        delta = evalHueSatMapDelta(hsv.x, hsv.y, DCP_HSM_VIVID);
+    } else {
+        delta = evalHueSatMapDelta(hsv.x, hsv.y, DCP_HSM_STANDARD);
+    }
+
+    float h_out = fmod(fmod(hsv.x + delta.x, 360.0) + 360.0, 360.0);
+    float s_out = clamp(hsv.y * delta.y, 0.0, 1.0);
+    float v_out = max(hsv.z * delta.z, 0.0);
+
+    return hsv2rgb(float3(h_out, s_out, v_out));
+}
+
 
 // Linear sRGB -> Linear Rec.2020 Matrix (columns in Metal MSL)
 constant float3x3 LINEAR_SRGB_TO_REC2020 = float3x3(
@@ -186,11 +307,16 @@ inline float3 agxToneMap(float3 rec2020Color, float contrastGain) {
 }
 
 inline float3 agxToneMapVivid(float3 rec2020Color, float contrastGain) {
-    float punchyContrast = contrastGain * 1.15;
+    float punchyContrast = contrastGain * 1.35;
     float3 base = agxToneMap(rec2020Color, punchyContrast);
 
     float lum = 0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b;
-    float sat = 1.20;
+    float t = clamp((lum - 0.65) / 0.35, 0.0, 1.0);
+    float h = t * t * (3.0 - 2.0 * t);
+    float baseSat = 1.25 - 0.25 * h;
+
+    float sat = baseSat;
+
     return clamp(float3(
         lum + sat * (base.r - lum),
         lum + sat * (base.g - lum),
@@ -223,10 +349,11 @@ inline float3 applyBilateralToneRecovery(
     // Inner ring (r1): local edge guard against boundary bleed.
     // Outer ring (r2): macro ambient illumination (Durand & Dorsey 2002 Retinex separation).
     // Spatial weights at characteristic scale: Orthogonal (dist r) = exp(-0.5) ~ 0.60653066, Diagonal (dist r*sqrt(2)) = exp(-1.0) ~ 0.36787944
-    // Range weights: Gaussian in EV stops with sigma_r = 0.85 EV (2 * sigma_r^2 = 1.445)
+    // Ambient illumination spatial separation: sigma_r = 2.0 EV (2 * sigma_r^2 = 8.0)
+    // Prevents soft facial contours from being treated as hard edges, avoiding feature flattening.
     constexpr float w_s_ortho = 0.60653066;
     constexpr float w_s_diag  = 0.36787944;
-    constexpr float inv_two_sigma_r_sq = 1.0 / 1.445;
+    constexpr float inv_two_sigma_r_sq = 1.0 / 8.0;
     
     float total_weight = 1.0;
     float weighted_ev_sum = ev_c;
@@ -281,35 +408,42 @@ inline float3 applyBilateralToneRecovery(
     if (blacks != 0.0) {
         float u = clamp((-ev_base - 1.0) / 3.0, 0.0, 1.0);
         float w_blacks = u * u * (3.0 - 2.0 * u);
-        delta_ev += (blacks / 100.0) * 0.90 * w_blacks;
+        delta_ev += (blacks / 100.0) * 1.20 * w_blacks;
     }
     
     // 2. Shadows: Ansel Adams Zones II-IV (-3.0 EV to 0.0 EV, shadow texture, dark skin, dark foliage)
+    // Full photographic headroom (2.25 EV) allows deep shadow lifting matching Lightroom.
     if (shadows != 0.0) {
         float u = clamp(-ev_base / 3.0, 0.0, 1.0);
         float w_shadows = u * u * (3.0 - 2.0 * u);
-        delta_ev += (shadows / 100.0) * 1.20 * w_shadows;
+        delta_ev += (shadows / 100.0) * 2.25 * w_shadows;
     }
     
     // 3. Highlights: Ansel Adams Zones VI-IX (0.0 EV to +3.0 EV, light skin, textured snow, cloud detail)
+    // 2.25 EV pull recovers dense sky clouds and prevents chalky highlight blowout.
     if (highlights != 0.0) {
         float u = clamp(ev_base / 3.0, 0.0, 1.0);
         float w_highlights = u * u * (3.0 - 2.0 * u);
-        delta_ev += (highlights / 100.0) * 1.30 * w_highlights;
+        delta_ev += (highlights / 100.0) * 2.25 * w_highlights;
     }
     
     // 4. Whites: Ansel Adams Zones VII-X (+1.0 EV to +4.0 EV, specular highlights and maximum printable diffuse white)
     if (whites != 0.0) {
         float u = clamp((ev_base - 1.0) / 3.0, 0.0, 1.0);
         float w_whites = u * u * (3.0 - 2.0 * u);
-        delta_ev += (whites / 100.0) * 0.90 * w_whites;
+        delta_ev += (whites / 100.0) * 1.20 * w_whites;
     }
     
     if (delta_ev == 0.0) {
         return color;
     }
     
-    float gain = exp2(delta_ev);
+    // Retinex High-Frequency Detail Preservation & Micro-Contrast Restoration:
+    // Preserves local edge ratios (sharpness and texture) across facial features and silhouettes
+    // when compressing dynamic range with large-scale base illumination adjustments.
+    float detail = clamp(ev_c - ev_base, -3.0, 3.0);
+    float detail_boost = 0.35 * detail * (abs(delta_ev) / 2.25);
+    float gain = exp2(clamp(delta_ev + detail_boost, -6.0, 6.0));
     return color * gain;
 }
 

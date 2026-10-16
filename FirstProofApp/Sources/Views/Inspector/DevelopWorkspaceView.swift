@@ -1,7 +1,7 @@
 import SwiftUI
 import FirstProofBridge
 
-public struct ColorWorkspaceView: View {
+public struct DevelopWorkspaceView: View {
     @Environment(AppViewModel.self) private var viewModel
     @State private var isSplitToningExpanded: Bool = false
     
@@ -10,6 +10,70 @@ public struct ColorWorkspaceView: View {
     public var body: some View {
         @Bindable var viewModel = viewModel
         VStack(alignment: .leading, spacing: 14) {
+            // MARK: - Tone Profile & 3D LUT Look
+            VStack(alignment: .leading, spacing: 6) {
+                Text("TONE PROFILE & LOOK")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.secondary)
+                
+                Picker("", selection: Binding<ColorProfileMode>(
+                    get: { viewModel.toneProfile },
+                    set: { viewModel.setToneProfile($0) }
+                )) {
+                    Text("Camera Standard").tag(ColorProfileMode.cameraStandard)
+                    Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
+                    Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
+                    Text("Camera Portrait").tag(ColorProfileMode.cameraPortrait)
+                    Text("Camera Landscape").tag(ColorProfileMode.cameraLandscape)
+                    Text("Camera Vivid").tag(ColorProfileMode.cameraVivid)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                
+                HStack(spacing: 8) {
+                    Picker("", selection: Binding<String>(
+                        get: { viewModel.selectedLutName ?? "" },
+                        set: { newValue in
+                            viewModel.setSelectedLutName(newValue.isEmpty ? nil : newValue)
+                        }
+                    )) {
+                        Text("LUT: None (Bypass)").tag("")
+                        Divider()
+                        ForEach(viewModel.allLutTitles, id: \.self) { title in
+                            Text(title).tag(title)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    
+                    Button(action: {
+                        viewModel.importCustomLut()
+                    }) {
+                        Image(systemName: "plus.circle")
+                            .help("Import .cube LUT file...")
+                    }
+                    .buttonStyle(.borderless)
+                }
+                
+                if viewModel.selectedLutName != nil {
+                    SliderRow(
+                        label: "Intensity",
+                        value: $viewModel.lutIntensity,
+                        range: 0.0...1.0,
+                        format: "%.0f%%",
+                        onReset: { viewModel.resetSlider(.lutIntensity) },
+                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .lutIntensity) },
+                        onCancel: { viewModel.cancelSliderScrub() },
+                        multiplier: 100.0
+                    )
+                }
+            }
+            
+            Divider()
+                .padding(.vertical, 2)
+            
+            // MARK: - White Balance
             HStack {
                 Text("WHITE BALANCE")
                     .font(.caption)
@@ -88,7 +152,84 @@ public struct ColorWorkspaceView: View {
             )
             
             Divider()
+                .padding(.vertical, 2)
             
+            // MARK: - Tone & Exposure
+            HStack {
+                Text("TONE & EXPOSURE")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button(action: {
+                    viewModel.applyAutoAdjustments()
+                }) {
+                    Label("Auto", systemImage: "wand.and.stars")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Automatically calculate conservative exposure and contrast (Cmd+U)")
+            }
+            
+            SliderRow(
+                slider: .exposure,
+                value: $viewModel.exposure,
+                onReset: { viewModel.resetSlider(.exposure) },
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .exposure) },
+                onCancel: { viewModel.cancelSliderScrub() }
+            )
+            
+            SliderRow(
+                slider: .contrast,
+                value: $viewModel.contrast,
+                onReset: { viewModel.resetSlider(.contrast) },
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .contrast) },
+                onCancel: { viewModel.cancelSliderScrub() }
+            )
+            
+            SliderRow(
+                slider: .highlights,
+                value: $viewModel.highlights,
+                onReset: { viewModel.resetSlider(.highlights) },
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .highlights) },
+                onCancel: { viewModel.cancelSliderScrub() }
+            )
+            
+            SliderRow(
+                slider: .shadows,
+                value: $viewModel.shadows,
+                onReset: { viewModel.resetSlider(.shadows) },
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .shadows) },
+                onCancel: { viewModel.cancelSliderScrub() }
+            )
+            
+            SliderRow(
+                slider: .whites,
+                value: $viewModel.whites,
+                onReset: { viewModel.resetSlider(.whites) },
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .whites) },
+                onCancel: { viewModel.cancelSliderScrub() }
+            )
+            
+            SliderRow(
+                slider: .blacks,
+                value: $viewModel.blacks,
+                onReset: { viewModel.resetSlider(.blacks) },
+                onEditingChanged: { viewModel.handleSliderEditing($0, slider: .blacks) },
+                onCancel: { viewModel.cancelSliderScrub() }
+            )
+            
+            Divider()
+                .padding(.vertical, 2)
+            
+            // MARK: - Tone Curve
+            ToneCurveView()
+            
+            Divider()
+                .padding(.vertical, 2)
+            
+            // MARK: - Color & Vibrance
             Text("COLOR & VIBRANCE")
                 .font(.caption)
                 .fontWeight(.bold)
@@ -127,7 +268,9 @@ public struct ColorWorkspaceView: View {
             )
             
             Divider()
+                .padding(.vertical, 2)
             
+            // MARK: - Split Toning
             DisclosureGroup(isExpanded: $isSplitToningExpanded) {
                 VStack(spacing: 12) {
                     HStack {
@@ -174,7 +317,6 @@ public struct ColorWorkspaceView: View {
                         .fixedSize()
                     }
                     
-                    // Dual 2D Color Wheels: Shadows and Highlights side-by-side
                     HStack(spacing: 16) {
                         ColorWheelView(
                             title: "Shadows",
@@ -221,73 +363,6 @@ public struct ColorWorkspaceView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 3))
                     }
                 }
-            }
-            
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Tone Profile")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Picker("", selection: Binding<ColorProfileMode>(
-                    get: { viewModel.toneProfile },
-                    set: { viewModel.setToneProfile($0) }
-                )) {
-                    Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
-                    Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
-                    Text("Camera Standard").tag(ColorProfileMode.cameraStandard)
-                    Text("Camera Portrait").tag(ColorProfileMode.cameraPortrait)
-                    Text("Camera Landscape").tag(ColorProfileMode.cameraLandscape)
-                    Text("Camera Vivid").tag(ColorProfileMode.cameraVivid)
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-            }
-            
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text("3D LUT Look")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                HStack(spacing: 8) {
-                    Picker("", selection: Binding<String>(
-                        get: { viewModel.selectedLutName ?? "" },
-                        set: { newValue in
-                            viewModel.setSelectedLutName(newValue.isEmpty ? nil : newValue)
-                        }
-                    )) {
-                        Text("None (Bypass)").tag("")
-                        Divider()
-                        ForEach(viewModel.allLutTitles, id: \.self) { title in
-                            Text(title).tag(title)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    
-                    Button(action: {
-                        viewModel.importCustomLut()
-                    }) {
-                        Image(systemName: "plus.circle")
-                            .help("Import .cube LUT file...")
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
-            
-            if viewModel.selectedLutName != nil {
-                SliderRow(
-                    label: "Intensity",
-                    value: $viewModel.lutIntensity,
-                    range: 0.0...1.0,
-                    format: "%.0f%%",
-                    onReset: { viewModel.resetSlider(.lutIntensity) },
-                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .lutIntensity) },
-                    onCancel: { viewModel.cancelSliderScrub() },
-                    multiplier: 100.0
-                )
             }
         }
         .padding(.top, 4)

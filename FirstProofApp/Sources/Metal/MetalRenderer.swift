@@ -30,6 +30,8 @@ extension ShaderUniforms {
         u.grainSize = 1.0
         u.grainAmount = 1.0
         u.rotation = 0
+        u.asShotTemperature = 5500.0
+        u.asShotTint = 0.0
         return u
     }
 }

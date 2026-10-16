@@ -513,6 +513,19 @@ pub fn compute_auto_white_balance_from_buffer(width: u32, height: u32, data: Vec
 }
 
 #[uniffi::export]
+pub fn get_as_shot_white_balance(path: String) -> Option<WhiteBalanceResult> {
+    let decoder = crate::raw_decoder::RawlerDecoder;
+    if let Ok(frame) = crate::raw_decoder::RawDecoder::decode(&decoder, Path::new(&path)) {
+        Some(WhiteBalanceResult {
+            temperature: frame.as_shot_temperature(),
+            tint: frame.as_shot_tint(),
+        })
+    } else {
+        None
+    }
+}
+
+#[uniffi::export]
 pub fn match_takeout_json(image_path: String) -> Option<String> {
     takeout::match_takeout_json(Path::new(&image_path))
         .map(|p| p.to_string_lossy().into_owned())

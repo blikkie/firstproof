@@ -29,14 +29,30 @@ pub fn apply_edits_with_tier(
         1.0 + (edits.contrast / 100.0) * 0.60
     };
     
-    let temp_norm = (edits.temperature / 5500.0).clamp(0.25, 4.0);
-    let mut r_scale = temp_norm.powf(0.75);
-    let mut b_scale = (1.0 / temp_norm).powf(0.75);
-    
-    let tint_factor = edits.tint * 0.002;
-    let g_scale = (1.0 - tint_factor).max(0.01);
-    r_scale = (r_scale + tint_factor * 0.5).max(0.01);
-    b_scale = (b_scale + tint_factor * 0.5).max(0.01);
+    let base_temp = if image.is_raw {
+        image.as_shot_temperature.unwrap_or(5500.0)
+    } else {
+        5500.0
+    };
+    let base_tint = if image.is_raw {
+        image.as_shot_tint.unwrap_or(0.0)
+    } else {
+        0.0
+    };
+
+    let (r_scale, g_scale, b_scale) = if (edits.temperature - base_temp).abs() >= 1.0 || (edits.tint - base_tint).abs() >= 0.1 {
+        let temp_norm = (edits.temperature / base_temp).clamp(0.25, 4.0);
+        let mut r = temp_norm.powf(0.75);
+        let mut b = (1.0 / temp_norm).powf(0.75);
+        
+        let tint_factor = (edits.tint - base_tint) * 0.002;
+        let g = (1.0 - tint_factor).max(0.01);
+        r = (r + tint_factor * 0.5).max(0.01);
+        b = (b + tint_factor * 0.5).max(0.01);
+        (r, g, b)
+    } else {
+        (1.0, 1.0, 1.0)
+    };
     
     let curve_lut = crate::curve::evaluate_curves_lut_ref(&edits.curves);
     let has_master_curve = is_curve_active(&edits.curves.master);
@@ -101,9 +117,19 @@ pub fn apply_edits_with_tier(
         }
     };
 
+    let camera_huesatmap: Option<crate::color::DcpHueSatMap> = match edits.tone_profile {
+        crate::ColorProfileMode::AgxVivid | crate::ColorProfileMode::AgxFilmic => None,
+        crate::ColorProfileMode::CameraPortrait => Some(crate::color::DcpProfile::built_in_portrait_huesatmap()),
+        crate::ColorProfileMode::CameraLandscape => Some(crate::color::DcpProfile::built_in_landscape_huesatmap()),
+        crate::ColorProfileMode::CameraVivid => Some(crate::color::DcpProfile::built_in_vivid_huesatmap()),
+        _ => Some(crate::color::DcpProfile::built_in_standard_huesatmap()),
+    };
+
     let max_dim = image.width.max(image.height) as f32;
-    let r_inner = 1usize;
-    let r_outer = ((max_dim * 0.016).round() as usize).max(16);
+    // Dual-concentric ring stencil: meso-scale inner ring (r_inner) skips pores/eyelashes,
+    // macro-scale outer ring (r_outer) estimates ambient illumination field.
+    let r_inner = ((max_dim * 0.003).round() as usize).max(3);
+    let r_outer = ((max_dim * 0.024).round() as usize).max(24);
 
     if needs_spatial_pass {
         // Pass 1: Upstream optical exposure, WB, bilateral tone recovery, and recording emulsion
@@ -251,6 +277,15 @@ pub fn apply_edits_with_tier(
                     _ => {
                         let c_rec2020 = Color3::new(r, g, b);
                         let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+                        let (mut r_adj, mut g_adj, mut b_adj) = (c_srgb.r().max(0.0), c_srgb.g().max(0.0), c_srgb.b().max(0.0));
+                        if let Some(ref hsm) = camera_huesatmap {
+                            let (h, s, v) = crate::color::dcp::rgb_to_hsv(r_adj, g_adj, b_adj);
+                            let (h_out, s_out, v_out) = hsm.apply_hsv(h, s, v);
+                            let (r_hsv, g_hsv, b_hsv) = crate::color::dcp::hsv_to_rgb(h_out, s_out, v_out);
+                            r_adj = r_hsv;
+                            g_adj = g_hsv;
+                            b_adj = b_hsv;
+                        }
                         if let Some(ref lut) = camera_curve_lut {
                             let lut_size_f = (lut.len() - 1) as f32;
                             let apply_curve = |v: f32| -> f32 {
@@ -260,9 +295,13 @@ pub fn apply_edits_with_tier(
                                 let frac = pos - i0 as f32;
                                 lut[i0] * (1.0 - frac) + lut[i1] * frac
                             };
-                            r = apply_curve(c_srgb.r().max(0.0));
-                            g = apply_curve(c_srgb.g().max(0.0));
-                            b = apply_curve(c_srgb.b().max(0.0));
+                            r = apply_curve(r_adj);
+                            g = apply_curve(g_adj);
+                            b = apply_curve(b_adj);
+                        } else {
+                            r = r_adj;
+                            g = g_adj;
+                            b = b_adj;
                         }
                     }
                 }
@@ -419,6 +458,15 @@ pub fn apply_edits_with_tier(
                     _ => {
                         let c_rec2020 = Color3::new(r, g, b);
                         let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+                        let (mut r_adj, mut g_adj, mut b_adj) = (c_srgb.r().max(0.0), c_srgb.g().max(0.0), c_srgb.b().max(0.0));
+                        if let Some(ref hsm) = camera_huesatmap {
+                            let (h, s, v) = crate::color::dcp::rgb_to_hsv(r_adj, g_adj, b_adj);
+                            let (h_out, s_out, v_out) = hsm.apply_hsv(h, s, v);
+                            let (r_hsv, g_hsv, b_hsv) = crate::color::dcp::hsv_to_rgb(h_out, s_out, v_out);
+                            r_adj = r_hsv;
+                            g_adj = g_hsv;
+                            b_adj = b_hsv;
+                        }
                         if let Some(ref lut) = camera_curve_lut {
                             let lut_size_f = (lut.len() - 1) as f32;
                             let apply_curve = |v: f32| -> f32 {
@@ -428,9 +476,13 @@ pub fn apply_edits_with_tier(
                                 let frac = pos - i0 as f32;
                                 lut[i0] * (1.0 - frac) + lut[i1] * frac
                             };
-                            r = apply_curve(c_srgb.r().max(0.0));
-                            g = apply_curve(c_srgb.g().max(0.0));
-                            b = apply_curve(c_srgb.b().max(0.0));
+                            r = apply_curve(r_adj);
+                            g = apply_curve(g_adj);
+                            b = apply_curve(b_adj);
+                        } else {
+                            r = r_adj;
+                            g = g_adj;
+                            b = b_adj;
                         }
                     }
                 }

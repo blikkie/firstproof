@@ -237,18 +237,18 @@ struct FirstProofApp: App {
                 .keyboardShortcut("i", modifiers: [.command, .option])
                 
                 Menu("Inspector Workspace") {
-                    Button("Light & Tone") {
-                        viewModel.selectedInspectorTab = .light
+                    Button("Develop") {
+                        viewModel.selectedInspectorTab = .develop
                     }
                     .keyboardShortcut("1", modifiers: [.command, .option])
                     
-                    Button("Color & Look") {
-                        viewModel.selectedInspectorTab = .color
+                    Button("Optics & Geometry") {
+                        viewModel.selectedInspectorTab = .optics
                     }
                     .keyboardShortcut("2", modifiers: [.command, .option])
                     
-                    Button("Optics & Geometry") {
-                        viewModel.selectedInspectorTab = .optics
+                    Button("Emulsion & Darkroom Print") {
+                        viewModel.selectedInspectorTab = .emulsion
                     }
                     .keyboardShortcut("3", modifiers: [.command, .option])
                     
@@ -256,16 +256,6 @@ struct FirstProofApp: App {
                         viewModel.selectedInspectorTab = .detail
                     }
                     .keyboardShortcut("4", modifiers: [.command, .option])
-                    
-                    Button("Emulsion & Darkroom Print") {
-                        viewModel.selectedInspectorTab = .emulsion
-                    }
-                    .keyboardShortcut("5", modifiers: [.command, .option])
-                    
-                    Button("EXIF Metadata") {
-                        viewModel.selectedInspectorTab = .metadata
-                    }
-                    .keyboardShortcut("6", modifiers: [.command, .option])
                 }
             }
         }
