@@ -1,6 +1,7 @@
 .PHONY: all check build-core build-bridge build-wasm build-web clean test test-all run bundle build-cli package-dmg package-cli package harvest-hardware
 
 ARCH := $(shell uname -m)
+VERSION ?= 0.1.1
 ifeq ($(ARCH),arm64)
 	RUST_TARGET := aarch64-apple-darwin
 else
@@ -64,18 +65,18 @@ package-dmg: bundle
 	mkdir -p dist/dmg_staging
 	cp -R dist/FirstProof.app dist/dmg_staging/
 	ln -s /Applications dist/dmg_staging/Applications
-	hdiutil create -volname "First Proof" -srcfolder dist/dmg_staging -ov -format UDZO dist/FirstProof-0.1.0-macos-$(ARCH).dmg
+	hdiutil create -volname "First Proof" -srcfolder dist/dmg_staging -ov -format UDZO dist/FirstProof-$(VERSION)-macos-$(ARCH).dmg
 	rm -rf dist/dmg_staging
-	@echo "✅ Distributable DMG created at dist/FirstProof-0.1.0-macos-$(ARCH).dmg"
+	@echo "✅ Distributable DMG created at dist/FirstProof-$(VERSION)-macos-$(ARCH).dmg"
 
 package-cli: build-cli
 	@echo "==> Packaging standalone CLI release tarball..."
-	tar -czf dist/firstproof-cli-0.1.0-macos-$(ARCH).tar.gz -C dist firstproof-cli
-	@echo "✅ Standalone CLI tarball created at dist/firstproof-cli-0.1.0-macos-$(ARCH).tar.gz"
+	tar -czf dist/firstproof-cli-$(VERSION)-macos-$(ARCH).tar.gz -C dist firstproof-cli
+	@echo "✅ Standalone CLI tarball created at dist/firstproof-cli-$(VERSION)-macos-$(ARCH).tar.gz"
 
 package: package-dmg package-cli
 	@echo "==> Generating release checksums..."
-	(cd dist && shasum -a 256 FirstProof-0.1.0-macos-$(ARCH).dmg firstproof-cli-0.1.0-macos-$(ARCH).tar.gz > SHA256SUMS.txt)
+	(cd dist && shasum -a 256 FirstProof-$(VERSION)-macos-$(ARCH).dmg firstproof-cli-$(VERSION)-macos-$(ARCH).tar.gz > SHA256SUMS.txt)
 	@echo "✅ Release package complete with SHA256 checksums in dist/SHA256SUMS.txt"
 
 harvest-hardware:

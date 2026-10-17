@@ -207,10 +207,7 @@ fn cmd_develop(args: &[String]) -> Result<(), String> {
     let mut is_quiet = false;
 
     // Start with default edits
-    let mut edits = EditSettings {
-        tone_profile: ColorProfileMode::CameraStandard,
-        ..Default::default()
-    };
+    let mut edits = EditSettings::default();
 
     // Auto-detect adjacent .xmp or input.xmp
     let sidecar_candidates = [

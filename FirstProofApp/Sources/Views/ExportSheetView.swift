@@ -27,7 +27,7 @@ public struct ExportSheetView: View {
 
     private var hasActiveEmulsion: Bool {
         if let photo = viewModel.selectedPhoto {
-            let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits ?? .defaultIdentity)
+            let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits.migratingLegacyProfiles ?? .defaultIdentity)
             return edits.emulsionArchetype != .none
         }
         return false
@@ -277,7 +277,7 @@ public struct ExportSheetView: View {
                 .appendingPathComponent("\(baseName)_FirstProof.\(ext)")
                 .path
             
-            let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits ?? .defaultIdentity)
+            let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits.migratingLegacyProfiles ?? .defaultIdentity)
             let lensCoeffs = (photo.filePath == viewModel.selectedPhoto?.filePath && viewModel.lensCorrectionEnabled) ? viewModel.lensCoefficients : nil
             
             let dq: DemosaicQuality = (demosaicQualityChoice == "Archival") ? .archival : .standard
@@ -319,7 +319,7 @@ public struct ExportSheetView: View {
                 let outputPath = URL(fileURLWithPath: destination)
                     .appendingPathComponent("\(baseName)_FirstProof.\(ext)")
                     .path
-                let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits ?? .defaultIdentity)
+                let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits.migratingLegacyProfiles ?? .defaultIdentity)
                 let lensCoeffs = (photo.filePath == viewModel.selectedPhoto?.filePath && viewModel.lensCorrectionEnabled) ? viewModel.lensCoefficients : nil
                 
                 items.append(BatchExportItemRecord(

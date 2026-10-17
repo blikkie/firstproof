@@ -62,6 +62,19 @@ extension AppViewModel {
 }
 
 extension EditSettings {
+    /// Gracefully migrates legacy/retired closed-domain camera profiles to First Proof's
+    /// open-domain AgX Vivid filmic tone profile.
+    public var migratingLegacyProfiles: EditSettings {
+        var copy = self
+        if copy.toneProfile == .cameraStandard ||
+           copy.toneProfile == .cameraPortrait ||
+           copy.toneProfile == .cameraLandscape ||
+           copy.toneProfile == .cameraVivid {
+            copy.toneProfile = .agxVivid
+        }
+        return copy
+    }
+
     public static var defaultIdentity: EditSettings {
         EditSettings(
             exposure: 0.0,
@@ -87,7 +100,7 @@ extension EditSettings {
             rotation: 0,
             flipHorizontal: false,
             flipVertical: false,
-            toneProfile: .cameraStandard,
+            toneProfile: .agxVivid,
             lutName: nil,
             lutIntensity: 1.0,
             sharpeningAmount: 0.0,
@@ -119,6 +132,7 @@ extension EditSettings {
 
 extension AppViewModel {
     public func applyEdits(_ edits: EditSettings) {
+        let edits = edits.migratingLegacyProfiles
         self.exposure = edits.exposure
         self.contrast = edits.contrast
         self.highlights = edits.highlights

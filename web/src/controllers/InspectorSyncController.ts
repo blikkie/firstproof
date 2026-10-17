@@ -377,6 +377,9 @@ export class InspectorSyncController {
       'select-tone-profile',
     ) as HTMLSelectElement | null;
     if (selectTone && edits.tone_profile) {
+      if (edits.tone_profile.startsWith('Camera')) {
+        edits.tone_profile = 'AgxVivid';
+      }
       selectTone.value = edits.tone_profile;
     }
     const selectEmulsion = document.getElementById(

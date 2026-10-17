@@ -711,7 +711,7 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
             "CameraLandscape" => ColorProfileMode::CameraLandscape,
             "CameraVivid" => ColorProfileMode::CameraVivid,
             "AgxPhotographic" => ColorProfileMode::AgxPhotographic,
-            _ => ColorProfileMode::CameraStandard,
+            _ => ColorProfileMode::AgxVivid,
         };
     }
     if let Some(pm_str) = get(pm, "printMedia") {

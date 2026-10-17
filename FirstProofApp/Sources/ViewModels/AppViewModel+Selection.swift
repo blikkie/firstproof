@@ -249,7 +249,7 @@ extension AppViewModel {
 
         let targetEdits: EditSettings
         if let xmp = readXmp(path: photo.filePath) {
-            targetEdits = xmp.edits
+            targetEdits = xmp.edits.migratingLegacyProfiles
         } else {
             var defaultEdits = EditSettings.defaultIdentity
             defaultEdits.rotation = Int32(exifRotation)

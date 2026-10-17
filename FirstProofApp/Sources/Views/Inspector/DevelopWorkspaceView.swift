@@ -24,6 +24,15 @@ public struct DevelopWorkspaceView: View {
                     )) {
                         Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
                         Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
+                        Text("AgX Photographic (Chroma Preserving)").tag(ColorProfileMode.agxPhotographic)
+                        
+                        if viewModel.toneProfile == .cameraStandard ||
+                           viewModel.toneProfile == .cameraPortrait ||
+                           viewModel.toneProfile == .cameraLandscape ||
+                           viewModel.toneProfile == .cameraVivid {
+                            Divider()
+                            Text("Camera Matching (Legacy)").tag(viewModel.toneProfile)
+                        }
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
