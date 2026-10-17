@@ -261,6 +261,7 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
             ColorProfileMode::CameraPortrait => "CameraPortrait",
             ColorProfileMode::CameraLandscape => "CameraLandscape",
             ColorProfileMode::CameraVivid => "CameraVivid",
+            ColorProfileMode::AgxPhotographic => "AgxPhotographic",
         });
     if let Some(lut) = &data.edits.lut_name {
         writer.element("lutName", pm_ns.clone()).value(lut.as_str());
@@ -709,6 +710,7 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
             "CameraPortrait" => ColorProfileMode::CameraPortrait,
             "CameraLandscape" => ColorProfileMode::CameraLandscape,
             "CameraVivid" => ColorProfileMode::CameraVivid,
+            "AgxPhotographic" => ColorProfileMode::AgxPhotographic,
             _ => ColorProfileMode::CameraStandard,
         };
     }

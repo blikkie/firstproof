@@ -11,6 +11,7 @@ pub enum ColorProfileMode {
     CameraPortrait,
     CameraLandscape,
     CameraVivid,
+    AgxPhotographic,
 }
 
 

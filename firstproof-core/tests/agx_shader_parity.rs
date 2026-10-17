@@ -120,6 +120,75 @@ fn test_metal_rust_agx_vivid_parity() {
     }
 }
 
+/// Simulates the exact single-precision Metal shader implementation (`agxToneMapPhotographic` in ColorScience.metal)
+fn metal_shader_agx_photographic_sim(rec2020_r: f32, rec2020_g: f32, rec2020_b: f32, contrast_gain: f32) -> (f32, f32, f32) {
+    let min_c = rec2020_r.min(rec2020_g).min(rec2020_b);
+    let (cr, cg, cb) = if min_c < 0.0 {
+        (rec2020_r - min_c, rec2020_g - min_c, rec2020_b - min_c)
+    } else {
+        (rec2020_r, rec2020_g, rec2020_b)
+    };
+
+    let photo_contrast = contrast_gain * 1.28;
+
+    let lum_rec = 0.2627 * cr + 0.6780 * cg + 0.0593 * cb;
+
+    let x_rel = (lum_rec / 0.18).max(1e-6);
+    let log_encoded = (x_rel.log2() - (-10.0)) / 16.5;
+    let mut norm = log_encoded.clamp(0.0, 1.0);
+    if (photo_contrast - 1.0).abs() > 0.001 {
+        norm = (0.6060606 + (norm - 0.6060606) * photo_contrast).clamp(0.0, 1.0);
+    }
+    let curved = firstproof_core::color::agx::agx_apply_curve_channel(norm);
+    let lum_mapped = curved.max(0.0).powf(2.2);
+
+    let gain = if lum_rec > 1e-6 { lum_mapped / lum_rec } else { 1.0 };
+    let c_scaled = Color3::new(cr * gain, cg * gain, cb * gain);
+    let s_ratio = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(c_scaled);
+
+    let (s_agx_r, s_agx_g, s_agx_b) = metal_shader_agx_sim(cr, cg, cb, photo_contrast);
+
+    let peak_val = lum_mapped
+        .max(s_ratio.r().max(0.0))
+        .max(s_ratio.g().max(0.0))
+        .max(s_ratio.b().max(0.0));
+    let t = ((peak_val - 0.85) / 0.20).clamp(0.0, 1.0);
+    let h = t * t * (3.0 - 2.0 * t);
+
+    (
+        (s_ratio.r().max(0.0) * (1.0 - h) + s_agx_r * h).clamp(0.0, 1.0),
+        (s_ratio.g().max(0.0) * (1.0 - h) + s_agx_g * h).clamp(0.0, 1.0),
+        (s_ratio.b().max(0.0) * (1.0 - h) + s_agx_b * h).clamp(0.0, 1.0),
+    )
+}
+
+#[test]
+fn test_metal_rust_agx_photographic_parity() {
+    let test_levels = [0.005, 0.02, 0.10, 0.18, 0.50, 1.0, 2.5, 8.0];
+    let test_contrasts = [0.8, 1.0, 1.2];
+
+    for &contrast in &test_contrasts {
+        for &r in &test_levels {
+            for &g in &test_levels {
+                for &b in &test_levels {
+                    let rust_out = firstproof_core::color::agx_tone_map_photographic(Color3::new(r, g, b), contrast);
+                    let (metal_r, metal_g, metal_b) = metal_shader_agx_photographic_sim(r, g, b, contrast);
+
+                    let diff_r = (rust_out.r() - metal_r).abs();
+                    let diff_g = (rust_out.g() - metal_g).abs();
+                    let diff_b = (rust_out.b() - metal_b).abs();
+
+                    assert!(
+                        diff_r < 1e-4 && diff_g < 1e-4 && diff_b < 1e-4,
+                        "AgX Photographic parity divergence at ({}, {}, {}) with contrast {}: Rust=({}, {}, {}), Metal=({}, {}, {})",
+                        r, g, b, contrast, rust_out.r(), rust_out.g(), rust_out.b(), metal_r, metal_g, metal_b
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn test_neutral_axis_achromatic_preservation() {
     // Across 16 stops of exposure, neutral input must yield neutral output

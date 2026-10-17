@@ -834,7 +834,8 @@ export type ColorProfileMode =
     | 'CameraStandard'
     | 'CameraPortrait'
     | 'CameraLandscape'
-    | 'CameraVivid';
+    | 'CameraVivid'
+    | 'AgxPhotographic';
 
 export type ExportColorSpace =
     | 'Srgb'

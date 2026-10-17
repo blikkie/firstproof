@@ -118,6 +118,7 @@ fn test_xmp_tone_profile_roundtrip() {
         ColorProfileMode::CameraPortrait,
         ColorProfileMode::CameraLandscape,
         ColorProfileMode::CameraVivid,
+        ColorProfileMode::AgxPhotographic,
     ];
 
     for mode in modes {
@@ -522,7 +523,7 @@ fn test_cr2_0194_full_pipeline_parity() {
 
 #[test]
 fn test_sliders_dual_engine_parity_sweep() {
-    use firstproof_core::color::{Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB, agx_tone_map, agx_tone_map_vivid, evaluate_tone_curve, linear_to_srgb_gamma};
+    use firstproof_core::color::{Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB, agx_tone_map, agx_tone_map_photographic, agx_tone_map_vivid, evaluate_tone_curve, linear_to_srgb_gamma};
     use firstproof_core::export::{apply_tone_recovery, apply_color_adjustments};
     use firstproof_core::color::dcp::DcpProfile;
     use firstproof_core::ColorProfileMode;
@@ -540,13 +541,15 @@ fn test_sliders_dual_engine_parity_sweep() {
 
     // Slider configurations to sweep: (exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint, mode)
     // Slider configurations to sweep: (exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint, mode)
-    let test_configs: [(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, ColorProfileMode); 8] = [
+    let test_configs: [(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, ColorProfileMode); 9] = [
         // Neutral
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5500.0, 0.0, ColorProfileMode::AgxVivid),
         // Saturated & Punchy with color adjustments
         (0.5, 20.0, -30.0, 25.0, -15.0, 10.0, 35.0, 20.0, 6200.0, 10.0, ColorProfileMode::AgxVivid),
         // AgX Filmic neutral base with deep blue boost
         (-0.5, -10.0, 10.0, -10.0, 0.0, 0.0, 15.0, -10.0, 4800.0, -8.0, ColorProfileMode::AgxFilmic),
+        // AgX Photographic ratio-preserving filmic with rich chroma
+        (0.2, 10.0, -20.0, 15.0, -10.0, 5.0, 20.0, 10.0, 5500.0, 0.0, ColorProfileMode::AgxPhotographic),
         // Camera Standard profile with high vibrance & foliage
         (0.0, 15.0, -20.0, 20.0, -10.0, 5.0, 50.0, 15.0, 5500.0, 0.0, ColorProfileMode::CameraStandard),
         // Camera Portrait profile with negative vibrance
@@ -609,6 +612,14 @@ fn test_sliders_dual_engine_parity_sweep() {
                 }
                 ColorProfileMode::AgxFilmic => {
                     let srgb = agx_tone_map(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
+                    (
+                        linear_to_srgb_gamma(srgb.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma(srgb.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                        linear_to_srgb_gamma(srgb.b().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                    )
+                }
+                ColorProfileMode::AgxPhotographic => {
+                    let srgb = agx_tone_map_photographic(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
                     (
                         linear_to_srgb_gamma(srgb.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
                         linear_to_srgb_gamma(srgb.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),

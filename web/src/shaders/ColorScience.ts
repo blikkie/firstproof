@@ -326,6 +326,50 @@ vec3 agxToneMapVivid(vec3 rec2020Color, float contrastGain) {
     ), 0.0, 1.0);
 }
 
+vec3 agxToneMapPhotographic(vec3 rec2020Color, float contrastGain) {
+    float minC = min(rec2020Color.r, min(rec2020Color.g, rec2020Color.b));
+    vec3 compressed = (minC < 0.0) ? (rec2020Color - minC) : rec2020Color;
+
+    // Apply calibrated photographic contrast (1.28x) to match standard darkroom film response and eliminate shadow flatness
+    float photoContrast = contrastGain * 1.28;
+
+    // 1. Scene luminance in Linear Rec.2020 (photopic Y)
+    float lumRec = 0.2627 * compressed.r + 0.6780 * compressed.g + 0.0593 * compressed.b;
+
+    // 2. Evaluate AgX sigmoidal transfer on scene luminance with photographic contrast
+    float xRel = max(lumRec / 0.18, 1e-6);
+    float logEncoded = (log2(xRel) - AGX_MIN_EV) / AGX_EV_RANGE;
+    float norm = clamp(logEncoded, 0.0, 1.0);
+    if (abs(photoContrast - 1.0) > 0.001) {
+        norm = clamp(AGX_MID_GRAY_NORM + (norm - AGX_MID_GRAY_NORM) * photoContrast, 0.0, 1.0);
+    }
+    float curved = agxApplyCurveChannel(norm);
+    float lumMapped = pow(max(curved, 0.0), AGX_GAMMA);
+
+    // 3. Proportional ratio scaling
+    float gain = (lumRec > 1e-6) ? (lumMapped / lumRec) : 1.0;
+    vec3 cScaled = compressed * gain;
+    vec3 sRatio = REC2020_TO_LINEAR_SRGB * cScaled;
+
+    // 4. Base per-channel AgX with matching photographic contrast for highlight roll-off
+    vec3 sAgx = agxToneMap(compressed, photoContrast);
+
+    // 5. C^1 Hermite highlight desaturation blend
+    // Driven by peak channel intensity: max(Y, max(R, G, B))
+    // Only engage desaturation when a channel actually approaches or exceeds the display ceiling (0.85..1.05),
+    // ensuring colors in midtones, bright skies, and flowers remain 100% richly saturated even when exposure is pushed,
+    // while smoothly rolling off extreme specular highlights into clean diffuse white.
+    float peakVal = max(lumMapped, max(max(sRatio.r, 0.0), max(max(sRatio.g, 0.0), max(sRatio.b, 0.0))));
+    float t = clamp((peakVal - 0.85) / 0.20, 0.0, 1.0);
+    float h = t * t * (3.0 - 2.0 * t);
+
+    return clamp(vec3(
+        max(sRatio.r, 0.0) * (1.0 - h) + sAgx.r * h,
+        max(sRatio.g, 0.0) * (1.0 - h) + sAgx.g * h,
+        max(sRatio.b, 0.0) * (1.0 - h) + sAgx.b * h
+    ), 0.0, 1.0);
+}
+
 // Advanced Bilateral Base/Detail Tone Recovery (Highlights, Shadows, Whites, Blacks)
 vec3 applyBilateralToneRecovery(
     vec3 color,

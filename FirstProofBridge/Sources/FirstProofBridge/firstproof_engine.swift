@@ -2022,6 +2022,7 @@ public enum ColorProfileMode {
     case cameraPortrait
     case cameraLandscape
     case cameraVivid
+    case agxPhotographic
 }
 
 
@@ -2046,6 +2047,8 @@ public struct FfiConverterTypeColorProfileMode: FfiConverterRustBuffer {
         case 5: return .cameraLandscape
         
         case 6: return .cameraVivid
+        
+        case 7: return .agxPhotographic
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2077,6 +2080,10 @@ public struct FfiConverterTypeColorProfileMode: FfiConverterRustBuffer {
         
         case .cameraVivid:
             writeInt(&buf, Int32(6))
+        
+        
+        case .agxPhotographic:
+            writeInt(&buf, Int32(7))
         
         }
     }

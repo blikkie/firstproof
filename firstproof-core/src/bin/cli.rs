@@ -108,6 +108,7 @@ fn parse_color_profile(s: &str) -> Option<ColorProfileMode> {
     match s.to_lowercase().replace(['-', '_'], "").as_str() {
         "agxvivid" | "vivid" => Some(ColorProfileMode::AgxVivid),
         "agxneutral" | "agxfilmic" | "neutral" | "filmic" => Some(ColorProfileMode::AgxFilmic),
+        "agxphotographic" | "photographic" | "photo" => Some(ColorProfileMode::AgxPhotographic),
         "camerastandard" | "standard" => Some(ColorProfileMode::CameraStandard),
         "cameraportrait" | "portrait" => Some(ColorProfileMode::CameraPortrait),
         "cameralandscape" | "landscape" => Some(ColorProfileMode::CameraLandscape),

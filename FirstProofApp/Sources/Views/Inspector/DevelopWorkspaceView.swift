@@ -22,12 +22,8 @@ public struct DevelopWorkspaceView: View {
                         get: { viewModel.toneProfile },
                         set: { viewModel.setToneProfile($0) }
                     )) {
-                        Text("Camera Standard").tag(ColorProfileMode.cameraStandard)
                         Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
                         Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
-                        Text("Camera Portrait").tag(ColorProfileMode.cameraPortrait)
-                        Text("Camera Landscape").tag(ColorProfileMode.cameraLandscape)
-                        Text("Camera Vivid").tag(ColorProfileMode.cameraVivid)
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)

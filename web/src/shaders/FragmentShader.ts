@@ -26,7 +26,7 @@ uniform float u_tint;
 uniform float u_asShotTemperature;
 uniform float u_asShotTint;
 
-uniform int u_toneProfileMode; // 0: AgxVivid, 1: AgxFilmic, 2: CamStandard, 3: CamPortrait, 4: CamLandscape, 5: CamVivid
+uniform int u_toneProfileMode; // 0: AgxVivid, 1: AgxFilmic, 2: CamStandard, 3: CamPortrait, 4: CamLandscape, 5: CamVivid, 6: AgxPhotographic
 uniform int u_emulsionArchetype;
 uniform float u_emulsionExposure;
 uniform int u_emulsionGrainMode;
@@ -97,6 +97,8 @@ float computeDisplayLuma(vec3 c) {
         srgbOut = agxToneMapVivid(c, contrastGain);
     } else if (u_toneProfileMode == 1) {
         srgbOut = agxToneMap(c, contrastGain);
+    } else if (u_toneProfileMode == 6) {
+        srgbOut = agxToneMapPhotographic(c, contrastGain);
     } else {
         int camMode = u_toneProfileMode - 1;
         vec3 c_srgb = max(REC2020_TO_LINEAR_SRGB * c, vec3(0.0));
@@ -575,6 +577,9 @@ void main() {
     } else if (u_toneProfileMode == 1) {
         // Mode 1: AgX Neutral (Filmic Base)
         srgbLinearOut = agxToneMap(rec2020Color, contrastGain);
+    } else if (u_toneProfileMode == 6) {
+        // Mode 6: AgX Photographic (Chroma Preserving)
+        srgbLinearOut = agxToneMapPhotographic(rec2020Color, contrastGain);
     } else {
         // Modes 2..5: Camera Matching (2: Standard, 3: Portrait, 4: Landscape, 5: Vivid)
         int camMode = u_toneProfileMode - 1;

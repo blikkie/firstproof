@@ -71,43 +71,48 @@ pub fn compute_auto_adjustments_from_luminances(mut lums: Vec<f32>) -> AutoAdjus
 
     let p10 = p(10.0);
     let p50 = p(50.0); // Median scene midtone
+    let p70 = p(70.0); // Upper midtones / key illuminated subject
     let p90 = p(90.0);
-    let p98 = p(98.0); // Highlight ceiling / shoulder
+    let p95 = p(95.0); // Diffuse highlight anchor (Zone VII/VIII)
+    let p98 = p(98.0); // Specular highlight shoulder
 
-    // 1. Exposure Calculation (Zone System Log-Luminance Key-Value Anchoring):
-    // Photographic middle gray targets ~0.16 linear scene reflectance.
-    let target_mid = 0.16f32;
+    // Dynamic range spread between 10th and 90th percentile
+    let spread = (p90.max(0.01) / p10.max(0.001)).log2();
 
-    // Compute log-geometric mean luminance L_g across all samples:
+    // 1. Exposure Calculation (Zone System Evaluative Key Anchoring):
+    // Compute log-geometric mean luminance L_g across all samples
     let log_sum: f32 = lums.iter().map(|&l| l.max(1e-5).ln()).sum();
     let log_mean_lum = (log_sum / (n as f32)).exp();
 
-    // Zone V (18% photographic middle gray) target EV compensation:
-    let zone_v_ev = (target_mid / log_mean_lum.max(0.005)).log2();
+    // In high-contrast scenes (spread > 4.5 EV), dark backgrounds (foliage, dark rooms, night)
+    // would artificially pull the geometric mean down. Weight the illuminated key midtone (P70)
+    // to prevent blowing out illuminated subjects against dark surroundings.
+    let key_midtone = if spread > 4.5 {
+        0.35 * p50 + 0.65 * p70
+    } else {
+        0.50 * log_mean_lum + 0.50 * p50
+    };
 
-    // Percentile midtone EV requirement:
-    let midtone_ev = (target_mid / p50.max(0.01)).log2();
+    let target_mid = 0.16f32;
+    let midtone_ev = (target_mid / key_midtone.max(0.01)).log2();
 
-    // Combine Zone V log-geometric mean with 50th percentile median (50/50 weighted key anchor)
-    let combined_mid_ev: f32 = 0.5 * zone_v_ev + 0.5 * midtone_ev;
+    // Highlight ceiling safety check (Zone VII/VIII diffuse highlight anchor):
+    // Diffuse white highlights (P95) should never be pushed past ~0.55 linear scene radiance,
+    // and near-specular highlights (P98) should remain capped at 0.85.
+    let diffuse_headroom_ev = (0.55 / p95.max(0.05)).log2();
+    let specular_headroom_ev = (0.85 / p98.max(0.05)).log2();
+    let max_headroom_ev = diffuse_headroom_ev.min(specular_headroom_ev);
 
-    // Highlight ceiling safety check:
-    // Ensure the 98th percentile does not get pushed past 1.0 (specular threshold)
-    let max_headroom_ev = (1.0 / p98.max(0.05)).log2().max(0.0);
+    let target_ev = midtone_ev.min(max_headroom_ev);
 
-    // Take the minimum of midtone requirement and highlight headroom
-    let target_ev = combined_mid_ev.min(max_headroom_ev);
-
-    // Apply conservative damping (65% factor) and clamp to [-1.0, +1.75]
-    let damped_ev = target_ev * 0.65;
-    let clamped_ev = damped_ev.clamp(-1.0, 1.75);
-    // Round to 0.05 EV steps (e.g. 0.35 EV)
+    // Apply conservative photographic damping (40% factor) and clamp to [-0.85, +1.00]
+    // Ensures Auto Tone acts as a subtle refinement without blowing out open-domain filmic tone mappers.
+    let damped_ev = target_ev * 0.40;
+    let clamped_ev = damped_ev.clamp(-0.85, 1.00);
+    // Round to 0.05 EV steps (e.g. 0.15 EV)
     let final_exposure = (clamped_ev * 20.0).round() / 20.0;
 
     // 2. Contrast Calculation:
-    // Evaluate dynamic range spread between 10th and 90th percentile
-    let spread = (p90.max(0.01) / p10.max(0.001)).log2();
-
     // Standard photographic scene has around 5.0 stops between P10 and P90.
     // Flat scenes (< 4.5 stops) benefit from gentle contrast (+5 .. +15).
     // Harsh scenes (> 6.5 stops) benefit from slight contrast easing (-5 .. -10).

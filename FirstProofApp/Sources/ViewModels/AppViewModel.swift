@@ -439,7 +439,7 @@ public final class AppViewModel {
     public var cropAspectRatioPreset: CropAspectRatioPreset = .original
     @ObservationIgnored public var cropSessionSnapshot: CropSessionSnapshot? = nil
     public var lensCorrectionEnabled: Bool = true
-    public var toneProfile: ColorProfileMode = .cameraStandard
+    public var toneProfile: ColorProfileMode = .agxVivid
     public var selectedLutName: String? = nil
     public var lutIntensity: Float = 1.0
     public var availableLutTitles: [String] = []

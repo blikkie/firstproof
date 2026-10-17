@@ -462,6 +462,9 @@ fragment float4 fragmentShader(
     } else if (uniforms.toneProfileMode == 1) {
         // Mode 1: AgX Neutral (Filmic Base)
         srgbLinearOut = agxToneMap(rec2020Color, contrastGain);
+    } else if (uniforms.toneProfileMode == 6) {
+        // Mode 6: AgX Photographic (Chroma Preserving)
+        srgbLinearOut = agxToneMapPhotographic(rec2020Color, contrastGain);
     } else {
         // Modes 2..5: Camera Matching (Standard, Portrait, Landscape, Vivid)
         int camMode = uniforms.toneProfileMode - 1; // 2->1 (Standard), 3->2 (Portrait), 4->3 (Landscape), 5->4 (Vivid)

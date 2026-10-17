@@ -682,6 +682,7 @@ export class WebGLRenderer {
       CameraPortrait: 3,
       CameraLandscape: 4,
       CameraVivid: 5,
+      AgxPhotographic: 6,
     };
     gl.uniform1i(
       this.uLocs['u_toneProfileMode'],

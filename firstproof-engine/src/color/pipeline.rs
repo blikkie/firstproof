@@ -12,7 +12,7 @@
 //! 3. Pure Linear Rec.2020 working space before terminal display conversion.
 
 use crate::color::{
-    agx_tone_map, agx_tone_map_vivid, apply_print_media, apply_recording_emulsion,
+    agx_tone_map, agx_tone_map_photographic, agx_tone_map_vivid, apply_print_media, apply_recording_emulsion,
     built_in_landscape_tone_curve, built_in_portrait_tone_curve, built_in_standard_tone_curve,
     built_in_vivid_tone_curve, evaluate_tone_curve, hsv_to_rgb, linear_rgb_to_srgb8,
     linear_to_srgb_gamma, srgb_gamma_to_linear, Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB,
@@ -549,6 +549,12 @@ pub fn evaluate_display_luma(
                 + 0.6780 * srgb.g().clamp(0.0, 1.0)
                 + 0.0593 * srgb.b().clamp(0.0, 1.0)
         }
+        ColorProfileMode::AgxPhotographic => {
+            let srgb = agx_tone_map_photographic(rec2020, contrast_gain);
+            0.2627 * srgb.r().clamp(0.0, 1.0)
+                + 0.6780 * srgb.g().clamp(0.0, 1.0)
+                + 0.0593 * srgb.b().clamp(0.0, 1.0)
+        }
         mode => {
             let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
             let lum = 0.2627 * c_srgb.r() + 0.6780 * c_srgb.g() + 0.0593 * c_srgb.b();
@@ -756,6 +762,7 @@ pub fn develop_pixel_pipeline(
     let mut srgb_linear_out: Color3 = match edits.tone_profile {
         ColorProfileMode::AgxVivid => agx_tone_map_vivid(rec2020, contrast_gain),
         ColorProfileMode::AgxFilmic => agx_tone_map(rec2020, contrast_gain),
+        ColorProfileMode::AgxPhotographic => agx_tone_map_photographic(rec2020, contrast_gain),
         mode => {
             let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
             let curve = match mode {

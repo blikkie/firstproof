@@ -173,6 +173,8 @@ extension MetalRenderer {
             uniforms.toneProfileMode = 4
         case .cameraVivid:
             uniforms.toneProfileMode = 5
+        case .agxPhotographic:
+            uniforms.toneProfileMode = 6
         }
         
         if let coeff = lensCoefficients, coeff.hasDistortion {

@@ -865,7 +865,7 @@ extension AppViewModel {
         remjetBacking = .intact
         flipHorizontal = defaultExifFlipH
         flipVertical = defaultExifFlipV
-        toneProfile = .cameraStandard
+        toneProfile = .agxVivid
         selectedLutName = nil
         lutIntensity = 1.0
         curves = .defaultIdentity
@@ -996,6 +996,7 @@ extension AppViewModel {
         case .cameraPortrait: title = "Tone Profile: Camera Portrait"
         case .cameraLandscape: title = "Tone Profile: Camera Landscape"
         case .cameraVivid: title = "Tone Profile: Camera Vivid"
+        case .agxPhotographic: title = "Tone Profile: AgX Photographic"
         }
         registerDiscreteEdit(title: title, before: before)
         notifyThumbnailChanged()

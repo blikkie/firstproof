@@ -126,6 +126,7 @@ fn main() {
                     match args[i + 1].as_str() {
                         "AgxVivid" => edits.tone_profile = firstproof_core::ColorProfileMode::AgxVivid,
                         "AgxFilmic" => edits.tone_profile = firstproof_core::ColorProfileMode::AgxFilmic,
+                        "AgxPhotographic" => edits.tone_profile = firstproof_core::ColorProfileMode::AgxPhotographic,
                         "CameraStandard" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraStandard,
                         "CameraPortrait" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraPortrait,
                         "CameraLandscape" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraLandscape,
@@ -915,6 +916,187 @@ fn main() {
                 }
             }
         }
+        "find-reds" => {
+            use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
+            let path = Path::new(&args[2]);
+            let frame = RawlerDecoder.decode(path).unwrap();
+            let img = firstproof_core::export::decode_image(path).unwrap();
+            let _temp = frame.as_shot_temperature();
+            let srgb_gamma = |c: f32| -> u8 {
+                let v = if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.max(0.0).powf(1.0 / 2.4) - 0.055 };
+                (v.clamp(0.0, 1.0) * 255.0).round() as u8
+            };
+
+            println!("Searching deep reds in {} ({}x{})...", path.display(), img.width, img.height);
+            let mut count = 0;
+            for y in (50..img.height - 50).step_by(25) {
+                for x in (50..img.width - 50).step_by(25) {
+                    let idx = (y * img.width + x) * 3;
+                    let r_rec = img.data[idx];
+                    let g_rec = img.data[idx + 1];
+                    let b_rec = img.data[idx + 2];
+                    let c_rec = Color3::new(r_rec, g_rec, b_rec);
+                    let c_srgb = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec);
+                    
+                    // Look for deep vermilion/red: r_srgb is significantly higher than g_srgb and b_srgb
+                    if c_srgb.r() > 0.15 && c_srgb.r() > c_srgb.g() * 1.8 && c_srgb.r() > c_srgb.b() * 1.8 {
+                        let agx_vivid = firstproof_core::color::agx_tone_map_vivid(c_rec, 1.0);
+                        let agx_neutral = firstproof_core::color::agx_tone_map(c_rec, 1.0);
+                        let port_curve = firstproof_core::color::dcp::DcpProfile::built_in_portrait_tone_curve();
+                        let cam_port_r = firstproof_core::color::evaluate_tone_curve(c_srgb.r().max(0.0), &port_curve);
+                        let cam_port_g = firstproof_core::color::evaluate_tone_curve(c_srgb.g().max(0.0), &port_curve);
+                        let cam_port_b = firstproof_core::color::evaluate_tone_curve(c_srgb.b().max(0.0), &port_curve);
+                        
+                        let disp_port = (srgb_gamma(cam_port_r), srgb_gamma(cam_port_g), srgb_gamma(cam_port_b));
+                        let disp_vivid = (srgb_gamma(agx_vivid.r()), srgb_gamma(agx_vivid.g()), srgb_gamma(agx_vivid.b()));
+                        let disp_neutral = (srgb_gamma(agx_neutral.r()), srgb_gamma(agx_neutral.g()), srgb_gamma(agx_neutral.b()));
+                        
+                        println!("At ({:4}, {:4}) [LinRec: R={:.3}, G={:.3}, B={:.3}]:", x, y, r_rec, g_rec, b_rec);
+                        println!("   CamPortrait: ({:3}, {:3}, {:3}) [G/R={:.3}, B/R={:.3}]", disp_port.0, disp_port.1, disp_port.2, disp_port.1 as f32 / disp_port.0.max(1) as f32, disp_port.2 as f32 / disp_port.0.max(1) as f32);
+                        println!("   AgxVivid:    ({:3}, {:3}, {:3}) [G/R={:.3}, B/R={:.3}]", disp_vivid.0, disp_vivid.1, disp_vivid.2, disp_vivid.1 as f32 / disp_vivid.0.max(1) as f32, disp_vivid.2 as f32 / disp_vivid.0.max(1) as f32);
+                        println!("   AgxNeutral:  ({:3}, {:3}, {:3}) [G/R={:.3}, B/R={:.3}]", disp_neutral.0, disp_neutral.1, disp_neutral.2, disp_neutral.1 as f32 / disp_neutral.0.max(1) as f32, disp_neutral.2 as f32 / disp_neutral.0.max(1) as f32);
+                        
+                        println!("   Exposure sweep on this pixel (EV: -1 to +3):");
+                        for ev in [-1.0, 0.0, 1.0, 2.0, 3.0] {
+                            let scale = 2.0f32.powf(ev);
+                            let c_scaled = Color3::new(r_rec * scale, g_rec * scale, b_rec * scale);
+                            let c_srgb_sc = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(c_scaled);
+                            let cp_r = firstproof_core::color::evaluate_tone_curve(c_srgb_sc.r().max(0.0), &port_curve);
+                            let cp_g = firstproof_core::color::evaluate_tone_curve(c_srgb_sc.g().max(0.0), &port_curve);
+                            let cp_b = firstproof_core::color::evaluate_tone_curve(c_srgb_sc.b().max(0.0), &port_curve);
+                            let dp = (srgb_gamma(cp_r), srgb_gamma(cp_g), srgb_gamma(cp_b));
+                            
+                            let av = firstproof_core::color::agx_tone_map_vivid(c_scaled, 1.0);
+                            let _dav = (srgb_gamma(av.r()), srgb_gamma(av.g()), srgb_gamma(av.b()));
+                            
+                            let an = firstproof_core::color::agx_tone_map(c_scaled, 1.0);
+                            let _dan = (srgb_gamma(an.r()), srgb_gamma(an.g()), srgb_gamma(an.b()));
+
+                            // Prototype A: Photographic Inset (5% crosstalk instead of 20%)
+                            let photo_inset_rec2020 = firstproof_core::color::Matrix3x3([
+                                [ 1.564, -0.160, -0.015],
+                                [ 0.040,  1.070, -0.090],
+                                [ 0.035, -0.010,  1.060],
+                            ]);
+                            // Outset matrix is inverse
+                            let photo_outset = photo_inset_rec2020.inverse().unwrap_or(firstproof_core::color::Matrix3x3::IDENTITY);
+                            let min_c = c_scaled.r().min(c_scaled.g()).min(c_scaled.b());
+                            let c_comp = if min_c < 0.0 { Color3::new(c_scaled.r() - min_c, c_scaled.g() - min_c, c_scaled.b() - min_c) } else { c_scaled };
+                            let inset_a = photo_inset_rec2020.multiply_vector(c_comp);
+                            let proc_a = |v: f32| -> f32 {
+                                let x_rel = (v / 0.18).max(1e-6);
+                                let norm = ((x_rel.log2() - (-10.0)) / 16.5).clamp(0.0, 1.0);
+                                firstproof_core::color::agx::agx_apply_curve_channel(norm).powf(2.2)
+                            };
+                            let lin_a = Color3::new(proc_a(inset_a.r()), proc_a(inset_a.g()), proc_a(inset_a.b()));
+                            let out_a = photo_outset.multiply_vector(lin_a);
+                            let _da = (srgb_gamma(out_a.r().max(0.0)), srgb_gamma(out_a.g().max(0.0)), srgb_gamma(out_a.b().max(0.0)));
+
+                            // Prototype B: Ratio-Preserving AgX (evaluates tone curve on luminance, desaturates only near white)
+                            let lum_rec = 0.2627 * c_scaled.r() + 0.6780 * c_scaled.g() + 0.0593 * c_scaled.b();
+                            let lum_mapped = {
+                                let x_rel = (lum_rec / 0.18).max(1e-6);
+                                let norm = ((x_rel.log2() - (-10.0)) / 16.5).clamp(0.0, 1.0);
+                                firstproof_core::color::agx::agx_apply_curve_channel(norm).powf(2.2)
+                            };
+                            let gain = if lum_rec > 1e-6 { lum_mapped / lum_rec } else { 1.0 };
+                            let c_scaled_gain = Color3::new(c_scaled.r() * gain, c_scaled.g() * gain, c_scaled.b() * gain);
+                            let c_ratio_srgb = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(c_scaled_gain);
+                            let _db = (srgb_gamma(c_ratio_srgb.r().clamp(0.0, 1.0)), srgb_gamma(c_ratio_srgb.g().clamp(0.0, 1.0)), srgb_gamma(c_ratio_srgb.b().clamp(0.0, 1.0)));
+
+                            // Prototype D: Photographic AgX with Peak-Driven Highlight Desaturation & Camera Contrast
+                            let photo_contrast = 1.25;
+                            let lum_rec = 0.2627 * c_scaled.r() + 0.6780 * c_scaled.g() + 0.0593 * c_scaled.b();
+                            let lum_mapped = {
+                                let x_rel = (lum_rec / 0.18).max(1e-6);
+                                let norm = ((x_rel.log2() - (-10.0)) / 16.5).clamp(0.0, 1.0);
+                                let norm_c = (0.6060606 + (norm - 0.6060606) * photo_contrast).clamp(0.0, 1.0);
+                                firstproof_core::color::agx::agx_apply_curve_channel(norm_c).powf(2.2)
+                            };
+                            let gain = if lum_rec > 1e-6 { lum_mapped / lum_rec } else { 1.0 };
+                            let c_scaled_gain = Color3::new(c_scaled.r() * gain, c_scaled.g() * gain, c_scaled.b() * gain);
+                            let s_ratio = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(c_scaled_gain);
+
+                            // Base AgX with matching photographic contrast
+                            let s_agx = firstproof_core::color::agx_tone_map(c_scaled, photo_contrast);
+
+                            // Compare desaturation thresholds: 0.60 vs 0.85 vs 0.90
+                            let peak_channel = s_ratio.r().max(s_ratio.g()).max(s_ratio.b()).max(lum_mapped);
+                            
+                            let calc_blend = |start: f32, range: f32| -> (u8, u8, u8, f32) {
+                                let t = ((peak_channel - start) / range).clamp(0.0, 1.0);
+                                let h = t * t * (3.0 - 2.0 * t);
+                                let out_r = s_ratio.r().max(0.0) * (1.0 - h) + s_agx.r() * h;
+                                let out_g = s_ratio.g().max(0.0) * (1.0 - h) + s_agx.g() * h;
+                                let out_b = s_ratio.b().max(0.0) * (1.0 - h) + s_agx.b() * h;
+                                let rgb = (srgb_gamma(out_r.clamp(0.0, 1.0)), srgb_gamma(out_g.clamp(0.0, 1.0)), srgb_gamma(out_b.clamp(0.0, 1.0)));
+                                let s = (rgb.0.max(rgb.1).max(rgb.2) - rgb.0.min(rgb.1).min(rgb.2)) as f32 / rgb.0.max(rgb.1).max(rgb.2).max(1) as f32;
+                                (rgb.0, rgb.1, rgb.2, s)
+                            };
+
+                            let d60 = calc_blend(0.60, 0.35);
+                            let d85 = calc_blend(0.85, 0.25);
+                            let d90 = calc_blend(0.90, 0.30);
+
+                            println!("     EV {:+1.0}: CamPort=({:3},{:3},{:3}) [S={:.2}] | Thresh0.60=({:3},{:3},{:3}) [S={:.2}] | Thresh0.85=({:3},{:3},{:3}) [S={:.2}] | Thresh0.90=({:3},{:3},{:3}) [S={:.2}] (peak={:.2})",
+                                ev,
+                                dp.0, dp.1, dp.2, (dp.0.max(dp.1).max(dp.2) - dp.0.min(dp.1).min(dp.2)) as f32 / dp.0.max(dp.1).max(dp.2).max(1) as f32,
+                                d60.0, d60.1, d60.2, d60.3,
+                                d85.0, d85.1, d85.2, d85.3,
+                                d90.0, d90.1, d90.2, d90.3,
+                                peak_channel
+                            );
+                        }
+
+                        println!("\n=== Macbeth Chart Key Patches Audit ===");
+                        // Macbeth Patch 15: Red (sRGB: 175, 54, 60 -> Linear sRGB: ~0.428, 0.036, 0.046)
+                        // Macbeth Patch 1: Dark Skin (sRGB: 115, 82, 68 -> Linear sRGB: ~0.169, 0.084, 0.058)
+                        // Macbeth Patch 2: Light Skin (sRGB: 194, 150, 130 -> Linear sRGB: ~0.536, 0.305, 0.227)
+                        // Macbeth Patch 13: Blue (sRGB: 56, 61, 150 -> Linear sRGB: ~0.038, 0.047, 0.298)
+                        // Macbeth Patch 22: Neutral 5 (sRGB: 122, 122, 121 -> Linear sRGB: ~0.191, 0.191, 0.188)
+                        let patches = [
+                            ("Patch 15 (Red)", Color3::new(0.428, 0.036, 0.046)),
+                            ("Patch 1 (Dark Skin)", Color3::new(0.169, 0.084, 0.058)),
+                            ("Patch 2 (Light Skin)", Color3::new(0.536, 0.305, 0.227)),
+                            ("Patch 13 (Blue)", Color3::new(0.038, 0.047, 0.298)),
+                            ("Patch 22 (Neutral Mid)", Color3::new(0.191, 0.191, 0.191)),
+                        ];
+                        for (label, srgb_lin) in patches {
+                            let rec = firstproof_core::color::LINEAR_SRGB_TO_REC2020.multiply_vector(srgb_lin);
+                            let av = firstproof_core::color::agx_tone_map_vivid(rec, 1.0);
+                            let an = firstproof_core::color::agx_tone_map(rec, 1.0);
+                            
+                            // Proto B
+                            let lum_rec = 0.2627 * rec.r() + 0.6780 * rec.g() + 0.0593 * rec.b();
+                            let lum_mapped = {
+                                let x_rel = (lum_rec / 0.18).max(1e-6);
+                                let norm = ((x_rel.log2() - (-10.0)) / 16.5).clamp(0.0, 1.0);
+                                firstproof_core::color::agx::agx_apply_curve_channel(norm).powf(2.2)
+                            };
+                            let gain = if lum_rec > 1e-6 { lum_mapped / lum_rec } else { 1.0 };
+                            let c_scaled_gain = Color3::new(rec.r() * gain, rec.g() * gain, rec.b() * gain);
+                            let c_ratio_srgb = firstproof_core::color::REC2020_TO_LINEAR_SRGB.multiply_vector(c_scaled_gain);
+                            let blend_t = ((lum_mapped - 0.70) / 0.30).clamp(0.0, 1.0);
+                            let h_blend = blend_t * blend_t * (3.0 - 2.0 * blend_t);
+                            let out_b_r = c_ratio_srgb.r() * (1.0 - h_blend) + an.r() * h_blend;
+                            let out_b_g = c_ratio_srgb.g() * (1.0 - h_blend) + an.g() * h_blend;
+                            let out_b_b = c_ratio_srgb.b() * (1.0 - h_blend) + an.b() * h_blend;
+                            let db = (srgb_gamma(out_b_r.max(0.0)), srgb_gamma(out_b_g.max(0.0)), srgb_gamma(out_b_b.max(0.0)));
+                            let dav = (srgb_gamma(av.r()), srgb_gamma(av.g()), srgb_gamma(av.b()));
+                            let dan = (srgb_gamma(an.r()), srgb_gamma(an.g()), srgb_gamma(an.b()));
+
+                            println!("   {:22}: AgxNeut=({:3},{:3},{:3}) | AgxVivid=({:3},{:3},{:3}) | ProtoB=({:3},{:3},{:3})",
+                                label, dan.0, dan.1, dan.2, dav.0, dav.1, dav.2, db.0, db.1, db.2);
+                        }
+                        println!("=======================================\n");
+                        
+                        count += 1;
+                        if count >= 3 { break; }
+                    }
+                }
+                if count >= 8 { break; }
+            }
+        }
         "test-types-full-demosaic" => {
             use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
             let path = Path::new(&args[2]);
@@ -1025,6 +1207,10 @@ fn cmd_inspect_photo(path_str: &str) {
         Err(e) => {
             println!("\nℹ️  No XMP sidecar found ({})", e);
         }
+    }
+
+    if let Some(adj) = firstproof_core::auto::compute_auto_adjustments_from_path(path) {
+        println!("\n✨ Auto Tone Recommendation: Exposure: {:+.2} EV, Contrast: {:+.0}", adj.exposure, adj.contrast);
     }
 }
 

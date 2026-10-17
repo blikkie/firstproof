@@ -86,7 +86,7 @@ pub fn apply_edits_with_tier(
     let needs_spatial_pass = has_halation;
 
     let camera_curve_lut: Option<Vec<f32>> = match edits.tone_profile {
-        crate::ColorProfileMode::AgxVivid | crate::ColorProfileMode::AgxFilmic => None,
+        crate::ColorProfileMode::AgxVivid | crate::ColorProfileMode::AgxFilmic | crate::ColorProfileMode::AgxPhotographic => None,
         mode => {
             let curve = match mode {
                 crate::ColorProfileMode::CameraPortrait => crate::color::dcp::DcpProfile::built_in_portrait_tone_curve(),
@@ -118,7 +118,7 @@ pub fn apply_edits_with_tier(
     };
 
     let camera_huesatmap: Option<crate::color::DcpHueSatMap> = match edits.tone_profile {
-        crate::ColorProfileMode::AgxVivid | crate::ColorProfileMode::AgxFilmic => None,
+        crate::ColorProfileMode::AgxVivid | crate::ColorProfileMode::AgxFilmic | crate::ColorProfileMode::AgxPhotographic => None,
         crate::ColorProfileMode::CameraPortrait => Some(crate::color::DcpProfile::built_in_portrait_huesatmap()),
         crate::ColorProfileMode::CameraLandscape => Some(crate::color::DcpProfile::built_in_landscape_huesatmap()),
         crate::ColorProfileMode::CameraVivid => Some(crate::color::DcpProfile::built_in_vivid_huesatmap()),
@@ -288,6 +288,13 @@ pub fn apply_edits_with_tier(
                     crate::ColorProfileMode::AgxFilmic => {
                         let c_rec2020 = Color3::new(r, g, b);
                         let c_srgb = crate::color::agx_tone_map(c_rec2020, contrast_gain);
+                        r = c_srgb.r();
+                        g = c_srgb.g();
+                        b = c_srgb.b();
+                    }
+                    crate::ColorProfileMode::AgxPhotographic => {
+                        let c_rec2020 = Color3::new(r, g, b);
+                        let c_srgb = crate::color::agx_tone_map_photographic(c_rec2020, contrast_gain);
                         r = c_srgb.r();
                         g = c_srgb.g();
                         b = c_srgb.b();
@@ -481,6 +488,13 @@ pub fn apply_edits_with_tier(
                     crate::ColorProfileMode::AgxFilmic => {
                         let c_rec2020 = Color3::new(r, g, b);
                         let c_srgb = crate::color::agx_tone_map(c_rec2020, contrast_gain);
+                        r = c_srgb.r();
+                        g = c_srgb.g();
+                        b = c_srgb.b();
+                    }
+                    crate::ColorProfileMode::AgxPhotographic => {
+                        let c_rec2020 = Color3::new(r, g, b);
+                        let c_srgb = crate::color::agx_tone_map_photographic(c_rec2020, contrast_gain);
                         r = c_srgb.r();
                         g = c_srgb.g();
                         b = c_srgb.b();
