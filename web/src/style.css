@@ -24,11 +24,18 @@
   padding: 0;
 }
 
+html {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
 body.darkroom-body {
   background-color: var(--bg-dark);
   color: var(--text-main);
   font-family: var(--font-sans);
   height: 100vh;
+  height: 100dvh;
+  max-width: 100vw;
   overflow: hidden;
 }
 
@@ -36,6 +43,9 @@ body.darkroom-body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* --- Header --- */
@@ -1422,15 +1432,104 @@ kbd {
 /* --- Mobile Responsive Ergonomic Projection (Smartphone & Tablet) --- */
 @media (max-width: 768px) {
   .app-header {
-    padding: 0.4rem 0.8rem;
+    padding: 0.4rem 0.6rem;
+    gap: 0.4rem;
+    max-width: 100vw;
   }
   .brand-tagline {
+    display: none;
+  }
+  .brand-name {
+    font-size: 0.95rem;
+  }
+  .version-pill {
+    display: none;
+  }
+  .header-mode-nav {
+    padding: 2px;
+  }
+  .nav-tab {
+    padding: 4px 8px;
+    font-size: 0.72rem;
+  }
+  .header-nav-links .nav-link {
+    display: none;
+  }
+  #btn-header-launch-darkroom {
+    display: none;
+  }
+  .header-nav-links {
+    gap: 0.35rem;
+  }
+  .header-actions {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    scrollbar-width: none;
+  }
+  .header-actions::-webkit-scrollbar {
     display: none;
   }
   .header-actions .btn-sm {
     padding: 0.35rem 0.5rem;
     font-size: 0.72rem;
   }
+
+  /* Editorial Landing View Mobile Refinements */
+  .editorial-container {
+    padding: 1.5rem 1rem 4rem 1rem;
+    gap: 3rem;
+  }
+  .editorial-hero {
+    padding: 1.5rem 0.5rem 0.5rem 0.5rem;
+    gap: 1rem;
+  }
+  .hero-personal-note {
+    max-width: 100%;
+  }
+  .downloads-grid {
+    grid-template-columns: 1fr;
+  }
+  .download-card {
+    padding: 1.25rem 1rem;
+  }
+  .film-carrier-frame {
+    padding: 8px 10px;
+  }
+  .film-carrier-rebate {
+    padding: 2px 0;
+  }
+  .film-sprockets {
+    gap: 8px;
+    max-width: 45%;
+  }
+  .sprocket-hole {
+    width: 10px;
+    height: 7px;
+  }
+  .film-edge-code {
+    font-size: 0.58rem;
+    gap: 6px;
+  }
+  .pillars-grid,
+  .lineage-grid,
+  .comparison-notes-grid {
+    grid-template-columns: 1fr;
+  }
+  .comparison-badge-left,
+  .comparison-badge-right {
+    font-size: 0.62rem;
+    padding: 3px 6px;
+    bottom: 8px;
+  }
+  .comparison-badge-left {
+    left: 8px;
+  }
+  .comparison-badge-right {
+    right: 8px;
+  }
+
+  /* Darkroom Workspace Mobile Refinements */
   .workspace-container {
     flex-direction: column;
   }
@@ -1517,6 +1616,29 @@ kbd {
   .seg-icon {
     width: 16px;
     height: 16px;
+  }
+  .brand-name {
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+  }
+  .brand-logo svg {
+    width: 18px;
+    height: 18px;
+  }
+  .header-brand {
+    gap: 0.4rem;
+  }
+  .nav-tab {
+    padding: 3px 6px;
+    font-size: 0.68rem;
+  }
+  .hero-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .hero-actions .btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 
@@ -2179,9 +2301,12 @@ kbd {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   background: radial-gradient(circle at 50% 0%, #151820 0%, #0a0b0e 100%);
   height: calc(100vh - 54px);
+  height: calc(100dvh - 54px);
+  max-width: 100vw;
 }
 
 .editorial-container {
@@ -2430,8 +2555,10 @@ kbd {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   color: var(--text-dim);
-  overflow-x: auto;
-  white-space: nowrap;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .checksum-label {
@@ -2489,7 +2616,10 @@ kbd {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  word-break: break-all;
 }
 
 .install-cli-snippet code {
