@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import FirstProofBridge
 
+@MainActor
 struct SidebarView: View {
     @Environment(AppViewModel.self) private var viewModel
     

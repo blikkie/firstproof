@@ -248,14 +248,15 @@ extension AppViewModel {
         openAfter: Bool,
         completion: @escaping (ExportPackageReport?) -> Void
     ) {
-        var targets = Array(selectedPhotoPaths)
-        if targets.isEmpty, let single = selectedPhoto?.filePath {
-            targets = [single]
+        var resolvedTargets = Array(selectedPhotoPaths)
+        if resolvedTargets.isEmpty, let single = selectedPhoto?.filePath {
+            resolvedTargets = [single]
         }
-        guard !targets.isEmpty else {
+        guard !resolvedTargets.isEmpty else {
             completion(nil)
             return
         }
+        let targets = resolvedTargets
         
         Task { [weak self] in
             guard let self = self else { return }

@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import FirstProofBridge
 
+@MainActor
 struct InspectorView: View {
     @Environment(AppViewModel.self) private var viewModel
     

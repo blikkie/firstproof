@@ -192,6 +192,7 @@ public struct ExifBadgeView: View {
     }
 }
 
+@MainActor
 public struct RatingControlsView: View {
     @Environment(AppViewModel.self) private var viewModel
     
@@ -240,6 +241,7 @@ public struct RatingControlsView: View {
     }
 }
 
+@MainActor
 public struct FlagControlsView: View {
     @Environment(AppViewModel.self) private var viewModel
     
@@ -314,6 +316,7 @@ public struct FlagControlsView: View {
     }
 }
 
+@MainActor
 public struct BulkCullingPanel: View {
     @Environment(AppViewModel.self) private var viewModel
     

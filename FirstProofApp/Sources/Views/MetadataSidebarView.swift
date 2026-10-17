@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import FirstProofBridge
 
+@MainActor
 public struct MetadataSidebarView: View {
     @Environment(AppViewModel.self) private var viewModel
     @State private var isContentExpanded: Bool = true

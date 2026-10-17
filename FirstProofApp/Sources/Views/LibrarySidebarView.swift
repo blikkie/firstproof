@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import FirstProofBridge
 
+@MainActor
 public struct LibrarySidebarView: View {
     @Environment(AppViewModel.self) private var viewModel
     @State private var hoveredFolderPath: String? = nil
@@ -233,6 +234,7 @@ public struct LibrarySidebarView: View {
     }
 }
 
+@MainActor
 private struct SessionItemRowView: View {
     @Environment(AppViewModel.self) private var viewModel
     let folderPath: String

@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 
+@MainActor
 public struct SettingsView: View {
     @Environment(AppViewModel.self) private var viewModel
     

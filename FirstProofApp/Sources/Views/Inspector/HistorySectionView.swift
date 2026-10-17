@@ -1,6 +1,7 @@
 import SwiftUI
 import FirstProofBridge
 
+@MainActor
 public struct HistorySectionView: View {
     @Environment(AppViewModel.self) private var viewModel
     @State private var isExpanded: Bool = true

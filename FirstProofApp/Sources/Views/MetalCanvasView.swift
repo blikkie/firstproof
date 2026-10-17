@@ -3,6 +3,7 @@ import AppKit
 import MetalKit
 import FirstProofBridge
 
+@MainActor
 public struct MetalCanvasView: NSViewRepresentable {
     @Environment(AppViewModel.self) private var envViewModel
     private var explicitViewModel: AppViewModel? = nil
@@ -204,6 +205,7 @@ public struct MetalCanvasView: NSViewRepresentable {
         }
     }
     
+    @MainActor
     private static func setupCaptureClosure(for viewModel: AppViewModel, renderer: MetalRenderer) {
         viewModel.captureThumbnailSnapshot = { [weak renderer, weak viewModel] in
             guard let renderer = renderer, let vm = viewModel else { return nil }

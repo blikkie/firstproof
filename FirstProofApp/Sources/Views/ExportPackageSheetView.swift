@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import FirstProofBridge
 
+@MainActor
 public struct ExportPackageSheetView: View {
     @Environment(AppViewModel.self) private var viewModel
     @Environment(\.dismiss) private var dismiss
