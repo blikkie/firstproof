@@ -114,6 +114,9 @@
               I built this because I wanted a photo editor that was honest. It should show the world as it looks and shouldn’t require a million tweaks to look good—the first proof should come out right.
             </p>
             <p>
+              As a software engineer I generally know better than to do things that are unreasonable to vibe code, but I also like to take an idea, a cheap model, and see how far I can get.
+            </p>
+            <p>
               Along the way, I gave myself a strict rule: no magic constants to make photos artificially look "good." Everything had to be grounded either in color science or darkroom chemistry. Because of that, I went a bit down the rabbit hole and spent a lot of innovation tokens on physical film and print media emulation.
             </p>
             <p>
@@ -201,6 +204,22 @@
               <div class="checksum-box">
                 <span class="checksum-label">SHA256:</span>
                 de6e220ac0b39243f0002f721f16c5aeed232ecceaeecfbdf2511d6e2db52be9
+              </div>
+              <div class="download-install-note">
+                <div class="install-note-header">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span>macOS Gatekeeper Notice</span>
+                </div>
+                <p>
+                  This build is ad-hoc signed and not notarized through Apple's paid developer program. When opening for the first time, macOS will block it as an unidentified developer app.
+                </p>
+                <p>
+                  To launch: right-click (or Control-click) <strong>FirstProof.app</strong> in Finder and choose <strong>Open</strong>, or go to <strong>System Settings &gt; Privacy &amp; Security</strong> and click <em>Open Anyway</em>.
+                </p>
+                <div class="install-cli-snippet">
+                  <span class="checksum-label">Terminal:</span>
+                  <code>xattr -cr /Applications/FirstProof.app</code>
+                </div>
               </div>
             </div>
 

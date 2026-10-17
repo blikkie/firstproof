@@ -2439,6 +2439,63 @@ kbd {
   margin-right: 6px;
 }
 
+.download-install-note {
+  margin-top: 0.65rem;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.install-note-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 500;
+  color: var(--text-main);
+  font-size: 0.8rem;
+}
+
+.install-note-header svg {
+  color: #f59e0b;
+}
+
+.download-install-note p {
+  margin: 0;
+}
+
+.download-install-note strong {
+  color: var(--text-main);
+}
+
+.download-install-note em {
+  font-style: normal;
+  color: var(--text-main);
+}
+
+.install-cli-snippet {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.35rem 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+}
+
+.install-cli-snippet code {
+  color: #a5b4fc;
+}
+
 /* --- Optical Comparison Section --- */
 .optical-comparison-container {
   display: flex;
