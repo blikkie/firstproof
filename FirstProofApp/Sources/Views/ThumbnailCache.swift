@@ -24,7 +24,7 @@ public final class ThumbnailCache {
         
         let fastQ = OperationQueue()
         fastQ.name = "photo.firstproof.fastThumbnailQueue"
-        fastQ.maxConcurrentOperationCount = 6
+        fastQ.maxConcurrentOperationCount = 3
         fastQ.qualityOfService = .userInitiated
         self.fastQueue = fastQ
         
@@ -216,12 +216,19 @@ public final class ThumbnailCache {
     }
     
     // MARK: - Fast Embedded Preview Extraction (2-5 ms)
-    public static func extractFastPreview(filePath: String, xmp: XmpDataRecord? = nil) -> NSImage? {
+    public static func extractFastPreview(
+        filePath: String,
+        xmp: XmpDataRecord? = nil,
+        isCancelled: (() -> Bool)? = nil
+    ) -> NSImage? {
+        if isCancelled?() == true { return nil }
         var loaded: NSImage? = nil
         
         // 1. Fast-path for RAW photos: Extract embedded camera JPEG preview
         if let data = extractPreview(path: filePath) {
+            if isCancelled?() == true { return nil }
             if let src = CGImageSourceCreateWithData(data as CFData, nil) {
+                if isCancelled?() == true { return nil }
                 let options: [CFString: Any] = [
                     kCGImageSourceCreateThumbnailFromImageAlways: true,
                     kCGImageSourceCreateThumbnailWithTransform: true,
@@ -233,11 +240,14 @@ public final class ThumbnailCache {
                 }
             }
         }
+        
+        if isCancelled?() == true { return nil }
         
         // 2. Fallback for non-RAW images (JPEGs, PNGs)
         if loaded == nil {
             let url = URL(fileURLWithPath: filePath) as CFURL
             if let src = CGImageSourceCreateWithURL(url, nil) {
+                if isCancelled?() == true { return nil }
                 let options: [CFString: Any] = [
                     kCGImageSourceCreateThumbnailFromImageAlways: true,
                     kCGImageSourceCreateThumbnailWithTransform: true,
@@ -249,6 +259,8 @@ public final class ThumbnailCache {
                 }
             }
         }
+        
+        if isCancelled?() == true { return nil }
         
         // 3. Apply rotation / flips from XMP or EXIF
         if var base = loaded {
@@ -256,19 +268,23 @@ public final class ThumbnailCache {
             let userFlipH = xmp?.edits.flipHorizontal ?? false
             let userFlipV = xmp?.edits.flipVertical ?? false
             
-            let meta = extractMetadata(path: filePath)
-            let exifDec = meta?.orientation.map { decodeExifOrientation(orientation: $0) }
-            let exifRot = Int(exifDec?.rotation ?? 0)
-            let exifFlipH = exifDec?.flipHorizontal ?? false
-            let exifFlipV = exifDec?.flipVertical ?? false
-            
-            let deltaRot = (userRot - exifRot + 360) % 360
-            let deltaFlipH = userFlipH != exifFlipH
-            let deltaFlipV = userFlipV != exifFlipV
-            
-            if deltaRot != 0 || deltaFlipH || deltaFlipV {
-                base = base.transformed(rotationDegrees: CGFloat(deltaRot), flipH: deltaFlipH, flipV: deltaFlipV)
-                loaded = base
+            // Fast-path: Only probe EXIF orientation if user XMP specified an orientation override
+            if userRot != 0 || userFlipH || userFlipV {
+                let meta = extractMetadata(path: filePath)
+                let exifDec = meta?.orientation.map { decodeExifOrientation(orientation: $0) }
+                let exifRot = Int(exifDec?.rotation ?? 0)
+                let exifFlipH = exifDec?.flipHorizontal ?? false
+                let exifFlipV = exifDec?.flipVertical ?? false
+                
+                let deltaRot = (userRot - exifRot + 360) % 360
+                let deltaFlipH = userFlipH != exifFlipH
+                let deltaFlipV = userFlipV != exifFlipV
+                
+                if deltaRot != 0 || deltaFlipH || deltaFlipV {
+                    if isCancelled?() == true { return nil }
+                    base = base.transformed(rotationDegrees: CGFloat(deltaRot), flipH: deltaFlipH, flipV: deltaFlipV)
+                    loaded = base
+                }
             }
         }
         
@@ -346,10 +362,9 @@ public struct AsyncThumbnailView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .thumbnailDidChange)) { note in
             if let targetPath = note.object as? String, targetPath == filePath {
-                if let updated = ThumbnailCache.shared.image(for: filePath) {
+                if let updated = ThumbnailCache.shared.fastCachedImage(for: filePath) {
                     self.image = updated
                 } else {
-                    self.image = nil
                     loadThumbnail()
                 }
             }
@@ -357,30 +372,28 @@ public struct AsyncThumbnailView: View {
     }
     
     private func loadThumbnail() {
-        let xmp = readXmp(path: filePath)
-        let asShot = getAsShotWhiteBalance(path: filePath)
-        let hasEdits = xmp.map { editsHasModifications(edits: $0.edits, asShotTemp: asShot?.temperature ?? 5500.0, asShotTint: asShot?.tint ?? 0.0) } ?? false
-        
-        // Exact edited thumbnail hit (RAM or Disk)
-        if let cached = ThumbnailCache.shared.image(for: filePath, edits: xmp?.edits) {
-            self.image = cached
+        // Fast-path 1: Instant RAM cache hit (0ms, 0 disk I/O, completely non-blocking)
+        if let fastCached = ThumbnailCache.shared.fastCachedImage(for: filePath) {
+            self.image = fastCached
             return
         }
         
-        // Check if fast preview is already in RAM cache
-        if let fastCached = ThumbnailCache.shared.fastCachedImage(for: filePath) {
-            self.image = fastCached
-            if !hasEdits { return }
-        }
+        // Cancel any pending operations before scheduling new one
+        fastOperation?.cancel()
+        fastOperation = nil
+        renderOperation?.cancel()
+        renderOperation = nil
         
-        // STAGE 1: Instant embedded camera JPEG extraction (2-5 ms)
+        // STAGE 1: Fully asynchronous background disk & preview extraction
         let fastOp = BlockOperation()
         fastOp.queuePriority = .veryHigh
         fastOp.addExecutionBlock { [weak fastOp] in
             guard let fastOp = fastOp, !fastOp.isCancelled else { return }
             
+            // Check memory cache again in case another background operation just populated it
             if let fastCached = ThumbnailCache.shared.fastCachedImage(for: filePath) {
                 DispatchQueue.main.async {
+                    guard !fastOp.isCancelled else { return }
                     if self.image == nil {
                         self.image = fastCached
                     }
@@ -388,63 +401,110 @@ public struct AsyncThumbnailView: View {
                 return
             }
             
-            if let fastImg = ThumbnailCache.extractFastPreview(filePath: filePath, xmp: xmp) {
+            guard !fastOp.isCancelled else { return }
+            
+            // Background check: Is on-disk cached thumbnail available?
+            if let diskCached = ThumbnailCache.shared.image(for: filePath) {
+                guard !fastOp.isCancelled else { return }
+                DispatchQueue.main.async {
+                    guard !fastOp.isCancelled else { return }
+                    self.image = diskCached
+                }
+                return
+            }
+            
+            guard !fastOp.isCancelled else { return }
+            
+            // Background check: read XMP sidecar if present
+            let xmp = readXmp(path: filePath)
+            
+            guard !fastOp.isCancelled else { return }
+            
+            // Background extract: embedded camera JPEG preview (with cooperative cancellation)
+            if let fastImg = ThumbnailCache.extractFastPreview(
+                filePath: filePath,
+                xmp: xmp,
+                isCancelled: { fastOp.isCancelled }
+            ) {
+                guard !fastOp.isCancelled else { return }
                 ThumbnailCache.shared.setFastCachedImage(fastImg, for: filePath)
                 DispatchQueue.main.async {
-                    if self.image == nil {
-                        self.image = fastImg
-                    }
+                    guard !fastOp.isCancelled else { return }
+                    self.image = fastImg
                 }
             }
-        }
-        self.fastOperation = fastOp
-        ThumbnailCache.shared.fastQueue.addOperation(fastOp)
-        
-        // STAGE 2: If photo has custom edits, enqueue refinement render
-        if hasEdits, let edits = xmp?.edits {
-            let renderOp = BlockOperation()
-            renderOp.queuePriority = .normal
-            renderOp.addExecutionBlock { [weak renderOp] in
-                guard let renderOp = renderOp, !renderOp.isCancelled else { return }
+            
+            guard !fastOp.isCancelled else { return }
+            
+            // STAGE 2: If photo has custom develop edits, enqueue refinement render
+            if let xmp = xmp {
+                let asShot = getAsShotWhiteBalance(path: filePath)
+                guard !fastOp.isCancelled else { return }
                 
-                // Check if another thread completed it
-                if let cached = ThumbnailCache.shared.image(for: filePath, edits: edits) {
-                    DispatchQueue.main.async {
-                        self.image = cached
-                    }
-                    return
-                }
-                
-                let key = ThumbnailCache.cacheKey(filePath: filePath, edits: edits)
-                let tempThumbPath = ThumbnailCache.shared.diskCacheURL.appendingPathComponent("\(key).jpg").path
-                let success = exportPhoto(
-                    inputPath: filePath,
-                    outputPath: tempThumbPath,
-                    edits: edits,
-                    lensCoeffs: nil,
-                    quality: 80,
-                    maxDimension: 320,
-                    colorSpace: nil,
-                    renderingIntent: nil,
-                    ultraHdr: false,
-                    demosaicQuality: nil,
-                    renderTier: nil
+                let hasEdits = editsHasModifications(
+                    edits: xmp.edits,
+                    asShotTemp: asShot?.temperature ?? 5500.0,
+                    asShotTint: asShot?.tint ?? 0.0
                 )
                 
-                guard !renderOp.isCancelled else { return }
-                
-                if success, let thumbImg = NSImage(contentsOfFile: tempThumbPath) {
-                    ThumbnailCache.shared.saveEditedThumbnail(thumbImg, for: filePath, edits: edits, broadcast: false)
-                    DispatchQueue.main.async {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            self.image = thumbImg
-                        }
+                if hasEdits {
+                    self.enqueueRefinementRender(edits: xmp.edits)
+                }
+            }
+        }
+        
+        self.fastOperation = fastOp
+        ThumbnailCache.shared.fastQueue.addOperation(fastOp)
+    }
+    
+    private func enqueueRefinementRender(edits: EditSettings) {
+        let renderOp = BlockOperation()
+        renderOp.queuePriority = .normal
+        renderOp.addExecutionBlock { [weak renderOp] in
+            guard let renderOp = renderOp, !renderOp.isCancelled else { return }
+            
+            // Check if already on disk
+            if let cached = ThumbnailCache.shared.image(for: filePath, edits: edits) {
+                DispatchQueue.main.async {
+                    guard !renderOp.isCancelled else { return }
+                    self.image = cached
+                }
+                return
+            }
+            
+            let key = ThumbnailCache.cacheKey(filePath: filePath, edits: edits)
+            let tempThumbPath = ThumbnailCache.shared.diskCacheURL.appendingPathComponent("\(key).jpg").path
+            
+            guard !renderOp.isCancelled else { return }
+            
+            let success = exportPhoto(
+                inputPath: filePath,
+                outputPath: tempThumbPath,
+                edits: edits,
+                lensCoeffs: nil,
+                quality: 80,
+                maxDimension: 320,
+                colorSpace: nil,
+                renderingIntent: nil,
+                ultraHdr: false,
+                demosaicQuality: nil,
+                renderTier: nil
+            )
+            
+            guard !renderOp.isCancelled else { return }
+            
+            if success, let thumbImg = NSImage(contentsOfFile: tempThumbPath) {
+                ThumbnailCache.shared.saveEditedThumbnail(thumbImg, for: filePath, edits: edits, broadcast: false)
+                DispatchQueue.main.async {
+                    guard !renderOp.isCancelled else { return }
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        self.image = thumbImg
                     }
                 }
             }
-            self.renderOperation = renderOp
-            ThumbnailCache.shared.renderQueue.addOperation(renderOp)
         }
+        self.renderOperation = renderOp
+        ThumbnailCache.shared.renderQueue.addOperation(renderOp)
     }
 }
 

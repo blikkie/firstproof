@@ -374,13 +374,16 @@ class DarkroomApp {
   private cacheElements() {
     const ids = [
       'btn-open-folder',
+      'btn-open-photos',
       'file-input-fallback',
+      'file-input-photos',
       'btn-original-peek',
       'btn-export-proof',
       'btn-parity-audit',
       'btn-shortcuts',
       'empty-state',
       'btn-empty-open',
+      'btn-empty-open-photos',
       'developing-spinner',
       'filmstrip-count',
       'filmstrip-scroll',
@@ -506,20 +509,53 @@ class DarkroomApp {
       }
     };
 
-    this.elements['btn-open-folder'].addEventListener(
+    this.elements['btn-open-folder']?.addEventListener(
       'click',
       handleOpenFolder,
     );
-    this.elements['btn-empty-open'].addEventListener('click', handleOpenFolder);
+    this.elements['btn-empty-open']?.addEventListener(
+      'click',
+      handleOpenFolder,
+    );
 
-    (this.elements['file-input-fallback'] as HTMLInputElement).addEventListener(
+    (
+      this.elements['file-input-fallback'] as HTMLInputElement
+    )?.addEventListener('change', (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      if (target.files && target.files.length > 0) {
+        const entries = FolderIntake.processFileList(target.files);
+        this.pageNavController.setMode('darkroom');
+        this.filmstripController.loadPhotos(entries);
+      }
+    });
+
+    const handleOpenPhotos = () => {
+      const photosEl = this.elements['file-input-photos'] as HTMLInputElement;
+      if (photosEl) {
+        photosEl.value = '';
+        photosEl.click();
+      }
+    };
+
+    this.elements['btn-open-photos']?.addEventListener(
+      'click',
+      handleOpenPhotos,
+    );
+    this.elements['btn-empty-open-photos']?.addEventListener(
+      'click',
+      handleOpenPhotos,
+    );
+
+    (this.elements['file-input-photos'] as HTMLInputElement)?.addEventListener(
       'change',
       (e: Event) => {
         const target = e.target as HTMLInputElement;
         if (target.files && target.files.length > 0) {
           const entries = FolderIntake.processFileList(target.files);
-          this.pageNavController.setMode('darkroom');
-          this.filmstripController.loadPhotos(entries);
+          if (entries.length > 0) {
+            this.pageNavController.setMode('darkroom');
+            this.filmstripController.loadPhotos(entries);
+          }
         }
       },
     );

@@ -267,7 +267,20 @@ body.darkroom-body {
 .empty-actions {
   display: flex;
   justify-content: center;
-  margin-bottom: 1.5rem;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.empty-subtext {
+  font-size: 0.78rem !important;
+  color: var(--text-dim) !important;
+  margin-top: 0;
+  margin-bottom: 1.25rem !important;
+  max-width: 440px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.4;
 }
 
 .zero-tracking-pill {
@@ -1473,6 +1486,15 @@ kbd {
   .header-actions .btn-sm {
     padding: 0.35rem 0.5rem;
     font-size: 0.72rem;
+  }
+  #btn-open-folder,
+  .btn-folder-desktop {
+    display: none !important;
+  }
+  #btn-open-photos {
+    background-color: var(--accent-blue);
+    color: #ffffff;
+    border-color: transparent;
   }
 
   /* Editorial Landing View Mobile Refinements */

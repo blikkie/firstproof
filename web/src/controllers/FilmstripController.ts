@@ -61,18 +61,20 @@ export class FilmstripController {
       this.observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
-            if (entry.isIntersecting) {
-              const idxStr = entry.target.getAttribute('data-idx');
-              if (idxStr !== null) {
-                const idx = parseInt(idxStr, 10);
+            const idxStr = entry.target.getAttribute('data-idx');
+            if (idxStr !== null) {
+              const idx = parseInt(idxStr, 10);
+              if (entry.isIntersecting) {
                 this.enqueueThumbnail(idx);
+              } else {
+                this.cancelThumbnail(idx);
               }
             }
           }
         },
         {
           root: this.container,
-          rootMargin: '300px', // Pre-fetch thumbnails 300px before scrolling into view
+          rootMargin: '150px',
           threshold: 0.01,
         },
       );
@@ -377,12 +379,23 @@ export class FilmstripController {
   }
 
   // --- Concurrency-Controlled Lazy Thumbnail Loading ---
+  private cancelThumbnail(idx: number) {
+    const qIdx = this.thumbnailQueue.indexOf(idx);
+    if (qIdx !== -1) {
+      this.thumbnailQueue.splice(qIdx, 1);
+    }
+  }
+
   private enqueueThumbnail(idx: number) {
     if (idx < 0 || idx >= this.fileEntries.length) return;
     if (this.thumbCache.has(idx) || this.thumbLoadingSet.has(idx)) return;
-    if (this.thumbnailQueue.includes(idx)) return;
 
-    this.thumbnailQueue.push(idx);
+    // Prioritize visible cards (LIFO) so user sees thumbs for what is on screen
+    const existing = this.thumbnailQueue.indexOf(idx);
+    if (existing !== -1) {
+      this.thumbnailQueue.splice(existing, 1);
+    }
+    this.thumbnailQueue.unshift(idx);
     this.processQueue();
   }
 

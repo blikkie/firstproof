@@ -33,6 +33,9 @@ export class FolderIntake {
     'raf',
     'jpg',
     'jpeg',
+    'png',
+    'tif',
+    'tiff',
   ]);
 
   public static isSupportedExtension(filename: string): boolean {
