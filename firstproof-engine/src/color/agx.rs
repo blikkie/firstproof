@@ -283,7 +283,7 @@ mod tests {
         for &gray in &[0.01, 0.05, 0.18, 0.5, 1.0, 4.0, 16.0] {
             let input = Color3::new(gray, gray, gray);
             let out_photo = agx_tone_map_photographic(input, 1.0);
-            let out_base = agx_tone_map(input, 1.0);
+            let out_base = agx_tone_map(input, 1.28);
 
             assert!(
                 (out_photo.r() - out_photo.g()).abs() < 1e-4,
