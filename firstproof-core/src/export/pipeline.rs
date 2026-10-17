@@ -258,7 +258,25 @@ pub fn apply_edits_with_tier(
             b = b_st;
 
             // 3. TERMINAL STAGE: AgX Filmic or Camera-Matching Tone Profiles -> Linear sRGB Output
-            if image.is_raw || edits.contrast != 0.0 || edits.highlights != 0.0 || edits.shadows != 0.0 || edits.whites != 0.0 || edits.blacks != 0.0 || edits.emulsion_archetype != crate::EmulsionArchetype::None || edits.tone_profile != crate::ColorProfileMode::AgxFilmic {
+            if !image.is_raw {
+                let c_rec2020 = Color3::new(r, g, b);
+                let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+                let mut r_srgb = c_srgb.r().max(0.0);
+                let mut g_srgb = c_srgb.g().max(0.0);
+                let mut b_srgb = c_srgb.b().max(0.0);
+                if (contrast_gain - 1.0).abs() > 0.001 {
+                    r_srgb = ((r_srgb - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+                    g_srgb = ((g_srgb - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+                    b_srgb = ((b_srgb - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+                } else {
+                    r_srgb = r_srgb.clamp(0.0, 1.0);
+                    g_srgb = g_srgb.clamp(0.0, 1.0);
+                    b_srgb = b_srgb.clamp(0.0, 1.0);
+                }
+                r = r_srgb;
+                g = g_srgb;
+                b = b_srgb;
+            } else {
                 match edits.tone_profile {
                     crate::ColorProfileMode::AgxVivid => {
                         let c_rec2020 = Color3::new(r, g, b);
@@ -305,12 +323,6 @@ pub fn apply_edits_with_tier(
                         }
                     }
                 }
-            } else {
-                let c_rec2020 = Color3::new(r, g, b);
-                let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
-                r = c_srgb.r().max(0.0);
-                g = c_srgb.g().max(0.0);
-                b = c_srgb.b().max(0.0);
             }
 
             // 4. Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration in Linear Display Space
@@ -439,7 +451,25 @@ pub fn apply_edits_with_tier(
             b = b_st;
 
             // 3. TERMINAL STAGE: AgX Filmic or Camera-Matching Tone Profiles -> Linear sRGB Output
-            if image.is_raw || edits.contrast != 0.0 || edits.highlights != 0.0 || edits.shadows != 0.0 || edits.whites != 0.0 || edits.blacks != 0.0 || edits.emulsion_archetype != crate::EmulsionArchetype::None || edits.tone_profile != crate::ColorProfileMode::AgxFilmic {
+            if !image.is_raw {
+                let c_rec2020 = Color3::new(r, g, b);
+                let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+                let mut r_srgb = c_srgb.r().max(0.0);
+                let mut g_srgb = c_srgb.g().max(0.0);
+                let mut b_srgb = c_srgb.b().max(0.0);
+                if (contrast_gain - 1.0).abs() > 0.001 {
+                    r_srgb = ((r_srgb - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+                    g_srgb = ((g_srgb - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+                    b_srgb = ((b_srgb - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+                } else {
+                    r_srgb = r_srgb.clamp(0.0, 1.0);
+                    g_srgb = g_srgb.clamp(0.0, 1.0);
+                    b_srgb = b_srgb.clamp(0.0, 1.0);
+                }
+                r = r_srgb;
+                g = g_srgb;
+                b = b_srgb;
+            } else {
                 match edits.tone_profile {
                     crate::ColorProfileMode::AgxVivid => {
                         let c_rec2020 = Color3::new(r, g, b);
@@ -486,12 +516,6 @@ pub fn apply_edits_with_tier(
                         }
                     }
                 }
-            } else {
-                let c_rec2020 = Color3::new(r, g, b);
-                let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
-                r = c_srgb.r().max(0.0);
-                g = c_srgb.g().max(0.0);
-                b = c_srgb.b().max(0.0);
             }
 
             // 4. Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration in Linear Display Space

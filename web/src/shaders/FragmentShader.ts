@@ -290,6 +290,11 @@ void main() {
         (u_hasMasterCurve == 0) &&
         (u_hasRgbCurves == 0);
 
+    if (u_isLinearRec2020 == 0 && isNeutralEdits) {
+        fragColor = sampled;
+        return;
+    }
+
     vec3 rec2020Color;
     if (u_isLinearRec2020 != 0) {
         rec2020Color = sampled.rgb;
@@ -555,7 +560,16 @@ void main() {
     // 10. TERMINAL STAGE: AgX Filmic Tone Mapping Engine OR Camera-Matching Profiles -> Linear sRGB
     float contrastGain = (u_contrast >= 0.0) ? (1.0 + u_contrast / 100.0) : (1.0 + (u_contrast / 100.0) * 0.60);
     vec3 srgbLinearOut;
-    if (u_toneProfileMode == 0) {
+    if (u_isLinearRec2020 == 0) {
+        // Non-RAW master images (JPEG/PNG/TIFF) are already tone-mapped display-referred SDR.
+        // Bypass camera DCP and AgX filmic tone curves to prevent harsh double-contrast compression.
+        vec3 srgb = max(REC2020_TO_LINEAR_SRGB * rec2020Color, vec3(0.0));
+        if (abs(contrastGain - 1.0) > 0.001) {
+            srgbLinearOut = clamp((srgb - 0.18) * contrastGain + 0.18, 0.0, 1.0);
+        } else {
+            srgbLinearOut = clamp(srgb, 0.0, 1.0);
+        }
+    } else if (u_toneProfileMode == 0) {
         // Mode 0: AgX Vivid (Filmic Punchy) - DEFAULT
         srgbLinearOut = agxToneMapVivid(rec2020Color, contrastGain);
     } else if (u_toneProfileMode == 1) {

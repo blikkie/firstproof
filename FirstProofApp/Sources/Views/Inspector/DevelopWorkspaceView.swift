@@ -17,19 +17,29 @@ public struct DevelopWorkspaceView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
                 
-                Picker("", selection: Binding<ColorProfileMode>(
-                    get: { viewModel.toneProfile },
-                    set: { viewModel.setToneProfile($0) }
-                )) {
-                    Text("Camera Standard").tag(ColorProfileMode.cameraStandard)
-                    Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
-                    Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
-                    Text("Camera Portrait").tag(ColorProfileMode.cameraPortrait)
-                    Text("Camera Landscape").tag(ColorProfileMode.cameraLandscape)
-                    Text("Camera Vivid").tag(ColorProfileMode.cameraVivid)
+                if viewModel.selectedPhotoIsRaw {
+                    Picker("", selection: Binding<ColorProfileMode>(
+                        get: { viewModel.toneProfile },
+                        set: { viewModel.setToneProfile($0) }
+                    )) {
+                        Text("Camera Standard").tag(ColorProfileMode.cameraStandard)
+                        Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
+                        Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
+                        Text("Camera Portrait").tag(ColorProfileMode.cameraPortrait)
+                        Text("Camera Landscape").tag(ColorProfileMode.cameraLandscape)
+                        Text("Camera Vivid").tag(ColorProfileMode.cameraVivid)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                } else {
+                    HStack {
+                        Text("Embedded Camera Profile")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.vertical, 2)
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
                 
                 HStack(spacing: 8) {
                     Picker("", selection: Binding<String>(

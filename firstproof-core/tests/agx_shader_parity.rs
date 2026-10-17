@@ -7,9 +7,9 @@
 //! 4. High dynamic range highlights roll off smoothly with zero digital clipping.
 
 use firstproof_core::color::agx::{
-    agx_tone_map, AGX_EV_RANGE, AGX_MID_GRAY_NORM, AGX_MIN_EV,
+    agx_tone_map, agx_tone_map_vivid, AGX_EV_RANGE, AGX_MID_GRAY_NORM, AGX_MIN_EV,
 };
-use firstproof_core::color::Color3;
+use firstproof_core::color::{Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB};
 
 /// Simulates the exact single-precision Metal shader implementation (`agxToneMap` in Shaders.metal)
 fn metal_shader_agx_sim(rec2020_r: f32, rec2020_g: f32, rec2020_b: f32, contrast_gain: f32) -> (f32, f32, f32) {
@@ -324,6 +324,116 @@ fn test_synthetic_greyscale_wedge_photometric_continuity() {
         }
 
         prev_output = out.r();
+    }
+}
+
+/// Simulates Metal shader Step 9 non-RAW terminal stage:
+/// Non-RAW master images bypass AgX and Camera DCP tone curves, applying only
+/// the contrast pivot around middle gray (0.18) if contrast != 0.
+fn metal_shader_non_raw_sim(rec2020_r: f32, rec2020_g: f32, rec2020_b: f32, contrast_gain: f32) -> (f32, f32, f32) {
+    // REC2020_TO_LINEAR_SRGB * rec2020Color
+    // In Metal MSL column-major float3x3:
+    let srgb_r = (1.660491 * rec2020_r - 0.5876411 * rec2020_g - 0.0728499 * rec2020_b).max(0.0);
+    let srgb_g = (-0.1245505 * rec2020_r + 1.1328999 * rec2020_g - 0.0083494 * rec2020_b).max(0.0);
+    let srgb_b = (-0.0181508 * rec2020_r - 0.1005789 * rec2020_g + 1.1187297 * rec2020_b).max(0.0);
+
+    if (contrast_gain - 1.0).abs() > 0.001 {
+        (
+            ((srgb_r - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0),
+            ((srgb_g - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0),
+            ((srgb_b - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0),
+        )
+    } else {
+        (
+            srgb_r.clamp(0.0, 1.0),
+            srgb_g.clamp(0.0, 1.0),
+            srgb_b.clamp(0.0, 1.0),
+        )
+    }
+}
+
+/// Simulates Rust CPU export pipeline Step 3 for non-RAW images
+fn rust_export_non_raw_sim(rec2020_r: f32, rec2020_g: f32, rec2020_b: f32, contrast_gain: f32) -> (f32, f32, f32) {
+    let c_rec2020 = Color3::new(rec2020_r, rec2020_g, rec2020_b);
+    let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(c_rec2020);
+    let mut r = c_srgb.r().max(0.0);
+    let mut g = c_srgb.g().max(0.0);
+    let mut b = c_srgb.b().max(0.0);
+    if (contrast_gain - 1.0).abs() > 0.001 {
+        r = ((r - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+        g = ((g - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+        b = ((b - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+    } else {
+        r = r.clamp(0.0, 1.0);
+        g = g.clamp(0.0, 1.0);
+        b = b.clamp(0.0, 1.0);
+    }
+    (r, g, b)
+}
+
+#[test]
+fn test_non_raw_terminal_bypass_parity_and_identity() {
+    let test_srgb_levels = [0.01, 0.05, 0.10, 0.18, 0.35, 0.50, 0.75, 0.90, 0.99];
+    let test_contrasts = [0.0, 15.0, -20.0];
+
+    for &contrast_val in &test_contrasts {
+        let contrast_gain = if contrast_val >= 0.0 {
+            1.0 + (contrast_val / 100.0)
+        } else {
+            1.0 + (contrast_val / 100.0) * 0.60
+        };
+
+        for &r in &test_srgb_levels {
+            for &g in &test_srgb_levels {
+                for &b in &test_srgb_levels {
+                    // Encode linear sRGB -> Linear Rec.2020 (simulating Step 2)
+                    let c_srgb_lin = Color3::new(r, g, b);
+                    let c_rec2020 = LINEAR_SRGB_TO_REC2020.multiply_vector(c_srgb_lin);
+
+                    let (rust_r, rust_g, rust_b) = rust_export_non_raw_sim(
+                        c_rec2020.r(), c_rec2020.g(), c_rec2020.b(), contrast_gain
+                    );
+                    let (metal_r, metal_g, metal_b) = metal_shader_non_raw_sim(
+                        c_rec2020.r(), c_rec2020.g(), c_rec2020.b(), contrast_gain
+                    );
+
+                    // 1. Bit-level parity between Metal shader and Rust CPU export pipeline
+                    let diff_r = (rust_r - metal_r).abs();
+                    let diff_g = (rust_g - metal_g).abs();
+                    let diff_b = (rust_b - metal_b).abs();
+                    assert!(
+                        diff_r < 1e-5 && diff_g < 1e-5 && diff_b < 1e-5,
+                        "Non-RAW dual-engine parity divergence: Rust=({}, {}, {}), Metal=({}, {}, {})",
+                        rust_r, rust_g, rust_b, metal_r, metal_g, metal_b
+                    );
+
+                    // 2. Identity preservation when contrast == 0 (zero slider touches)
+                    if contrast_val == 0.0 {
+                        assert!(
+                            (rust_r - r).abs() < 1e-5 &&
+                            (rust_g - g).abs() < 1e-5 &&
+                            (rust_b - b).abs() < 1e-5,
+                            "Non-RAW neutral identity violated: input=({}, {}, {}), output=({}, {}, {})",
+                            r, g, b, rust_r, rust_g, rust_b
+                        );
+
+                        // 3. Proves that output is NOT corrupted by AgX Vivid double tone-mapping
+                        let agx_vivid_out = agx_tone_map_vivid(c_rec2020, 1.0);
+                        if (r - 0.18).abs() > 0.05 {
+                            // Points away from mid-gray must diverge significantly from AgX Vivid
+                            let diff_agx = (rust_r - agx_vivid_out.r()).abs()
+                                + (rust_g - agx_vivid_out.g()).abs()
+                                + (rust_b - agx_vivid_out.b()).abs();
+                            assert!(
+                                diff_agx > 0.005,
+                                "Non-RAW output unexpectedly matched AgX Vivid tone curve at ({}, {}, {})",
+                                r, g, b
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

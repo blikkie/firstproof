@@ -74,20 +74,20 @@ fragment float4 fragmentShader(
     
     // Fast-path: When all edit sliders are at default neutral positions for JPEG thumbnails, return exact as-shot pixels.
     // (Linear RAW must always pass through the baseline exposure, filmic curve, and sRGB color transform).
-    bool isNeutralEdits = (uniforms.exposure == 0.0) && 
+    bool isNeutralEdits = (abs(uniforms.exposure) < 0.001) && 
                           (abs(uniforms.temperature - 5500.0) < 1.0) && 
-                          (uniforms.tint == 0.0) && 
-                          (uniforms.contrast == 0.0) &&
-                          (uniforms.highlights == 0.0) &&
-                          (uniforms.shadows == 0.0) &&
-                          (uniforms.whites == 0.0) &&
-                          (uniforms.blacks == 0.0) &&
-                          (uniforms.vibrance == 0.0) &&
-                          (uniforms.saturation == 0.0) &&
-                          (uniforms.deepBlue == 0.0) &&
-                          (uniforms.foliage == 0.0) && 
-                          (uniforms.splitToningShadowSat == 0.0) &&
-                          (uniforms.splitToningHighlightSat == 0.0) &&
+                          (abs(uniforms.tint) < 0.001) && 
+                          (abs(uniforms.contrast) < 0.001) &&
+                          (abs(uniforms.highlights) < 0.001) &&
+                          (abs(uniforms.shadows) < 0.001) &&
+                          (abs(uniforms.whites) < 0.001) &&
+                          (abs(uniforms.blacks) < 0.001) &&
+                          (abs(uniforms.vibrance) < 0.001) &&
+                          (abs(uniforms.saturation) < 0.001) &&
+                          (abs(uniforms.deepBlue) < 0.001) &&
+                          (abs(uniforms.foliage) < 0.001) && 
+                          (abs(uniforms.splitToningShadowSat) < 0.001) &&
+                          (abs(uniforms.splitToningHighlightSat) < 0.001) &&
                           (uniforms.lutEnabled == 0) &&
                           (uniforms.sharpeningAmount == 0.0) &&
                           (uniforms.noiseReduction == 0.0) &&
@@ -447,16 +447,21 @@ fragment float4 fragmentShader(
         ? (1.0 + editContrast / 100.0)
         : (1.0 + (editContrast / 100.0) * 0.60);
     float3 srgbLinearOut;
-    if (uniforms.toneProfileMode == 0) {
+    if (uniforms.isLinearRaw == 0) {
+        // Non-RAW master images (JPEG/PNG/TIFF) are already tone-mapped display-referred SDR.
+        // Bypass camera DCP and AgX filmic tone curves to prevent harsh double-contrast compression.
+        float3 srgb = max(REC2020_TO_LINEAR_SRGB * rec2020Color, float3(0.0));
+        if (abs(contrastGain - 1.0) > 0.001) {
+            srgbLinearOut = clamp((srgb - 0.18) * contrastGain + 0.18, 0.0, 1.0);
+        } else {
+            srgbLinearOut = clamp(srgb, 0.0, 1.0);
+        }
+    } else if (uniforms.toneProfileMode == 0) {
         // Mode 0: AgX Vivid (Filmic Punchy) - DEFAULT
         srgbLinearOut = agxToneMapVivid(rec2020Color, contrastGain);
     } else if (uniforms.toneProfileMode == 1) {
         // Mode 1: AgX Neutral (Filmic Base)
-        if (uniforms.isLinearRaw == 1 || editContrast != 0.0) {
-            srgbLinearOut = agxToneMap(rec2020Color, contrastGain);
-        } else {
-            srgbLinearOut = max(REC2020_TO_LINEAR_SRGB * rec2020Color, float3(0.0));
-        }
+        srgbLinearOut = agxToneMap(rec2020Color, contrastGain);
     } else {
         // Modes 2..5: Camera Matching (Standard, Portrait, Landscape, Vivid)
         int camMode = uniforms.toneProfileMode - 1; // 2->1 (Standard), 3->2 (Portrait), 4->3 (Landscape), 5->4 (Vivid)

@@ -451,7 +451,7 @@ fn main() {
                     if (bx * 2 == 560 && by * 2 == 160) || (bx * 2 == 360 && by * 2 == 600) {
                         let lr_path = Path::new("/Users/blikkie/Pictures/Lightroom Export/2016/2016-03-26/_MG_3717_edited.jpg");
                         if let Ok(lr_img) = image::open(lr_path).map(|i| i.to_rgb8()) {
-                            let lp = lr_img.get_pixel(bx * 2 as u32, by * 2 as u32);
+                            let lp = lr_img.get_pixel(bx * 2, by * 2);
                             let (lh, ls, _lv) = firstproof_core::color::rgb_to_hsv(lp[0] as f32 / 255.0, lp[1] as f32 / 255.0, lp[2] as f32 / 255.0);
 
                             println!("POINT (x={}, y={}):", bx * 2, by * 2);
