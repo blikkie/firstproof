@@ -405,7 +405,11 @@ fn test_dng_manifest_opcode_integration() {
 
 #[test]
 fn test_pixel_computational_dng_optical_fidelity() {
-    let path = std::path::Path::new("/home/remco/Pictures/From phone/PXL_20261002_115613878.RAW-02.ORIGINAL.dng");
+    let path_str = match std::env::var("FIRSTPROOF_PIXEL_SAMPLE") {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    let path = std::path::Path::new(&path_str);
     if !path.exists() {
         return;
     }

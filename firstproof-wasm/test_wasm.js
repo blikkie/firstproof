@@ -14,7 +14,7 @@ console.log(`   ✔ Scratchpad pointer: 0x${ptr.toString(16)}`);
 console.log(`   ✔ Scratchpad capacity: ${(len / (1024 * 1024)).toFixed(1)} MB`);
 
 // 2. Load test image into WASM linear memory buffer directly
-const testImagePath = path.join(__dirname, '../raw_calibration_comparison.jpg');
+const testImagePath = path.join(__dirname, '../firstproof-core/tests/fixtures/_MG_2651.dng');
 console.log(`\n2. Loading test image: ${testImagePath}`);
 const fileBuffer = fs.readFileSync(testImagePath);
 console.log(`   ✔ Read image file: ${(fileBuffer.length / 1024).toFixed(1)} KB`);

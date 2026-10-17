@@ -33,7 +33,7 @@ fn test_dng_conversion_and_disk_verification() {
         return;
     }
 
-    let out_dir = PathBuf::from("/tmp/firstproof_dng_test");
+    let out_dir = std::env::temp_dir().join("firstproof_dng_test");
     let _ = fs::create_dir_all(&out_dir);
     let dng_out = out_dir.join("mg_2651_archival.dng");
     let _ = fs::remove_file(&dng_out);
@@ -123,7 +123,7 @@ fn test_dng_destructive_path_and_sidecar_migration() {
         return;
     }
 
-    let sandbox_dir = PathBuf::from("/tmp/firstproof_dng_destructive_test");
+    let sandbox_dir = std::env::temp_dir().join("firstproof_dng_destructive_test");
     let _ = fs::create_dir_all(&sandbox_dir);
 
     let sandboxed_cr2 = sandbox_dir.join("sample.CR2");
@@ -211,7 +211,7 @@ fn test_dng_failure_safety_negative_case() {
         return;
     }
 
-    let sandbox_dir = PathBuf::from("/tmp/firstproof_dng_safety_test");
+    let sandbox_dir = std::env::temp_dir().join("firstproof_dng_safety_test");
     let _ = fs::create_dir_all(&sandbox_dir);
     let sandboxed_cr2 = sandbox_dir.join("safety_sample.CR2");
     fs::copy(&cr2_src, &sandboxed_cr2).expect("Copy CR2 to safety test");
