@@ -7,7 +7,7 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up (v0.1 Release Gate)
-1. **Story 4.9: Robust Headless Command Bus, CLI Parity & Unified MCP Bridge** (P1)
+1. **Story 4.10: Optical Chromatic Aberration Correction: Lateral TCA & Longitudinal Defringe** (P1)
 
 
 ---
@@ -74,22 +74,6 @@ This document strictly tracks pending and deferred features calibrated against o
   - Non-blocking background worker with progress sheet and cancel safety.
 - **Sidecar & Catalog Sync**:
   - Automatically updates catalog database records (`catalog.db`) pointing photo paths to the new `.dng` file without dropping user ratings, flags, or undo history.
-
-### 4.9 Robust Headless Command Bus, CLI Parity & Unified MCP Bridge (P1)
-- **Problem Statement**:
-  - First Proof possesses a high-performance CLI (`firstproof-cli` with `develop`, `inspect`, and `dng` subcommands) and an AppKit debug socket / MCP server (`tools/mcp/firstproof_mcp.py`), but the underlying command and state schemas are partially ad-hoc and decoupled from the web darkroom.
-- **Canonical Command Schema in Shared Rust Engine (`firstproof-engine::command`)**:
-  - Formalize a strongly typed, serializable JSON command enum (`DarkroomCommand`, `DarkroomAction`, `EditDelta`):
-    - Viewport inspection (`GetState`, `SamplePixel`, `InspectMetadata`).
-    - Non-destructive edit commands (`SetExposure`, `ApplyToneCurve`, `SetEmulsion`, `ResetWorkspace`).
-    - Archival batch operations (`DevelopPhoto`, `ConvertToDng`, `BatchExport`).
-- **Triple-Target Command Parity**:
-  - **Native macOS Desktop**: AppKit debug socket (`/tmp/firstproof-debug.sock`) executes the canonical command enum directly, updating UI state without tearing.
-  - **Headless CLI**: `firstproof-cli` accepts piped JSON command streams or flag-driven commands for headless studio automation, ingestion pipelines, and CI regression suites.
-  - **Web Darkroom**: `firstproof-wasm` exposes `execute_command(json_str)` directly to JavaScript, enabling browser automation, test harness orchestration, and web extension integration.
-- **Production MCP Server Refinement & Documentation**:
-  - Elevate `firstproof_mcp.py` to a production-grade Model Context Protocol server exposing formal tools for darkroom automation, live diagnostics, and color parity verification.
-  - Author complete documentation in `docs/architecture/cli_and_mcp.md` detailing CLI usage, socket IPC protocols, and MCP integration for photographers and studio engineers.
 
 ### 4.10 Optical Chromatic Aberration Correction: Lateral TCA & Longitudinal Defringe (P1)
 - **Problem Statement & Physical Sensitometrics**:

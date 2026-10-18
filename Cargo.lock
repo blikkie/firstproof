@@ -628,6 +628,7 @@ dependencies = [
  "rawler",
  "roxmltree",
  "serde",
+ "serde_json",
  "uniffi",
  "xmp-writer",
 ]

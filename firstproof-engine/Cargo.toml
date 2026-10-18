@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 roxmltree = "0.19.0"
 xmp-writer = "0.3"
 kamadak-exif = "0.5.5"

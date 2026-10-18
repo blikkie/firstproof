@@ -33,6 +33,7 @@ SUBCOMMANDS:
     develop    Develop a RAW or image file to 16-bit TIFF or JPEG
     inspect    Inspect camera EXIF, sensor CFA calibration, and XMP edits
     dng        Convert proprietary RAW (.CR2, .NEF, .ARW) to archival DNG
+    command    Execute canonical DarkroomCommand JSON headlessly or via socket
     shaders    Transpile canonical WGSL darkroom shaders to Metal and WebGL 2
     help       Print this help message or the help of the given subcommand
 
@@ -933,6 +934,144 @@ export const CANONICAL_DARKROOM_WGSL = `{}`;
     Ok(())
 }
 
+fn print_command_help() {
+    println!(
+        r#"firstproof-cli command
+Execute canonical DarkroomCommand JSON requests headlessly or forward them to a running FirstProofApp instance.
+
+USAGE:
+    firstproof-cli command [OPTIONS] [COMMAND_JSON]
+
+ARGS:
+    <COMMAND_JSON>               JSON string containing DarkroomCommand (e.g. '{{"command":"get_state"}}')
+
+OPTIONS:
+    -c, --connect                Forward command to live AppKit instance via Unix domain socket
+        --socket <PATH>          Socket path (default: /tmp/firstproof-debug.sock)
+        --stdin                  Read commands line-by-line from standard input
+    -h, --help                   Print help information
+
+EXAMPLES:
+    # Inspect photo metadata headlessly
+    firstproof-cli command '{{"command":"inspect_metadata","path":"photo.cr2"}}'
+
+    # Query live AppKit viewport state
+    firstproof-cli command --connect '{{"command":"get_state"}}'
+
+    # Select photo in active desktop app
+    firstproof-cli command --connect '{{"command":"select_photo","path":"/path/to/img.cr2"}}'
+
+    # Stream batch commands via stdin
+    cat commands.jsonl | firstproof-cli command
+"#
+    );
+}
+
+#[cfg(unix)]
+fn send_to_socket(socket_path: &str, json_cmd: &str) -> Result<String, String> {
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixStream;
+    use std::time::Duration;
+
+    let mut stream = UnixStream::connect(socket_path)
+        .map_err(|e| format!("Failed to connect to socket at '{}': {}. Is FirstProofApp running?", socket_path, e))?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))
+        .map_err(|e| e.to_string())?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))
+        .map_err(|e| e.to_string())?;
+
+    stream.write_all(json_cmd.as_bytes())
+        .map_err(|e| format!("Failed to write to socket: {}", e))?;
+    stream.write_all(b"\n")
+        .map_err(|e| format!("Failed to write newline to socket: {}", e))?;
+
+    let mut response = String::new();
+    stream.read_to_string(&mut response)
+        .map_err(|e| format!("Failed to read response from socket: {}", e))?;
+
+    Ok(response)
+}
+
+#[cfg(not(unix))]
+fn send_to_socket(_socket_path: &str, _json_cmd: &str) -> Result<String, String> {
+    Err("Unix domain sockets are not supported on this platform".to_string())
+}
+
+fn cmd_command(args: &[String]) -> Result<(), String> {
+    use std::io::IsTerminal;
+
+    let mut connect = false;
+    let mut socket_path = "/tmp/firstproof-debug.sock".to_string();
+    let mut read_stdin = false;
+    let mut command_json: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-h" | "--help" => {
+                print_command_help();
+                return Ok(());
+            }
+            "-c" | "--connect" => {
+                connect = true;
+                i += 1;
+            }
+            "--socket" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err("Missing value for --socket".to_string());
+                }
+                socket_path = args[i].clone();
+                connect = true;
+                i += 1;
+            }
+            "--stdin" => {
+                read_stdin = true;
+                i += 1;
+            }
+            arg if !arg.starts_with('-') && command_json.is_none() => {
+                command_json = Some(arg.to_string());
+                i += 1;
+            }
+            other => {
+                return Err(format!("Unknown option: {}", other));
+            }
+        }
+    }
+
+    if read_stdin || (command_json.is_none() && !std::io::stdin().is_terminal()) {
+        use std::io::BufRead;
+        let stdin = std::io::stdin();
+        for line in stdin.lock().lines() {
+            let line = line.map_err(|e| e.to_string())?;
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let resp = if connect {
+                send_to_socket(&socket_path, trimmed)?
+            } else {
+                firstproof_core::execute_darkroom_command_headless(trimmed.to_string())
+            };
+            println!("{}", resp.trim());
+        }
+        return Ok(());
+    }
+
+    let cmd_str = command_json.ok_or_else(|| {
+        "Missing command JSON argument or --stdin. Use --help for usage.".to_string()
+    })?;
+
+    let resp = if connect {
+        send_to_socket(&socket_path, &cmd_str)?
+    } else {
+        firstproof_core::execute_darkroom_command_headless(cmd_str)
+    };
+
+    println!("{}", resp.trim());
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -947,6 +1086,7 @@ fn main() {
         "develop" | "dev" => cmd_develop(rest),
         "inspect" | "info" => cmd_inspect(rest),
         "dng" | "convert" => cmd_dng(rest),
+        "command" | "cmd" => cmd_command(rest),
         "bundle-lensfun" => cmd_bundle_lensfun(rest),
         "shaders" | "transpile-shaders" => cmd_shaders(rest),
         "help" | "--help" | "-h" => {
@@ -954,6 +1094,7 @@ fn main() {
                 match rest[0].as_str() {
                     "develop" | "dev" => print_develop_help(),
                     "dng" | "convert" => print_dng_help(),
+                    "command" | "cmd" => print_command_help(),
                     "shaders" => print_shaders_help(),
                     _ => print_main_help(),
                 }

@@ -4,6 +4,7 @@ uniffi::setup_scaffolding!("firstproof_engine");
 pub mod auto;
 pub mod calibration;
 pub mod color;
+pub mod command;
 pub mod container;
 pub mod curve;
 pub mod modes;
@@ -14,6 +15,8 @@ pub mod schema;
 pub mod settings;
 pub mod shader;
 pub mod xmp;
+
+pub use command::{CommandResponse, DarkroomCommand, EditDelta};
 
 pub use calibration::{CameraCalibration, CameraCalibrationRegistry};
 pub use container::{

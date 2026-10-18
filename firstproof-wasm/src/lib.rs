@@ -987,9 +987,97 @@ export interface AdjustmentDescriptor {
 }
 "#;
 
+/// Executes a canonical [`DarkroomCommand`] in the Web darkroom via WASM.
+#[wasm_bindgen]
+pub fn execute_darkroom_command(json_str: &str) -> String {
+    let cmd = match firstproof_engine::DarkroomCommand::from_json(json_str) {
+        Ok(c) => c,
+        Err(e) => return firstproof_engine::CommandResponse::error(e).to_json(),
+    };
+
+    match cmd {
+        firstproof_engine::DarkroomCommand::ApplyEditDelta { delta } => {
+            let mut settings = firstproof_engine::EditSettings::default();
+            delta.apply_to(&mut settings);
+            match serde_json::to_value(&settings) {
+                Ok(val) => firstproof_engine::CommandResponse::ok(serde_json::json!({
+                    "settings": val
+                })).to_json(),
+                Err(e) => firstproof_engine::CommandResponse::error(e.to_string()).to_json(),
+            }
+        }
+        firstproof_engine::DarkroomCommand::ResetWorkspace { category } => {
+            firstproof_engine::CommandResponse::ok(serde_json::json!({
+                "action": "reset_workspace",
+                "category": category,
+            })).to_json()
+        }
+        firstproof_engine::DarkroomCommand::SetExposure { ev } => {
+            firstproof_engine::CommandResponse::ok(serde_json::json!({
+                "action": "set_exposure",
+                "ev": ev,
+            })).to_json()
+        }
+        firstproof_engine::DarkroomCommand::SetTemperature { kelvin } => {
+            firstproof_engine::CommandResponse::ok(serde_json::json!({
+                "action": "set_temperature",
+                "kelvin": kelvin,
+            })).to_json()
+        }
+        firstproof_engine::DarkroomCommand::SetTint { tint } => {
+            firstproof_engine::CommandResponse::ok(serde_json::json!({
+                "action": "set_tint",
+                "tint": tint,
+            })).to_json()
+        }
+        firstproof_engine::DarkroomCommand::SetToneProfile { profile } => {
+            firstproof_engine::CommandResponse::ok(serde_json::json!({
+                "action": "set_tone_profile",
+                "profile": profile,
+            })).to_json()
+        }
+        firstproof_engine::DarkroomCommand::SetEmulsion { archetype, format, exposure } => {
+            firstproof_engine::CommandResponse::ok(serde_json::json!({
+                "action": "set_emulsion",
+                "archetype": archetype,
+                "format": format,
+                "exposure": exposure,
+            })).to_json()
+        }
+        firstproof_engine::DarkroomCommand::SetPrintMedia { media, paper_grade, base_warmth, process_depth } => {
+            firstproof_engine::CommandResponse::ok(serde_json::json!({
+                "action": "set_print_media",
+                "media": media,
+                "paper_grade": paper_grade,
+                "base_warmth": base_warmth,
+                "process_depth": process_depth,
+            })).to_json()
+        }
+        other => {
+            firstproof_engine::CommandResponse::ok(serde_json::json!({
+                "command": format!("{:?}", other),
+                "status": "acknowledged"
+            })).to_json()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_wasm_execute_darkroom_command() {
+        let delta_json = r#"{"command":"apply_edit_delta","delta":{"exposure":1.25,"contrast":10.0}}"#;
+        let resp = execute_darkroom_command(delta_json);
+        assert!(resp.contains("\"status\":\"ok\""));
+        assert!(resp.contains("\"exposure\":1.25"));
+
+        let exp_json = r#"{"command":"set_exposure","ev":-0.5}"#;
+        let resp_exp = execute_darkroom_command(exp_json);
+        assert!(resp_exp.contains("\"status\":\"ok\""));
+        assert!(resp_exp.contains("\"ev\":-0.5"));
+    }
 
     #[test]
     fn test_scratchpad_allocation() {

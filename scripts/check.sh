@@ -30,6 +30,8 @@ trap 'rm -rf "$TMP_DIR"' EXIT
     cargo test --workspace --quiet
     echo "    [Rust] Verifying canonical shader sync across Metal, WebGL, and WebGPU..."
     cargo run -p firstproof-core --bin firstproof-cli -- shaders --check
+    echo "    [MCP] Running Model Context Protocol integration test..."
+    python3 tools/mcp/test_mcp.py
     echo "    [Rust] Running Clippy linter..."
 
     cargo clippy --workspace --all-targets -- -D warnings

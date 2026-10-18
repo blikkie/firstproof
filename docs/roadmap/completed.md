@@ -532,5 +532,13 @@ This archive tracks completed stories and features moved from the active backlog
   - Bit-identical `ShaderUniforms` layout (288 bytes, exactly 18 16-byte chunks) and `VertexQuad` uniform buffer (`buffer(0)`) preserving zoom, pan, and rotation across all targets with zero manual shader duplication.
   - Integration into `./scripts/check.sh`, `Makefile` (`make shaders`, `make shaders-check`), and `architecture_fitness.rs` asserting pipeline stage ordering, Rec.2020 photopic luminance coefficients, and zero drift across engines.
 
-
-
+- **Story 4.9: Robust Headless Command Bus, CLI Parity & Unified MCP Bridge**:
+  - Formalized strongly typed, serializable canonical command schema in `firstproof-engine::command` (`DarkroomCommand`, `EditDelta`, `CommandResponse`) supporting both tagged JSON and JSON-RPC envelopes.
+  - Native macOS AppKit debug IPC socket (`/tmp/firstproof-debug.sock`) upgraded to execute canonical commands (`get_state`, `select_photo`, `set_canvas_mode`, `set_exposure`, `set_temperature`, `set_tint`, `set_tone_profile`, `set_emulsion`, `set_print_media`, `apply_edit_delta`, `reset_workspace`, `sample_viewport`, `capture_canvas`, `inspect_metadata`) with thread-safe `MainActor` UI execution.
+  - Headless CLI integration in `firstproof-cli command`:
+    - Headless command execution via `execute_darkroom_command_headless` for automated studio scripts, DNG conversions, and CI parity testing.
+    - Live forwarding to running AppKit GUI instances over Unix domain socket via `--connect` / `--socket`.
+    - Piped JSON-RPC command streams via standard input (`cat commands.jsonl | firstproof-cli command`).
+  - Web Darkroom parity: exported `execute_darkroom_command` from `firstproof-wasm` directly to JavaScript.
+  - Upgraded `tools/mcp/firstproof_mcp.py` to production-grade Model Context Protocol (MCP) server exposing 12 formal tools with automatic fallback from live GUI socket to headless CLI runner.
+  - Authored comprehensive documentation in `docs/architecture/cli_and_mcp.md`.

@@ -22,10 +22,11 @@ pub use firstproof_engine::{
     all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,
     AdjustmentDescriptor, ScaleMode, WorkspaceCategory,
     evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, ColorProfileMode,
-    CropAspectRatioPreset, CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype,
-    EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace,
-    ExportRenderingIntent, PrintMediaMode, RemjetBackingMode, RenderTier, ToneCurvesRecord,
-    WhiteBalancePreset, WhiteBalanceResult,
+    CommandResponse, CropAspectRatioPreset, CurvePointRecord, DarkroomCommand, DemosaicQuality,
+    EditDelta, EditSettings, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode,
+    EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent,
+    PrintMediaMode, RemjetBackingMode, RenderTier, ToneCurvesRecord, WhiteBalancePreset,
+    WhiteBalanceResult,
 };
 
 pub use lensfun::LensCorrectionCoefficients;
@@ -1038,6 +1039,192 @@ pub fn find_duplicate_clusters(photos: Vec<PhotoRecord>) -> Vec<DuplicateCluster
 #[uniffi::export]
 pub fn normalize_stem(stem: String) -> String {
     db::normalize_stem(&stem)
+}
+
+/// Executes a canonical [`DarkroomCommand`] in headless mode and returns a structured JSON response.
+#[uniffi::export]
+pub fn execute_darkroom_command_headless(json_str: String) -> String {
+    let cmd = match DarkroomCommand::from_json(&json_str) {
+        Ok(c) => c,
+        Err(e) => return CommandResponse::error(e).to_json(),
+    };
+
+    match cmd {
+        DarkroomCommand::InspectMetadata { path } => {
+            let p = match path {
+                Some(p) => p,
+                None => return CommandResponse::error("Missing photo path for metadata inspection").to_json(),
+            };
+            match raw::extract_metadata(&p) {
+                Ok(meta) => CommandResponse::ok(serde_json::json!({
+                    "metadata": {
+                        "camera_make": meta.camera_make,
+                        "camera_model": meta.camera_model,
+                        "lens_model": meta.lens_model,
+                        "iso": meta.iso,
+                        "aperture": meta.aperture,
+                        "shutter_speed": meta.shutter_speed,
+                        "focal_length": meta.focal_length,
+                        "orientation": meta.orientation,
+                        "raw_width": meta.raw_width,
+                        "raw_height": meta.raw_height,
+                    }
+                })).to_json(),
+                Err(e) => CommandResponse::error(format!("Failed to extract metadata: {:?}", e)).to_json(),
+            }
+        }
+        DarkroomCommand::DevelopPhoto { input, output, settings, fast } => {
+            let in_path = std::path::PathBuf::from(&input);
+            if !in_path.exists() {
+                return CommandResponse::error(format!("Input file not found: {}", input)).to_json();
+            }
+            let out_path = output.unwrap_or_else(|| {
+                let stem = in_path.file_stem().and_then(|s| s.to_str()).unwrap_or("output");
+                format!("{}_developed.tiff", stem)
+            });
+            let edits = settings.unwrap_or_default();
+            let (demosaic_quality, render_tier) = if fast.unwrap_or(false) {
+                (DemosaicQuality::Standard, RenderTier::Viewport)
+            } else {
+                (DemosaicQuality::Archival, RenderTier::ArchivalExport)
+            };
+            
+            match export::export_photo_file_advanced(
+                &input,
+                &out_path,
+                &edits,
+                None,
+                95,
+                None,
+                ExportColorSpace::Srgb,
+                ExportRenderingIntent::Perceptual,
+                false,
+                demosaic_quality,
+                render_tier,
+            ) {
+                Ok(_) => CommandResponse::ok(serde_json::json!({
+                    "input": input,
+                    "output_path": out_path,
+                    "render_tier": format!("{:?}", render_tier),
+                })).to_json(),
+                Err(e) => CommandResponse::error(format!("Develop failed: {:?}", e)).to_json(),
+            }
+        }
+        DarkroomCommand::ConvertToDng { input, output } => {
+            let in_path = std::path::PathBuf::from(&input);
+            if !in_path.exists() {
+                return CommandResponse::error(format!("Input file not found: {}", input)).to_json();
+            }
+            let options = dng::DngConvertOptions {
+                output_path: output.map(std::path::PathBuf::from),
+                verify: true,
+                ..Default::default()
+            };
+            match dng::convert_raw_to_dng(&input, &options) {
+                Ok(report) => CommandResponse::ok(serde_json::json!({
+                    "input": input,
+                    "dng_path": report.dng_path.to_string_lossy().to_string(),
+                    "source_size_bytes": report.source_size_bytes,
+                    "dng_size_bytes": report.dng_size_bytes,
+                    "compression_ratio": report.compression_ratio,
+                    "verification_passed": report.verification_passed,
+                })).to_json(),
+                Err(e) => CommandResponse::error(format!("DNG conversion failed: {:?}", e)).to_json(),
+            }
+        }
+        DarkroomCommand::ApplyEditDelta { delta } => {
+            let mut settings = EditSettings::default();
+            delta.apply_to(&mut settings);
+            match serde_json::to_value(&settings) {
+                Ok(val) => CommandResponse::ok(serde_json::json!({
+                    "settings": val
+                })).to_json(),
+                Err(e) => CommandResponse::error(format!("Serialization failed: {}", e)).to_json(),
+            }
+        }
+        DarkroomCommand::SetExposure { ev } => {
+            let mut settings = EditSettings::default();
+            settings.exposure = ev;
+            match serde_json::to_value(&settings) {
+                Ok(val) => CommandResponse::ok(serde_json::json!({
+                    "exposure": ev,
+                    "settings": val
+                })).to_json(),
+                Err(e) => CommandResponse::error(e.to_string()).to_json(),
+            }
+        }
+        DarkroomCommand::SetTemperature { kelvin } => {
+            let mut settings = EditSettings::default();
+            settings.temperature = kelvin as f32;
+            match serde_json::to_value(&settings) {
+                Ok(val) => CommandResponse::ok(serde_json::json!({
+                    "temperature": kelvin,
+                    "settings": val
+                })).to_json(),
+                Err(e) => CommandResponse::error(e.to_string()).to_json(),
+            }
+        }
+        DarkroomCommand::SetTint { tint } => {
+            let mut settings = EditSettings::default();
+            settings.tint = tint;
+            match serde_json::to_value(&settings) {
+                Ok(val) => CommandResponse::ok(serde_json::json!({
+                    "tint": tint,
+                    "settings": val
+                })).to_json(),
+                Err(e) => CommandResponse::error(e.to_string()).to_json(),
+            }
+        }
+        DarkroomCommand::SetToneProfile { profile } => {
+            let mut settings = EditSettings::default();
+            settings.tone_profile = profile;
+            match serde_json::to_value(&settings) {
+                Ok(val) => CommandResponse::ok(serde_json::json!({
+                    "profile": profile,
+                    "settings": val
+                })).to_json(),
+                Err(e) => CommandResponse::error(e.to_string()).to_json(),
+            }
+        }
+        DarkroomCommand::SetEmulsion { archetype, format, exposure } => {
+            let mut settings = EditSettings::default();
+            settings.emulsion_archetype = archetype;
+            if let Some(f) = format { settings.emulsion_format = f; }
+            if let Some(e) = exposure { settings.emulsion_exposure = e; }
+            match serde_json::to_value(&settings) {
+                Ok(val) => CommandResponse::ok(serde_json::json!({
+                    "archetype": archetype,
+                    "format": settings.emulsion_format,
+                    "exposure": settings.emulsion_exposure,
+                    "settings": val
+                })).to_json(),
+                Err(e) => CommandResponse::error(e.to_string()).to_json(),
+            }
+        }
+        DarkroomCommand::SetPrintMedia { media, paper_grade, base_warmth, process_depth } => {
+            let mut settings = EditSettings::default();
+            settings.print_media = media;
+            if let Some(g) = paper_grade { settings.print_paper_grade = g; }
+            if let Some(w) = base_warmth { settings.print_base_warmth = w; }
+            if let Some(d) = process_depth { settings.print_process_depth = d; }
+            match serde_json::to_value(&settings) {
+                Ok(val) => CommandResponse::ok(serde_json::json!({
+                    "media": media,
+                    "paper_grade": settings.print_paper_grade,
+                    "base_warmth": settings.print_base_warmth,
+                    "process_depth": settings.print_process_depth,
+                    "settings": val
+                })).to_json(),
+                Err(e) => CommandResponse::error(e.to_string()).to_json(),
+            }
+        }
+        other => {
+            CommandResponse::error(format!(
+                "Command '{:?}' requires an interactive darkroom session (connect via AppKit debug socket /tmp/firstproof-debug.sock)",
+                other
+            )).to_json()
+        }
+    }
 }
 
 #[cfg(test)]

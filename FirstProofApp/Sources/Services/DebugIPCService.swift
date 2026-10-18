@@ -132,36 +132,69 @@ public final class DebugIPCService {
     }
     
     private func processRequest(_ data: Data) -> String {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let method = json["method"] as? String else {
-            return "{\"status\":\"error\",\"message\":\"Invalid JSON or missing method\"}\n"
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return "{\"status\":\"error\",\"message\":\"Invalid JSON\"}\n"
         }
+        
+        let method = (json["command"] as? String) ?? (json["method"] as? String) ?? ""
+        let params = (json["params"] as? [String: Any]) ?? json
         
         switch method {
         case "get_state":
             return getStateResponse()
             
-        case "open_detail_view":
-            let params = json["params"] as? [String: Any]
-            let path = params?["photo_path"] as? String
+        case "open_detail_view", "select_photo":
+            let path = (params["photo_path"] as? String) ?? (params["path"] as? String)
             return openDetailViewResponse(photoPath: path)
             
+        case "set_canvas_mode":
+            let mode = params["mode"] as? String
+            return setCanvasModeResponse(mode: mode)
+            
         case "capture_canvas":
-            let params = json["params"] as? [String: Any]
-            let outPath = params?["output_path"] as? String ?? "/tmp/firstproof_viewport.png"
+            let outPath = (params["output_path"] as? String) ?? "/tmp/firstproof_viewport.png"
             return captureCanvasResponse(outputPath: outPath)
             
-        case "sample_viewport":
-            let params = json["params"] as? [String: Any]
-            let uvList = params?["points"] as? [[Double]] ?? []
+        case "sample_viewport", "sample_pixel":
+            let uvList = (params["points"] as? [[Double]]) ?? []
             return sampleViewportResponse(points: uvList)
             
+        case "set_exposure":
+            let ev = (params["ev"] as? Double) ?? (params["exposure"] as? Double)
+            return setExposureResponse(ev: ev)
+            
+        case "set_temperature":
+            let k = (params["kelvin"] as? Double) ?? (params["temperature"] as? Double)
+            return setTemperatureResponse(kelvin: k)
+            
+        case "set_tint":
+            let t = params["tint"] as? Double
+            return setTintResponse(tint: t)
+            
+        case "set_tone_profile":
+            let p = params["profile"] as? String
+            return setToneProfileResponse(profile: p)
+            
         case "set_emulsion":
-            let params = json["params"] as? [String: Any]
             return setEmulsionResponse(params: params)
             
+        case "set_print_media":
+            return setPrintMediaResponse(params: params)
+            
+        case "apply_edit_delta":
+            let delta = (params["delta"] as? [String: Any]) ?? params
+            return applyEditDeltaResponse(delta: delta)
+            
+        case "reset_workspace":
+            let cat = params["category"] as? String
+            return resetWorkspaceResponse(category: cat)
+            
+        case "inspect_metadata":
+            let path = (params["photo_path"] as? String) ?? (params["path"] as? String)
+            return inspectMetadataResponse(photoPath: path)
+            
         default:
-            return "{\"status\":\"error\",\"message\":\"Unknown method: \(method)\"}\n"
+            return "{\"status\":\"error\",\"message\":\"Unknown command or method: \(method)\"}\n"
         }
     }
     
@@ -353,5 +386,219 @@ public final class DebugIPCService {
             }
         }
         return "{\"status\":\"ok\"}\n"
+    }
+    
+    private func setCanvasModeResponse(mode: String?) -> String {
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                if mode == "grid" {
+                    vm.enterGridMode()
+                } else {
+                    vm.enterDetailMode()
+                }
+            }
+        }
+        return "{\"status\":\"ok\",\"canvasMode\":\"\(mode ?? "detail")\"}\n"
+    }
+    
+    private func setExposureResponse(ev: Double?) -> String {
+        guard let ev = ev else { return "{\"status\":\"error\",\"message\":\"Missing 'ev'\"}\n" }
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                vm.exposure = Float(ev)
+            }
+        }
+        return "{\"status\":\"ok\",\"exposure\":\(ev)}\n"
+    }
+    
+    private func setTemperatureResponse(kelvin: Double?) -> String {
+        guard let k = kelvin else { return "{\"status\":\"error\",\"message\":\"Missing 'kelvin'\"}\n" }
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                vm.temperature = Float(k)
+            }
+        }
+        return "{\"status\":\"ok\",\"temperature\":\(k)}\n"
+    }
+    
+    private func setTintResponse(tint: Double?) -> String {
+        guard let t = tint else { return "{\"status\":\"error\",\"message\":\"Missing 'tint'\"}\n" }
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                vm.tint = Float(t)
+            }
+        }
+        return "{\"status\":\"ok\",\"tint\":\(t)}\n"
+    }
+    
+    private func setToneProfileResponse(profile: String?) -> String {
+        guard let prof = profile?.lowercased().replacingOccurrences(of: "-", with: "").replacingOccurrences(of: "_", with: "") else {
+            return "{\"status\":\"error\",\"message\":\"Missing profile\"}\n"
+        }
+        var resolved = "agx_vivid"
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                switch prof {
+                case "agxvivid", "vivid":
+                    vm.toneProfile = .agxVivid
+                    resolved = "agx_vivid"
+                case "agxfilmic", "agxneutral", "filmic", "neutral":
+                    vm.toneProfile = .agxFilmic
+                    resolved = "agx_filmic"
+                case "agxphotographic", "photographic":
+                    vm.toneProfile = .agxPhotographic
+                    resolved = "agx_photographic"
+                case "camerastandard", "standard":
+                    vm.toneProfile = .cameraStandard
+                    resolved = "camera_standard"
+                case "cameraportrait", "portrait":
+                    vm.toneProfile = .cameraPortrait
+                    resolved = "camera_portrait"
+                case "cameralandscape", "landscape":
+                    vm.toneProfile = .cameraLandscape
+                    resolved = "camera_landscape"
+                case "cameravivid":
+                    vm.toneProfile = .cameraVivid
+                    resolved = "camera_vivid"
+                default:
+                    break
+                }
+            }
+        }
+        return "{\"status\":\"ok\",\"toneProfile\":\"\(resolved)\"}\n"
+    }
+    
+    private func setPrintMediaResponse(params: [String: Any]?) -> String {
+        guard let p = params else {
+            return "{\"status\":\"error\",\"message\":\"Missing params\"}\n"
+        }
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                if let mediaStr = (p["media"] as? String)?.lowercased().replacingOccurrences(of: "-", with: "").replacingOccurrences(of: "_", with: "") {
+                    switch mediaStr {
+                    case "baryta", "barytasilvergelatin": vm.printMedia = .barytaSilverGelatin
+                    case "warmtone", "warmtonechlorobromide": vm.printMedia = .warmtoneChlorobromide
+                    case "platinum", "platinumpalladium": vm.printMedia = .platinumPalladium
+                    case "cyanotype": vm.printMedia = .cyanotype
+                    case "bamako", "bamakosilvercontact": vm.printMedia = .bamakoSilverContact
+                    default: vm.printMedia = .none
+                    }
+                }
+                if let grade = (p["paper_grade"] as? Double) ?? (p["print_paper_grade"] as? Double) {
+                    vm.printPaperGrade = Float(grade)
+                }
+                if let warmth = (p["base_warmth"] as? Double) ?? (p["print_base_warmth"] as? Double) {
+                    vm.printBaseWarmth = Float(warmth)
+                }
+                if let depth = (p["process_depth"] as? Double) ?? (p["print_process_depth"] as? Double) {
+                    vm.printProcessDepth = Float(depth)
+                }
+            }
+        }
+        return "{\"status\":\"ok\"}\n"
+    }
+    
+    private func applyEditDeltaResponse(delta: [String: Any]) -> String {
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                if let v = delta["exposure"] as? Double { vm.exposure = Float(v) }
+                if let v = delta["contrast"] as? Double { vm.contrast = Float(v) }
+                if let v = delta["highlights"] as? Double { vm.highlights = Float(v) }
+                if let v = delta["shadows"] as? Double { vm.shadows = Float(v) }
+                if let v = delta["whites"] as? Double { vm.whites = Float(v) }
+                if let v = delta["blacks"] as? Double { vm.blacks = Float(v) }
+                if let v = delta["saturation"] as? Double { vm.saturation = Float(v) }
+                if let v = delta["vibrance"] as? Double { vm.vibrance = Float(v) }
+                if let v = (delta["deep_blue"] as? Double) ?? (delta["deepBlue"] as? Double) { vm.deepBlue = Float(v) }
+                if let v = delta["foliage"] as? Double { vm.foliage = Float(v) }
+                if let v = delta["temperature"] as? Double { vm.temperature = Float(v) }
+                if let v = delta["tint"] as? Double { vm.tint = Float(v) }
+                if let v = delta["rotation"] as? Int { vm.rotationDegrees = v }
+                if let v = (delta["crop_angle"] as? Double) ?? (delta["straightenAngle"] as? Double) { vm.straightenAngle = Float(v) }
+                if let v = (delta["perspective_vertical"] as? Double) ?? (delta["perspectiveVertical"] as? Double) { vm.perspectiveVertical = Float(v) }
+                if let v = (delta["perspective_horizontal"] as? Double) ?? (delta["perspectiveHorizontal"] as? Double) { vm.perspectiveHorizontal = Float(v) }
+                if let v = (delta["sharpening_amount"] as? Double) ?? (delta["sharpeningAmount"] as? Double) { vm.sharpeningAmount = Float(v) }
+                if let v = (delta["noise_reduction"] as? Double) ?? (delta["noiseReduction"] as? Double) { vm.noiseReduction = Float(v) }
+                if let crop = delta["crop"] as? [Double], crop.count >= 4 {
+                    vm.cropLeft = Float(crop[0])
+                    vm.cropTop = Float(crop[1])
+                    vm.cropRight = Float(crop[2])
+                    vm.cropBottom = Float(crop[3])
+                }
+            }
+        }
+        return "{\"status\":\"ok\"}\n"
+    }
+    
+    private func resetWorkspaceResponse(category: String?) -> String {
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                switch category?.lowercased() {
+                case "light":
+                    vm.exposure = 0.0
+                    vm.contrast = 0.0
+                    vm.highlights = 0.0
+                    vm.shadows = 0.0
+                    vm.whites = 0.0
+                    vm.blacks = 0.0
+                case "color":
+                    vm.temperature = 5500.0
+                    vm.tint = 0.0
+                    vm.saturation = 0.0
+                    vm.vibrance = 0.0
+                    vm.deepBlue = 0.0
+                    vm.foliage = 0.0
+                case "detail":
+                    vm.sharpeningAmount = 0.0
+                    vm.noiseReduction = 0.0
+                case "emulsion":
+                    vm.resetEmulsion()
+                    vm.resetPrintMedia()
+                default:
+                    vm.resetAllSliders()
+                    vm.resetGeometry()
+                    vm.resetEmulsion()
+                    vm.resetPrintMedia()
+                }
+            }
+        }
+        return "{\"status\":\"ok\",\"reset\":\"\(category ?? "all")\"}\n"
+    }
+    
+    private func inspectMetadataResponse(photoPath: String?) -> String {
+        var resolvedPath = photoPath
+        var result: [String: Any] = ["status": "ok"]
+        
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                if resolvedPath == nil {
+                    resolvedPath = vm.selectedPhoto?.filePath
+                }
+                if let p = resolvedPath {
+                    result["photo_path"] = p
+                    if let selected = vm.selectedPhoto, selected.filePath == p {
+                        result["camera_make"] = selected.cameraMake
+                        result["camera_model"] = selected.cameraModel
+                        result["lens_model"] = selected.lensModel
+                        result["iso"] = selected.iso
+                        result["aperture"] = selected.aperture
+                        result["shutter_speed"] = selected.shutterSpeed
+                        result["focal_length"] = selected.focalLength
+                    }
+                }
+            }
+        }
+        
+        let data = (try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted])) ?? Data()
+        return String(data: data, encoding: .utf8) ?? "{\"status\":\"ok\"}\n"
     }
 }
