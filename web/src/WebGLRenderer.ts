@@ -1,4 +1,9 @@
-import { FRAGMENT_SHADER_SOURCE as FRAGMENT_SHADER_SRC } from './shaders/FragmentShader';
+import {
+  FRAGMENT_SHADER_SOURCE as FRAGMENT_SHADER_SRC,
+  SHADER_SAMPLER_NAMES,
+  SHADER_UNIFORM_BLOCK_NAME,
+  SHADER_UNIFORM_SIZE_BYTES,
+} from './shaders/GeneratedGLSL';
 import { isCurveActive } from './utils/edits';
 import type { EditSettingsPayload, EvaluatedLut } from './WasmBridge';
 
@@ -10,12 +15,12 @@ uniform vec2 u_fitScale;
 uniform float u_zoomScale;
 uniform vec2 u_panOffset;
 
-out vec2 v_texCoord;
+smooth out vec2 _vs2fs_location0;
 
 void main() {
     vec2 pos = a_position * u_fitScale * u_zoomScale + u_panOffset;
     gl_Position = vec4(pos, 0.0, 1.0);
-    v_texCoord = a_texCoord;
+    _vs2fs_location0 = a_texCoord;
 }
 `;
 
@@ -97,6 +102,10 @@ export class WebGLRenderer {
 
   // Uniform locations
   private uLocs: Record<string, WebGLUniformLocation | null> = {};
+  private uboBuffer: WebGLBuffer | null = null;
+  private uboBufferData = new ArrayBuffer(SHADER_UNIFORM_SIZE_BYTES);
+  private uboFloatView = new Float32Array(this.uboBufferData);
+  private uboIntView = new Int32Array(this.uboBufferData);
 
   constructor(canvas: HTMLCanvasElement) {
     const gl = canvas.getContext('webgl2', {
@@ -140,73 +149,53 @@ export class WebGLRenderer {
     }
     this.gl.useProgram(prog);
 
-    // Cache uniforms
-    const uniforms = [
-      'u_texture',
-      'u_curveMasterLut',
-      'u_curveRgbLut',
-      'u_exposure',
-      'u_contrast',
-      'u_highlights',
-      'u_shadows',
-      'u_whites',
-      'u_blacks',
-      'u_vibrance',
-      'u_saturation',
-      'u_deepBlue',
-      'u_foliage',
-      'u_temperature',
-      'u_tint',
-      'u_asShotTemperature',
-      'u_asShotTint',
-      'u_toneProfileMode',
-      'u_emulsionArchetype',
-      'u_emulsionExposure',
-      'u_emulsionGrainMode',
-      'u_grainScale',
-      'u_grainSize',
-      'u_grainAmount',
-      'u_formatMagnification',
-      'u_printMediaMode',
-      'u_printPaperGrade',
-      'u_printProcessDepth',
-      'u_enlargerFilterMode',
-      'u_splitShadowHue',
-      'u_splitShadowSat',
-      'u_splitHighlightHue',
-      'u_splitHighlightSat',
-      'u_splitBalance',
-      'u_sharpeningAmount',
-      'u_sharpeningRadius',
-      'u_sharpeningMasking',
-      'u_noiseReduction',
-      'u_baselineSharpness',
-      'u_fitScale',
-      'u_zoomScale',
-      'u_panOffset',
-      'u_cropLeft',
-      'u_cropTop',
-      'u_cropRight',
-      'u_cropBottom',
-      'u_cropModeActive',
-      'u_straightenAngle',
-      'u_cropConstrain',
-      'u_aspectRatio',
-      'u_rotation',
-      'u_flipH',
-      'u_flipV',
-      'u_isIntermediate',
-      'u_perspectiveVertical',
-      'u_perspectiveHorizontal',
-      'u_isOriginal',
-      'u_isLinearRec2020',
-      'u_hasMasterCurve',
-      'u_hasRgbCurves',
-      'u_halationMode',
-    ];
-    for (const u of uniforms) {
-      this.uLocs[u] = this.gl.getUniformLocation(prog, u);
+    // Bind Uniform Buffer Object (UBO) for ShaderUniforms
+    const blockIndex = this.gl.getUniformBlockIndex(
+      prog,
+      SHADER_UNIFORM_BLOCK_NAME,
+    );
+    if (blockIndex !== this.gl.INVALID_INDEX) {
+      this.gl.uniformBlockBinding(prog, blockIndex, 0);
     }
+
+    this.uboBuffer = this.gl.createBuffer();
+    this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.uboBuffer);
+    this.gl.bufferData(
+      this.gl.UNIFORM_BUFFER,
+      SHADER_UNIFORM_SIZE_BYTES,
+      this.gl.DYNAMIC_DRAW,
+    );
+    this.gl.bindBufferBase(this.gl.UNIFORM_BUFFER, 0, this.uboBuffer);
+
+    // Bind texture samplers to texture units
+    const uTexture = this.gl.getUniformLocation(
+      prog,
+      SHADER_SAMPLER_NAMES.texture,
+    );
+    const uLut3d = this.gl.getUniformLocation(prog, SHADER_SAMPLER_NAMES.lut3d);
+    const uMasterLut = this.gl.getUniformLocation(
+      prog,
+      SHADER_SAMPLER_NAMES.curveMaster,
+    );
+    const uRgbLut = this.gl.getUniformLocation(
+      prog,
+      SHADER_SAMPLER_NAMES.curveRgb,
+    );
+    const uGainMap = this.gl.getUniformLocation(
+      prog,
+      SHADER_SAMPLER_NAMES.gainMap,
+    );
+
+    if (uTexture) this.gl.uniform1i(uTexture, 0);
+    if (uLut3d) this.gl.uniform1i(uLut3d, 1);
+    if (uMasterLut) this.gl.uniform1i(uMasterLut, 2);
+    if (uRgbLut) this.gl.uniform1i(uRgbLut, 3);
+    if (uGainMap) this.gl.uniform1i(uGainMap, 4);
+
+    // Vertex shader geometry uniforms
+    this.uLocs.u_fitScale = this.gl.getUniformLocation(prog, 'u_fitScale');
+    this.uLocs.u_zoomScale = this.gl.getUniformLocation(prog, 'u_zoomScale');
+    this.uLocs.u_panOffset = this.gl.getUniformLocation(prog, 'u_panOffset');
 
     return prog;
   }
@@ -432,7 +421,7 @@ export class WebGLRenderer {
       masterBytes[i * 4 + 2] = val;
       masterBytes[i * 4 + 3] = 255;
     }
-    gl.activeTexture(gl.TEXTURE1);
+    gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.masterLutTex);
     gl.texImage2D(
       gl.TEXTURE_2D,
@@ -460,7 +449,7 @@ export class WebGLRenderer {
       );
       rgbBytes[i * 4 + 3] = 255;
     }
-    gl.activeTexture(gl.TEXTURE2);
+    gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, this.rgbLutTex);
     gl.texImage2D(
       gl.TEXTURE_2D,
@@ -603,77 +592,23 @@ export class WebGLRenderer {
       cropModeActive,
     );
 
-    // Zoom & Pan & Fit Scale
-    gl.uniform2f(this.uLocs['u_fitScale'], fitScaleX, fitScaleY);
-    gl.uniform1f(this.uLocs['u_zoomScale'], zoomScale);
-    gl.uniform2f(this.uLocs['u_panOffset'], panOffset.x, panOffset.y);
-
-    // Viewport Geometry & Crop Uniforms
-    gl.uniform1f(this.uLocs['u_cropLeft'], effectiveEdits.crop_left ?? 0.0);
-    gl.uniform1f(this.uLocs['u_cropTop'], effectiveEdits.crop_top ?? 0.0);
-    gl.uniform1f(this.uLocs['u_cropRight'], effectiveEdits.crop_right ?? 1.0);
-    gl.uniform1f(this.uLocs['u_cropBottom'], effectiveEdits.crop_bottom ?? 1.0);
-    gl.uniform1i(this.uLocs['u_cropModeActive'], cropModeActive ? 1 : 0);
-    gl.uniform1f(
-      this.uLocs['u_straightenAngle'],
-      ((effectiveEdits.crop_angle ?? 0.0) * Math.PI) / 180.0,
-    );
-    gl.uniform1i(
-      this.uLocs['u_cropConstrain'],
-      effectiveEdits.crop_constrain ? 1 : 0,
-    );
-    gl.uniform1f(
-      this.uLocs['u_aspectRatio'],
-      this.texWidth / Math.max(this.texHeight, 1),
-    );
-    gl.uniform1i(
-      this.uLocs['u_rotation'],
-      (((effectiveEdits.rotation ?? 0) % 360) + 360) % 360,
-    );
-    gl.uniform1i(this.uLocs['u_flipH'], effectiveEdits.flip_horizontal ? 1 : 0);
-    gl.uniform1i(this.uLocs['u_flipV'], effectiveEdits.flip_vertical ? 1 : 0);
-    gl.uniform1i(this.uLocs['u_isIntermediate'], this.isIntermediate ? 1 : 0);
-    gl.uniform1f(
-      this.uLocs['u_perspectiveVertical'],
-      edits.perspective_vertical ?? 0.0,
-    );
-    gl.uniform1f(
-      this.uLocs['u_perspectiveHorizontal'],
-      edits.perspective_horizontal ?? 0.0,
-    );
+    // Viewport Geometry & Fit Scale
+    gl.uniform2f(this.uLocs.u_fitScale, fitScaleX, fitScaleY);
+    gl.uniform1f(this.uLocs.u_zoomScale, zoomScale);
+    gl.uniform2f(this.uLocs.u_panOffset, panOffset.x, panOffset.y);
 
     if (this.texture) {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.texture);
     }
     if (this.masterLutTex) {
-      gl.activeTexture(gl.TEXTURE1);
+      gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, this.masterLutTex);
     }
     if (this.rgbLutTex) {
-      gl.activeTexture(gl.TEXTURE2);
+      gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_2D, this.rgbLutTex);
     }
-
-    gl.uniform1i(this.uLocs['u_texture'], 0);
-    gl.uniform1i(this.uLocs['u_curveMasterLut'], 1);
-    gl.uniform1i(this.uLocs['u_curveRgbLut'], 2);
-
-    gl.uniform1f(this.uLocs['u_exposure'], edits.exposure);
-    gl.uniform1f(this.uLocs['u_contrast'], edits.contrast);
-    gl.uniform1f(this.uLocs['u_highlights'], edits.highlights);
-    gl.uniform1f(this.uLocs['u_shadows'], edits.shadows);
-    gl.uniform1f(this.uLocs['u_whites'], edits.whites);
-    gl.uniform1f(this.uLocs['u_blacks'], edits.blacks);
-
-    gl.uniform1f(this.uLocs['u_vibrance'], edits.vibrance);
-    gl.uniform1f(this.uLocs['u_saturation'], edits.saturation);
-    gl.uniform1f(this.uLocs['u_deepBlue'], edits.deep_blue);
-    gl.uniform1f(this.uLocs['u_foliage'], edits.foliage);
-    gl.uniform1f(this.uLocs['u_temperature'], edits.temperature);
-    gl.uniform1f(this.uLocs['u_tint'], edits.tint);
-    gl.uniform1f(this.uLocs['u_asShotTemperature'], 5500.0);
-    gl.uniform1f(this.uLocs['u_asShotTint'], 0.0);
 
     const modeMap: Record<string, number> = {
       AgxVivid: 0,
@@ -684,45 +619,6 @@ export class WebGLRenderer {
       CameraVivid: 5,
       AgxPhotographic: 6,
     };
-    gl.uniform1i(
-      this.uLocs['u_toneProfileMode'],
-      modeMap[edits.tone_profile] ?? 0,
-    );
-    gl.uniform1i(
-      this.uLocs['u_emulsionArchetype'],
-      EMULSION_MAP[edits.emulsion_archetype] ?? 0,
-    );
-    gl.uniform1f(this.uLocs['u_emulsionExposure'], edits.emulsion_exposure);
-    gl.uniform1i(
-      this.uLocs['u_emulsionGrainMode'],
-      GRAIN_MODE_MAP[edits.emulsion_grain_mode] ?? 0,
-    );
-    const formatMagMap: Record<string, number> = {
-      Format35mm: 1.0,
-      Format120: 0.48,
-      MediumFormat: 0.48,
-      Format4x5: 0.28,
-      LargeFormat4x5: 0.28,
-      Super8: 7.3,
-      Format16mm: 3.4,
-    };
-    const formatMag = formatMagMap[edits.emulsion_format] ?? 1.0;
-    gl.uniform1f(this.uLocs['u_formatMagnification'], formatMag);
-    const grainSize = edits.grain_size ?? edits.grain_scale ?? 1.0;
-    const grainAmount = edits.grain_amount ?? 1.0;
-    gl.uniform1f(this.uLocs['u_grainScale'], grainSize);
-    gl.uniform1f(this.uLocs['u_grainSize'], grainSize);
-    gl.uniform1f(this.uLocs['u_grainAmount'], grainAmount);
-
-    gl.uniform1i(
-      this.uLocs['u_printMediaMode'],
-      PRINT_MEDIA_MAP[edits.print_media] ?? 0,
-    );
-    gl.uniform1f(this.uLocs['u_printPaperGrade'], edits.print_paper_grade);
-    gl.uniform1f(
-      this.uLocs['u_printProcessDepth'],
-      edits.print_process_depth ?? 100.0,
-    );
     const filterMap: Record<string, number> = {
       NeutralPanchromatic: 0,
       FilterGrade2: 0,
@@ -732,36 +628,6 @@ export class WebGLRenderer {
       GreenX1: 4,
       Orthochromatic: 5,
     };
-    gl.uniform1i(
-      this.uLocs['u_enlargerFilterMode'],
-      filterMap[edits.enlarger_filter] ?? 0,
-    );
-
-    gl.uniform1f(this.uLocs['u_splitShadowHue'], edits.split_toning_shadow_hue);
-    gl.uniform1f(this.uLocs['u_splitShadowSat'], edits.split_toning_shadow_sat);
-    gl.uniform1f(
-      this.uLocs['u_splitHighlightHue'],
-      edits.split_toning_highlight_hue,
-    );
-    gl.uniform1f(
-      this.uLocs['u_splitHighlightSat'],
-      edits.split_toning_highlight_sat,
-    );
-    gl.uniform1f(this.uLocs['u_splitBalance'], edits.split_toning_balance);
-    gl.uniform1f(
-      this.uLocs['u_sharpeningAmount'],
-      edits.sharpening_amount ?? 0.0,
-    );
-    gl.uniform1f(
-      this.uLocs['u_sharpeningRadius'],
-      edits.sharpening_radius ?? 1.0,
-    );
-    gl.uniform1f(
-      this.uLocs['u_sharpeningMasking'],
-      edits.sharpening_masking ?? 0.0,
-    );
-    gl.uniform1f(this.uLocs['u_noiseReduction'], edits.noise_reduction ?? 0.0);
-    gl.uniform1f(this.uLocs['u_baselineSharpness'], this.baselineSharpness);
 
     const isStrippedCinema =
       edits.emulsion_archetype === 'RochesterCinema500' &&
@@ -772,22 +638,97 @@ export class WebGLRenderer {
     } else if (isStrippedCinema) {
       halationMode = 2;
     }
-    gl.uniform1i(this.uLocs['u_halationMode'], halationMode);
 
-    gl.uniform1i(this.uLocs['u_isOriginal'], isOriginal ? 1 : 0);
-    gl.uniform1i(this.uLocs['u_isLinearRec2020'], this.isLinearRec2020 ? 1 : 0);
-    gl.uniform1i(
-      this.uLocs['u_hasMasterCurve'],
-      isCurveActive(edits.curves?.master) ? 1 : 0,
-    );
-    gl.uniform1i(
-      this.uLocs['u_hasRgbCurves'],
+    const grainSize = edits.grain_size ?? edits.grain_scale ?? 1.0;
+    const grainAmount = edits.grain_amount ?? 1.0;
+    const hasMaster = isCurveActive(edits.curves?.master) ? 1 : 0;
+    const hasRgb =
       isCurveActive(edits.curves?.red) ||
-        isCurveActive(edits.curves?.green) ||
-        isCurveActive(edits.curves?.blue)
+      isCurveActive(edits.curves?.green) ||
+      isCurveActive(edits.curves?.blue)
         ? 1
-        : 0,
-    );
+        : 0;
+
+    const f = this.uboFloatView;
+    const i = this.uboIntView;
+
+    f[0] = edits.exposure;
+    f[1] = edits.temperature;
+    f[2] = edits.tint;
+    f[3] = edits.contrast;
+    f[4] = edits.highlights;
+    f[5] = edits.shadows;
+    f[6] = edits.whites;
+    f[7] = edits.blacks;
+    f[8] = edits.vibrance;
+    f[9] = edits.saturation;
+    f[10] = edits.deep_blue;
+    f[11] = edits.foliage;
+    f[12] = ((effectiveEdits.crop_angle ?? 0.0) * Math.PI) / 180.0;
+    f[13] = this.texWidth / Math.max(this.texHeight, 1);
+    i[14] = 0; // lensCorrectionEnabled
+    i[15] = 0; // distortionModel
+    f[16] = 0.0; // k1
+    f[17] = 0.0; // k2
+    f[18] = 0.0; // k3
+    f[19] = 0.0; // k4
+    f[20] = isOriginal ? 1.0 : 0.0;
+    i[21] = this.isLinearRec2020 ? 1 : 0;
+    i[22] = modeMap[edits.tone_profile] ?? 0;
+    i[23] = 0; // lutEnabled
+    f[24] = 0.0; // lutIntensity
+    f[25] = 0.0; // lutSize
+    f[26] = edits.sharpening_amount ?? 0.0;
+    f[27] = edits.sharpening_radius ?? 1.0;
+    f[28] = edits.sharpening_masking ?? 0.0;
+    f[29] = edits.noise_reduction ?? 0.0;
+    f[30] = this.baselineSharpness;
+    f[31] = effectiveEdits.crop_left ?? 0.0;
+    f[32] = effectiveEdits.crop_top ?? 0.0;
+    f[33] = effectiveEdits.crop_right ?? 1.0;
+    f[34] = effectiveEdits.crop_bottom ?? 1.0;
+    f[35] = edits.perspective_vertical ?? 0.0;
+    f[36] = edits.perspective_horizontal ?? 0.0;
+    i[37] = effectiveEdits.crop_constrain ? 1 : 0;
+    i[38] = cropModeActive ? 1 : 0;
+    i[39] = hasMaster || hasRgb ? 1 : 0;
+    i[40] = hasMaster;
+    i[41] = hasRgb;
+    f[42] = 1.0; // edrHeadroom
+    i[43] = 0; // edrEnabled
+    i[44] = 0; // hasGainMap
+    f[45] = 0.0; // gainMapMin
+    f[46] = 1.0; // gainMapMax
+    f[47] = 1.0; // gainMapGamma
+    f[48] = 1.0; // gainMapCapacityMax
+    i[49] = EMULSION_MAP[edits.emulsion_archetype] ?? 0;
+    i[50] = 0; // emulsionFormat
+    f[51] = edits.emulsion_exposure;
+    i[52] = GRAIN_MODE_MAP[edits.emulsion_grain_mode] ?? 0;
+    f[53] = grainSize;
+    f[54] = grainSize;
+    f[55] = grainAmount;
+    i[56] = this.isIntermediate ? 1 : 0;
+    f[57] = edits.split_toning_shadow_hue;
+    f[58] = edits.split_toning_shadow_sat;
+    f[59] = edits.split_toning_highlight_hue;
+    f[60] = edits.split_toning_highlight_sat;
+    f[61] = edits.split_toning_balance;
+    i[62] = PRINT_MEDIA_MAP[edits.print_media] ?? 0;
+    i[63] = filterMap[edits.enlarger_filter] ?? 0;
+    f[64] = edits.print_paper_grade;
+    f[65] = 0.0; // printBaseWarmth
+    f[66] = edits.print_process_depth ?? 100.0;
+    i[67] = halationMode;
+    i[68] = (((effectiveEdits.rotation ?? 0) % 360) + 360) % 360;
+    f[69] = 5500.0; // asShotTemperature
+    f[70] = 0.0; // asShotTint
+    f[71] = 0.0; // pad
+
+    if (this.uboBuffer) {
+      gl.bindBuffer(gl.UNIFORM_BUFFER, this.uboBuffer);
+      gl.bufferSubData(gl.UNIFORM_BUFFER, 0, this.uboFloatView);
+    }
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
@@ -827,6 +768,10 @@ export class WebGLRenderer {
     if (this.rgbLutTex) {
       this.gl.deleteTexture(this.rgbLutTex);
       this.rgbLutTex = null;
+    }
+    if (this.uboBuffer) {
+      this.gl.deleteBuffer(this.uboBuffer);
+      this.uboBuffer = null;
     }
   }
 

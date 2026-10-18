@@ -89,6 +89,7 @@ struct ShaderUniforms {
     int32_t rotation;              // 0, 90, 180, 270
     float asShotTemperature;       // Photo's native correlated color temperature in Kelvin (default 5500K)
     float asShotTint;              // Photo's native tint (default 0.0)
+    float pad;                     // 16-byte std140/WebGPU alignment padding
 };
 
 #endif /* ShaderTypes_h */

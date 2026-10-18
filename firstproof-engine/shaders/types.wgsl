@@ -1,0 +1,93 @@
+// Canonical Darkroom Shader Uniforms & Vertex Structures
+// Guaranteed bit-identical alignment across WebGPU, Metal Shading Language, and WebGL 2 GLSL ES 300.
+
+struct ShaderUniforms {
+    exposure: f32,
+    temperature: f32,
+    tint: f32,
+    contrast: f32,
+    highlights: f32,
+    shadows: f32,
+    whites: f32,
+    blacks: f32,
+    vibrance: f32,
+    saturation: f32,
+    deepBlue: f32,
+    foliage: f32,
+    straightenAngle: f32,
+    aspectRatio: f32,
+    lensCorrectionEnabled: i32,
+    distortionModel: i32,
+    k1: f32,
+    k2: f32,
+    k3: f32,
+    k4: f32,
+    isOriginal: f32,
+    isLinearRaw: i32,
+    toneProfileMode: i32,
+    lutEnabled: i32,
+    lutIntensity: f32,
+    lutSize: f32,
+    sharpeningAmount: f32,
+    sharpeningRadius: f32,
+    sharpeningMasking: f32,
+    noiseReduction: f32,
+    baselineSharpness: f32,
+    cropLeft: f32,
+    cropTop: f32,
+    cropRight: f32,
+    cropBottom: f32,
+    perspectiveVertical: f32,
+    perspectiveHorizontal: f32,
+    cropConstrain: i32,
+    cropModeActive: i32,
+    hasCurves: i32,
+    hasMasterCurve: i32,
+    hasRgbCurves: i32,
+    edrHeadroom: f32,
+    edrEnabled: i32,
+    hasGainMap: i32,
+    gainMapMin: f32,
+    gainMapMax: f32,
+    gainMapGamma: f32,
+    gainMapCapacityMax: f32,
+    emulsionArchetype: i32,
+    emulsionFormat: i32,
+    emulsionExposure: f32,
+    emulsionGrainMode: i32,
+    grainScale: f32,
+    grainSize: f32,
+    grainAmount: f32,
+    isIntermediate: i32,
+    splitToningShadowHue: f32,
+    splitToningShadowSat: f32,
+    splitToningHighlightHue: f32,
+    splitToningHighlightSat: f32,
+    splitToningBalance: f32,
+    printMediaMode: i32,
+    enlargerFilterMode: i32,
+    printPaperGrade: f32,
+    printBaseWarmth: f32,
+    printProcessDepth: f32,
+    halationMode: i32,
+    rotation: i32,
+    asShotTemperature: f32,
+    asShotTint: f32,
+    pad: f32, // 16-byte std140/WebGPU alignment padding (72 fields * 4 bytes = 288 bytes = 18 * 16)
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) texCoord: vec2<f32>,
+};
+
+struct VertexInput {
+    position: vec2<f32>,
+    texCoord: vec2<f32>,
+};
+
+struct VertexQuad {
+    vertices: array<VertexInput, 4>,
+};
+
+

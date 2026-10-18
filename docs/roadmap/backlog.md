@@ -7,10 +7,8 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up (v0.1 Release Gate)
-1. **Story 4.8: Unified Shader Pipeline via WGSL & Naga Cross-Compilation** (P1)
-2. **Story 4.9: Robust Headless Command Bus, CLI Parity & Unified MCP Bridge** (P1)
+1. **Story 4.9: Robust Headless Command Bus, CLI Parity & Unified MCP Bridge** (P1)
 
-> *(Note: Stories 4.0, 4.1, 4.3, 4.4, 4.5, 4.6, and 4.12 are fully completed and archived in [completed.md](completed.md))*
 
 ---
 
@@ -76,21 +74,6 @@ This document strictly tracks pending and deferred features calibrated against o
   - Non-blocking background worker with progress sheet and cancel safety.
 - **Sidecar & Catalog Sync**:
   - Automatically updates catalog database records (`catalog.db`) pointing photo paths to the new `.dng` file without dropping user ratings, flags, or undo history.
-
-### 4.8 Unified Shader Pipeline via WGSL & Naga Cross-Compilation (P1)
-- **Problem Statement & Maintenance Friction**:
-  - First Proof currently maintains identical color science and rendering algorithms across two divergent shader dialects: Metal Shading Language (`Shaders.metal`, `ColorScience.metal`, `Detail.metal`) for native macOS AppKit and WebGL 2 GLSL (`FragmentShader.ts`, `ColorScience.ts`, `Detail.ts`) for the web darkroom.
-  - Every update to color science, print media, tone curves, or optical grain requires parallel manual implementations, constant synchronization, and defensive parity testing.
-- **Single Source of Truth in WGSL (WebGPU Shading Language)**:
-  - Migrate core fragment and compute shaders into canonical, strongly typed `.wgsl` source modules in `firstproof-engine/shaders/`.
-  - Author all internal optical adjustments (Exposure, Bilateral Tone Recovery, White Balance, Hurter-Driffield curves, AgX filmic tone mapping, and print media) once.
-- **Headless Naga Cross-Compilation Toolchain**:
-  - Leverage `naga` (pure Rust shader compiler from the `wgpu` ecosystem) at build time:
-    - Transpiles canonical WGSL $\to$ Metal Shading Language (`.metal`) for macOS desktop bundle compilation.
-    - Transpiles canonical WGSL $\to$ GLSL 300 ES for WebGL 2 web darkroom runtime, with direct WGSL pass-through for WebGPU targets.
-- **Deterministic Compile-Time Parity Verification**:
-  - Build-time fitness assertions ensure generated MSL and GLSL expose bit-identical uniform buffer structures, scalar alignment, and coordinate math.
-  - Eliminates human transcription error, divergent math, and manual multi-dialect shader maintenance permanently.
 
 ### 4.9 Robust Headless Command Bus, CLI Parity & Unified MCP Bridge (P1)
 - **Problem Statement**:

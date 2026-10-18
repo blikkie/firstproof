@@ -12,6 +12,7 @@ pub mod raw;
 pub mod resample;
 pub mod schema;
 pub mod settings;
+pub mod shader;
 pub mod xmp;
 
 pub use calibration::{CameraCalibration, CameraCalibrationRegistry};

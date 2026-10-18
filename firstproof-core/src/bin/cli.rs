@@ -33,6 +33,7 @@ SUBCOMMANDS:
     develop    Develop a RAW or image file to 16-bit TIFF or JPEG
     inspect    Inspect camera EXIF, sensor CFA calibration, and XMP edits
     dng        Convert proprietary RAW (.CR2, .NEF, .ARW) to archival DNG
+    shaders    Transpile canonical WGSL darkroom shaders to Metal and WebGL 2
     help       Print this help message or the help of the given subcommand
 
 EXAMPLES:
@@ -808,6 +809,130 @@ fn cmd_bundle_lensfun(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn print_shaders_help() {
+    println!(
+        r#"firstproof-cli shaders
+Transpile canonical WGSL darkroom shaders to Metal and WebGL 2 GLSL.
+
+USAGE:
+    firstproof-cli shaders [OPTIONS]
+
+OPTIONS:
+    --check          Verify on-disk shaders match transpiled output without writing
+    --msl <PATH>     Target path for Metal Shading Language output
+                     (default: FirstProofApp/Sources/Shaders/Shaders.metal)
+    --glsl <PATH>    Target path for WebGL 2 TypeScript GLSL output
+                     (default: web/src/shaders/GeneratedGLSL.ts)
+    --wgsl <PATH>    Target path for WebGPU TypeScript WGSL output
+                     (default: web/src/shaders/CanonicalWGSL.ts)
+    -h, --help       Print this help message
+"#
+    );
+}
+
+fn cmd_shaders(args: &[String]) -> Result<(), String> {
+    let mut check_only = false;
+    let mut msl_path = PathBuf::from("FirstProofApp/Sources/Shaders/Shaders.metal");
+    let mut glsl_path = PathBuf::from("web/src/shaders/GeneratedGLSL.ts");
+    let mut wgsl_path = PathBuf::from("web/src/shaders/CanonicalWGSL.ts");
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--check" => check_only = true,
+            "--msl" if i + 1 < args.len() => {
+                msl_path = PathBuf::from(&args[i + 1]);
+                i += 1;
+            }
+            "--glsl" if i + 1 < args.len() => {
+                glsl_path = PathBuf::from(&args[i + 1]);
+                i += 1;
+            }
+            "--wgsl" if i + 1 < args.len() => {
+                wgsl_path = PathBuf::from(&args[i + 1]);
+                i += 1;
+            }
+            "-h" | "--help" => {
+                print_shaders_help();
+                return Ok(());
+            }
+            other => return Err(format!("Unknown option for shaders command: {}", other)),
+        }
+        i += 1;
+    }
+
+    println!("🎨 Transpiling canonical WGSL shaders with Naga...");
+    let msl_content = format!(
+        "// AUTO-GENERATED from canonical WGSL by firstproof-engine (Story 4.8)\n// DO NOT EDIT DIRECTLY. Edit firstproof-engine/shaders/*.wgsl instead.\n\n{}",
+        firstproof_engine::shader::compile_to_msl().map_err(|e| e.to_string())?
+    );
+
+    let raw_glsl = firstproof_engine::shader::compile_to_glsl().map_err(|e| e.to_string())?;
+    let glsl_content = format!(
+        r#"// AUTO-GENERATED from canonical WGSL by firstproof-engine (Story 4.8)
+// DO NOT EDIT DIRECTLY. Edit firstproof-engine/shaders/*.wgsl instead.
+
+export const FRAGMENT_SHADER_SOURCE = `{}`;
+
+export const SHADER_UNIFORM_BLOCK_NAME = 'ShaderUniforms_block_0Fragment';
+export const SHADER_UNIFORM_SIZE_BYTES = 288;
+
+export const SHADER_SAMPLER_NAMES = {{
+  texture: '_group_0_binding_1_fs',
+  lut3d: '_group_0_binding_3_fs',
+  curveMaster: '_group_0_binding_5_fs',
+  curveRgb: '_group_0_binding_6_fs',
+  gainMap: '_group_0_binding_8_fs',
+}} as const;
+"#,
+        raw_glsl
+    );
+
+    let raw_wgsl = firstproof_engine::shader::canonical_wgsl();
+    let wgsl_content = format!(
+        r#"// AUTO-GENERATED from canonical WGSL by firstproof-engine (Story 4.8)
+// DO NOT EDIT DIRECTLY. Edit firstproof-engine/shaders/*.wgsl instead.
+
+export const CANONICAL_DARKROOM_WGSL = `{}`;
+"#,
+        raw_wgsl
+    );
+
+    let targets = [
+        ("MSL (.metal)", &msl_path, &msl_content),
+        ("WebGL 2 (GLSL TS)", &glsl_path, &glsl_content),
+        ("WebGPU (WGSL TS)", &wgsl_path, &wgsl_content),
+    ];
+
+    if check_only {
+        for (label, path, expected) in &targets {
+            if !path.exists() {
+                return Err(format!("Shader check failed: target file {:?} does not exist.", path));
+            }
+            let actual = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+            if actual != **expected {
+                return Err(format!(
+                    "Shader check failed: {:?} is out of sync with canonical WGSL. Run 'firstproof-cli shaders' to regenerate.",
+                    path
+                ));
+            }
+            println!("  ✅ {} {:?} matches canonical source", label, path);
+        }
+        println!("✨ All generated shaders are in bit-level sync with canonical WGSL.");
+    } else {
+        for (label, path, content) in &targets {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(path, content).map_err(|e| e.to_string())?;
+            println!("  ✅ Generated {} -> {:?}", label, path);
+        }
+        println!("✨ Successfully transpiled canonical WGSL to Metal, WebGL 2 GLSL, and WebGPU WGSL.");
+    }
+
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -823,11 +948,13 @@ fn main() {
         "inspect" | "info" => cmd_inspect(rest),
         "dng" | "convert" => cmd_dng(rest),
         "bundle-lensfun" => cmd_bundle_lensfun(rest),
+        "shaders" | "transpile-shaders" => cmd_shaders(rest),
         "help" | "--help" | "-h" => {
             if !rest.is_empty() {
                 match rest[0].as_str() {
                     "develop" | "dev" => print_develop_help(),
                     "dng" | "convert" => print_dng_help(),
+                    "shaders" => print_shaders_help(),
                     _ => print_main_help(),
                 }
             } else {

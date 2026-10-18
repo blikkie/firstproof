@@ -523,4 +523,14 @@ This archive tracks completed stories and features moved from the active backlog
   - *Automated GitHub Pages Deployment Workflow (`.github/workflows/pages.yml`)*:
     - Configured GitHub Actions CI workflow triggered on changes to `main` to compile Rust WASM via `wasm-pack`, run web verification tracks, bundle static assets, and deploy to GitHub Pages under `firstproof.photo` (via `web/public/CNAME`).
 
+- **Story 4.8: Unified Shader Pipeline via WGSL & Naga Cross-Compilation**:
+  - Authoritative, single-source-of-truth darkroom shaders authored once in canonical WGSL (WebGPU Shading Language) in `firstproof-engine/shaders/`: `types.wgsl`, `constants.wgsl`, `geometry.wgsl`, `detail.wgsl`, `color_science.wgsl`, and `darkroom.wgsl`.
+  - Headless Naga cross-compilation pipeline integrated into shared engine (`firstproof_engine::shader`) and CLI (`firstproof-cli shaders` and `--check`):
+    - Transpiles WGSL $\to$ Metal Shading Language (`FirstProofApp/Sources/Shaders/Shaders.metal`) for native macOS AppKit desktop bundle.
+    - Transpiles WGSL $\to$ WebGL 2 GLSL 300 ES (`web/src/shaders/GeneratedGLSL.ts`) with std140 uniform buffer mapping (`ShaderUniforms_block_0Fragment`) and automatic 1D $\to$ 2D LUT sampler adaptation.
+    - Transpiles WGSL $\to$ direct WebGPU pass-through (`web/src/shaders/CanonicalWGSL.ts`).
+  - Bit-identical `ShaderUniforms` layout (288 bytes, exactly 18 16-byte chunks) and `VertexQuad` uniform buffer (`buffer(0)`) preserving zoom, pan, and rotation across all targets with zero manual shader duplication.
+  - Integration into `./scripts/check.sh`, `Makefile` (`make shaders`, `make shaders-check`), and `architecture_fitness.rs` asserting pipeline stage ordering, Rec.2020 photopic luminance coefficients, and zero drift across engines.
+
+
 

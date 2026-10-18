@@ -51,6 +51,7 @@ def check_boundary_anchoring():
         ROOT_DIR / "FirstProofApp" / "Sources" / "Shaders",
         ROOT_DIR / "web" / "src" / "shaders",
         ROOT_DIR / "firstproof-engine" / "src",
+        ROOT_DIR / "firstproof-engine" / "shaders",
     ]
     pattern = re.compile(r"\+\s*0\.016|\+\s*0\.035|\bbase_?refl\b", re.IGNORECASE)
     
@@ -58,7 +59,8 @@ def check_boundary_anchoring():
         if not target.exists():
             continue
         for path in target.rglob("*"):
-            if path.suffix in [".metal", ".ts", ".rs"]:
+            if path.suffix in [".metal", ".ts", ".rs", ".wgsl"]:
+
                 try:
                     content = path.read_text(encoding="utf-8")
                     for idx, line in enumerate(content.splitlines(), start=1):

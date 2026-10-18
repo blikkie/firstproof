@@ -13,6 +13,13 @@ all: build-bridge
 check:
 	./scripts/check.sh
 
+shaders:
+	cargo run -p firstproof-core --bin firstproof-cli -- shaders
+
+shaders-check:
+	cargo run -p firstproof-core --bin firstproof-cli -- shaders --check
+
+
 build-core:
 	GIT_CONFIG_GLOBAL=/dev/null cargo build --release --target $(RUST_TARGET) -p firstproof-core
 

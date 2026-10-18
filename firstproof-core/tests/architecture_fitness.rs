@@ -126,7 +126,7 @@ fn test_terminal_display_transform_ordering_metal() {
         .unwrap_or_else(|_| panic!("Failed to read {:?}", shader_path));
 
     let frag_start = content
-        .find("fragment float4 fragmentShader(")
+        .find("fragment fragmentShaderOutput fragmentShader(")
         .expect("Found fragmentShader in Shaders.metal");
     let frag_body = &content[frag_start..];
 
@@ -143,17 +143,40 @@ fn test_terminal_display_transform_ordering_metal() {
     }
 
     // Terminal gamma encoding must be the very last return stage
-    check_pipeline_stage_order(frag_body, "agxToneMapVivid", "linearToSrgbGamma3(finalColor)")
+    check_pipeline_stage_order(frag_body, "agxToneMapVivid", "linearToSrgbGamma3_")
         .unwrap_or_else(|e| panic!("Metal Shader Error: {}", e));
 }
 
 #[test]
+fn test_terminal_display_transform_ordering_wgsl() {
+    let wgsl = firstproof_engine::shader::canonical_wgsl();
+    let frag_start = wgsl
+        .find("fn fragmentShader(")
+        .expect("Found fn fragmentShader in canonical WGSL");
+    let frag_body = &wgsl[frag_start..];
+
+    for upstream in &[
+        "applyBilateralToneRecovery",
+        "applyRecordingEmulsion",
+        "applyColorAdjustments",
+        "applySplitToning",
+        "applyDetailAndSharpening",
+    ] {
+        check_pipeline_stage_order(frag_body, upstream, "agxToneMapVivid")
+            .unwrap_or_else(|e| panic!("WGSL Shader Error: {}", e));
+    }
+
+    check_pipeline_stage_order(frag_body, "agxToneMapVivid", "linearToSrgbGamma3")
+        .unwrap_or_else(|e| panic!("WGSL Shader Error: {}", e));
+}
+
+#[test]
 fn test_terminal_display_transform_ordering_webgl() {
-    let shader_path = repo_root().join("web/src/shaders/FragmentShader.ts");
+    let shader_path = repo_root().join("web/src/shaders/GeneratedGLSL.ts");
     let content = fs::read_to_string(&shader_path)
         .unwrap_or_else(|_| panic!("Failed to read {:?}", shader_path));
 
-    let main_start = content.find("void main() {").expect("Found void main() in FragmentShader.ts");
+    let main_start = content.find("void main() {").expect("Found void main() in GeneratedGLSL.ts");
     let main_body = &content[main_start..];
 
     // Assert that upstream optical adjustments precede terminal tone mapping
@@ -168,8 +191,8 @@ fn test_terminal_display_transform_ordering_webgl() {
             .unwrap_or_else(|e| panic!("WebGL Shader Error: {}", e));
     }
 
-    // Terminal gamma encoding must be the very last assignment to fragColor
-    check_pipeline_stage_order(main_body, "agxToneMapVivid", "fragColor = vec4(linearToSrgbGamma3")
+    // Terminal gamma encoding must be the very last assignment to output
+    check_pipeline_stage_order(main_body, "agxToneMapVivid", "linearToSrgbGamma3_")
         .unwrap_or_else(|e| panic!("WebGL Shader Error: {}", e));
 }
 
@@ -207,28 +230,35 @@ fn test_terminal_display_transform_failure_mode() {
 #[test]
 fn test_rec2020_luminance_coefficient_purity() {
     let metal_shader = fs::read_to_string(repo_root().join("FirstProofApp/Sources/Shaders/Shaders.metal")).unwrap();
-    let webgl_shader = fs::read_to_string(repo_root().join("web/src/shaders/FragmentShader.ts")).unwrap();
+    let webgl_shader = fs::read_to_string(repo_root().join("web/src/shaders/GeneratedGLSL.ts")).unwrap();
+    let wgsl_shader = firstproof_engine::shader::canonical_wgsl();
     let rust_pipeline = fs::read_to_string(repo_root().join("firstproof-core/src/export/pipeline.rs")).unwrap();
 
     let r_coeff = "0.2627";
-    let g_coeff = "0.6780";
+    let g_coeff = "0.678";
     let b_coeff = "0.0593";
 
     // 1. Metal Shader Verification
     assert!(metal_shader.contains(r_coeff), "Shaders.metal must evaluate Rec.2020 Red coeff 0.2627");
-    assert!(metal_shader.contains(g_coeff), "Shaders.metal must evaluate Rec.2020 Green coeff 0.6780");
+    assert!(metal_shader.contains(g_coeff), "Shaders.metal must evaluate Rec.2020 Green coeff 0.678");
     assert!(metal_shader.contains(b_coeff), "Shaders.metal must evaluate Rec.2020 Blue coeff 0.0593");
 
-    // 2. WebGL Shader Verification
-    assert!(webgl_shader.contains(r_coeff), "FragmentShader.ts must evaluate Rec.2020 Red coeff 0.2627");
-    assert!(webgl_shader.contains(g_coeff), "FragmentShader.ts must evaluate Rec.2020 Green coeff 0.6780");
-    assert!(webgl_shader.contains(b_coeff), "FragmentShader.ts must evaluate Rec.2020 Blue coeff 0.0593");
+    // 2. WebGL Shader Verification (GeneratedGLSL.ts)
+    assert!(webgl_shader.contains(r_coeff), "GeneratedGLSL.ts must evaluate Rec.2020 Red coeff 0.2627");
+    assert!(webgl_shader.contains(g_coeff), "GeneratedGLSL.ts must evaluate Rec.2020 Green coeff 0.678");
+    assert!(webgl_shader.contains(b_coeff), "GeneratedGLSL.ts must evaluate Rec.2020 Blue coeff 0.0593");
 
-    // 3. Rust CPU Pipeline Verification
+    // 3. Canonical WGSL Verification
+    assert!(wgsl_shader.contains(r_coeff), "Canonical WGSL must evaluate Rec.2020 Red coeff 0.2627");
+    assert!(wgsl_shader.contains(g_coeff), "Canonical WGSL must evaluate Rec.2020 Green coeff 0.678");
+    assert!(wgsl_shader.contains(b_coeff), "Canonical WGSL must evaluate Rec.2020 Blue coeff 0.0593");
+
+    // 4. Rust CPU Pipeline Verification
     assert!(rust_pipeline.contains(r_coeff), "pipeline.rs must evaluate Rec.2020 Red coeff 0.2627");
-    assert!(rust_pipeline.contains(g_coeff), "pipeline.rs must evaluate Rec.2020 Green coeff 0.6780");
+    assert!(rust_pipeline.contains(g_coeff), "pipeline.rs must evaluate Rec.2020 Green coeff 0.678");
     assert!(rust_pipeline.contains(b_coeff), "pipeline.rs must evaluate Rec.2020 Blue coeff 0.0593");
 }
+
 
 #[test]
 fn test_dual_domain_performance_asymmetry_invariants() {

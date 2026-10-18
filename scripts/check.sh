@@ -28,7 +28,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
     cargo deny check licenses
     echo "    [Rust] Running workspace tests..."
     cargo test --workspace --quiet
+    echo "    [Rust] Verifying canonical shader sync across Metal, WebGL, and WebGPU..."
+    cargo run -p firstproof-core --bin firstproof-cli -- shaders --check
     echo "    [Rust] Running Clippy linter..."
+
     cargo clippy --workspace --all-targets -- -D warnings
     echo "    [Rust] Building & verifying WebAssembly..."
     (cd firstproof-wasm && wasm-pack build --target web --out-dir pkg >/dev/null 2>&1)
