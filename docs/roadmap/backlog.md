@@ -7,14 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up (v0.1 Release Gate)
-1. **Story 4.0: Comprehensive AI Slop Audit & Codebase De-Slop Pass** (P0) - COMPLETED
-2. **Story 4.5: Swift Desktop Parameter Schema & Behavioral Interaction Parity** (P0) - COMPLETED
-3. **Story 4.6: Comprehensive Permissive RAW Decoding Matrix (CR2/CR3, ARW, NEF, RAF X-Trans, RW2, ORF, PEF)** (P0) - COMPLETED
-4. **Story 4.4: Standalone Desktop & CLI Release Packaging Pipeline** (P1) - COMPLETED
-5. **Story 4.1: Open Source IP, Security & License Compliance Gate** (P1) - COMPLETED
-6. **Story 4.3: Web Distribution & Release Site (`firstproof.photo`)** (P1) - COMPLETED
-7. **Story 4.8: Unified Shader Pipeline via WGSL & Naga Cross-Compilation** (P1)
-8. **Story 4.9: Robust Headless Command Bus, CLI Parity & Unified MCP Bridge** (P1)
+1. **Story 4.8: Unified Shader Pipeline via WGSL & Naga Cross-Compilation** (P1)
+2. **Story 4.9: Robust Headless Command Bus, CLI Parity & Unified MCP Bridge** (P1)
+
+> *(Note: Stories 4.0, 4.1, 4.3, 4.4, 4.5, 4.6, and 4.12 are fully completed and archived in [completed.md](completed.md))*
 
 ---
 
@@ -57,114 +53,17 @@ This document strictly tracks pending and deferred features calibrated against o
   - Evaluated asynchronously on a background worker or via GPU texture downsampling only when paused in the develop inspector or when toggled on demand via shortcut (`H`).
 - **Quiet Darkroom Visuals**:
   - Monochrome tone density fill or muted desaturated channel traces rendered in dark slate (`#1E1E1E`); zero primary-colored mountain graphs or dancing waveforms.
-### 3.7 WebAssembly Darkroom Engine & Static Web Launch (P0 / P1 - Pulled Forward)
-- **`firstproof-wasm` Core Crate Scaffolding**:
-  - Extract lightweight WebAssembly bindings target using `wasm-bindgen` and `wasm-pack`.
-  - Compiles pure Rust color science (`color/`), AgX filmic tonemapping, Fritsch-Carlson tone curves (`curve.rs`), and fast RAW preview extraction (`raw_decoder.rs`).
-  - Pre-allocated RAM scratchpad buffer to eliminate browser garbage collection (GC) stutter and memory fragmentation.
-- **Zero-Copy WebGL 2 Shader Pipeline**:
-  - GLSL 3.00 ES fragment shader port of `ColorScience.metal` and `Shaders.metal`.
-  - Uniform Buffer Objects (UBO) matching `EditSettings` (Exposure, Contrast, WB Temp/Tint, Bilateral Tone Recovery, Curves, Emulsion presets).
-  - Direct pointer access into WASM linear memory (`wasm.memory.buffer`) for zero-copy texture upload via `gl.texSubImage2D`.
-- **Local Folder Intake & Bi-Directional XMP Sync**:
-  - **Folder Selection**: Integrate File System Access API (`window.showDirectoryPicker()`) with fallback to `<input type="file" webkitdirectory>`.
-  - **Lazy Streaming Ingestion**: Handle 500+ RAW folders without loading multi-gigabyte payloads into browser RAM.
-  - **Direct Sidecar Write-Back**: When granted directory permission, edits and star ratings write back directly to disk as adjacent `.xmp` sidecars.
-  - **In-Memory Filmstrip**: Horizontal thumbnail carousel with single-key rating shortcuts (`1`–`5`, `P`/`X`) and keyboard navigation.
-- **Static Web Distribution & Privacy-First Ethos (`firstproof.photo`)**:
-  - Host statically on GitHub Pages via GitHub Actions CI. Zero backend servers, 100% private on-device processing.
-  - Clean, typography-driven landing page embedding the interactive web darkroom.
-  - Strict anti-marketing principles: Zero email address capture, zero tracking scripts, zero waitlists. Direct link to open source repo and binaries when ready.
-
-
-### 3.8 Web Darkroom Subsystem Parity & Anti-Slop Initiative (P0 / P1) - COMPLETED
-All sub-stories (3.8.1 through 3.8.7) completed and archived in [completed.md](completed.md).
-
-
-
 ---
 
 
 
 ## Phase 4: Pre-Release IP Audit, Code Cleanliness & Distribution (P0 / P1)
 
-### 4.0 Comprehensive AI Slop Audit & Codebase De-Slop Pass (P0) - COMPLETED
-All 7 lenses (Lenses 1 through 7) completed and archived in [completed.md](completed.md).
-
-### 4.1 Open Source IP, Security & License Compliance Gate (P1)
-- **License Compliance & Copyleft Gate (`cargo-deny`)**:
-  - Whitelist permissive licenses (`MIT`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `MPL-2.0`, `CC0-1.0`); hard-block copyleft `GPL` / `AGPL`.
-  - Audit `rawler` (LGPL-2.1) to ensure standalone dynamic linking or clean-room replacement without copyleft contamination.
-  - Standardize First Proof application code and Rust engine under the **MIT License**.
-  - **Bundled Lensfun Database CC-BY-SA 3.0 Guardrail**:
-    - Quarantines the bundled Lensfun lens calibration database under `assets/lensfun/` as a distinct dataset licensed under Creative Commons Attribution-ShareAlike 3.0 (CC-BY-SA 3.0).
-    - As a collective work / mere aggregation, the database license does not affect First Proof's MIT application code.
-    - Explicitly call out this dataset carve-out in root `LICENSE` and `THIRDPARTY.md`.
-    - Provide visible in-app attribution under the Optics inspector tab lens profile selector (*"Lens profiles provided by the open-source Lensfun Project (CC-BY-SA 3.0)"*) and in the About/Attribution view.
-- **Code Cleanliness & Provenance Scanning (`scancode` / `license-eye`)**:
-  - Scan codebase for accidental copy-pasted GPL snippets, proprietary headers, or unlicensed third-party code.
-  - Standardize SPDX license headers (`SPDX-License-Identifier: MIT`) across all Rust, Swift, and Metal files.
-- **Secret & Credential Detection (`gitleaks`)**:
-  - Pre-commit and CI scans to guarantee no private keys, signing certificates, local absolute paths, or API tokens exist in repository git history.
-- **Dependency Vulnerability Auditing (`cargo-audit`)**:
-  - Scan dependency graph against the RustSec Advisory Database for known CVEs and memory safety advisories.
-- **Memory Safety & Undefined Behavior (`cargo miri`)**:
-  - Validate unsafe FFI pointer conversions and raw byte slicing in `raw_decoder` and `export` modules under Miri.
-
 ### 4.2 Pre-Release Git History Scrubbing Pass (P2 - Pre-Push Gate)
 - **Git History Rewrite & Scrubbing Pass (`git-filter-repo` / BFG)**:
   - *(Note: Active codebase path sanitization and test scratch cleanup completed; see completed.md)*
   - Perform an automated history rewrite prior to public release to scrub local paths, developer usernames, private emails, and transient binary blobs from git commit history.
   - Followed by aggressive reflog expiration and garbage collection (`git reflog expire --expire=now --all && git gc --prune=now --aggressive`).
-
-### 4.3 Web Distribution & Release Site (`firstproof.photo`) (P1)
-- **Craft-First, Zero Sales Pitch Design**:
-  - Restrained, typography-driven static page (deep neutral darks, editorial layout, zero marketing popups, tracking cookies, or conversion fluff).
-  - Unadorned application screenshots showing the actual darkroom interface and workflow.
-  - Zero email harvesting or lead capture forms: pure, quiet software craft.
-- **Integrated In-Browser Test Drive**:
-  - Photographers can drag and drop their own RAW files or click "Open Folder" to test First Proof instantly without downloading anything.
-- **Visual Proof Gallery & Optical Comparison**:
-  - Curated gallery of real photographic captures demonstrating authentic color rendition, natural skin tones, and subtle tonal gradations.
-  - Side-by-side inspection: In-Camera JPEG (cooked 8-bit sRGB with blown highlights) vs. First Proof (16-bit linear Rec.2020 AgX output).
-- **On the Shoulders of Giants (Attribution & Lineage)**:
-  - Dedicated recognition honoring the foundational pioneers whose open work makes First Proof possible:
-    - **Troy Sobotka**: Groundbreaking research on AgX color science, open filmic tonemapping, and dynamic range preservation.
-    - **Marti Maria**: LittleCMS (`lcms2`) open color management system.
-    - **Dave Coffin & RAW Decoding Pioneers**: `dcraw`, `libraw`, and `rawler` for reversing proprietary camera Bayer sensor formats.
-    - **Torsten Bronger & Lensfun Community**: Open lens database and optical distortion modeling.
-    - **CIE Colorimetry & Open Standards**: CIE 1931/1976 colorimetric observers, Planckian locus math, and open standard specifications.
-
-### 4.4 Standalone Desktop & CLI Release Packaging Pipeline (P1)
-- **Release Packaging Milestone**:
-  - Packaging the standalone native macOS application (compiling `libfirstproof_core.a`, running `uniffi-bindgen`, building the SwiftUI `.app` bundle, Developer ID code signing, and Apple `notarytool` stapling) and headless multi-arch `firstproof-cli` release binaries (`x86_64` and `aarch64` Linux and macOS).
-  - Cross-platform GitHub Actions release runner compiling statically linked artifacts with LittleCMS2, shell completions (`bash`, `zsh`, `fish`), and man pages.
-  - **Automated Hardware & Lens Calibration Harvester (`scripts/harvest_hardware_data.sh`)**:
-    - Build a deterministic headless extraction script (`scripts/harvest_hardware_data.sh`) executed during release preparation or CI that pulls both camera profiles and lens correction data directly from authoritative upstream distributions:
-      1. **Camera Calibration**: Pulls Adobe DNG Converter archive packages (extracted headlessly via `7z`) or RawTherapee `camconst.json`, parsing Adobe `.dcp` profiles and DNG tags (ForwardMatrix, Illuminant matrices, `BaselineSharpness`, `LinearResponseLimit`, and sensor black/white saturation margins) directly into `firstproof-engine::calibration::registry` or a compact binary table.
-      2. **Bundled Lens Calibration (Lensfun DB)**: Ingests upstream Lensfun CC-BY-SA 3.0 XML database snapshots (`data/db/*.xml`), compiling and indexing them into a compact pre-indexed binary blob (`lensfun.bin` / JSON) embedded directly in native macOS desktop resources and WebAssembly assets.
-    - **Deprecation of Legacy External Host Scanning**:
-      - Deprecates the old runtime scanning of local Homebrew `/opt/homebrew/share/lensfun` and Linux `/usr/share/lensfun` paths.
-      - Guarantees instant (< 2ms) optical distortion, TCA, and vignetting lookups operate 100% out of the box across desktop and browser darkrooms on day 1 without requiring user OS package installs.
-    - Keeps both new camera and lens support a simple automated version bump away without requiring manual downloads or hand-crafted registry entries.
-  - Native macOS `.app` bundle verification active on macOS workstation via `make bundle`.
-  - Direct download links will be posted openly when binaries are ready—no email gates or signups.
-
-### 4.5 Swift Desktop Parameter Schema & Behavioral Interaction Parity (P0)
-- **Swift View & Model Schema Consumption**:
-  - *(Note: Rust core UniFFI & WASM parameter schema bridge completed; see completed.md)*
-  - Refactor `SliderRow.swift`, `DevelopInspectorView.swift`, and `AppViewModel.swift` to derive slider ranges, steps, defaults, and formatters directly from the canonical Rust descriptors rather than hardcoding values in Swift views.
-- **Unified Interaction Behavioral Contracts**:
-  - Implement the identical interaction state machine in native AppKit / SwiftUI matching [ui_architecture.md](../architecture/ui_architecture.md):
-    - Record initial value on drag gesture start.
-    - <kbd>Shift</kbd>+drag fine-scrubbing ($0.1\times$ precision damper).
-    - <kbd>Escape</kbd> key drag rollback (cancels pending scrub and reverts value without pushing undo).
-    - Double-click / double-tap reset on slider thumb and row labels.
-    - Tabular lining numbers (`.monospacedDigit()`) across all inspector readout labels to eliminate width jitter.
-- **Persistent Heads-Up EXIF Badges (CAM / ISO / Aperture / Shutter)**:
-  - Adopt the web darkroom's fixed 4-badge EXIF summary element (`CAM`, `ISO`, `APERTURE`, `SHUTTER`) directly in macOS `PermanentHeaderCard` (`InspectorHeaderView.swift`) positioned above the segmented tabs, so essential capture parameters remain visible at a glance across every workspace tab.
-- **Cross-Platform Verification Gate**:
-  - Verify 1:1 parameter boundaries, visual feedback, and keyboard/mouse interaction parity between native macOS and WebAssembly darkroom targets.
 
 
 ### 4.7 Native macOS Desktop Archival DNG Ingest & Batch Action (P2)
@@ -243,7 +142,6 @@ All 7 lenses (Lenses 1 through 7) completed and archived in [completed.md](compl
 ## Phase 5: Post-v1 & Long-Term Vision
 
 ### 5.1 Google Liberation Bridge & Cloud Quarantine (Post-v1)
-- **Pixel Computational Linear DNG Ingestion**: Ingest 16-bit multi-frame linear DNGs (`PXL_*.dng`) with embedded lens shading gain maps.
 - **Air-Gapped Cloud Rejects Quarantine**:
   - Decouple local reject flagging (`X`) from remote cloud deletion.
   - Dedicated "Rejected Google Photos" sidebar scope where candidates must be explicitly reviewed.
