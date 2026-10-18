@@ -258,7 +258,17 @@ public final class AppViewModel {
     }
     
     // MARK: - Photos & Selection
-    public var photos: [PhotoRecord] = []
+    public var photos: [PhotoRecord] = [] {
+        didSet {
+            rebuildOriginalPhotosCache()
+        }
+    }
+    public internal(set) var filteredPhotos: [PhotoRecord] = []
+    public internal(set) var cachedOriginalPhotos: [PhotoRecord] = []
+    public var cachedMasterPhotos: [PhotoRecord] {
+        get { cachedOriginalPhotos }
+        set { cachedOriginalPhotos = newValue }
+    }
     public var selectedPhoto: PhotoRecord? = nil
     public var selectedPhotoPaths: Set<String> = []
     public var isBulkSelectionMode: Bool = false
@@ -287,10 +297,27 @@ public final class AppViewModel {
     public var isExportSheetPresented: Bool = false
     public var isExportPackageSheetPresented: Bool = false
     
+    // MARK: - In-Place Duplicate Culling State
+    public var isCullDuplicatesSheetPresented: Bool = false
+    public var cullScopeName: String = "Main Library"
+    public var cullScopeFolderPath: String? = nil
+    public var cullClusters: [DuplicateRowModel] = []
+    public var isScanningDuplicates: Bool = false
+    
     // MARK: - Ingestion & Import State (Story 2.3)
     public var isImportSheetPresented: Bool = false
     public var importSourcePath: String? = nil
     public var importSelectedPaths: [String] = []
+    public var importOriginalsOnly: Bool = true
+    public var importMastersOnly: Bool {
+        get { importOriginalsOnly }
+        set { importOriginalsOnly = newValue }
+    }
+    public var isImporting: Bool = false
+    public var importProgressStatus: String = ""
+    public var importProgressCurrent: UInt32 = 0
+    public var importProgressTotal: UInt32 = 0
+    public var importCurrentFileName: String = ""
     public var isCameraCardBannerPresented: Bool = false
     public var detectedCameraCard: CameraCardInfo? = nil
     
@@ -363,8 +390,22 @@ public final class AppViewModel {
     }
     
     // MARK: - Filters
-    public var ratingFilter: Int? = nil // nil = All, 1..5
-    public var statusFilter: String? = nil // nil = All, "pick", "reject"
+    public var ratingFilter: Int? = nil {
+        didSet {
+            applyDisplayFilters()
+        }
+    }
+    public var statusFilter: String? = nil {
+        didSet {
+            applyDisplayFilters()
+        }
+    }
+    public var hideDerivativeClones: Bool = UserDefaults.standard.object(forKey: "hideDerivativeClones") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(hideDerivativeClones, forKey: "hideDerivativeClones")
+            rebuildMasterPhotosCache()
+        }
+    }
     
     // MARK: - Edit Sliders (P0 + Lens Corrections)
     public var exposure: Float = 0.0      // -3.0 .. +3.0 EV
@@ -579,9 +620,28 @@ public final class AppViewModel {
         detector.start()
     }
     
+    public func isOriginalsOnly(for folderPath: String?) -> Bool {
+        guard let path = folderPath else { return hideDerivativeClones }
+        let key = "originalsOnly_\(path)"
+        if let val = UserDefaults.standard.object(forKey: key) as? Bool {
+            return val
+        }
+        let legacyKey = "mastersOnly_\(path)"
+        if let val = UserDefaults.standard.object(forKey: legacyKey) as? Bool {
+            return val
+        }
+        return hideDerivativeClones
+    }
+    
+    public func isMastersOnly(for folderPath: String?) -> Bool {
+        return isOriginalsOnly(for: folderPath)
+    }
+    
     public func promptImport(from sourcePath: String? = nil, selectedPaths: [String] = []) {
-        self.importSourcePath = sourcePath ?? currentFolderPath
+        let src = sourcePath ?? currentFolderPath
+        self.importSourcePath = src
         self.importSelectedPaths = selectedPaths
+        self.importOriginalsOnly = isOriginalsOnly(for: src)
         self.isImportSheetPresented = true
     }
     
@@ -782,5 +842,59 @@ public final class AppViewModel {
             )
             _ = writeXmp(path: path, record: record)
         }
+    }
+}
+
+// MARK: - In-Place Duplicate Culling Models
+@Observable
+public final class DuplicateRowModel: Identifiable {
+    public let id: String
+    /// When checked ("Keep"), all duplicates in this row are exempted from deletion.
+    /// Defaults to empty (`false`) so duplicates are queued for deletion unless explicitly kept.
+    public var isKept: Bool = false
+    public var original: PhotoRecord
+    public var duplicates: [DuplicateItemModel]
+    
+    public init(cluster: DuplicateClusterRecord) {
+        self.id = cluster.original.filePath
+        self.isKept = false
+        self.original = cluster.original
+        self.duplicates = cluster.duplicates.map { DuplicateItemModel(photo: $0) }
+    }
+    
+    /// Duplicates in this row that are NOT exempted from deletion
+    public var duplicatesToTrash: [DuplicateItemModel] {
+        guard !isKept else { return [] }
+        return duplicates.filter { !$0.isKept }
+    }
+    
+    public var markedDuplicatesCount: Int {
+        duplicatesToTrash.count
+    }
+    
+    public var markedDuplicatesBytes: Int64 {
+        duplicatesToTrash.reduce(0) { $0 + $1.photo.fileSize }
+    }
+    
+    public func swapOriginal(with duplicate: DuplicateItemModel) {
+        let oldOriginal = self.original
+        self.original = duplicate.photo
+        duplicate.photo = oldOriginal
+        duplicate.isKept = false
+    }
+}
+
+@Observable
+public final class DuplicateItemModel: Identifiable {
+    public let id: String
+    public var photo: PhotoRecord
+    /// When checked ("Keep"), this specific duplicate is exempted from deletion.
+    /// Defaults to empty (`false`) so it is queued for deletion unless explicitly kept.
+    public var isKept: Bool = false
+    
+    public init(photo: PhotoRecord) {
+        self.id = photo.filePath
+        self.photo = photo
+        self.isKept = false
     }
 }

@@ -10,7 +10,7 @@ public struct ImportSheetView: View {
     @State private var subfolderName: String = ""
     @State private var moveFiles: Bool = false
     @AppStorage("defaultConsolidateSidecars") private var consolidateSidecars: Bool = true
-    @AppStorage("defaultDeduplicateRawOverJpeg") private var deduplicateRawOverJpeg: Bool = true
+    @State private var deduplicateRawOverJpeg: Bool = true
     @AppStorage("defaultSkipDuplicates") private var skipDuplicates: Bool = true
     @State private var deleteFromCard: Bool = false
     
@@ -32,9 +32,16 @@ public struct ImportSheetView: View {
         sourcePath.hasPrefix("/Volumes/") && !sourcePath.hasPrefix("/Volumes/Macintosh HD")
     }
     
+    private var isCurrentFolderActive: Bool {
+        viewModel.importSourcePath == nil || viewModel.importSourcePath == viewModel.currentFolderPath
+    }
+    
     private var targetCount: Int {
         if !viewModel.importSelectedPaths.isEmpty {
             return viewModel.importSelectedPaths.count
+        }
+        if isCurrentFolderActive {
+            return deduplicateRawOverJpeg ? viewModel.filteredPhotos.count : viewModel.photos.count
         }
         return viewModel.photos.count
     }
@@ -78,6 +85,7 @@ public struct ImportSheetView: View {
         .padding(24)
         .frame(width: 560)
         .onAppear {
+            self.deduplicateRawOverJpeg = viewModel.importOriginalsOnly
             if subfolderName.isEmpty {
                 let formatter = DateFormatter()
                 formatter.dateFormat = "yyyy-MM-dd"
@@ -134,8 +142,13 @@ public struct ImportSheetView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
                 
-                Toggle("RAW Over JPEG: Master RAW wins when RAW+JPEG pairs exist", isOn: $deduplicateRawOverJpeg)
-                    .font(.subheadline)
+                Toggle(
+                    deduplicateRawOverJpeg
+                        ? "Originals Only: Import original RAW/negatives only (excludes export copies like _edited.jpg, -1.dng)"
+                        : "All Copies: Import all files including export derivatives and duplicate versions",
+                    isOn: $deduplicateRawOverJpeg
+                )
+                .font(.subheadline)
                 
                 Toggle("Consolidate Sidecars: Merge .xmp and Takeout .json into single First Proof XMP", isOn: $consolidateSidecars)
                     .font(.subheadline)
@@ -217,7 +230,9 @@ public struct ImportSheetView: View {
                 }
                 
                 Button(action: startImport) {
-                    Text(targetCount > 0 ? "Import \(targetCount) Photos" : "Import All Photos")
+                    Text(targetCount > 0
+                        ? (deduplicateRawOverJpeg ? "Import \(targetCount) Originals" : "Import \(targetCount) Photos")
+                        : "Import All Photos")
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -227,18 +242,61 @@ public struct ImportSheetView: View {
     // MARK: - Progress View
     private var importingProgressView: some View {
         VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.2)
-                .padding(.top, 12)
-            
-            Text("Importing into Main Library...")
-                .font(.headline)
-            
-            Text("Resolving RAW/JPEG precedence, consolidating XMP sidecars, and verifying cryptographic bit integrity...")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
+            if viewModel.importProgressTotal > 0 {
+                VStack(spacing: 12) {
+                    ProgressView(
+                        value: Double(viewModel.importProgressCurrent),
+                        total: Double(viewModel.importProgressTotal)
+                    )
+                    .progressViewStyle(.linear)
+                    .frame(maxWidth: 420)
+                    
+                    HStack {
+                        if viewModel.importProgressCurrent > 0 {
+                            Text("\(viewModel.importProgressCurrent) of \(viewModel.importProgressTotal) imported")
+                                .font(.system(.subheadline, design: .rounded))
+                                .fontWeight(.medium)
+                        } else {
+                            Text("Preparing \(viewModel.importProgressTotal) files...")
+                                .font(.system(.subheadline, design: .rounded))
+                                .fontWeight(.medium)
+                        }
+                        
+                        Spacer()
+                        
+                        if viewModel.importProgressTotal > 0 && viewModel.importProgressCurrent > 0 {
+                            let pct = Int((Double(viewModel.importProgressCurrent) / Double(max(1, viewModel.importProgressTotal))) * 100)
+                            Text("\(pct)%")
+                                .font(.system(.subheadline, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: 420)
+                    
+                    if !viewModel.importCurrentFileName.isEmpty {
+                        Text(viewModel.importCurrentFileName)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 420)
+                    }
+                }
+                .padding(.top, 16)
+            } else {
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .padding(.top, 12)
+                
+                Text("Analyzing Library & Resolving Captures...")
+                    .font(.headline)
+                
+                Text("Scanning files, clustering normalized stems, and resolving original precedence...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
         }
         .frame(maxWidth: .infinity, minHeight: 180)
     }
@@ -255,10 +313,15 @@ public struct ImportSheetView: View {
             
             // Stats Grid
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                statTile(title: "Imported Negatives", value: "\(report.importedCount)", icon: "photo.fill", color: .green)
+                statTile(title: "Imported Originals", value: "\(report.importedCount)", icon: "photo.fill", color: .green)
                 statTile(title: "Consolidated Sidecars", value: "\(report.consolidatedSidecars)", icon: "doc.text.fill", color: .blue)
-                statTile(title: "Suppressed JPEGs", value: "\(report.rawOverJpegSuppressed)", icon: "sparkles", color: .purple)
-                statTile(title: "Skipped Duplicates", value: "\(report.skippedDuplicates)", icon: "arrow.triangle.merge", color: .secondary)
+                if report.duplicateClonesSuppressed > 0 {
+                    statTile(title: "Duplicated Originals Skipped", value: "\(report.duplicateClonesSuppressed)", icon: "doc.on.doc.fill", color: .orange)
+                }
+                if report.rawOverJpegSuppressed > 0 {
+                    statTile(title: "Suppressed JPEGs", value: "\(report.rawOverJpegSuppressed)", icon: "sparkles", color: .purple)
+                }
+                statTile(title: "Already in Library", value: "\(report.skippedDuplicates)", icon: "arrow.triangle.merge", color: .secondary)
             }
             .padding(.horizontal, 12)
             
@@ -329,16 +392,22 @@ public struct ImportSheetView: View {
     
     private func startImport() {
         self.isImporting = true
+        self.viewModel.isImporting = true
         self.errorMessage = nil
         
         let sources: [String]
         if !viewModel.importSelectedPaths.isEmpty {
             sources = viewModel.importSelectedPaths
+        } else if isCurrentFolderActive && !sourcePath.isEmpty {
+            sources = deduplicateRawOverJpeg
+                ? viewModel.filteredPhotos.map(\.filePath)
+                : viewModel.photos.map(\.filePath)
         } else if !sourcePath.isEmpty {
             sources = [sourcePath]
         } else {
             self.errorMessage = "No source files or folder selected."
             self.isImporting = false
+            self.viewModel.isImporting = false
             return
         }
         
@@ -354,23 +423,48 @@ public struct ImportSheetView: View {
         
         let dest = viewModel.mainLibraryPath
         
+        viewModel.importProgressCurrent = 0
+        viewModel.importProgressTotal = 0
+        viewModel.importCurrentFileName = ""
+        
+        let tracker = ImportProgressTracker { [weak viewModel] curr, tot, file in
+            DispatchQueue.main.async {
+                viewModel?.importProgressCurrent = curr
+                viewModel?.importProgressTotal = tot
+                viewModel?.importCurrentFileName = file
+            }
+        }
+        
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let rep = try importToLibrary(
                     sourcePathsOrFolders: sources,
                     destinationFolder: dest,
-                    options: options
+                    options: options,
+                    progress: tracker
                 )
                 DispatchQueue.main.async {
                     self.report = rep
                     self.isImporting = false
+                    self.viewModel.isImporting = false
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.errorMessage = "Import failed: \(error.localizedDescription)"
                     self.isImporting = false
+                    self.viewModel.isImporting = false
                 }
             }
         }
+    }
+}
+
+final class ImportProgressTracker: ImportProgressCallback, @unchecked Sendable {
+    let handler: (UInt32, UInt32, String) -> Void
+    init(_ handler: @escaping (UInt32, UInt32, String) -> Void) {
+        self.handler = handler
+    }
+    func onProgress(current: UInt32, total: UInt32, currentFile: String) {
+        handler(current, total, currentFile)
     }
 }

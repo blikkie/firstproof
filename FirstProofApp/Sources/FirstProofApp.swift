@@ -75,6 +75,10 @@ struct FirstProofApp: App {
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
                 
+                Button("Cull Duplicates...") {
+                    viewModel.promptCullDuplicates()
+                }
+                
                 Divider()
                 
                 Button("Export Photo...") {

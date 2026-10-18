@@ -123,6 +123,7 @@ extension AppViewModel {
         }
         self.currentFolderPath = folderPath
         self.isExternalVolume = folderPath.hasPrefix("/Volumes/") && !folderPath.hasPrefix("/Volumes/Macintosh HD")
+        self.hideDerivativeClones = isOriginalsOnly(for: folderPath)
         
         // Graceful handling of disconnected/unmounted external drives:
         guard FileManager.default.fileExists(atPath: folderPath) else {
@@ -295,16 +296,189 @@ extension AppViewModel {
         }
     }
     
-    // MARK: - Filtered Photo List
-    public var filteredPhotos: [PhotoRecord] {
-        photos.filter { photo in
-            if let rating = ratingFilter, photo.rating != Int32(rating) {
-                return false
+    // MARK: - Filtered Photo List & Cache Management
+    public func rebuildOriginalPhotosCache() {
+        if hideDerivativeClones {
+            self.cachedOriginalPhotos = filterDerivativeClones(photos: photos)
+        } else {
+            self.cachedOriginalPhotos = photos
+        }
+        applyDisplayFilters()
+    }
+    
+    public func rebuildMasterPhotosCache() {
+        rebuildOriginalPhotosCache()
+    }
+
+    public func applyDisplayFilters() {
+        if ratingFilter == nil && statusFilter == nil {
+            self.filteredPhotos = self.cachedOriginalPhotos
+        } else {
+            self.filteredPhotos = self.cachedOriginalPhotos.filter { photo in
+                if let rating = ratingFilter, photo.rating != Int32(rating) {
+                    return false
+                }
+                if let status = statusFilter, photo.status != status {
+                    return false
+                }
+                return true
             }
-            if let status = statusFilter, photo.status != status {
-                return false
-            }
-            return true
         }
     }
+
+    public func updateFilteredPhotos() {
+        rebuildMasterPhotosCache()
+    }
+
+    public func toggleHideDerivativeClones() {
+        let currentSelected = selectedPhoto
+        hideDerivativeClones.toggle()
+        if let folder = currentFolderPath {
+            UserDefaults.standard.set(hideDerivativeClones, forKey: "mastersOnly_\(folder)")
+        }
+        
+        // If currentSelected was a derivative clone that is now hidden,
+        // re-anchor selectedPhoto on its corresponding master negative
+        if let current = currentSelected {
+            if let directMatch = filteredPhotos.first(where: { $0.filePath == current.filePath }) {
+                self.selectedPhoto = directMatch
+            } else {
+                let targetDir = URL(fileURLWithPath: current.filePath).deletingLastPathComponent().path
+                let targetStem = canonicalNormalizedStem(for: current.filePath)
+                if let match = filteredPhotos.first(where: {
+                    let dir = URL(fileURLWithPath: $0.filePath).deletingLastPathComponent().path
+                    let stem = canonicalNormalizedStem(for: $0.filePath)
+                    return dir == targetDir && stem == targetStem
+                }) {
+                    self.selectPhoto(match)
+                }
+            }
+        }
+    }
+    
+    // MARK: - In-Place Duplicate Culling Action (Trash Integration)
+    public func promptCullDuplicates(for folderPath: String? = nil) {
+        self.cullScopeFolderPath = folderPath
+        if let folder = folderPath {
+            self.cullScopeName = URL(fileURLWithPath: folder).lastPathComponent
+        } else {
+            self.cullScopeName = "Main Library"
+        }
+        
+        self.isScanningDuplicates = true
+        self.cullClusters = []
+        self.isCullDuplicatesSheetPresented = true
+        
+        Task { [weak self] in
+            guard let self = self else { return }
+            
+            // Gather target photos to scan for duplicates
+            let targetPhotos: [PhotoRecord]
+            if let folder = folderPath {
+                targetPhotos = self.photos.filter { $0.filePath.hasPrefix(folder) }
+            } else {
+                targetPhotos = self.photos
+            }
+            
+            let clusters = await Task.detached(priority: .userInitiated) {
+                findDuplicateClusters(photos: targetPhotos)
+            }.value
+            
+            await MainActor.run {
+                self.cullClusters = clusters.map { DuplicateRowModel(cluster: $0) }
+                self.isScanningDuplicates = false
+            }
+        }
+    }
+    
+    public func performCullDuplicates() {
+        var pathsToTrash: [String] = []
+        
+        for cluster in cullClusters where !cluster.isKept {
+            for dup in cluster.duplicates where !dup.isKept {
+                pathsToTrash.append(dup.photo.filePath)
+            }
+        }
+        
+        guard !pathsToTrash.isEmpty else {
+            self.isCullDuplicatesSheetPresented = false
+            return
+        }
+        
+        var trashedPaths: [String] = []
+        let fm = FileManager.default
+        for path in pathsToTrash {
+            let url = URL(fileURLWithPath: path)
+            let xmpUrl = url.appendingPathExtension("xmp")
+            let altSidecarUrl = URL(fileURLWithPath: (path as NSString).deletingPathExtension + ".xmp")
+            
+            do {
+                try fm.trashItem(at: url, resultingItemURL: nil)
+                trashedPaths.append(path)
+                
+                if fm.fileExists(atPath: xmpUrl.path) {
+                    try? fm.trashItem(at: xmpUrl, resultingItemURL: nil)
+                } else if fm.fileExists(atPath: altSidecarUrl.path) {
+                    try? fm.trashItem(at: altSidecarUrl, resultingItemURL: nil)
+                }
+            } catch {
+                print("Failed to trash file \(path): \(error)")
+            }
+        }
+        
+        if !trashedPaths.isEmpty {
+            // Remove from database
+            _ = self.db?.deletePhotos(filePaths: trashedPaths)
+            
+            let trashedSet = Set(trashedPaths)
+            self.photos.removeAll { trashedSet.contains($0.filePath) }
+            self.selectedPhotoPaths.subtract(trashedSet)
+            if let current = self.selectedPhoto, trashedSet.contains(current.filePath) {
+                self.selectedPhoto = self.photos.first
+                if let first = self.photos.first {
+                    self.loadPreview(for: first)
+                } else {
+                    self.previewImage = nil
+                }
+            }
+            
+            for path in trashedPaths {
+                ThumbnailCache.shared.removeImage(for: path)
+            }
+            
+            rebuildOriginalPhotosCache()
+        }
+        
+        self.isCullDuplicatesSheetPresented = false
+    }
+}
+
+public func canonicalNormalizedStem(for path: String) -> String {
+    var s = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent.lowercased()
+    let suffixes = ["_edited", "-edited", "_edit", "-edit", "_export", "-export", "_proof", "-proof"]
+    for _ in 0..<5 {
+        var changed = false
+        for suf in suffixes {
+            if s.hasSuffix(suf) {
+                s = String(s.dropLast(suf.count))
+                changed = true
+            }
+        }
+        if let lastDash = s.lastIndex(of: "-"), lastDash != s.startIndex {
+            let after = s[s.index(after: lastDash)...]
+            if !after.isEmpty && after.allSatisfy(\.isNumber) {
+                s = String(s[..<lastDash])
+                changed = true
+            }
+        }
+        if let lastUnder = s.lastIndex(of: "_"), lastUnder != s.startIndex {
+            let after = s[s.index(after: lastUnder)...]
+            if after.count <= 2 && after.allSatisfy(\.isNumber) {
+                s = String(s[..<lastUnder])
+                changed = true
+            }
+        }
+        if !changed { break }
+    }
+    return s
 }

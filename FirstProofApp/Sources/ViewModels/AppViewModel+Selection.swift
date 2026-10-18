@@ -428,11 +428,13 @@ extension AppViewModel {
         _ = db.updateRatingStatusBatch(filePaths: targets, rating: newRating, updateRating: true, status: nil)
         
         let targetSet = Set(targets)
-        for i in photos.indices {
-            if targetSet.contains(photos[i].filePath) {
-                photos[i].rating = newRating
+        var updatedPhotos = photos
+        for i in updatedPhotos.indices {
+            if targetSet.contains(updatedPhotos[i].filePath) {
+                updatedPhotos[i].rating = newRating
             }
         }
+        photos = updatedPhotos
         if let current = selectedPhoto, targetSet.contains(current.filePath) {
             selectedPhoto?.rating = newRating
         }
@@ -480,11 +482,13 @@ extension AppViewModel {
         _ = db.updateRatingStatusBatch(filePaths: targets, rating: nil, updateRating: false, status: newStatus)
         
         let targetSet = Set(targets)
-        for i in photos.indices {
-            if targetSet.contains(photos[i].filePath) {
-                photos[i].status = newStatus
+        var updatedPhotos = photos
+        for i in updatedPhotos.indices {
+            if targetSet.contains(updatedPhotos[i].filePath) {
+                updatedPhotos[i].status = newStatus
             }
         }
+        photos = updatedPhotos
         if let current = selectedPhoto, targetSet.contains(current.filePath) {
             selectedPhoto?.status = newStatus
         }

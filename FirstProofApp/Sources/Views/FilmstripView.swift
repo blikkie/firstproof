@@ -134,7 +134,7 @@ struct FilmstripThumbnailCell: View, Equatable {
     static func == (lhs: FilmstripThumbnailCell, rhs: FilmstripThumbnailCell) -> Bool {
         lhs.photo.filePath == rhs.photo.filePath &&
         lhs.photo.rating == rhs.photo.rating &&
-        lhs.photo.status == rhs.photo.status &&
+        lhs.photo.status.caseInsensitiveCompare(rhs.photo.status) == .orderedSame &&
         lhs.isSelected == rhs.isSelected
     }
     
@@ -144,6 +144,35 @@ struct FilmstripThumbnailCell: View, Equatable {
                 .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             
+            let status = photo.status.lowercased()
+            if status == "pick" {
+                VStack {
+                    HStack {
+                        Image(systemName: "flag.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.green)
+                            .padding(2)
+                            .background(Color.black.opacity(0.7))
+                            .cornerRadius(2)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+            } else if status == "reject" {
+                VStack {
+                    HStack {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.red)
+                            .padding(2)
+                            .background(Color.black.opacity(0.7))
+                            .cornerRadius(2)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+            }
+            
             if let rating = photo.rating, rating > 0 {
                 Text("\(rating)★")
                     .font(.system(size: 8, weight: .bold))
@@ -151,6 +180,11 @@ struct FilmstripThumbnailCell: View, Equatable {
                     .padding(2)
                     .background(Color.black.opacity(0.7))
                     .cornerRadius(2)
+            } else {
+                Text("–★")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(.clear)
+                    .padding(2)
             }
         }
         .overlay(

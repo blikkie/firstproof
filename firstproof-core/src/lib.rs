@@ -176,6 +176,39 @@ impl From<db::PhotoRecord> for PhotoRecord {
     }
 }
 
+impl From<PhotoRecord> for db::PhotoRecord {
+    fn from(r: PhotoRecord) -> Self {
+        Self {
+            id: r.id,
+            file_path: r.file_path,
+            file_name: r.file_name,
+            file_size: r.file_size,
+            modified_time: r.modified_time,
+            camera_make: r.camera_make,
+            camera_model: r.camera_model,
+            lens_model: r.lens_model,
+            iso: r.iso,
+            aperture: r.aperture,
+            shutter_speed: r.shutter_speed,
+            focal_length: r.focal_length,
+            taken_time: r.taken_time,
+            latitude: r.latitude,
+            longitude: r.longitude,
+            title: r.title,
+            description: r.description,
+            creator: r.creator,
+            copyright: r.copyright,
+            keywords: r.keywords,
+            rating: r.rating,
+            status: r.status,
+            has_xmp: r.has_xmp,
+            has_takeout: r.has_takeout,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }
+    }
+}
+
 #[derive(uniffi::Record)]
 pub struct ImageMetadata {
     pub file_path: String,
@@ -609,6 +642,15 @@ impl FirstProofDatabase {
             .collect()
     }
 
+    pub fn get_master_photos(&self) -> Vec<PhotoRecord> {
+        let photos = self.inner.get_all_photos().unwrap_or_default();
+        self.inner
+            .filter_derivative_records(photos)
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
     pub fn update_rating_status(&self, file_path: String, rating: Option<i32>, status: String) -> bool {
         self.inner
             .update_rating_status(&file_path, rating, &status)
@@ -665,12 +707,37 @@ impl FirstProofDatabase {
         source_paths_or_folders: Vec<String>,
         destination_folder: String,
         options: ImportOptionsRecord,
+        progress: Option<Box<dyn ImportProgressCallback>>,
     ) -> Result<ImportReportRecord, FirstProofError> {
         let opts: db::ImportOptions = options.into();
+        let progress_fn = progress.as_ref().map(|cb| {
+            move |curr: u32, tot: u32, file: &str| {
+                cb.on_progress(curr, tot, file.to_string());
+            }
+        });
+        let progress_ref: Option<&dyn Fn(u32, u32, &str)> = match &progress_fn {
+            Some(f) => Some(f),
+            None => None,
+        };
         self.inner
-            .import_to_library(&source_paths_or_folders, &destination_folder, &opts)
+            .import_to_library(&source_paths_or_folders, &destination_folder, &opts, progress_ref)
             .map(Into::into)
             .map_err(|e| FirstProofError::DatabaseError { reason: e })
+    }
+
+    pub fn delete_photos(&self, file_paths: Vec<String>) -> u32 {
+        self.inner.delete_photos(&file_paths).unwrap_or(0) as u32
+    }
+
+    pub fn find_duplicate_clusters(&self) -> Vec<DuplicateClusterRecord> {
+        let photos = self.inner.get_all_photos().unwrap_or_default();
+        db::Database::find_duplicate_clusters_in_memory(photos)
+            .into_iter()
+            .map(|c| DuplicateClusterRecord {
+                original: c.original.into(),
+                duplicates: c.duplicates.into_iter().map(Into::into).collect(),
+            })
+            .collect()
     }
 
     pub fn close(&self) {
@@ -707,6 +774,7 @@ pub struct ImportReportRecord {
     pub imported_count: u32,
     pub skipped_duplicates: u32,
     pub raw_over_jpeg_suppressed: u32,
+    pub duplicate_clones_suppressed: u32,
     pub consolidated_sidecars: u32,
     pub error_count: u32,
     pub destination_catalog_path: String,
@@ -720,6 +788,7 @@ impl From<db::ImportReport> for ImportReportRecord {
             imported_count: r.imported_count,
             skipped_duplicates: r.skipped_duplicates,
             raw_over_jpeg_suppressed: r.raw_over_jpeg_suppressed,
+            duplicate_clones_suppressed: r.duplicate_clones_suppressed,
             consolidated_sidecars: r.consolidated_sidecars,
             error_count: r.error_count,
             destination_catalog_path: r.destination_catalog_path,
@@ -749,12 +818,27 @@ impl From<db::ExportPackageStats> for ExportPackageReport {
     }
 }
 
+#[uniffi::export(callback_interface)]
+pub trait ImportProgressCallback: Send + Sync + std::fmt::Debug {
+    fn on_progress(&self, current: u32, total: u32, current_file: String);
+}
+
 #[uniffi::export]
 pub fn import_to_library(
     source_paths_or_folders: Vec<String>,
     destination_folder: String,
     options: ImportOptionsRecord,
+    progress: Option<Box<dyn ImportProgressCallback>>,
 ) -> Result<ImportReportRecord, FirstProofError> {
+    let progress_fn = progress.as_ref().map(|cb| {
+        move |curr: u32, tot: u32, file: &str| {
+            cb.on_progress(curr, tot, file.to_string());
+        }
+    });
+    let progress_ref: Option<&dyn Fn(u32, u32, &str)> = match &progress_fn {
+        Some(f) => Some(f),
+        None => None,
+    };
     if let Some(first_path) = source_paths_or_folders.first() {
         let p = Path::new(first_path);
         let parent = if p.is_dir() { Some(p) } else { p.parent() };
@@ -763,7 +847,7 @@ pub fn import_to_library(
             if let Ok(db) = db::Database::open(&cat_path) {
                 let opts: db::ImportOptions = options.into();
                 return db
-                    .import_to_library(&source_paths_or_folders, &destination_folder, &opts)
+                    .import_to_library(&source_paths_or_folders, &destination_folder, &opts, progress_ref)
                     .map(Into::into)
                     .map_err(|e| FirstProofError::DatabaseError { reason: e });
             }
@@ -773,7 +857,7 @@ pub fn import_to_library(
         .map_err(|e| FirstProofError::DatabaseError { reason: e.to_string() })?;
     let opts: db::ImportOptions = options.into();
     temp_db
-        .import_to_library(&source_paths_or_folders, &destination_folder, &opts)
+        .import_to_library(&source_paths_or_folders, &destination_folder, &opts, progress_ref)
         .map(Into::into)
         .map_err(|e| FirstProofError::DatabaseError { reason: e })
 }
@@ -916,6 +1000,44 @@ pub fn load_cube_lut(path: String) -> Option<CubeLutRecord> {
             data_rgba32f,
         }
     })
+}
+
+#[uniffi::export]
+pub fn filter_derivative_clones(photos: Vec<PhotoRecord>) -> Vec<PhotoRecord> {
+    if photos.len() <= 1 {
+        return photos;
+    }
+    let db_records: Vec<db::PhotoRecord> = photos.into_iter().map(Into::into).collect();
+    db::Database::filter_derivative_records_in_memory(db_records)
+        .into_iter()
+        .map(Into::into)
+        .collect()
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct DuplicateClusterRecord {
+    pub original: PhotoRecord,
+    pub duplicates: Vec<PhotoRecord>,
+}
+
+#[uniffi::export]
+pub fn find_duplicate_clusters(photos: Vec<PhotoRecord>) -> Vec<DuplicateClusterRecord> {
+    if photos.len() <= 1 {
+        return Vec::new();
+    }
+    let db_records: Vec<db::PhotoRecord> = photos.into_iter().map(Into::into).collect();
+    db::Database::find_duplicate_clusters_in_memory(db_records)
+        .into_iter()
+        .map(|c| DuplicateClusterRecord {
+            original: c.original.into(),
+            duplicates: c.duplicates.into_iter().map(Into::into).collect(),
+        })
+        .collect()
+}
+
+#[uniffi::export]
+pub fn normalize_stem(stem: String) -> String {
+    db::normalize_stem(&stem)
 }
 
 #[cfg(test)]

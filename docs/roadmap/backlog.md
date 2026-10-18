@@ -220,6 +220,24 @@ All 7 lenses (Lenses 1 through 7) completed and archived in [completed.md](compl
   - Implement edge-directed chromaticity attenuation on high-contrast specular borders to suppress residual purple/violet fringing.
   - Anchor defringe qualification to physical hue bands ($260^\circ - 340^\circ$) with smooth analytical edge-luminance weighting, preventing desaturation of legitimate subject colors (flowers, fabrics).
 
+### 4.12 Lightroom Migration & Master Ingest Sanitizer (P1)
+- **Problem Statement & Export Clutter Permutations**:
+  - Lightroom exports and migrations routinely generate redundant derivative files alongside original captures: `<base>_edited.jpg`, `<base>-1.dng`, `<base>_edited-1.jpg`, `<base> (1).jpg`, etc.
+  - Shallow single-pass suffix matching fails to strip numeric collision counters (`-1`, `-2`, ` (1)`) and compound suffix sequences (`_edited-1`), scattering duplicates across the library grid and managed import flows.
+  - For non-RAW captures (phone/compact camera JPEGs), arbitrary filesystem walk order can erroneously select the baked `_edited` clone over the true untouched master original.
+- **Recursive Canonical Stem Normalizer (`normalize_stem`)**:
+  - Deterministic multi-pass normalization loop stripping both collision indices (`-N`, `_N`, ` (N)`) and derivative keywords (`_edited`, `-edit`, `_export`, `_vN`, `_proof`) until the unadulterated base filename is resolved:
+    $$\text{"IMG\_1234\_edited-1"} \longrightarrow \text{"IMG\_1234\_edited"} \longrightarrow \text{"IMG\_1234"}$$
+- **Master Negative Precedence Hierarchy**:
+  - When clustering capture candidates sharing a normalized stem and matching capture timestamp ($\pm 5\text{s}$):
+    1. **Original Camera RAW Master**: Proprietary sensor formats (`.cr2`, `.cr3`, `.arw`, `.nef`, `.raf`, `.orf`, `.rw2`, `.pef`, `.raw`) take highest precedence.
+    2. **Archival DNG Master**: Un-suffixed `<base>.dng` preferred over collision exports (`<base>-1.dng`).
+    3. **Untouched Raster Master**: Exact clean un-suffixed `<base>.jpg`/`<base>.png` without derivative tokens preferred over `_edited` or `-N` clones.
+    4. **Active First Proof Edits**: Retains custom XMP adjustments if present.
+    5. **Deterministic Tie-Breaker**: Cleanest stem length followed by lexicographical sort.
+- **Library Grid Stacking & Derivative Suppression**:
+  - In-place folder browsing (`index_folder` / `get_all_photos`) option to automatically stack or suppress derivative clones, ensuring that opening an existing Lightroom export directory displays strictly the single pertinent master negative per capture.
+
 ---
 
 ## Phase 5: Post-v1 & Long-Term Vision

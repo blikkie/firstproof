@@ -109,7 +109,17 @@ This archive tracks completed stories and features moved from the active backlog
   - *Native macOS Settings Window (`SettingsView.swift`)*: Preferences window (`Cmd+,`) allowing user customization of library location, memory card auto-detection, and ingestion rules.
 - **Universal Non-Destructive Sidecar Architecture**: Immutable master files with firstproof-native `.xmp` sidecars (`https://firstproof.photo/ns/pm/1.0/`), Adobe CRS ingestion, and `img-parts` ICC/metadata injection.
 - **Multi-Selection Batch Export UI & Rayon Thread Pool**: Parallel batch export sheet (`ExportSheetView.swift`) powered by Rayon multi-core pool, sRGB/Display-P3 profiles, and LittleCMS2 rendering intent control.
-- **Google Takeout Archive Extraction**: Rust parser in `takeout.rs` matching `.json` sidecars to images and populating EXIF/GPS/timestamps during catalog indexing.
+- **Story 4.12: Lightroom Migration, Original Ingest Sanitizer & In-Place Duplicate Culling (P1)**:
+  - *Recursive Canonical Stem Normalizer (`normalize_stem`)*: Deterministic multi-pass normalization loop stripping collision indices (`-N`, `_N`, ` (N)`) and derivative keywords (`_edited`, `-edit`, `_export`, `_vN`, `_proof`) until the unadulterated base filename is resolved.
+  - *Original Capture Precedence Hierarchy*: Prioritizes camera RAW master negatives (`.cr2`, `.cr3`, `.arw`, `.nef`, `.raf`, `.orf`, `.rw2`) over archival DNGs, untouched base rasters, active First Proof XMP edits, and cleanest stem lengths.
+  - *Library Grid Stacking & Derivative Suppression*: In-place folder browsing (`index_folder` / `filteredPhotos`) provides a prominent "Originals Only" / "All Copies" toggle in the grid toolbar, ensuring that opening an existing Lightroom export directory displays strictly the single pertinent original negative per capture by default.
+  - *Cross-Subfolder Duplicate Prevention & Derivative-to-Original Upgrade Invariant*: Managed library imports cross-reference existing records across all subfolders. If the library only holds an exported derivative and incoming photos include the true original RAW, First Proof upgrades to the original capture rather than falsely skipping it as a duplicate.
+  - *In-Place Duplicate Culling System (`CullDuplicatesSheetView`)*:
+    - 3-column table (`| KEEP | ORIGINAL | DUPLICATES |`) with responsive wrapping `LazyVGrid` and interactive "Make Original" promotion.
+    - Non-destructive "Keep" exemption semantics defaulting to empty/unchecked (`isKept = false`), where checking "Keep" exempts captures or files from deletion.
+    - Direct macOS System Trash integration (`FileManager.default.trashItem`) safely trashing culled duplicate files and companion `.xmp` sidecars.
+    - Accessible via right-click context menu on sessions and the Main Library, as well as menu shortcut (`⌥⌘D`).
+  - *Terminology Modernization*: Shifted from legacy "Master" to "Original" across the catalog, grid filters, import modal, and status telemetry.
 
 ---
 

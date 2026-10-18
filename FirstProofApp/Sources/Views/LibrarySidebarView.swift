@@ -51,6 +51,15 @@ public struct LibrarySidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 4)
+                .contextMenu {
+                    Button("Cull Duplicates in Library...") {
+                        viewModel.promptCullDuplicates(for: nil)
+                    }
+                    Divider()
+                    Button("Reveal in Finder") {
+                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: viewModel.mainLibraryPath)
+                    }
+                }
             }
             .padding(.top, 10)
             
@@ -215,8 +224,56 @@ public struct LibrarySidebarView: View {
             
             Spacer()
             
-            // MARK: - Footer Scanning Indicator
-            if viewModel.isScanning {
+            // MARK: - Footer Progress Indicators
+            if viewModel.isImporting {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.and.arrow.down.fill")
+                            .foregroundColor(.accentColor)
+                            .font(.caption2)
+                        Text(viewModel.importProgressTotal > 0
+                             ? "Importing (\(viewModel.importProgressCurrent)/\(viewModel.importProgressTotal))"
+                             : "Analyzing Library...")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        Spacer()
+                        if viewModel.importProgressTotal > 0 && viewModel.importProgressCurrent > 0 {
+                            let pct = Int((Double(viewModel.importProgressCurrent) / Double(max(1, viewModel.importProgressTotal))) * 100)
+                            Text("\(pct)%")
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    if viewModel.importProgressTotal > 0 {
+                        ProgressView(
+                            value: Double(viewModel.importProgressCurrent),
+                            total: Double(max(1, viewModel.importProgressTotal))
+                        )
+                        .progressViewStyle(.linear)
+                        .controlSize(.small)
+                    } else {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                            .controlSize(.small)
+                    }
+                    
+                    if !viewModel.importCurrentFileName.isEmpty {
+                        Text(viewModel.importCurrentFileName)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.accentColor.opacity(0.08))
+                .cornerRadius(6)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
+            } else if viewModel.isScanning {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
@@ -311,6 +368,10 @@ private struct SessionItemRowView: View {
             hoveredFolderPath = isHovered ? folderPath : nil
         }
         .contextMenu {
+            Button("Cull Duplicates...") {
+                viewModel.promptCullDuplicates(for: folderPath)
+            }
+            Divider()
             Button("Import into Main Library...") {
                 viewModel.promptImport(from: folderPath)
             }

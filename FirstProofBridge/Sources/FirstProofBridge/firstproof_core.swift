@@ -566,13 +566,19 @@ public protocol FirstProofDatabaseProtocol : AnyObject {
     
     func close() 
     
+    func deletePhotos(filePaths: [String])  -> UInt32
+    
     func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool) throws  -> ExportPackageReport
+    
+    func findDuplicateClusters()  -> [DuplicateClusterRecord]
     
     func getAllPhotos()  -> [PhotoRecord]
     
+    func getMasterPhotos()  -> [PhotoRecord]
+    
     func getPhoto(filePath: String)  -> PhotoRecord?
     
-    func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord) throws  -> ImportReportRecord
+    func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord, progress: ImportProgressCallback?) throws  -> ImportReportRecord
     
     func indexFolder(folderPath: String)  -> UInt32
     
@@ -648,6 +654,14 @@ open func close() {try! rustCall() {
 }
 }
     
+open func deletePhotos(filePaths: [String]) -> UInt32 {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_method_firstproofdatabase_delete_photos(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(filePaths),$0
+    )
+})
+}
+    
 open func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool)throws  -> ExportPackageReport {
     return try  FfiConverterTypeExportPackageReport.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
     uniffi_firstproof_core_fn_method_firstproofdatabase_export_portable_package(self.uniffiClonePointer(),
@@ -658,9 +672,23 @@ open func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: S
 })
 }
     
+open func findDuplicateClusters() -> [DuplicateClusterRecord] {
+    return try!  FfiConverterSequenceTypeDuplicateClusterRecord.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_method_firstproofdatabase_find_duplicate_clusters(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func getAllPhotos() -> [PhotoRecord] {
     return try!  FfiConverterSequenceTypePhotoRecord.lift(try! rustCall() {
     uniffi_firstproof_core_fn_method_firstproofdatabase_get_all_photos(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getMasterPhotos() -> [PhotoRecord] {
+    return try!  FfiConverterSequenceTypePhotoRecord.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_method_firstproofdatabase_get_master_photos(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -673,12 +701,13 @@ open func getPhoto(filePath: String) -> PhotoRecord? {
 })
 }
     
-open func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord)throws  -> ImportReportRecord {
+open func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord, progress: ImportProgressCallback?)throws  -> ImportReportRecord {
     return try  FfiConverterTypeImportReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
     uniffi_firstproof_core_fn_method_firstproofdatabase_import_to_library(self.uniffiClonePointer(),
         FfiConverterSequenceString.lower(sourcePathsOrFolders),
         FfiConverterString.lower(destinationFolder),
-        FfiConverterTypeImportOptionsRecord.lower(options),$0
+        FfiConverterTypeImportOptionsRecord.lower(options),
+        FfiConverterOptionCallbackInterfaceImportProgressCallback.lower(progress),$0
     )
 })
 }
@@ -1302,6 +1331,72 @@ public func FfiConverterTypeCubeLutRecord_lower(_ value: CubeLutRecord) -> RustB
 }
 
 
+public struct DuplicateClusterRecord {
+    public var original: PhotoRecord
+    public var duplicates: [PhotoRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(original: PhotoRecord, duplicates: [PhotoRecord]) {
+        self.original = original
+        self.duplicates = duplicates
+    }
+}
+
+
+
+extension DuplicateClusterRecord: Equatable, Hashable {
+    public static func ==(lhs: DuplicateClusterRecord, rhs: DuplicateClusterRecord) -> Bool {
+        if lhs.original != rhs.original {
+            return false
+        }
+        if lhs.duplicates != rhs.duplicates {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(original)
+        hasher.combine(duplicates)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDuplicateClusterRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DuplicateClusterRecord {
+        return
+            try DuplicateClusterRecord(
+                original: FfiConverterTypePhotoRecord.read(from: &buf), 
+                duplicates: FfiConverterSequenceTypePhotoRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DuplicateClusterRecord, into buf: inout [UInt8]) {
+        FfiConverterTypePhotoRecord.write(value.original, into: &buf)
+        FfiConverterSequenceTypePhotoRecord.write(value.duplicates, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDuplicateClusterRecord_lift(_ buf: RustBuffer) throws -> DuplicateClusterRecord {
+    return try FfiConverterTypeDuplicateClusterRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDuplicateClusterRecord_lower(_ value: DuplicateClusterRecord) -> RustBuffer {
+    return FfiConverterTypeDuplicateClusterRecord.lower(value)
+}
+
+
 public struct ExportPackageReport {
     public var totalRequested: UInt32
     public var exportedCount: UInt32
@@ -1853,6 +1948,7 @@ public struct ImportReportRecord {
     public var importedCount: UInt32
     public var skippedDuplicates: UInt32
     public var rawOverJpegSuppressed: UInt32
+    public var duplicateClonesSuppressed: UInt32
     public var consolidatedSidecars: UInt32
     public var errorCount: UInt32
     public var destinationCatalogPath: String
@@ -1860,11 +1956,12 @@ public struct ImportReportRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(totalFound: UInt32, importedCount: UInt32, skippedDuplicates: UInt32, rawOverJpegSuppressed: UInt32, consolidatedSidecars: UInt32, errorCount: UInt32, destinationCatalogPath: String, errorMessages: [String]) {
+    public init(totalFound: UInt32, importedCount: UInt32, skippedDuplicates: UInt32, rawOverJpegSuppressed: UInt32, duplicateClonesSuppressed: UInt32, consolidatedSidecars: UInt32, errorCount: UInt32, destinationCatalogPath: String, errorMessages: [String]) {
         self.totalFound = totalFound
         self.importedCount = importedCount
         self.skippedDuplicates = skippedDuplicates
         self.rawOverJpegSuppressed = rawOverJpegSuppressed
+        self.duplicateClonesSuppressed = duplicateClonesSuppressed
         self.consolidatedSidecars = consolidatedSidecars
         self.errorCount = errorCount
         self.destinationCatalogPath = destinationCatalogPath
@@ -1888,6 +1985,9 @@ extension ImportReportRecord: Equatable, Hashable {
         if lhs.rawOverJpegSuppressed != rhs.rawOverJpegSuppressed {
             return false
         }
+        if lhs.duplicateClonesSuppressed != rhs.duplicateClonesSuppressed {
+            return false
+        }
         if lhs.consolidatedSidecars != rhs.consolidatedSidecars {
             return false
         }
@@ -1908,6 +2008,7 @@ extension ImportReportRecord: Equatable, Hashable {
         hasher.combine(importedCount)
         hasher.combine(skippedDuplicates)
         hasher.combine(rawOverJpegSuppressed)
+        hasher.combine(duplicateClonesSuppressed)
         hasher.combine(consolidatedSidecars)
         hasher.combine(errorCount)
         hasher.combine(destinationCatalogPath)
@@ -1927,6 +2028,7 @@ public struct FfiConverterTypeImportReportRecord: FfiConverterRustBuffer {
                 importedCount: FfiConverterUInt32.read(from: &buf), 
                 skippedDuplicates: FfiConverterUInt32.read(from: &buf), 
                 rawOverJpegSuppressed: FfiConverterUInt32.read(from: &buf), 
+                duplicateClonesSuppressed: FfiConverterUInt32.read(from: &buf), 
                 consolidatedSidecars: FfiConverterUInt32.read(from: &buf), 
                 errorCount: FfiConverterUInt32.read(from: &buf), 
                 destinationCatalogPath: FfiConverterString.read(from: &buf), 
@@ -1939,6 +2041,7 @@ public struct FfiConverterTypeImportReportRecord: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.importedCount, into: &buf)
         FfiConverterUInt32.write(value.skippedDuplicates, into: &buf)
         FfiConverterUInt32.write(value.rawOverJpegSuppressed, into: &buf)
+        FfiConverterUInt32.write(value.duplicateClonesSuppressed, into: &buf)
         FfiConverterUInt32.write(value.consolidatedSidecars, into: &buf)
         FfiConverterUInt32.write(value.errorCount, into: &buf)
         FfiConverterString.write(value.destinationCatalogPath, into: &buf)
@@ -2928,6 +3031,115 @@ extension FirstProofError: Foundation.LocalizedError {
     }
 }
 
+
+
+
+public protocol ImportProgressCallback : AnyObject {
+    
+    func onProgress(current: UInt32, total: UInt32, currentFile: String) 
+    
+}
+
+// Magic number for the Rust proxy to call using the same mechanism as every other method,
+// to free the callback once it's dropped by Rust.
+private let IDX_CALLBACK_FREE: Int32 = 0
+// Callback return codes
+private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
+private let UNIFFI_CALLBACK_ERROR: Int32 = 1
+private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceImportProgressCallback {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    static var vtable: UniffiVTableCallbackInterfaceImportProgressCallback = UniffiVTableCallbackInterfaceImportProgressCallback(
+        onProgress: { (
+            uniffiHandle: UInt64,
+            current: UInt32,
+            total: UInt32,
+            currentFile: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceImportProgressCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onProgress(
+                     current: try FfiConverterUInt32.lift(current),
+                     total: try FfiConverterUInt32.lift(total),
+                     currentFile: try FfiConverterString.lift(currentFile)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterCallbackInterfaceImportProgressCallback.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface ImportProgressCallback: handle missing in uniffiFree")
+            }
+        }
+    )
+}
+
+private func uniffiCallbackInitImportProgressCallback() {
+    uniffi_firstproof_core_fn_init_callback_vtable_importprogresscallback(&UniffiCallbackInterfaceImportProgressCallback.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceImportProgressCallback {
+    fileprivate static var handleMap = UniffiHandleMap<ImportProgressCallback>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceImportProgressCallback : FfiConverter {
+    typealias SwiftType = ImportProgressCallback
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3363,6 +3575,30 @@ fileprivate struct FfiConverterOptionTypeXmpDataRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionCallbackInterfaceImportProgressCallback: FfiConverterRustBuffer {
+    typealias SwiftType = ImportProgressCallback?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterCallbackInterfaceImportProgressCallback.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterCallbackInterfaceImportProgressCallback.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeAdjustmentDescriptor: FfiConverterRustBuffer {
     typealias SwiftType = AdjustmentDescriptor?
 
@@ -3599,6 +3835,31 @@ fileprivate struct FfiConverterSequenceTypeBatchExportResultRecord: FfiConverter
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeBatchExportResultRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeDuplicateClusterRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [DuplicateClusterRecord]
+
+    public static func write(_ value: [DuplicateClusterRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeDuplicateClusterRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [DuplicateClusterRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [DuplicateClusterRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeDuplicateClusterRecord.read(from: &buf))
         }
         return seq
     }
@@ -3932,6 +4193,20 @@ public func extractUltraHdrGainMap(filePath: String) -> GainMapRecord? {
     )
 })
 }
+public func filterDerivativeClones(photos: [PhotoRecord]) -> [PhotoRecord] {
+    return try!  FfiConverterSequenceTypePhotoRecord.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_filter_derivative_clones(
+        FfiConverterSequenceTypePhotoRecord.lower(photos),$0
+    )
+})
+}
+public func findDuplicateClusters(photos: [PhotoRecord]) -> [DuplicateClusterRecord] {
+    return try!  FfiConverterSequenceTypeDuplicateClusterRecord.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_find_duplicate_clusters(
+        FfiConverterSequenceTypePhotoRecord.lower(photos),$0
+    )
+})
+}
 public func getAdjustmentDescriptor(id: String) -> AdjustmentDescriptor? {
     return try!  FfiConverterOptionTypeAdjustmentDescriptor.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_get_adjustment_descriptor(
@@ -3980,12 +4255,13 @@ public func hasUltraHdrGainMap(filePath: String) -> Bool {
     )
 })
 }
-public func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord)throws  -> ImportReportRecord {
+public func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord, progress: ImportProgressCallback?)throws  -> ImportReportRecord {
     return try  FfiConverterTypeImportReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
     uniffi_firstproof_core_fn_func_import_to_library(
         FfiConverterSequenceString.lower(sourcePathsOrFolders),
         FfiConverterString.lower(destinationFolder),
-        FfiConverterTypeImportOptionsRecord.lower(options),$0
+        FfiConverterTypeImportOptionsRecord.lower(options),
+        FfiConverterOptionCallbackInterfaceImportProgressCallback.lower(progress),$0
     )
 })
 }
@@ -4000,6 +4276,13 @@ public func matchTakeoutJson(imagePath: String) -> String? {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_match_takeout_json(
         FfiConverterString.lower(imagePath),$0
+    )
+})
+}
+public func normalizeStem(stem: String) -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_normalize_stem(
+        FfiConverterString.lower(stem),$0
     )
 })
 }
@@ -4125,6 +4408,12 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_extract_ultra_hdr_gain_map() != 4456) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_func_filter_derivative_clones() != 11404) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_find_duplicate_clusters() != 29564) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_func_get_adjustment_descriptor() != 5221) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4146,13 +4435,16 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_has_ultra_hdr_gain_map() != 37776) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_import_to_library() != 29064) {
+    if (uniffi_firstproof_core_checksum_func_import_to_library() != 18394) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_load_cube_lut() != 34905) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_match_takeout_json() != 22513) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_normalize_stem() != 51966) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_parse_takeout_json() != 9154) {
@@ -4173,16 +4465,25 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_method_firstproofdatabase_close() != 33348) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_delete_photos() != 33915) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_method_firstproofdatabase_export_portable_package() != 10662) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_find_duplicate_clusters() != 26378) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_method_firstproofdatabase_get_all_photos() != 63137) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_get_master_photos() != 7622) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_method_firstproofdatabase_get_photo() != 43637) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_import_to_library() != 26453) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_import_to_library() != 11482) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_method_firstproofdatabase_index_folder() != 21580) {
@@ -4215,7 +4516,11 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_constructor_firstprooflensfun_new() != 43384) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_method_importprogresscallback_on_progress() != 41040) {
+        return InitializationResult.apiChecksumMismatch
+    }
 
+    uniffiCallbackInitImportProgressCallback()
     return InitializationResult.ok
 }()
 

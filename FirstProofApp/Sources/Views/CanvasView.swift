@@ -54,6 +54,34 @@ struct CanvasView: View {
                 
                 Spacer()
                 
+                if viewModel.canvasMode == .grid {
+                    Button {
+                        viewModel.toggleHideDerivativeClones()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: viewModel.hideDerivativeClones ? "square.stack.3d.down.right.fill" : "square.stack.3d.down.right")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(viewModel.hideDerivativeClones ? "Originals Only" : "All Copies")
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(viewModel.hideDerivativeClones ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.12))
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(viewModel.hideDerivativeClones ? Color.accentColor.opacity(0.4) : Color.clear, lineWidth: 1)
+                        )
+                        .foregroundColor(viewModel.hideDerivativeClones ? .primary : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(viewModel.hideDerivativeClones 
+                        ? "Originals Only: Showing authentic original captures (excludes export copies like _edited.jpg, -1.dng). Click to show all files." 
+                        : "Showing all files including export copies. Click to show Originals Only.")
+                }
+                
                 if viewModel.canvasMode == .detail {
                     // Apple EDR & HDR Radiance Toggle (Story 18.1 - Detail / Loupe View only)
                     let isHdrReady = viewModel.isScreenHdrCapable && viewModel.edrHeadroom > 1.0
@@ -200,7 +228,10 @@ struct CanvasView: View {
                             viewModel.selectPhoto(photo)
                             viewModel.isExportSheetPresented = true
                         },
-                        onSetStatus: { status in
+                        onSetStatus: { photo, status in
+                            if !viewModel.selectedPhotoPaths.contains(photo.filePath) && viewModel.selectedPhoto?.filePath != photo.filePath {
+                                viewModel.selectPhoto(photo)
+                            }
                             viewModel.setStatus(status)
                         },
                         onColumnsChanged: { cols in
@@ -601,7 +632,7 @@ struct GridThumbnailCell: View, Equatable {
     static func == (lhs: GridThumbnailCell, rhs: GridThumbnailCell) -> Bool {
         lhs.photo.filePath == rhs.photo.filePath &&
         lhs.photo.rating == rhs.photo.rating &&
-        lhs.photo.status == rhs.photo.status &&
+        lhs.photo.status.caseInsensitiveCompare(rhs.photo.status) == .orderedSame &&
         lhs.isSelected == rhs.isSelected &&
         lhs.isActive == rhs.isActive &&
         lhs.isBulkMode == rhs.isBulkMode
@@ -616,11 +647,12 @@ struct GridThumbnailCell: View, Equatable {
                         .frame(maxWidth: .infinity)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                     
-                    if photo.status == "pick" {
+                    let status = photo.status.lowercased()
+                    if status == "pick" {
                         Image(systemName: "flag.fill")
                             .foregroundColor(.green)
                             .padding(6)
-                    } else if photo.status == "reject" {
+                    } else if status == "reject" {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.red)
                             .padding(6)
@@ -654,15 +686,21 @@ struct GridThumbnailCell: View, Equatable {
                 .font(.caption)
                 .lineLimit(1)
             
-            if let rating = photo.rating, rating > 0 {
-                HStack(spacing: 1) {
+            HStack(spacing: 1) {
+                if let rating = photo.rating, rating > 0 {
                     ForEach(1...Int(rating), id: \.self) { _ in
                         Image(systemName: "star.fill")
                             .font(.system(size: 8))
                             .foregroundColor(.yellow)
                     }
+                } else {
+                    // Empty placeholder reserving consistent height so layout never jumps
+                    Image(systemName: "star")
+                        .font(.system(size: 8))
+                        .foregroundColor(.clear)
                 }
             }
+            .frame(height: 10, alignment: .leading)
         }
         .padding(8)
         .background(isSelected ? Color.accentColor.opacity(0.22) : Color(NSColor.controlBackgroundColor))

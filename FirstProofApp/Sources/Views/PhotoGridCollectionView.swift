@@ -150,7 +150,7 @@ struct PhotoGridCollectionView: NSViewRepresentable {
     let onDoubleClick: (PhotoRecord) -> Void
     let onExportPackage: (PhotoRecord) -> Void
     let onExportRendered: (PhotoRecord) -> Void
-    let onSetStatus: (String) -> Void
+    let onSetStatus: (PhotoRecord, String) -> Void
     var onColumnsChanged: ((Int) -> Void)? = nil
     
     func makeCoordinator() -> Coordinator {
@@ -213,6 +213,7 @@ struct PhotoGridCollectionView: NSViewRepresentable {
         private var lastBulkMode: Bool = false
         private var lastFolderPath: String? = nil
         private var lastCanvasMode: CanvasMode = .grid
+        private var currentPhotos: [PhotoRecord] = []
         
         private var hasScrolledInitial: Bool = false
         private var isUserDirectClick: Bool = false
@@ -225,6 +226,7 @@ struct PhotoGridCollectionView: NSViewRepresentable {
             self.lastBulkMode = parent.isBulkMode
             self.lastFolderPath = parent.currentFolderPath
             self.lastCanvasMode = parent.canvasMode
+            self.currentPhotos = parent.photos
         }
         
         func reloadDataIfNeeded() {
@@ -246,13 +248,41 @@ struct PhotoGridCollectionView: NSViewRepresentable {
             let selCountChanged = selCount != lastSelectedCount
             let bulkChanged = bulk != lastBulkMode
             let modeChanged = mode != lastCanvasMode
+            let photosChanged = currentPhotos != parent.photos
             
-            if countChanged || selectionChanged || selCountChanged || bulkChanged {
+            if countChanged || selectionChanged || selCountChanged || bulkChanged || photosChanged {
+                // If the photo count changed (e.g. toggling Originals Only / All Copies),
+                // capture the top visible original in the viewport so the user remains
+                // anchored in the exact same visual ballpark.
+                let anchorPhoto = countChanged ? findTopVisiblePhoto(in: currentPhotos) : nil
+                
                 lastPhotoCount = count
                 lastSelectedPath = path
                 lastSelectedCount = selCount
                 lastBulkMode = bulk
+                currentPhotos = parent.photos
                 collectionView?.reloadData()
+                
+                if let anchor = anchorPhoto, countChanged {
+                    let newPhotos = parent.photos
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self, let cv = self.collectionView, let sv = self.scrollView else { return }
+                        if let targetIndex = self.findBestMatchIndex(for: anchor, in: newPhotos),
+                           targetIndex < cv.numberOfItems(inSection: 0) {
+                            if targetIndex == 0 {
+                                sv.contentView.scroll(to: NSPoint(x: 0, y: 0))
+                                sv.reflectScrolledClipView(sv.contentView)
+                            } else {
+                                cv.scrollToItems(at: [IndexPath(item: targetIndex, section: 0)], scrollPosition: .top)
+                                if let attr = cv.layoutAttributesForItem(at: IndexPath(item: targetIndex, section: 0)) {
+                                    let targetY = max(0, attr.frame.origin.y - (self.layout?.sectionInset.top ?? 16))
+                                    sv.contentView.scroll(to: NSPoint(x: 0, y: targetY))
+                                    sv.reflectScrolledClipView(sv.contentView)
+                                }
+                            }
+                        }
+                    }
+                }
             }
             
             let switchedToGrid = modeChanged && mode == .grid
@@ -269,7 +299,7 @@ struct PhotoGridCollectionView: NSViewRepresentable {
                 DispatchQueue.main.async { [weak self] in
                     self?.scrollToSelected(centered: true)
                 }
-            } else if selectionChanged && !isUserDirectClick && parent.selectedPhoto != nil {
+            } else if !countChanged && selectionChanged && !isUserDirectClick && parent.selectedPhoto != nil {
                 // 3. Selection change via keyboard navigation (arrow keys)
                 DispatchQueue.main.async { [weak self] in
                     self?.scrollToSelected(centered: false)
@@ -277,6 +307,51 @@ struct PhotoGridCollectionView: NSViewRepresentable {
             }
             
             isUserDirectClick = false
+        }
+        
+        func findTopVisiblePhoto(in photos: [PhotoRecord]) -> PhotoRecord? {
+            guard let cv = collectionView, let sv = scrollView, !photos.isEmpty else { return nil }
+            let scrollY = sv.contentView.bounds.origin.y
+            if scrollY <= 24 {
+                return photos.first
+            }
+            let probePoint = NSPoint(x: (layout?.sectionInset.left ?? 16) + 24, y: scrollY + (layout?.sectionInset.top ?? 16) + 24)
+            if let ip = cv.indexPathForItem(at: probePoint), ip.item < photos.count {
+                return photos[ip.item]
+            }
+            let visible = cv.indexPathsForVisibleItems()
+            if let minItem = visible.map(\.item).min(), minItem < photos.count {
+                return photos[minItem]
+            }
+            return photos.first
+        }
+        
+        func findBestMatchIndex(for anchor: PhotoRecord, in newPhotos: [PhotoRecord]) -> Int? {
+            // 1. Direct path match
+            if let idx = newPhotos.firstIndex(where: { $0.filePath == anchor.filePath }) {
+                return idx
+            }
+            
+            // 2. Directory + normalized stem match (maps derivatives <-> original negatives)
+            let anchorDir = URL(fileURLWithPath: anchor.filePath).deletingLastPathComponent().path
+            let anchorStem = canonicalNormalizedStem(for: anchor.filePath)
+            if let idx = newPhotos.firstIndex(where: {
+                let dir = URL(fileURLWithPath: $0.filePath).deletingLastPathComponent().path
+                let stem = canonicalNormalizedStem(for: $0.filePath)
+                return dir == anchorDir && stem == anchorStem
+            }) {
+                return idx
+            }
+            
+            // 3. Fallback: closest EXIF capture timestamp
+            if let t = anchor.takenTime {
+                let candidates = newPhotos.enumerated().filter { $0.element.takenTime != nil }
+                if let closest = candidates.min(by: { abs($0.element.takenTime! - t) < abs($1.element.takenTime! - t) }) {
+                    return closest.offset
+                }
+            }
+            
+            return nil
         }
         
         func scrollToSelected(centered: Bool) {
@@ -373,13 +448,13 @@ struct PhotoGridCollectionView: NSViewRepresentable {
                 }
                 Divider()
                 Button("Mark as Pick (P)") {
-                    self?.parent.onSetStatus("pick")
+                    self?.parent.onSetStatus(photo, "pick")
                 }
                 Button("Mark as Reject (X)") {
-                    self?.parent.onSetStatus("reject")
+                    self?.parent.onSetStatus(photo, "reject")
                 }
                 Button("Clear Flag") {
-                    self?.parent.onSetStatus("none")
+                    self?.parent.onSetStatus(photo, "none")
                 }
                 Divider()
                 Button("Reveal in Finder") {

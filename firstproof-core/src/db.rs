@@ -645,6 +645,135 @@ impl Database {
         Ok(photos)
     }
 
+    /// Filters a list of photo records, clustering captures by parent directory and normalized stem.
+    /// In any cluster with multiple candidate files (e.g. Lightroom exports like `_edited.jpg`, `-1.dng`),
+    /// strictly preserves the single highest-precedence master negative with zero disk I/O.
+    pub fn filter_derivative_records(&self, records: Vec<PhotoRecord>) -> Vec<PhotoRecord> {
+        Self::filter_derivative_records_in_memory(records)
+    }
+
+    pub fn filter_derivative_records_in_memory(records: Vec<PhotoRecord>) -> Vec<PhotoRecord> {
+        if records.len() <= 1 {
+            return records;
+        }
+
+        use std::collections::HashMap;
+        // Group indices by normalized_stem to cluster captures across directory subfolders with zero disk I/O
+        let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+        for (idx, r) in records.iter().enumerate() {
+            let p = Path::new(&r.file_path);
+            let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let norm = normalize_stem(&stem);
+            groups.entry(norm).or_default().push(idx);
+        }
+
+        let mut winning_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        for (_key, group_indices) in groups {
+            if group_indices.len() == 1 {
+                winning_indices.insert(group_indices[0]);
+                continue;
+            }
+
+            let mut partitioned: Vec<Vec<usize>> = Vec::new();
+            for idx in group_indices {
+                let item = &records[idx];
+                let mut matched = false;
+                for cluster in &mut partitioned {
+                    if cluster.iter().any(|&existing_idx| {
+                        are_same_capture_records(&records[existing_idx], item)
+                    }) {
+                        cluster.push(idx);
+                        matched = true;
+                        break;
+                    }
+                }
+                if !matched {
+                    partitioned.push(vec![idx]);
+                }
+            }
+
+            for mut cluster in partitioned {
+                cluster.sort_by_key(|&idx| score_candidate_record(&records[idx]));
+                if let Some(&winner_idx) = cluster.first() {
+                    winning_indices.insert(winner_idx);
+                }
+            }
+        }
+
+        records
+            .into_iter()
+            .enumerate()
+            .filter_map(|(idx, r)| {
+                if winning_indices.contains(&idx) {
+                    Some(r)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Identifies all capture groups containing multiple derivative clones, returning clusters
+    /// paired with the designated master original and all duplicate clones.
+    pub fn find_duplicate_clusters(&self, records: Vec<PhotoRecord>) -> Vec<DuplicateCluster> {
+        Self::find_duplicate_clusters_in_memory(records)
+    }
+
+    pub fn find_duplicate_clusters_in_memory(records: Vec<PhotoRecord>) -> Vec<DuplicateCluster> {
+        if records.len() <= 1 {
+            return Vec::new();
+        }
+
+        use std::collections::HashMap;
+        let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+        for (idx, r) in records.iter().enumerate() {
+            let p = Path::new(&r.file_path);
+            let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let norm = normalize_stem(&stem);
+            groups.entry(norm).or_default().push(idx);
+        }
+
+        let mut clusters: Vec<DuplicateCluster> = Vec::new();
+        for (_key, group_indices) in groups {
+            if group_indices.len() <= 1 {
+                continue;
+            }
+
+            let mut partitioned: Vec<Vec<usize>> = Vec::new();
+            for idx in group_indices {
+                let item = &records[idx];
+                let mut matched = false;
+                for cluster in &mut partitioned {
+                    if cluster.iter().any(|&existing_idx| {
+                        are_same_capture_records(&records[existing_idx], item)
+                    }) {
+                        cluster.push(idx);
+                        matched = true;
+                        break;
+                    }
+                }
+                if !matched {
+                    partitioned.push(vec![idx]);
+                }
+            }
+
+            for mut cluster in partitioned {
+                if cluster.len() > 1 {
+                    cluster.sort_by_key(|&idx| score_candidate_record(&records[idx]));
+                    let original = records[cluster[0]].clone();
+                    let duplicates = cluster[1..].iter().map(|&i| records[i].clone()).collect();
+                    clusters.push(DuplicateCluster {
+                        original,
+                        duplicates,
+                    });
+                }
+            }
+        }
+
+        clusters.sort_by(|a, b| a.original.file_path.cmp(&b.original.file_path));
+        clusters
+    }
+
     pub fn update_photo_metadata(
         &self,
         file_path: &str,
@@ -724,6 +853,20 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let deleted = conn.execute("DELETE FROM photos WHERE file_path = ?1", params![file_path])?;
         Ok(deleted > 0)
+    }
+
+    pub fn delete_photos(&self, file_paths: &[String]) -> Result<usize> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let mut count = 0;
+        {
+            let mut stmt = tx.prepare("DELETE FROM photos WHERE file_path = ?1")?;
+            for path in file_paths {
+                count += stmt.execute(params![path])?;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
     }
 
     /// Exports a selection of photos to an isolated portable project package.
@@ -828,6 +971,7 @@ impl Database {
         source_paths_or_folders: &[String],
         destination_folder: P,
         options: &ImportOptions,
+        progress: Option<&dyn Fn(u32, u32, &str)>,
     ) -> std::result::Result<ImportReport, String> {
         let base_dest = destination_folder.as_ref();
         let dest_folder = if let Some(sub) = &options.subfolder_name {
@@ -844,6 +988,18 @@ impl Database {
 
         let dest_catalog_path = Self::resolve_catalog_path(base_dest, false);
         let dest_db = Self::open(&dest_catalog_path).map_err(|e| e.to_string())?;
+
+        // Preload destination library photos for library-wide duplicate detection
+        let dest_existing_photos = dest_db.get_all_photos().unwrap_or_default();
+        use std::collections::{HashMap, HashSet};
+        let mut dest_by_name_and_size: HashSet<(String, i64)> = HashSet::new();
+        let mut dest_by_stem: HashMap<String, Vec<PhotoRecord>> = HashMap::new();
+        for r in dest_existing_photos {
+            dest_by_name_and_size.insert((r.file_name.to_lowercase(), r.file_size));
+            let stem = Path::new(&r.file_path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let norm = normalize_stem(&stem);
+            dest_by_stem.entry(norm).or_default().push(r);
+        }
 
         // 1. Gather all candidate images
         let mut candidates: Vec<PathBuf> = Vec::new();
@@ -866,9 +1022,13 @@ impl Database {
         }
 
         let total_found = candidates.len() as u32;
+        if let Some(cb) = progress {
+            cb(0, total_found, &format!("Found {} files. Resolving masters...", total_found));
+        }
         let mut imported_count = 0u32;
         let mut skipped_duplicates = 0u32;
         let mut raw_over_jpeg_suppressed = 0u32;
+        let mut duplicate_clones_suppressed = 0u32;
         let mut consolidated_sidecars = 0u32;
         let mut error_count = 0u32;
         let mut error_messages = Vec::new();
@@ -909,62 +1069,36 @@ impl Database {
                 continue;
             }
 
-            let mut raws = Vec::new();
-            let mut non_raws = Vec::new();
-            for item in &group {
-                if is_raw_format(item) {
-                    raws.push(item.clone());
-                } else {
-                    non_raws.push(item.clone());
-                }
-            }
+            if options.deduplicate_raw_over_jpeg {
+                let mut sorted_group = group.clone();
+                sorted_group.sort_by_key(|p| score_candidate(p));
+                let winner = sorted_group[0].clone();
+                let siblings: Vec<PathBuf> = sorted_group.into_iter().skip(1).collect();
 
-            if options.deduplicate_raw_over_jpeg && !raws.is_empty() {
-                raw_over_jpeg_suppressed += non_raws.len() as u32;
-                // Rule 3: Active edits win
-                let mut chosen = None;
-                for r in &raws {
-                    if let Ok(data) = xmp::io::read_xmp_file(r) {
-                        if xmp::io::has_custom_adjustments(&data) {
-                            chosen = Some(r.clone());
-                            break;
-                        }
+                for sib in &siblings {
+                    if !is_raw_format(sib) && is_raw_format(&winner) {
+                        raw_over_jpeg_suppressed += 1;
+                    } else {
+                        duplicate_clones_suppressed += 1;
                     }
                 }
-                // Rule 4: Prefer DNG
-                if chosen.is_none() {
-                    for r in &raws {
-                        if r.extension().map(|e| e.to_string_lossy().eq_ignore_ascii_case("dng")).unwrap_or(false) {
-                            chosen = Some(r.clone());
-                            break;
-                        }
-                    }
-                }
-                // Rule 5: Deterministic tie-break
-                let winner = chosen.unwrap_or_else(|| raws[0].clone());
-                let siblings: Vec<PathBuf> = group.into_iter().filter(|p| p != &winner).collect();
                 winning_candidates.push((winner, siblings));
             } else {
-                let mut chosen = None;
-                for item in non_raws.iter().chain(raws.iter()) {
-                    if let Ok(data) = xmp::io::read_xmp_file(item) {
-                        if xmp::io::has_custom_adjustments(&data) {
-                            chosen = Some(item.clone());
-                            break;
-                        }
-                    }
+                // All Copies: preserve every file in the capture cluster as an individual import candidate
+                for item in group {
+                    winning_candidates.push((item, Vec::new()));
                 }
-                let winner = chosen.unwrap_or_else(|| {
-                    if !raws.is_empty() { raws[0].clone() } else { non_raws[0].clone() }
-                });
-                let siblings: Vec<PathBuf> = group.into_iter().filter(|p| p != &winner).collect();
-                winning_candidates.push((winner, siblings));
             }
         }
 
         // 4. Process each winning candidate
         let mut records_to_insert: Vec<PhotoRecord> = Vec::new();
-        for (src_path, siblings) in winning_candidates {
+        let total_winning = winning_candidates.len() as u32;
+        for (idx, (src_path, siblings)) in winning_candidates.into_iter().enumerate() {
+            let file_name_str = src_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            if let Some(cb) = progress {
+                cb((idx + 1) as u32, total_winning, &file_name_str);
+            }
             let file_name = match src_path.file_name() {
                 Some(n) => n,
                 None => {
@@ -974,18 +1108,65 @@ impl Database {
                 }
             };
 
-            let dest_file_path = dest_folder.join(file_name);
             let src_path_str = src_path.to_string_lossy().to_string();
+            let src_file_name_lower = file_name_str.to_lowercase();
+            let src_stem = src_path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let src_stem_norm = normalize_stem(&src_stem);
+            let src_size = fs::metadata(&src_path).map(|m| m.len() as i64).unwrap_or(0);
+            let dest_file_path = dest_folder.join(file_name);
 
-            // Check duplicate suppression
-            if options.skip_duplicates && dest_file_path.exists() {
-                if let (Ok(src_meta), Ok(dst_meta)) = (fs::metadata(&src_path), fs::metadata(&dest_file_path)) {
-                    if src_meta.len() == dst_meta.len() {
-                        skipped_duplicates += 1;
-                        continue;
+            // Check duplicate suppression across entire destination library
+            if options.skip_duplicates {
+                let mut is_dup = false;
+                // 1. Direct match in destination folder
+                if dest_file_path.exists() {
+                    if let Ok(dst_meta) = fs::metadata(&dest_file_path) {
+                        let dst_size = dst_meta.len() as i64;
+                        if destination_outranks_source(&dest_file_path, dst_size, &src_path, src_size, &src_stem_norm) {
+                            is_dup = true;
+                        }
                     }
                 }
+
+                // 2. Exact filename + size match anywhere in destination library
+                if !is_dup && dest_by_name_and_size.contains(&(src_file_name_lower.clone(), src_size)) && src_size > 0 {
+                    is_dup = true;
+                }
+
+                // 3. Capture match in destination library across all folders
+                if !is_dup {
+                    if let Some(existing_records) = dest_by_stem.get(&src_stem_norm) {
+                        let src_record = self.get_photo(&src_path_str).ok().flatten();
+                        is_dup = existing_records.iter().any(|dest_r| {
+                            let dest_p = Path::new(&dest_r.file_path);
+                            let is_same_capture = if dest_r.file_size == src_size && src_size > 0 {
+                                true
+                            } else if let (Some(t_dest), Some(t_src)) = (dest_r.taken_time, src_record.as_ref().and_then(|r| r.taken_time)) {
+                                (t_dest - t_src).abs() <= 5
+                            } else {
+                                are_same_capture(dest_p, &src_path)
+                            };
+
+                            if is_same_capture {
+                                destination_outranks_source(dest_p, dest_r.file_size, &src_path, src_size, &src_stem_norm)
+                            } else {
+                                false
+                            }
+                        });
+                    }
+                }
+
+                if is_dup {
+                    skipped_duplicates += 1;
+                    continue;
+                }
             }
+
+            let final_dest_file_path = if dest_file_path.exists() {
+                resolve_unique_destination_path(&dest_folder, file_name)
+            } else {
+                dest_file_path.clone()
+            };
 
             // Consolidate or transfer sidecars
             if options.consolidate_sidecars {
@@ -1085,14 +1266,14 @@ impl Database {
 
             // Transfer master negative
             if options.move_files {
-                if let Err(e) = fs::copy(&src_path, &dest_file_path) {
+                if let Err(e) = fs::copy(&src_path, &final_dest_file_path) {
                     error_count += 1;
                     error_messages.push(format!("Failed to copy {}: {}", src_path.display(), e));
                     continue;
                 }
 
                 // Bit-level cryptographic verification before source deletion
-                match crate::checksum::verify_files_identical(&src_path, &dest_file_path) {
+                match crate::checksum::verify_files_identical(&src_path, &final_dest_file_path) {
                     Ok(true) => {
                         if let Err(e) = fs::remove_file(&src_path) {
                             error_count += 1;
@@ -1111,17 +1292,19 @@ impl Database {
                     }
                 }
             } else {
-                if let Err(e) = fs::copy(&src_path, &dest_file_path) {
+                if let Err(e) = fs::copy(&src_path, &final_dest_file_path) {
                     error_count += 1;
                     error_messages.push(format!("Failed to copy {}: {}", src_path.display(), e));
                     continue;
                 }
             }
 
+            dest_by_name_and_size.insert((src_file_name_lower.clone(), src_size));
+
             // Collect record for atomic SQL batch insert into destination catalog database
             if let Ok(Some(mut record)) = self.get_photo(&src_path_str) {
-                record.file_path = dest_file_path.to_string_lossy().to_string();
-                record.file_name = file_name.to_string_lossy().to_string();
+                record.file_path = final_dest_file_path.to_string_lossy().to_string();
+                record.file_name = final_dest_file_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| file_name.to_string_lossy().to_string());
                 record.updated_at = current_timestamp();
                 records_to_insert.push(record);
             }
@@ -1194,12 +1377,89 @@ impl Database {
             imported_count,
             skipped_duplicates,
             raw_over_jpeg_suppressed,
+            duplicate_clones_suppressed,
             consolidated_sidecars,
             error_count,
             destination_catalog_path: dest_catalog_path.to_string_lossy().to_string(),
             error_messages,
         })
     }
+}
+
+fn resolve_unique_destination_path(dest_folder: &Path, file_name: &std::ffi::OsStr) -> PathBuf {
+    let mut target = dest_folder.join(file_name);
+    if !target.exists() {
+        return target;
+    }
+    let p = Path::new(file_name);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let mut counter = 1;
+    loop {
+        let new_name = if ext.is_empty() {
+            format!("{}_{}", stem, counter)
+        } else {
+            format!("{}_{}.{}", stem, counter, ext)
+        };
+        target = dest_folder.join(new_name);
+        if !target.exists() {
+            return target;
+        }
+        counter += 1;
+    }
+}
+
+/// Returns true if the destination photo already in the library has equal or higher precedence than the source photo.
+/// If the library only has a derivative and the source photo is a true original negative, returns false (allowing original to be imported).
+fn destination_outranks_source(
+    dest_path: &Path,
+    _dest_size: i64,
+    src_path: &Path,
+    _src_size: i64,
+    normalized_stem: &str,
+) -> bool {
+    let dest_ext = dest_path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let src_ext = src_path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+
+    let dest_is_raw = is_raw_format(dest_path);
+    let src_is_raw = is_raw_format(src_path);
+
+    // Format tiers: 0 = Camera RAW, 1 = Archival DNG, 2 = Raster/JPEG
+    let dest_format_tier = if dest_is_raw { if dest_ext == "dng" { 1 } else { 0 } } else { 2 };
+    let src_format_tier = if src_is_raw { if src_ext == "dng" { 1 } else { 0 } } else { 2 };
+
+    // 1. Format Tier Precedence:
+    // If Source is a higher format tier (e.g. Camera RAW vs JPEG derivative, or Camera RAW vs DNG),
+    // Destination NEVER outranks Source: the original RAW negative must be imported!
+    if src_format_tier < dest_format_tier {
+        return false;
+    }
+    // If Destination is already a higher format tier (e.g. RAW master in library, source is JPEG derivative),
+    // Destination outranks Source: skip the lower-tier derivative clone.
+    if dest_format_tier < src_format_tier {
+        return true;
+    }
+
+    // 2. Stem Cleanliness Precedence (within the same format tier):
+    // A clean un-suffixed stem (e.g. "IMG_1234") represents the original camera file,
+    // while suffixed stems (e.g. "IMG_1234_edited", "IMG_1234-1") represent derivative exports.
+    let dest_stem = dest_path.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let src_stem = src_path.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let dest_is_clean = dest_stem == normalized_stem;
+    let src_is_clean = src_stem == normalized_stem;
+
+    if !dest_is_clean && src_is_clean {
+        // Destination only has an edited/derivative clone, source is the clean original -> import it!
+        return false;
+    }
+    if dest_is_clean && !src_is_clean {
+        // Destination already has the clean original, source is an edited clone -> skip source!
+        return true;
+    }
+
+    // 3. Same format tier and same stem cleanliness:
+    // Destination already has an equivalent master/derivative. Destination outranks source.
+    true
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1231,6 +1491,7 @@ pub struct ImportReport {
     pub imported_count: u32,
     pub skipped_duplicates: u32,
     pub raw_over_jpeg_suppressed: u32,
+    pub duplicate_clones_suppressed: u32,
     pub consolidated_sidecars: u32,
     pub error_count: u32,
     pub destination_catalog_path: String,
@@ -1244,6 +1505,12 @@ pub struct ExportPackageStats {
     pub error_count: u32,
     pub destination_catalog_path: String,
     pub error_messages: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DuplicateCluster {
+    pub original: PhotoRecord,
+    pub duplicates: Vec<PhotoRecord>,
 }
 
 fn is_supported_image(path: &Path) -> bool {
@@ -1285,44 +1552,141 @@ fn is_raw_format(path: &Path) -> bool {
     }
 }
 
-fn normalize_stem(stem: &str) -> String {
+fn strip_derivative_suffix(stem: &str) -> Option<String> {
     let lower = stem.to_lowercase();
-    let suffixes = [
-        "-edit", "_edit", "-edited", "_edited", 
-        "-export", "_export", "_v1", "_v2", 
-        "_01", "_02", " (1)", " (2)"
+
+    // 1. Explicit keyword suffixes
+    let keyword_suffixes = [
+        "-edited", "_edited", "-edit", "_edit",
+        "-export", "_export", "-exported", "_exported",
+        "-proof", "_proof", "-original", "_original",
+        "-enhanced", "_enhanced", "-hdr", "_hdr",
+        "-panorama", "_panorama", "-pano", "_pano",
     ];
-    for s in &suffixes {
-        if lower.ends_with(s) {
-            return lower[..lower.len() - s.len()].to_string();
+    for s in &keyword_suffixes {
+        if lower.ends_with(s) && lower.len() > s.len() {
+            return Some(lower[..lower.len() - s.len()].to_string());
         }
     }
-    lower
+
+    // 2. Parenthesized duplicate counters: " (1)", " (2)", "(1)", etc.
+    if let Some(pos) = lower.rfind('(') {
+        if lower.ends_with(')') {
+            let inner = &lower[pos + 1..lower.len() - 1];
+            if !inner.is_empty() && inner.chars().all(|c| c.is_ascii_digit()) {
+                let trimmed = lower[..pos].trim_end();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    // 3. Hyphen collision counters: "-1", "-2", "-99" (Lightroom & macOS collision)
+    if let Some(hyphen_idx) = lower.rfind('-') {
+        let after_hyphen = &lower[hyphen_idx + 1..];
+        if !after_hyphen.is_empty()
+            && after_hyphen.len() <= 3
+            && after_hyphen.chars().all(|c| c.is_ascii_digit())
+            && hyphen_idx >= 3
+        {
+            return Some(lower[..hyphen_idx].to_string());
+        }
+    }
+
+    // 4. Version tokens: "_v1", "_v2", "-v1", etc.
+    let version_prefixes = ["_v", "-v"];
+    for vp in &version_prefixes {
+        if let Some(idx) = lower.rfind(vp) {
+            let after = &lower[idx + vp.len()..];
+            if !after.is_empty() && after.chars().all(|c| c.is_ascii_digit()) && idx >= 3 {
+                return Some(lower[..idx].to_string());
+            }
+        }
+    }
+
+    // 5. Underscore collision counter (e.g. "IMG_1234_1" where base "IMG_1234" has at least 5 chars and contains digits)
+    if let Some(under_idx) = lower.rfind('_') {
+        let after = &lower[under_idx + 1..];
+        let before = &lower[..under_idx];
+        if !after.is_empty()
+            && after.len() <= 2
+            && after.chars().all(|c| c.is_ascii_digit())
+            && before.len() >= 5
+            && before.chars().any(|c| c.is_ascii_digit())
+        {
+            return Some(before.to_string());
+        }
+    }
+
+    None
+}
+
+pub fn normalize_stem(stem: &str) -> String {
+    let mut current = stem.trim().to_lowercase();
+    for _ in 0..6 {
+        if let Some(stripped) = strip_derivative_suffix(&current) {
+            current = stripped;
+        } else {
+            break;
+        }
+    }
+    current
+}
+
+fn score_candidate(p: &Path) -> (u8, u8, bool, usize, String) {
+    let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let norm = normalize_stem(&stem);
+    let is_clean_stem = stem.to_lowercase() == norm;
+
+    // Tier 1: Format Priority
+    // 0 = Proprietary Camera RAW (.cr2, .cr3, .arw, .nef, .raf, .orf, .rw2, .pef, etc.)
+    // 1 = Archival DNG
+    // 2 = Raster / Other (.jpg, .jpeg, .png, .tiff, .heic)
+    let format_tier = if is_raw_format(p) {
+        if ext == "dng" { 1 } else { 0 }
+    } else {
+        2
+    };
+
+    // Tier 2: Clean un-suffixed stem vs derivative/collision
+    // 0 = Clean original (e.g. "IMG_1234.CR2" or "IMG_1234.jpg")
+    // 1 = Derivative / collision (e.g. "IMG_1234_edited.jpg" or "IMG_1234-1.dng")
+    let stem_tier = if is_clean_stem { 0 } else { 1 };
+
+    // Tier 3: Active custom First Proof XMP adjustments
+    let has_edits = if let Ok(data) = xmp::io::read_xmp_file(p) {
+        xmp::io::has_custom_adjustments(&data)
+    } else {
+        false
+    };
+    let edits_tier = !has_edits; // false (has edits) sorts before true (no edits)
+
+    // Tier 4: Stem length (prefer shorter, less cluttered filename)
+    let stem_len = stem.len();
+
+    // Tier 5: Deterministic lexicographical path
+    let path_str = p.to_string_lossy().to_string();
+
+    (format_tier, stem_tier, edits_tier, stem_len, path_str)
 }
 
 fn are_same_capture(p1: &Path, p2: &Path) -> bool {
     let r1 = is_raw_format(p1);
     let r2 = is_raw_format(p2);
-    
-    // Check EXIF capture timestamp if available
-    let meta1 = crate::raw::extract_metadata(p1).ok();
-    let meta2 = crate::raw::extract_metadata(p2).ok();
-    if let (Some(m1), Some(m2)) = (meta1, meta2) {
-        if let (Some(t1), Some(t2)) = (m1.taken_time, m2.taken_time) {
-            return (t1 - t2).abs() <= 5;
-        }
-    }
 
-    // If one is RAW and the other is non-raw, within the same import tree
+    // 1. If one is RAW and the other is non-raw, within the same import tree
     if r1 != r2 {
         return true;
     }
 
-    // Both RAW or both non-raw:
+    // 2. Both RAW or both non-raw in the same directory
     if p1.parent() == p2.parent() {
         return true;
     }
     
+    // 3. Export keywords in either path indicate derivative clone
     let p1_str = p1.to_string_lossy().to_lowercase();
     let p2_str = p2.to_string_lossy().to_lowercase();
     let export_keywords = ["export", "output", "darktable", "processed", "web", "jpeg", "jpg", "proof", "lyft"];
@@ -1332,12 +1696,96 @@ fn are_same_capture(p1: &Path, p2: &Path) -> bool {
         return true;
     }
     
+    // 4. Nested or common parent directory
     if let (Some(parent1), Some(parent2)) = (p1.parent(), p2.parent()) {
         if parent1.starts_with(parent2) || parent2.starts_with(parent1) {
             return true;
         }
     }
-    
+
+    // 5. Check EXIF capture timestamp as last resort if available
+    let meta1 = crate::raw::extract_metadata(p1).ok();
+    let meta2 = crate::raw::extract_metadata(p2).ok();
+    if let (Some(m1), Some(m2)) = (meta1, meta2) {
+        if let (Some(t1), Some(t2)) = (m1.taken_time, m2.taken_time) {
+            return (t1 - t2).abs() <= 5;
+        }
+    }
+
+    false
+}
+
+fn score_candidate_record(r: &PhotoRecord) -> (u8, u8, bool, usize, String) {
+    let p = Path::new(&r.file_path);
+    let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let norm = normalize_stem(&stem);
+    let is_clean_stem = stem.to_lowercase() == norm;
+
+    // Tier 1: Format Priority
+    // 0 = Proprietary Camera RAW (.cr2, .cr3, .arw, .nef, .raf, .orf, .rw2, .pef, etc.)
+    // 1 = Archival DNG
+    // 2 = Raster / Other (.jpg, .jpeg, .png, .tiff, .heic)
+    let format_tier = if is_raw_format(p) {
+        if ext == "dng" { 1 } else { 0 }
+    } else {
+        2
+    };
+
+    // Tier 2: Clean un-suffixed stem vs derivative/collision
+    let stem_tier = if is_clean_stem { 0 } else { 1 };
+
+    // Tier 3: In-memory XMP status (zero disk I/O)
+    let edits_tier = !r.has_xmp;
+
+    // Tier 4: Stem length (prefer shorter)
+    let stem_len = stem.len();
+
+    // Tier 5: Deterministic lexicographical path
+    (format_tier, stem_tier, edits_tier, stem_len, r.file_path.clone())
+}
+
+fn are_same_capture_records(r1: &PhotoRecord, r2: &PhotoRecord) -> bool {
+    let p1 = Path::new(&r1.file_path);
+    let p2 = Path::new(&r2.file_path);
+    let is_raw1 = is_raw_format(p1);
+    let is_raw2 = is_raw_format(p2);
+
+    // Check in-memory EXIF capture timestamp if available
+    if let (Some(t1), Some(t2)) = (r1.taken_time, r2.taken_time) {
+        return (t1 - t2).abs() <= 5;
+    }
+
+    // Identical file size + same normalized stem indicates identical duplicate file
+    if r1.file_size == r2.file_size && r1.file_size > 0 {
+        return true;
+    }
+
+    // If one is RAW and the other is non-raw, within same candidate cluster
+    if is_raw1 != is_raw2 {
+        return true;
+    }
+
+    // Both RAW or both non-raw:
+    if p1.parent() == p2.parent() {
+        return true;
+    }
+
+    let p1_str = r1.file_path.to_lowercase();
+    let p2_str = r2.file_path.to_lowercase();
+    let export_keywords = ["export", "output", "darktable", "processed", "web", "jpeg", "jpg", "proof", "lyft"];
+    let p1_is_export = export_keywords.iter().any(|k| p1_str.contains(k));
+    let p2_is_export = export_keywords.iter().any(|k| p2_str.contains(k));
+    if p1_is_export || p2_is_export {
+        return true;
+    }
+
+    if let (Some(parent1), Some(parent2)) = (p1.parent(), p2.parent()) {
+        if parent1.starts_with(parent2) || parent2.starts_with(parent1) {
+            return true;
+        }
+    }
+
     false
 }
 
@@ -1598,6 +2046,7 @@ mod tests {
             &[src_dir.to_string_lossy().to_string()],
             &dst_dir,
             &options,
+            None,
         ).unwrap();
 
         // RAW over JPEG: 1 imported, 2 suppressed (sibling + exported subfolder)
@@ -1626,6 +2075,7 @@ mod tests {
             &[src_dir.to_string_lossy().to_string()],
             &dst_dir,
             &options,
+            None,
         ).unwrap();
         assert_eq!(report_dup.skipped_duplicates, 1);
         assert_eq!(report_dup.imported_count, 0);
@@ -1664,6 +2114,7 @@ mod tests {
             &[raw_path.to_string_lossy().to_string()],
             &dst_dir,
             &options,
+            None,
         ).unwrap();
 
         assert_eq!(report.imported_count, 1);
@@ -1714,6 +2165,300 @@ mod tests {
 
         let all = db.get_all_photos().unwrap();
         assert_eq!(all.len(), test_files.len());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_recursive_stem_normalization() {
+        assert_eq!(normalize_stem("IMG_1234"), "img_1234");
+        assert_eq!(normalize_stem("IMG_1234.CR2"), "img_1234.cr2");
+        assert_eq!(normalize_stem("IMG_1234-1"), "img_1234");
+        assert_eq!(normalize_stem("IMG_1234-2"), "img_1234");
+        assert_eq!(normalize_stem("IMG_1234_edited"), "img_1234");
+        assert_eq!(normalize_stem("IMG_1234-edited"), "img_1234");
+        assert_eq!(normalize_stem("IMG_1234_edit"), "img_1234");
+        assert_eq!(normalize_stem("IMG_1234_export"), "img_1234");
+        assert_eq!(normalize_stem("IMG_1234_edited-1"), "img_1234");
+        assert_eq!(normalize_stem("IMG_1234_edited-2"), "img_1234");
+        assert_eq!(normalize_stem("IMG_1234_edited_1"), "img_1234");
+        assert_eq!(normalize_stem("DSC04321-edit-1"), "dsc04321");
+        assert_eq!(normalize_stem("PHOTO (1)"), "photo");
+        assert_eq!(normalize_stem("PHOTO (2)"), "photo");
+        assert_eq!(normalize_stem("_MG_5678-1"), "_mg_5678");
+        assert_eq!(normalize_stem("PXL_20241018_123456789"), "pxl_20241018_123456789");
+    }
+
+    #[test]
+    fn test_lightroom_export_deduplication_and_precedence() {
+        let src_dir = std::env::temp_dir().join("firstproof_test_lr_dedup_src");
+        let dst_dir = std::env::temp_dir().join("firstproof_test_lr_dedup_dst");
+        let _ = fs::remove_dir_all(&src_dir);
+        let _ = fs::remove_dir_all(&dst_dir);
+        let _ = fs::create_dir_all(&src_dir);
+        let _ = fs::create_dir_all(&dst_dir);
+
+        // Capture 1: Camera RAW shoot with Lightroom collision & edited exports
+        // True master: IMG_1234.CR2
+        fs::write(src_dir.join("IMG_1234.CR2"), b"Canon 14-bit RAW CFA data").unwrap();
+        fs::write(src_dir.join("IMG_1234-1.dng"), b"Lightroom DNG collision copy").unwrap();
+        fs::write(src_dir.join("IMG_1234_edited.jpg"), b"Baked edited JPEG export").unwrap();
+        fs::write(src_dir.join("IMG_1234_edited-1.jpg"), b"Baked edited JPEG collision copy").unwrap();
+
+        // Capture 2: Original camera/phone JPEG shoot with Lightroom derivatives
+        // True master: IMG_5678.jpg
+        fs::write(src_dir.join("IMG_5678.jpg"), b"Original untouched JPEG master").unwrap();
+        fs::write(src_dir.join("IMG_5678_edited.jpg"), b"Lightroom derivative edit").unwrap();
+        fs::write(src_dir.join("IMG_5678-1.jpg"), b"Lightroom collision derivative").unwrap();
+        fs::write(src_dir.join("IMG_5678_edited-1.jpg"), b"Lightroom compound collision derivative").unwrap();
+
+        let src_catalog = Database::resolve_catalog_path(&src_dir, true);
+        let src_db = Database::open(&src_catalog).unwrap();
+        src_db.index_folder(&src_dir).unwrap();
+
+        let options = ImportOptions {
+            move_files: false,
+            consolidate_sidecars: true,
+            deduplicate_raw_over_jpeg: true,
+            skip_duplicates: true,
+            verify_checksum: true,
+            subfolder_name: None,
+        };
+
+        let report = src_db.import_to_library(
+            &[src_dir.to_string_lossy().to_string()],
+            &dst_dir,
+            &options,
+            None,
+        ).unwrap();
+
+        // 8 total files found across the 2 captures: exactly 2 masters imported!
+        assert_eq!(report.total_found, 8);
+        assert_eq!(report.imported_count, 2);
+        assert_eq!(report.duplicate_clones_suppressed, 4);
+        assert_eq!(report.raw_over_jpeg_suppressed, 2);
+        assert_eq!(report.error_count, 0);
+
+        // Verification: Destination folder contains strictly the 2 true masters
+        assert!(dst_dir.join("IMG_1234.CR2").exists(), "RAW master must be imported");
+        assert!(!dst_dir.join("IMG_1234-1.dng").exists(), "Collision DNG must be suppressed");
+        assert!(!dst_dir.join("IMG_1234_edited.jpg").exists(), "Edited JPEG must be suppressed");
+        assert!(!dst_dir.join("IMG_1234_edited-1.jpg").exists(), "Compound collision JPEG must be suppressed");
+
+        assert!(dst_dir.join("IMG_5678.jpg").exists(), "Untouched original JPEG master must be imported");
+        assert!(!dst_dir.join("IMG_5678_edited.jpg").exists(), "Edited JPEG clone must be suppressed");
+        assert!(!dst_dir.join("IMG_5678-1.jpg").exists(), "Collision JPEG clone must be suppressed");
+        assert!(!dst_dir.join("IMG_5678_edited-1.jpg").exists(), "Compound collision JPEG clone must be suppressed");
+
+        let _ = fs::remove_dir_all(&src_dir);
+        let _ = fs::remove_dir_all(&dst_dir);
+    }
+
+    #[test]
+    fn test_filter_derivative_records_in_place_browsing() {
+        let temp_dir = std::env::temp_dir().join("firstproof_test_filter_derivatives");
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+
+        // Capture A: RAW with collision DNG and edited JPEG
+        fs::write(temp_dir.join("IMG_0001.CR2"), b"Canon RAW").unwrap();
+        fs::write(temp_dir.join("IMG_0001-1.dng"), b"Lightroom DNG").unwrap();
+        fs::write(temp_dir.join("IMG_0001_edited.jpg"), b"JPEG edit").unwrap();
+
+        // Capture B: Clean phone JPEG with derivative exports
+        fs::write(temp_dir.join("IMG_0002.jpg"), b"Phone JPEG master").unwrap();
+        fs::write(temp_dir.join("IMG_0002_edited.jpg"), b"Phone JPEG edit").unwrap();
+
+        // Capture C: Standalone photo without duplicates
+        fs::write(temp_dir.join("IMG_0003.CR2"), b"Clean RAW").unwrap();
+
+        let db = Database::open_in_memory().unwrap();
+        db.index_folder(&temp_dir).unwrap();
+
+        let all_records = db.get_all_photos().unwrap();
+        assert_eq!(all_records.len(), 6, "All 6 files exist in database index");
+
+        let filtered = db.filter_derivative_records(all_records);
+        assert_eq!(filtered.len(), 3, "Filtered view must retain strictly the 3 master negatives");
+
+        let filtered_names: Vec<String> = filtered.into_iter().map(|r| r.file_name).collect();
+        assert!(filtered_names.contains(&"IMG_0001.CR2".to_string()));
+        assert!(!filtered_names.contains(&"IMG_0001-1.dng".to_string()));
+        assert!(!filtered_names.contains(&"IMG_0001_edited.jpg".to_string()));
+
+        assert!(filtered_names.contains(&"IMG_0002.jpg".to_string()));
+        assert!(!filtered_names.contains(&"IMG_0002_edited.jpg".to_string()));
+
+        assert!(filtered_names.contains(&"IMG_0003.CR2".to_string()));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_import_to_library_skips_when_original_already_in_main_library_subfolder() {
+        let src_dir = std::env::temp_dir().join("firstproof_test_cross_subfolder_src");
+        let dst_lib = std::env::temp_dir().join("firstproof_test_cross_subfolder_dst");
+        let _ = fs::remove_dir_all(&src_dir);
+        let _ = fs::remove_dir_all(&dst_lib);
+        let _ = fs::create_dir_all(&src_dir);
+        let _ = fs::create_dir_all(&dst_lib);
+
+        // Pre-populate destination library with existing shoot in subfolder "2024-05-10"
+        let existing_subfolder = dst_lib.join("2024-05-10");
+        let _ = fs::create_dir_all(&existing_subfolder);
+        let existing_photo = existing_subfolder.join("IMG_9999.CR2");
+        fs::write(&existing_photo, b"Canon RAW original in destination library").unwrap();
+
+        let dst_catalog = Database::resolve_catalog_path(&dst_lib, false);
+        let dst_db = Database::open(&dst_catalog).unwrap();
+        dst_db.index_folder(&dst_lib).unwrap();
+        assert_eq!(dst_db.get_all_photos().unwrap().len(), 1, "Existing photo indexed in main library");
+
+        // Source folder has the same photo (e.g. from a Lightroom Export or backup)
+        let src_photo = src_dir.join("IMG_9999.CR2");
+        fs::write(&src_photo, b"Canon RAW original in destination library").unwrap();
+
+        let src_catalog = Database::resolve_catalog_path(&src_dir, true);
+        let src_db = Database::open(&src_catalog).unwrap();
+        src_db.index_folder(&src_dir).unwrap();
+
+        let options = ImportOptions {
+            move_files: false,
+            consolidate_sidecars: true,
+            deduplicate_raw_over_jpeg: true,
+            skip_duplicates: true,
+            verify_checksum: true,
+            subfolder_name: Some("2026-10-18 - Lightroom Export".to_string()),
+        };
+
+        let report = src_db.import_to_library(
+            &[src_dir.to_string_lossy().to_string()],
+            &dst_lib,
+            &options,
+            None,
+        ).unwrap();
+
+        // Must be detected as duplicate across subfolders and skipped!
+        assert_eq!(report.total_found, 1);
+        assert_eq!(report.skipped_duplicates, 1, "Photo must be skipped because original is already in destination library");
+        assert_eq!(report.imported_count, 0, "Zero duplicates imported");
+
+        let export_dest_folder = dst_lib.join("2026-10-18 - Lightroom Export");
+        assert!(!export_dest_folder.join("IMG_9999.CR2").exists(), "Duplicate file must NOT be created in new subfolder");
+
+        let _ = fs::remove_dir_all(&src_dir);
+        let _ = fs::remove_dir_all(&dst_lib);
+    }
+
+    #[test]
+    fn test_import_to_library_imports_original_when_destination_only_has_derivative() {
+        let src_dir = std::env::temp_dir().join("firstproof_test_import_original_src");
+        let dst_lib = std::env::temp_dir().join("firstproof_test_import_original_dst");
+        let _ = fs::remove_dir_all(&src_dir);
+        let _ = fs::remove_dir_all(&dst_lib);
+        let _ = fs::create_dir_all(&src_dir);
+        let _ = fs::create_dir_all(&dst_lib);
+
+        // Pre-populate destination library with ONLY a derivative (e.g. IMG_8888_edited.jpg)
+        let existing_subfolder = dst_lib.join("Previous Export");
+        let _ = fs::create_dir_all(&existing_subfolder);
+        let derivative_photo = existing_subfolder.join("IMG_8888_edited.jpg");
+        fs::write(&derivative_photo, b"Edited JPEG derivative in library").unwrap();
+
+        let dst_catalog = Database::resolve_catalog_path(&dst_lib, false);
+        let dst_db = Database::open(&dst_catalog).unwrap();
+        dst_db.index_folder(&dst_lib).unwrap();
+        assert_eq!(dst_db.get_all_photos().unwrap().len(), 1);
+
+        // Source folder has the TRUE ORIGINAL master RAW: IMG_8888.CR2
+        let src_photo = src_dir.join("IMG_8888.CR2");
+        fs::write(&src_photo, b"True Camera RAW original negative").unwrap();
+
+        let src_catalog = Database::resolve_catalog_path(&src_dir, true);
+        let src_db = Database::open(&src_catalog).unwrap();
+        src_db.index_folder(&src_dir).unwrap();
+
+        let options = ImportOptions {
+            move_files: false,
+            consolidate_sidecars: true,
+            deduplicate_raw_over_jpeg: true,
+            skip_duplicates: true,
+            verify_checksum: true,
+            subfolder_name: Some("Masters Ingest".to_string()),
+        };
+
+        let report = src_db.import_to_library(
+            &[src_dir.to_string_lossy().to_string()],
+            &dst_lib,
+            &options,
+            None,
+        ).unwrap();
+
+        assert_eq!(report.total_found, 1);
+        assert_eq!(report.imported_count, 1, "Original RAW master must be imported over derivative");
+        assert_eq!(report.skipped_duplicates, 0);
+
+        let ingest_folder = dst_lib.join("Masters Ingest");
+        assert!(ingest_folder.join("IMG_8888.CR2").exists(), "Original RAW must exist in destination");
+
+        let _ = fs::remove_dir_all(&src_dir);
+        let _ = fs::remove_dir_all(&dst_lib);
+    }
+
+    #[test]
+    fn test_find_duplicate_clusters_and_delete_photos() {
+        let temp_dir = std::env::temp_dir().join("firstproof_test_duplicate_clusters");
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+
+        // Group 1: 1 original RAW + 2 duplicate clones
+        fs::write(temp_dir.join("IMG_0100.CR2"), b"Canon RAW Original").unwrap();
+        fs::write(temp_dir.join("IMG_0100-1.dng"), b"Lightroom DNG Clone").unwrap();
+        fs::write(temp_dir.join("IMG_0100_edited.jpg"), b"Edited JPEG Clone").unwrap();
+
+        // Group 2: 1 clean phone JPEG + 1 edit
+        fs::write(temp_dir.join("IMG_0200.jpg"), b"Phone JPEG Master").unwrap();
+        fs::write(temp_dir.join("IMG_0200_edited.jpg"), b"Phone JPEG Edit").unwrap();
+
+        // Group 3: Standalone photo (no duplicates)
+        fs::write(temp_dir.join("IMG_0300.CR2"), b"Unique RAW").unwrap();
+
+        let db = Database::open_in_memory().unwrap();
+        db.index_folder(&temp_dir).unwrap();
+
+        let all_records = db.get_all_photos().unwrap();
+        assert_eq!(all_records.len(), 6);
+
+        let clusters = Database::find_duplicate_clusters_in_memory(all_records.clone());
+        assert_eq!(clusters.len(), 2, "Only captures with duplicates must be clustered");
+
+        // Verify cluster 1: IMG_0100
+        let cluster1 = clusters.iter().find(|c| c.original.file_name == "IMG_0100.CR2").expect("IMG_0100 cluster");
+        assert_eq!(cluster1.duplicates.len(), 2);
+        let dup_names1: Vec<&str> = cluster1.duplicates.iter().map(|d| d.file_name.as_str()).collect();
+        assert!(dup_names1.contains(&"IMG_0100-1.dng"));
+        assert!(dup_names1.contains(&"IMG_0100_edited.jpg"));
+
+        // Verify cluster 2: IMG_0200
+        let cluster2 = clusters.iter().find(|c| c.original.file_name == "IMG_0200.jpg").expect("IMG_0200 cluster");
+        assert_eq!(cluster2.duplicates.len(), 1);
+        assert_eq!(cluster2.duplicates[0].file_name, "IMG_0200_edited.jpg");
+
+        // Test delete_photos in database
+        let paths_to_delete = vec![
+            temp_dir.join("IMG_0100-1.dng").to_string_lossy().to_string(),
+            temp_dir.join("IMG_0100_edited.jpg").to_string_lossy().to_string(),
+            temp_dir.join("IMG_0200_edited.jpg").to_string_lossy().to_string(),
+        ];
+        let deleted_count = db.delete_photos(&paths_to_delete).unwrap();
+        assert_eq!(deleted_count, 3);
+
+        let remaining = db.get_all_photos().unwrap();
+        assert_eq!(remaining.len(), 3, "Only original masters must remain in DB");
+        let remaining_names: Vec<&str> = remaining.iter().map(|r| r.file_name.as_str()).collect();
+        assert!(remaining_names.contains(&"IMG_0100.CR2"));
+        assert!(remaining_names.contains(&"IMG_0200.jpg"));
+        assert!(remaining_names.contains(&"IMG_0300.CR2"));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

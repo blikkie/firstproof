@@ -25,7 +25,7 @@ struct MainView: View {
                             Text("Camera Card Detected: \(card.name)")
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
-                            Text("Import master negatives into your Primary Library with sidecar consolidation and duplicate suppression.")
+                            Text("Import original negatives into your Primary Library with sidecar consolidation and duplicate suppression.")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -132,6 +132,9 @@ struct MainView: View {
         .sheet(isPresented: $viewModel.isExportPackageSheetPresented) {
             ExportPackageSheetView()
         }
+        .sheet(isPresented: $viewModel.isCullDuplicatesSheetPresented) {
+            CullDuplicatesSheetView()
+        }
         .onAppear {
             setupKeyboardMonitor()
         }
@@ -181,6 +184,20 @@ struct MainView: View {
             if viewModel.isExportPackageSheetPresented {
                 if event.keyCode == 53 && event.type == .keyDown {
                     viewModel.isExportPackageSheetPresented = false
+                    return nil
+                }
+                return event
+            }
+            if viewModel.isCullDuplicatesSheetPresented {
+                if event.keyCode == 53 && event.type == .keyDown {
+                    viewModel.isCullDuplicatesSheetPresented = false
+                    return nil
+                }
+                return event
+            }
+            if viewModel.isImportSheetPresented {
+                if event.keyCode == 53 && event.type == .keyDown {
+                    viewModel.isImportSheetPresented = false
                     return nil
                 }
                 return event
