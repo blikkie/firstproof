@@ -1,7 +1,7 @@
 .PHONY: all check build-core build-bridge build-wasm build-web clean test test-all run bundle build-cli package-dmg package-cli package harvest-hardware
 
 ARCH := $(shell uname -m)
-VERSION ?= 0.2.0
+VERSION ?= 0.3.0
 ifeq ($(ARCH),arm64)
 	RUST_TARGET := aarch64-apple-darwin
 else

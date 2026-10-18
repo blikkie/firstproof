@@ -384,7 +384,7 @@ def main():
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "firstproof-mcp", "version": "0.2.0"}
+                    "serverInfo": {"name": "firstproof-mcp", "version": "0.3.0"}
                 }
             }
             sys.stdout.write(json.dumps(resp) + "\n")
