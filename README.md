@@ -64,8 +64,8 @@ firstproof-cli inspect photo.dng
 ## Installation & macOS Gatekeeper Notice
 
 Pre-built binaries are available on the [Releases](https://github.com/blikkie/firstproof/releases) page:
-* **macOS Disk Image**: `FirstProof-0.1.2-macos-arm64.dmg`
-* **CLI Tarball**: `firstproof-cli-0.1.2-macos-arm64.tar.gz`
+* **macOS Disk Image**: `FirstProof-0.2.0-macos-arm64.dmg`
+* **CLI Tarball**: `firstproof-cli-0.2.0-macos-arm64.tar.gz`
 
 > **macOS Gatekeeper Notice**:  
 > First Proof release builds are ad-hoc signed and not notarized through Apple's paid developer program ($99/year). When opening the app for the first time, macOS will display an unidentified developer warning.
