@@ -12,6 +12,26 @@ public final class ThumbnailCache {
     public let queue: OperationQueue
     public let diskCacheURL: URL
     private let maxDiskCacheBytes: Int64 = 500 * 1024 * 1024 // 500 MB capacity limit
+    private let refinedLock = NSLock()
+    private var refinedPaths = Set<String>()
+    
+    public func isRefinedThumbnail(for filePath: String) -> Bool {
+        refinedLock.lock()
+        defer { refinedLock.unlock() }
+        return refinedPaths.contains(filePath)
+    }
+    
+    public func markRefinedThumbnail(for filePath: String) {
+        refinedLock.lock()
+        defer { refinedLock.unlock() }
+        refinedPaths.insert(filePath)
+    }
+    
+    public func clearRefinedThumbnail(for filePath: String) {
+        refinedLock.lock()
+        defer { refinedLock.unlock() }
+        refinedPaths.remove(filePath)
+    }
     
     private init() {
         cache.countLimit = 1200
@@ -88,6 +108,10 @@ public final class ThumbnailCache {
            let diskImg = NSImage(contentsOf: fileURL) {
             cache.setObject(diskImg, forKey: key as NSString)
             cache.setObject(diskImg, forKey: filePath as NSString)
+            cache.setObject(diskImg, forKey: "fast_\(filePath)" as NSString)
+            if edits != nil {
+                markRefinedThumbnail(for: filePath)
+            }
             
             // Touch modification date asynchronously for LRU tracking
             queue.addOperation {
@@ -111,7 +135,7 @@ public final class ThumbnailCache {
         if let mem = cache.object(forKey: key as NSString) {
             return mem
         }
-        if let mem = cache.object(forKey: ("inter_" + filePath) as NSString) {
+        if edits == nil, let mem = cache.object(forKey: ("inter_" + filePath) as NSString) {
             return mem
         }
         
@@ -120,23 +144,13 @@ public final class ThumbnailCache {
         if FileManager.default.fileExists(atPath: fileURL.path),
            let diskImg = NSImage(contentsOf: fileURL) {
             cache.setObject(diskImg, forKey: key as NSString)
-            cache.setObject(diskImg, forKey: ("inter_" + filePath) as NSString)
+            if edits == nil {
+                cache.setObject(diskImg, forKey: ("inter_" + filePath) as NSString)
+            }
             queue.addOperation {
                 try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: fileURL.path)
             }
             return diskImg
-        }
-        
-        // Fallback: If edits was specified but not found on disk, check for base intermediate on disk
-        if edits != nil {
-            let baseKey = "inter_" + ThumbnailCache.cacheKey(filePath: filePath, edits: nil)
-            let baseURL = diskCacheURL.appendingPathComponent("\(baseKey).jpg")
-            if FileManager.default.fileExists(atPath: baseURL.path),
-               let diskImg = NSImage(contentsOf: baseURL) {
-                cache.setObject(diskImg, forKey: key as NSString)
-                cache.setObject(diskImg, forKey: ("inter_" + filePath) as NSString)
-                return diskImg
-            }
         }
         
         return nil
@@ -145,11 +159,11 @@ public final class ThumbnailCache {
     public func saveIntermediate(_ image: NSImage, for filePath: String, edits: EditSettings? = nil) {
         let key = "inter_" + ThumbnailCache.cacheKey(filePath: filePath, edits: edits)
         cache.setObject(image, forKey: key as NSString)
-        cache.setObject(image, forKey: ("inter_" + filePath) as NSString)
+        if edits == nil {
+            cache.setObject(image, forKey: ("inter_" + filePath) as NSString)
+        }
         
         let targetURL = diskCacheURL.appendingPathComponent("\(key).jpg")
-        let baseKey = "inter_" + ThumbnailCache.cacheKey(filePath: filePath, edits: nil)
-        let baseURL = diskCacheURL.appendingPathComponent("\(baseKey).jpg")
         
         queue.addOperation { [weak self] in
             guard let self = self else { return }
@@ -157,9 +171,6 @@ public final class ThumbnailCache {
                let rep = NSBitmapImageRep(data: tiff),
                let jpegData = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.90]) {
                 try? jpegData.write(to: targetURL, options: .atomic)
-                if targetURL != baseURL {
-                    try? jpegData.write(to: baseURL, options: .atomic)
-                }
             }
             self.enforceDiskCacheLimitIfNeeded()
         }
@@ -168,19 +179,28 @@ public final class ThumbnailCache {
     // MARK: - Save Edited Thumbnail & Invalidate Views
     public func saveEditedThumbnail(_ image: NSImage, for filePath: String, edits: EditSettings, broadcast: Bool = true) {
         let key = ThumbnailCache.cacheKey(filePath: filePath, edits: edits)
+        let baseKey = ThumbnailCache.cacheKey(filePath: filePath, edits: nil)
+        let fastKey = "fast_\(filePath)"
         
-        // 1. Update in-memory cache
+        // 1. Update in-memory cache across all lookups
         cache.setObject(image, forKey: key as NSString)
+        cache.setObject(image, forKey: baseKey as NSString)
         cache.setObject(image, forKey: filePath as NSString)
+        cache.setObject(image, forKey: fastKey as NSString)
+        markRefinedThumbnail(for: filePath)
         
         // 2. Persist to disk on background queue
         let targetURL = diskCacheURL.appendingPathComponent("\(key).jpg")
+        let baseURL = diskCacheURL.appendingPathComponent("\(baseKey).jpg")
         queue.addOperation { [weak self] in
             guard let self = self else { return }
             if let tiff = image.tiffRepresentation,
                let rep = NSBitmapImageRep(data: tiff),
                let jpegData = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.85]) {
                 try? jpegData.write(to: targetURL, options: .atomic)
+                if targetURL != baseURL {
+                    try? jpegData.write(to: baseURL, options: .atomic)
+                }
             }
             self.enforceDiskCacheLimitIfNeeded()
         }
@@ -208,11 +228,13 @@ public final class ThumbnailCache {
         let fastKey = "fast_\(filePath)"
         cache.setObject(image, forKey: fastKey as NSString)
         cache.setObject(image, forKey: filePath as NSString)
+        clearRefinedThumbnail(for: filePath)
     }
     
     public func removeImage(for path: String) {
         cache.removeObject(forKey: path as NSString)
         cache.removeObject(forKey: "fast_\(path)" as NSString)
+        clearRefinedThumbnail(for: path)
     }
     
     // MARK: - Fast Embedded Preview Extraction (2-5 ms)
@@ -328,12 +350,13 @@ public final class ThumbnailCache {
 
 public struct AsyncThumbnailView: View {
     let filePath: String
-    @State private var image: NSImage? = nil
+    @State private var image: NSImage?
     @State private var fastOperation: Operation? = nil
     @State private var renderOperation: Operation? = nil
     
     public init(filePath: String) {
         self.filePath = filePath
+        self._image = State(initialValue: ThumbnailCache.shared.fastCachedImage(for: filePath))
     }
     
     public var body: some View {
@@ -385,7 +408,9 @@ public struct AsyncThumbnailView: View {
         // Fast-path 1: Instant RAM cache hit (0ms, 0 disk I/O, completely non-blocking)
         if let fastCached = ThumbnailCache.shared.fastCachedImage(for: filePath) {
             self.image = fastCached
-            return
+            if ThumbnailCache.shared.isRefinedThumbnail(for: filePath) {
+                return
+            }
         }
         
         // Cancel any pending operations before scheduling new one
@@ -408,7 +433,9 @@ public struct AsyncThumbnailView: View {
                         self.image = fastCached
                     }
                 }
-                return
+                if ThumbnailCache.shared.isRefinedThumbnail(for: filePath) {
+                    return
+                }
             }
             
             guard !fastOp.isCancelled else { return }

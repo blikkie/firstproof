@@ -209,6 +209,7 @@ struct PhotoGridCollectionView: NSViewRepresentable {
         
         private var lastPhotoCount: Int = 0
         private var lastSelectedPath: String? = nil
+        private var lastSelectedPaths: Set<String> = []
         private var lastSelectedCount: Int = 0
         private var lastBulkMode: Bool = false
         private var lastFolderPath: String? = nil
@@ -222,6 +223,7 @@ struct PhotoGridCollectionView: NSViewRepresentable {
             self.parent = parent
             self.lastPhotoCount = parent.photos.count
             self.lastSelectedPath = parent.selectedPhoto?.filePath
+            self.lastSelectedPaths = parent.selectedPhotoPaths
             self.lastSelectedCount = parent.selectedPhotoPaths.count
             self.lastBulkMode = parent.isBulkMode
             self.lastFolderPath = parent.currentFolderPath
@@ -250,7 +252,10 @@ struct PhotoGridCollectionView: NSViewRepresentable {
             let modeChanged = mode != lastCanvasMode
             let photosChanged = currentPhotos != parent.photos
             
-            if countChanged || selectionChanged || selCountChanged || bulkChanged || photosChanged {
+            let structuralChanged = countChanged || bulkChanged || photosChanged || folderChanged
+            let selectionOnlyChanged = !structuralChanged && (selectionChanged || selCountChanged)
+            
+            if structuralChanged {
                 // If the photo count changed (e.g. toggling Originals Only / All Copies),
                 // capture the top visible original in the viewport so the user remains
                 // anchored in the exact same visual ballpark.
@@ -258,6 +263,7 @@ struct PhotoGridCollectionView: NSViewRepresentable {
                 
                 lastPhotoCount = count
                 lastSelectedPath = path
+                lastSelectedPaths = parent.selectedPhotoPaths
                 lastSelectedCount = selCount
                 lastBulkMode = bulk
                 currentPhotos = parent.photos
@@ -281,6 +287,33 @@ struct PhotoGridCollectionView: NSViewRepresentable {
                                 }
                             }
                         }
+                    }
+                }
+            } else if selectionOnlyChanged {
+                // Pinpointed in-place selection refresh: reload ONLY items whose selection state changed!
+                // Prevents recycling NSCollectionViewItems across untouched cells which causes previews to flash.
+                var changedPaths = lastSelectedPaths.symmetricDifference(parent.selectedPhotoPaths)
+                if let oldPath = lastSelectedPath, oldPath != path {
+                    changedPaths.insert(oldPath)
+                }
+                if let newPath = path, newPath != lastSelectedPath {
+                    changedPaths.insert(newPath)
+                }
+                
+                lastSelectedPath = path
+                lastSelectedPaths = parent.selectedPhotoPaths
+                lastSelectedCount = selCount
+                
+                if !changedPaths.isEmpty, let cv = collectionView {
+                    let changedIndexPaths = Set(changedPaths.compactMap { p -> IndexPath? in
+                        guard let idx = parent.photos.firstIndex(where: { $0.filePath == p }) else { return nil }
+                        return IndexPath(item: idx, section: 0)
+                    })
+                    if !changedIndexPaths.isEmpty {
+                        NSAnimationContext.beginGrouping()
+                        NSAnimationContext.current.duration = 0
+                        cv.reloadItems(at: changedIndexPaths)
+                        NSAnimationContext.endGrouping()
                     }
                 }
             }
@@ -381,24 +414,40 @@ struct PhotoGridCollectionView: NSViewRepresentable {
             
             guard index < cv.numberOfItems(inSection: 0) else { return }
             
+            guard let attr = cv.layoutAttributesForItem(at: IndexPath(item: index, section: 0)) else {
+                cv.scrollToItems(at: [IndexPath(item: index, section: 0)], scrollPosition: centered ? .centeredVertically : .bottom)
+                return
+            }
+            
+            let itemFrame = attr.frame
+            let itemTop = itemFrame.origin.y
+            let itemBottom = itemFrame.origin.y + itemFrame.size.height
+            let visibleRect = sv.contentView.bounds
+            let padding: CGFloat = 16
+            
             if centered {
                 if index == 0 {
                     sv.contentView.scroll(to: NSPoint(x: 0, y: 0))
-                    sv.reflectScrolledClipView(sv.contentView)
-                    return
+                } else {
+                    let targetY = max(0, itemTop - (visibleRect.size.height - itemFrame.size.height) / 2.0)
+                    sv.contentView.scroll(to: NSPoint(x: 0, y: targetY))
                 }
-                
-                cv.scrollToItems(at: [IndexPath(item: index, section: 0)], scrollPosition: .centeredVertically)
-                if let attr = cv.layoutAttributesForItem(at: IndexPath(item: index, section: 0)) {
-                    let itemY = attr.frame.origin.y
-                    let itemH = attr.frame.size.height
-                    let viewportH = sv.contentView.bounds.height
-                    let targetY = max(0, itemY - (viewportH - itemH) / 2.0)
+                sv.reflectScrolledClipView(sv.contentView)
+            } else {
+                // Follow focus: ensure item is comfortably within the visible viewport with breathing room
+                if itemTop - padding < visibleRect.origin.y {
+                    // Item is off the top: scroll up to reveal
+                    let targetY = max(0, itemTop - padding)
+                    sv.contentView.scroll(to: NSPoint(x: 0, y: targetY))
+                    sv.reflectScrolledClipView(sv.contentView)
+                } else if itemBottom + padding > visibleRect.origin.y + visibleRect.size.height {
+                    // Item is off the bottom: scroll down to reveal
+                    let contentH = max(cv.frame.height, layout?.collectionViewContentSize.height ?? cv.bounds.height)
+                    let maxScrollY = max(0, contentH - visibleRect.size.height)
+                    let targetY = min(maxScrollY, itemBottom + padding - visibleRect.size.height)
                     sv.contentView.scroll(to: NSPoint(x: 0, y: targetY))
                     sv.reflectScrolledClipView(sv.contentView)
                 }
-            } else {
-                cv.scrollToItems(at: [IndexPath(item: index, section: 0)], scrollPosition: [])
             }
         }
         

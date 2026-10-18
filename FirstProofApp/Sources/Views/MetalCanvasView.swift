@@ -128,9 +128,14 @@ public struct MetalCanvasView: NSViewRepresentable {
                     height: Int(rawRecord.height),
                     data: rawRecord.data
                 )
+                renderer.currentPhotoPath = viewModel.selectedPhoto?.filePath
                 context.coordinator.lastRawKey = currentRawKey
             } else if let image = viewModel.previewImage {
                 renderer.updateTexture(with: image)
+                renderer.currentPhotoPath = viewModel.selectedPhoto?.filePath
+                context.coordinator.lastRawKey = nil
+            } else {
+                renderer.currentPhotoPath = nil
                 context.coordinator.lastRawKey = nil
             }
             context.coordinator.lastPhotoPath = viewModel.selectedPhoto?.filePath
@@ -213,6 +218,9 @@ public struct MetalCanvasView: NSViewRepresentable {
     private static func setupCaptureClosure(for viewModel: AppViewModel, renderer: MetalRenderer) {
         viewModel.captureThumbnailSnapshot = { [weak renderer, weak viewModel] in
             guard let renderer = renderer, let vm = viewModel else { return nil }
+            guard vm.canvasMode == .detail else { return nil }
+            guard let activePath = vm.currentlyLoadedPhotoPath,
+                  renderer.currentPhotoPath == activePath else { return nil }
             let imageW: Float
             let imageH: Float
             if let raw = vm.rawPreviewRecord {
@@ -243,6 +251,9 @@ public struct MetalCanvasView: NSViewRepresentable {
         
         viewModel.captureIntermediateSnapshot = { [weak renderer, weak viewModel] in
             guard let renderer = renderer, let vm = viewModel else { return nil }
+            guard vm.canvasMode == .detail else { return nil }
+            guard let activePath = vm.currentlyLoadedPhotoPath,
+                  renderer.currentPhotoPath == activePath else { return nil }
             guard vm.rawPreviewRecord != nil else { return nil }
             let imageW: Float
             let imageH: Float

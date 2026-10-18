@@ -131,6 +131,9 @@ extension AppViewModel {
             selectPhoto(first)
         }
         self.canvasMode = .detail
+        if let current = selectedPhoto {
+            loadPreview(for: current)
+        }
     }
     
     public func enterGridMode() {
@@ -202,8 +205,9 @@ extension AppViewModel {
         // Save edits and pending metadata of previously active photo before switching
         if let prevPath = currentlyLoadedPhotoPath, prevPath != photo.filePath {
             self.flushPendingMetadataSave()
-            let editsSnapshot = currentEdits
-            self.syncXmp(for: prevPath, rating: nil, status: nil, edits: editsSnapshot)
+            if self.hasActiveSliderScrub {
+                self.endSliderScrub(actionName: "Edit")
+            }
         }
         self.currentlyLoadedPhotoPath = photo.filePath
         self.loadMetadataForSelectedPhoto()
@@ -325,7 +329,8 @@ extension AppViewModel {
                 
                 guard !Task.isCancelled, self.activeDecodeToken == token else { return }
                 
-                // Stage 2B: Full-resolution demosaic stream for 100% zoom pixel peeping
+                // Stage 2B: Full-resolution demosaic stream for 100% zoom pixel peeping (detail mode only)
+                guard self.canvasMode == .detail else { return }
                 let full = await Task.detached(priority: .userInitiated) {
                     decodeRawPreview(path: photo.filePath, maxDimension: nil)
                 }.value

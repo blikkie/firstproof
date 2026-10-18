@@ -48,6 +48,7 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     var uniformsBuffer: MTLBuffer?
     
     var currentTexture: MTLTexture?
+    public var currentPhotoPath: String? = nil
     var lutTexture: MTLTexture?
     var defaultLutTexture: MTLTexture?
     var curveMasterTexture: MTLTexture?

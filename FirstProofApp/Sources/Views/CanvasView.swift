@@ -643,6 +643,7 @@ struct GridThumbnailCell: View, Equatable {
             ZStack(alignment: .topLeading) {
                 ZStack(alignment: .bottomTrailing) {
                     AsyncThumbnailView(filePath: photo.filePath)
+                        .id(photo.filePath)
                         .aspectRatio(3.0 / 2.0, contentMode: .fit)
                         .frame(maxWidth: .infinity)
                         .clipShape(RoundedRectangle(cornerRadius: 6))

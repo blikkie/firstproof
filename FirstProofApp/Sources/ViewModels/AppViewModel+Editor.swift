@@ -195,10 +195,6 @@ extension AppViewModel {
         // Real-time sub-millisecond GPU thumbnail & intermediate capture for active viewport
         if let snapshot = captureThumbnailSnapshot?() {
             ThumbnailCache.shared.saveEditedThumbnail(snapshot, for: path, edits: editsSnapshot)
-        } else {
-            // Fallback for edits outside active Metal canvas
-            ThumbnailCache.shared.removeImage(for: path)
-            NotificationCenter.default.post(name: .thumbnailDidChange, object: path)
         }
         if let intermediate = captureIntermediateSnapshot?() {
             ThumbnailCache.shared.saveIntermediate(intermediate, for: path, edits: editsSnapshot)
@@ -367,7 +363,6 @@ extension AppViewModel {
             let targetEdits = isUndo ? before : after
             applyEdits(targetEdits)
             saveCurrentEdits()
-            notifyThumbnailChanged()
             
         case .rating(let targets):
             guard let db = db else { return }
@@ -447,7 +442,6 @@ extension AppViewModel {
         isCropToolActive = false
         cropSessionSnapshot = nil
         saveCurrentEdits()
-        notifyThumbnailChanged()
     }
     
     public func cancelCrop() {
@@ -472,7 +466,6 @@ extension AppViewModel {
         
         isCropToolActive = false
         saveCurrentEdits()
-        notifyThumbnailChanged()
     }
     
     public func toggleCropTool() {
@@ -646,8 +639,7 @@ extension AppViewModel {
     }
     
     public func notifyThumbnailChanged() {
-        guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
-        NotificationCenter.default.post(name: .thumbnailDidChange, object: path)
+        saveCurrentEdits()
     }
     
     public var allLutTitles: [String] {
@@ -1157,7 +1149,6 @@ extension AppViewModel {
     public func setGrainScale(_ scale: Float) {
         self.grainScale = scale
         saveCurrentEdits()
-        notifyThumbnailChanged()
     }
     
     public func setRemjetBacking(_ mode: RemjetBackingMode) {

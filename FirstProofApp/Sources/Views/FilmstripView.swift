@@ -141,6 +141,7 @@ struct FilmstripThumbnailCell: View, Equatable {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             AsyncThumbnailView(filePath: photo.filePath)
+                .id(photo.filePath)
                 .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             
