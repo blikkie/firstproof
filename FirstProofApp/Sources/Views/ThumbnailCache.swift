@@ -369,6 +369,16 @@ public struct AsyncThumbnailView: View {
                 }
             }
         }
+        .onChange(of: filePath) { _, newPath in
+            fastOperation?.cancel()
+            fastOperation = nil
+            renderOperation?.cancel()
+            renderOperation = nil
+            self.image = ThumbnailCache.shared.fastCachedImage(for: newPath)
+            if self.image == nil {
+                loadThumbnail()
+            }
+        }
     }
     
     private func loadThumbnail() {

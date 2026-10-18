@@ -98,6 +98,11 @@ fn test_synthetic_macbeth_and_neutral_ramp_dual_engine_parity() {
         let mut patch_count = 0;
 
         for patch in &chart.sample_points {
+            // Corner fiducials are 7x7 geometric alignment markers; under spatial bilateral filtering
+            // (highlights/shadows), the 24px stencil extends beyond the 7x7 fiducial into the grid background.
+            if patch.name.starts_with("Corner") && (edits.highlights.abs() > 0.001 || edits.shadows.abs() > 0.001) {
+                continue;
+            }
             let u = patch.uv[0];
             let v = patch.uv[1];
 

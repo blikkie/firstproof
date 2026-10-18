@@ -173,101 +173,47 @@ struct CanvasView: View {
                 .background(Color(NSColor.underPageBackgroundColor))
             } else {
                 ZStack {
-                    // 1. Persistent Grid View (Maintains exact scroll position in memory)
-                    GeometryReader { geo in
-                        ScrollViewReader { proxy in
-                            ScrollView {
-                                LazyVGrid(
-                                    columns: Array(repeating: GridItem(.flexible(minimum: 140, maximum: 240), spacing: 12), count: max(1, viewModel.gridColumnCount)),
-                                    spacing: 12
-                                ) {
-                                    ForEach(viewModel.filteredPhotos, id: \.filePath) { photo in
-                                        let isChecked = viewModel.selectedPhotoPaths.contains(photo.filePath)
-                                        let isActive = viewModel.selectedPhoto?.filePath == photo.filePath
-                                        let isSelected = viewModel.isBulkSelectionMode ? isChecked : (isActive || isChecked)
-                                        
-                                        GridThumbnailCell(
-                                            photo: photo,
-                                            isSelected: isSelected,
-                                            isActive: isActive,
-                                            isBulkMode: viewModel.isBulkSelectionMode,
-                                            action: {
-                                                handleCellClick(for: photo)
-                                            },
-                                            toggleAction: {
-                                                viewModel.toggleBulkSelection(for: photo)
-                                            },
-                                            doubleClickAction: {
-                                                viewModel.setActivePhoto(photo)
-                                                viewModel.enterDetailMode()
-                                            }
-                                        )
-                                        .id(photo.filePath)
-                                        .contextMenu {
-                                            Button("Export Selection as Portable Library...") {
-                                                if !viewModel.selectedPhotoPaths.contains(photo.filePath) {
-                                                    viewModel.selectPhoto(photo)
-                                                }
-                                                viewModel.isExportPackageSheetPresented = true
-                                            }
-                                            Button("Export Rendered JPEG/TIFF...") {
-                                                viewModel.selectPhoto(photo)
-                                                viewModel.isExportSheetPresented = true
-                                            }
-                                            Divider()
-                                            Button("Mark as Pick (P)") {
-                                                viewModel.setStatus("pick")
-                                            }
-                                            Button("Mark as Reject (X)") {
-                                                viewModel.setStatus("reject")
-                                            }
-                                            Button("Clear Flag") {
-                                                viewModel.setStatus("none")
-                                            }
-                                            Divider()
-                                            Button("Reveal in Finder") {
-                                                NSWorkspace.shared.selectFile(photo.filePath, inFileViewerRootedAtPath: "")
-                                            }
-                                        }
-                                    }
-                                }
-                                .padding(16)
+                    PhotoGridCollectionView(
+                        photos: viewModel.filteredPhotos,
+                        selectedPhoto: viewModel.selectedPhoto,
+                        selectedPhotoPaths: viewModel.selectedPhotoPaths,
+                        isBulkMode: viewModel.isBulkSelectionMode,
+                        currentFolderPath: viewModel.currentFolderPath,
+                        canvasMode: viewModel.canvasMode,
+                        onCellClick: { photo in
+                            handleCellClick(for: photo)
+                        },
+                        onToggleBulk: { photo in
+                            viewModel.toggleBulkSelection(for: photo)
+                        },
+                        onDoubleClick: { photo in
+                            viewModel.setActivePhoto(photo)
+                            viewModel.enterDetailMode()
+                        },
+                        onExportPackage: { photo in
+                            if !viewModel.selectedPhotoPaths.contains(photo.filePath) {
+                                viewModel.selectPhoto(photo)
                             }
-                            .background(Color(NSColor.underPageBackgroundColor))
-                            .opacity(viewModel.canvasMode == .grid ? 1 : 0)
-                            .allowsHitTesting(viewModel.canvasMode == .grid)
-                            .onChange(of: viewModel.canvasMode) { _, newMode in
-                                if newMode == .grid {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                        scrollToFocused(proxy: proxy, animated: true)
-                                    }
+                            viewModel.isExportPackageSheetPresented = true
+                        },
+                        onExportRendered: { photo in
+                            viewModel.selectPhoto(photo)
+                            viewModel.isExportSheetPresented = true
+                        },
+                        onSetStatus: { status in
+                            viewModel.setStatus(status)
+                        },
+                        onColumnsChanged: { cols in
+                            DispatchQueue.main.async {
+                                if viewModel.gridColumnCount != cols {
+                                    viewModel.gridColumnCount = cols
                                 }
-                            }
-                            .onChange(of: viewModel.selectedPhoto?.filePath) { _, newPath in
-                                if viewModel.canvasMode == .grid && newPath != nil {
-                                    scrollToFocused(proxy: proxy, animated: true)
-                                }
-                            }
-                            .onChange(of: viewModel.photos.count) { _, count in
-                                if count > 0 && viewModel.canvasMode == .grid {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                        scrollToFocused(proxy: proxy, animated: false)
-                                    }
-                                }
-                            }
-                            .onAppear {
-                                updateColumns(width: geo.size.width)
-                                if viewModel.canvasMode == .grid {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                        scrollToFocused(proxy: proxy, animated: false)
-                                    }
-                                }
-                            }
-                            .onChange(of: geo.size.width) { _, newWidth in
-                                updateColumns(width: newWidth)
                             }
                         }
-                    }
+                    )
+                    .background(Color(NSColor.underPageBackgroundColor))
+                    .opacity(viewModel.canvasMode == .grid ? 1 : 0)
+                    .allowsHitTesting(viewModel.canvasMode == .grid)
                     
                     // 2. Detail View (Metal GPU Canvas & Docked Control Bar)
                     if viewModel.canvasMode == .detail {
@@ -342,8 +288,9 @@ struct CanvasView: View {
                             Spacer()
                             HStack(spacing: 10) {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.accentColor)
-                                    .font(.system(size: 13))
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(Color.black, Color.white)
+                                    .font(.system(size: 14, weight: .semibold))
                                 Text("\(viewModel.selectedPhotoPaths.count) Selected")
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundColor(.white)
@@ -456,29 +403,6 @@ struct CanvasView: View {
             withAnimation(.easeInOut(duration: 0.15)) {
                 isDropTargeted = targeted
             }
-        }
-    }
-    
-    private func scrollToFocused(proxy: ScrollViewProxy, animated: Bool = true) {
-        guard let target = viewModel.selectedPhoto?.filePath else { return }
-        DispatchQueue.main.async {
-            if animated {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    proxy.scrollTo(target, anchor: .center)
-                }
-            } else {
-                proxy.scrollTo(target, anchor: .center)
-            }
-        }
-    }
-    
-    private func updateColumns(width: CGFloat) {
-        let availableWidth = max(0, width - 32)
-        let itemWidth: CGFloat = 180
-        let spacing: CGFloat = 12
-        let cols = max(1, Int((availableWidth + spacing) / (itemWidth + spacing)))
-        if viewModel.gridColumnCount != cols {
-            viewModel.gridColumnCount = cols
         }
     }
     
@@ -706,11 +630,11 @@ struct GridThumbnailCell: View, Equatable {
                 // Selection indicator badge
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.accentColor)
-                        .background(Circle().fill(Color.white).padding(2))
-                        .font(.system(size: 16))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.black, Color.white)
+                        .font(.system(size: 16, weight: .semibold))
                         .padding(6)
-                        .shadow(radius: 2)
+                        .shadow(color: .black.opacity(0.35), radius: 2, x: 0, y: 1)
                         .onTapGesture {
                             toggleAction()
                         }
@@ -786,3 +710,4 @@ struct DetailMetalCanvasContainer: View {
         }
     }
 }
+

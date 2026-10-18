@@ -253,7 +253,7 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         let fitScaleY = baseQuadH / viewSize.height
         
         let scale100 = Float(max(dispW / baseQuadW, dispH / baseQuadH))
-        if abs(self.zoomScale100 - scale100) > 0.001 {
+        if abs(self.zoomScale100 - scale100) > 0.05 {
             self.zoomScale100 = scale100
             self.onZoomScale100Changed?(scale100)
         }
@@ -319,7 +319,8 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
     
     // MARK: - MTKViewDelegate
     public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-        updateQuad(viewSize: view.bounds.size)
+        guard size.width > 0, size.height > 0 else { return }
+        updateQuad(viewSize: size)
     }
     
     public func draw(in view: MTKView) {

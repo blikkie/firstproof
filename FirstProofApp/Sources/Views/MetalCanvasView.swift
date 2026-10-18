@@ -63,7 +63,9 @@ public struct MetalCanvasView: NSViewRepresentable {
             
             renderer.onZoomScale100Changed = { [weak viewModel] newZ100 in
                 DispatchQueue.main.async {
-                    viewModel?.zoomScale100 = newZ100
+                    if let vm = viewModel, abs(vm.zoomScale100 - newZ100) > 0.05 {
+                        vm.zoomScale100 = newZ100
+                    }
                 }
             }
             
@@ -186,15 +188,17 @@ public struct MetalCanvasView: NSViewRepresentable {
         renderer.panOffset = SIMD2<Float>(Float(panOffset.x), Float(panOffset.y))
         renderer.updateQuad(viewSize: nsView.drawableSize)
         
-        if abs(viewModel.zoomScale100 - renderer.zoomScale100) > 0.01 {
+        if abs(viewModel.zoomScale100 - renderer.zoomScale100) > 0.05 {
             let z100 = renderer.zoomScale100
             DispatchQueue.main.async {
-                self.viewModel.zoomScale100 = z100
+                if abs(self.viewModel.zoomScale100 - z100) > 0.05 {
+                    self.viewModel.zoomScale100 = z100
+                }
             }
         }
         
-        // Trigger immediate synchronous draw call on MTKView
-        nsView.draw()
+        // Request asynchronous display pass to coalesce redraws with AppKit vsync
+        nsView.needsDisplay = true
         
         // Real-time intermediate capture for subsequent burst scrubbing
         if rawChanged, let path = viewModel.selectedPhoto?.filePath, viewModel.rawPreviewRecord != nil {
@@ -346,9 +350,14 @@ public final class CanvasMTKView: MTKView {
         super.setFrameSize(newSize)
         if let coordinator = coordinator, let renderer = coordinator.renderer {
             renderer.updateQuad(viewSize: self.drawableSize)
+            self.needsDisplay = true
             let z100 = renderer.zoomScale100
-            DispatchQueue.main.async {
-                coordinator.viewModel?.zoomScale100 = z100
+            if let vm = coordinator.viewModel, abs(vm.zoomScale100 - z100) > 0.05 {
+                DispatchQueue.main.async {
+                    if let vm = coordinator.viewModel, abs(vm.zoomScale100 - z100) > 0.05 {
+                        vm.zoomScale100 = z100
+                    }
+                }
             }
         }
     }

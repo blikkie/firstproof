@@ -1096,8 +1096,8 @@ mod tests {
         let edits = EditSettings::default();
         let edits_json = serde_json::to_string(&edits).unwrap();
 
-        // sRGB through default AgX Vivid:
-        let rgb_neutral = evaluate_reference_pixel(0.5, 0.5, 0.5, false, &edits_json, None).unwrap();
+        // sRGB through default AgX Vivid (matching 128u8 / 255.0 frame test below):
+        let rgb_neutral = evaluate_reference_pixel(128.0 / 255.0, 128.0 / 255.0, 128.0 / 255.0, false, &edits_json, None).unwrap();
         assert_eq!(rgb_neutral[0], rgb_neutral[1]);
         assert_eq!(rgb_neutral[1], rgb_neutral[2]);
 
