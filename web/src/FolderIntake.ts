@@ -21,7 +21,7 @@ export interface PhotoFileEntry {
 }
 
 export class FolderIntake {
-  private static RAW_EXTENSIONS = new Set([
+  private static RAW_SENSOR_EXTENSIONS = new Set([
     'cr2',
     'cr3',
     'nef',
@@ -31,16 +31,36 @@ export class FolderIntake {
     'orf',
     'pef',
     'raf',
+    'raw',
+  ]);
+
+  private static SUPPORTED_EXTENSIONS = new Set([
+    'cr2',
+    'cr3',
+    'nef',
+    'arw',
+    'dng',
+    'rw2',
+    'orf',
+    'pef',
+    'raf',
+    'raw',
     'jpg',
     'jpeg',
     'png',
     'tif',
     'tiff',
+    'webp',
   ]);
 
   public static isSupportedExtension(filename: string): boolean {
     const ext = filename.split('.').pop()?.toLowerCase() || '';
-    return FolderIntake.RAW_EXTENSIONS.has(ext);
+    return FolderIntake.SUPPORTED_EXTENSIONS.has(ext);
+  }
+
+  public static isRawExtension(filename: string): boolean {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    return FolderIntake.RAW_SENSOR_EXTENSIONS.has(ext);
   }
 
   private static IGNORED_DIRS = new Set([

@@ -149,6 +149,7 @@ self.onmessage = async (e: MessageEvent<WorkerDecodeMessage>) => {
       'orf',
       'pef',
       'raf',
+      'raw',
     ].includes(ext);
 
     let linearData: Uint16Array | undefined;

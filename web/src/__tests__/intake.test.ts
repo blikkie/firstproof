@@ -25,8 +25,23 @@ describe('Folder and Photo Intake Processing', () => {
       expect(FolderIntake.isSupportedExtension('photo.jpg')).toBe(true);
       expect(FolderIntake.isSupportedExtension('photo.JPEG')).toBe(true);
       expect(FolderIntake.isSupportedExtension('render.png')).toBe(true);
+      expect(FolderIntake.isSupportedExtension('web.webp')).toBe(true);
+      expect(FolderIntake.isSupportedExtension('web.WEBP')).toBe(true);
       expect(FolderIntake.isSupportedExtension('scan.tif')).toBe(true);
       expect(FolderIntake.isSupportedExtension('scan.tiff')).toBe(true);
+    });
+
+    it('distinguishes RAW camera captures from raster formats via isRawExtension', () => {
+      expect(FolderIntake.isRawExtension('photo.dng')).toBe(true);
+      expect(FolderIntake.isRawExtension('capture.CR3')).toBe(true);
+      expect(FolderIntake.isRawExtension('legacy.raw')).toBe(true);
+      expect(FolderIntake.isRawExtension('image.ARW')).toBe(true);
+
+      expect(FolderIntake.isRawExtension('photo.png')).toBe(false);
+      expect(FolderIntake.isRawExtension('photo.jpg')).toBe(false);
+      expect(FolderIntake.isRawExtension('photo.jpeg')).toBe(false);
+      expect(FolderIntake.isRawExtension('graphic.webp')).toBe(false);
+      expect(FolderIntake.isRawExtension('scan.tiff')).toBe(false);
     });
 
     it('rejects unsupported extensions', () => {

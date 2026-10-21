@@ -357,18 +357,7 @@ class DarkroomApp {
   public isCurrentPhotoRaw(): boolean {
     const entry = this.filmstripController.getActiveEntry();
     if (!entry) return false;
-    const ext = entry.name.split('.').pop()?.toLowerCase() || '';
-    return [
-      'cr2',
-      'cr3',
-      'nef',
-      'arw',
-      'dng',
-      'rw2',
-      'orf',
-      'pef',
-      'raf',
-    ].includes(ext);
+    return FolderIntake.isRawExtension(entry.name);
   }
 
   private cacheElements() {
@@ -704,18 +693,14 @@ class DarkroomApp {
     this.viewportController.resetZoom();
 
     // Stage 0: Up-Front Edit & Metadata Staging
-    const ext = entry.name.split('.').pop()?.toLowerCase() || '';
-    const isRawFile = [
-      'cr2',
-      'cr3',
-      'nef',
-      'arw',
-      'dng',
-      'rw2',
-      'orf',
-      'pef',
-      'raf',
-    ].includes(ext);
+    const isRawFile = FolderIntake.isRawExtension(entry.name);
+    const spinnerText =
+      this.elements['developing-spinner']?.querySelector('.spinner-text');
+    if (spinnerText) {
+      spinnerText.textContent = isRawFile
+        ? 'Developing 14-bit RAW AgX frame...'
+        : 'Loading photo...';
+    }
 
     const knownRot = this.loaderService.getCachedExif(entry.name);
     const defaultRot = knownRot?.rotation ?? 0;

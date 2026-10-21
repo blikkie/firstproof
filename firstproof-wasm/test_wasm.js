@@ -125,6 +125,23 @@ if (ori5.rotation !== 270 || ori5.flip_horizontal !== true) {
 const metaExtracted = wasm.extract_metadata_from_bytes(fileBuffer);
 console.log(`   ✔ Direct extract_metadata_from_bytes returned object (make=${metaExtracted.camera_make || 'N/A'}, orientation=${metaExtracted.orientation || 'N/A'})`);
 
+// 7. Test decoding a raster image (PNG) via WASM scratchpad
+console.log('\n7. Testing Raster Image (PNG) decoding via scratchpad fallback...');
+// 2x2 red PNG generated with valid CRC chunks
+const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==';
+const pngBuffer = Buffer.from(pngBase64, 'base64');
+wasm.copy_into_scratchpad(0, pngBuffer);
+
+const pngPreview = wasm.decode_preview_from_scratchpad(pngBuffer.length);
+console.log(`   ✔ Decoded PNG Dimensions: ${pngPreview.width} x ${pngPreview.height}`);
+console.log(`   ✔ Generated Preview Slice: offset=${pngPreview.preview_offset}, len=${pngPreview.preview_len} bytes`);
+if (pngPreview.width !== 2 || pngPreview.height !== 2) {
+  throw new Error(`Expected PNG dimensions 2x2, got ${pngPreview.width}x${pngPreview.height}`);
+}
+if (pngPreview.preview_len <= 0) {
+  throw new Error(`Expected non-empty preview slice for PNG, got ${pngPreview.preview_len}`);
+}
+
 console.log('\n====================================================');
 console.log(' 🎉 ALL WEBASSMEBLY TESTS PASSED SUCCESSFULLY!       ');
 console.log('====================================================\n');

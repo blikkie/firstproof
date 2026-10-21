@@ -4,15 +4,15 @@ use image::ImageEncoder;
 pub mod scratchpad;
 
 pub use firstproof_engine::{
-    all_adjustments, evaluate_all_curves_lut, evaluate_curve_lut, extract_preview_slice,
-    generate_xmp_sidecar, get_adjustment, get_jpeg_dimensions, kelvin_to_mired_norm,
-    mired_norm_to_kelvin, parse_xmp_sidecar, AdjustmentDescriptor, AllCurvesLutRecord,
-    AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode, CropAspectRatioPreset,
-    CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat,
-    EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent, f16_to_f32,
-    ImageMetadataRecord, PreviewResultRecord, PrintMediaMode, RawLinearResultRecord, RawSensorFrame,
-    RemjetBackingMode, RenderTier, ScaleMode, ToneCurvesRecord, WhiteBalancePreset, WorkspaceCategory,
-    XmpData,
+    all_adjustments, develop_raster_image_archival, evaluate_all_curves_lut, evaluate_curve_lut,
+    extract_preview_slice, generate_xmp_sidecar, get_adjustment, get_jpeg_dimensions,
+    kelvin_to_mired_norm, mired_norm_to_kelvin, parse_xmp_sidecar, AdjustmentDescriptor,
+    AllCurvesLutRecord, AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode,
+    CropAspectRatioPreset, CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype,
+    EmulsionFormat, EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace,
+    ExportRenderingIntent, f16_to_f32, ImageMetadataRecord, PreviewResultRecord, PrintMediaMode,
+    RawLinearResultRecord, RawSensorFrame, RemjetBackingMode, RenderTier, ScaleMode,
+    ToneCurvesRecord, WhiteBalancePreset, WorkspaceCategory, XmpData,
 };
 use scratchpad::with_scratchpad;
 
@@ -70,6 +70,21 @@ pub fn copy_into_scratchpad(offset: usize, bytes: &js_sys::Uint8Array) -> usize 
         }
         if let Some(slice) = buf.slice_mut(offset, len) {
             bytes.copy_to(slice);
+            len
+        } else {
+            0
+        }
+    })
+}
+
+pub fn copy_into_scratchpad_bytes(offset: usize, bytes: &[u8]) -> usize {
+    with_scratchpad(|buf| {
+        let len = bytes.len();
+        if offset + len > buf.len() {
+            buf.resize(offset + len);
+        }
+        if let Some(slice) = buf.slice_mut(offset, len) {
+            slice.copy_from_slice(bytes);
             len
         } else {
             0
@@ -221,19 +236,27 @@ pub fn develop_raw_archival_from_scratchpad(
     };
 
     with_scratchpad(|buf| {
-        let frame = {
-            let slice = buf
-                .slice(0, input_len)
-                .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
-            RawSensorFrame::decode_from_bytes(slice)
-                .ok_or_else(|| JsValue::from_str("Failed to decode RawSensorFrame from bytes"))?
-        };
+        let slice = buf
+            .slice(0, input_len)
+            .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
 
-        let (w, h, u16_data) = firstproof_engine::develop_raw_sensor_frame_archival(
-            &frame,
-            &edits,
-            quality_mode,
-        );
+        let (w, h, u16_data) = if let Some(frame) = RawSensorFrame::decode_from_bytes(slice) {
+            firstproof_engine::develop_raw_sensor_frame_archival(
+                &frame,
+                &edits,
+                quality_mode,
+            )
+        } else if let Ok(dyn_img) = image::load_from_memory(slice) {
+            let rgb = dyn_img.to_rgb8();
+            firstproof_engine::develop_raster_image_archival(
+                rgb.as_raw(),
+                rgb.width() as usize,
+                rgb.height() as usize,
+                &edits,
+            )
+        } else {
+            return Err(JsValue::from_str("Failed to decode image from bytes"));
+        };
 
         let bytes_needed = u16_data.len() * 2;
         let aligned_offset = (input_len + 15) & !15;
@@ -291,21 +314,28 @@ pub fn export_raw_from_scratchpad(
     };
 
     with_scratchpad(|buf| {
-        // 1. Decode RawSensorFrame from scratchpad
-        let frame = {
-            let slice = buf
-                .slice(0, input_len)
-                .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
-            RawSensorFrame::decode_from_bytes(slice)
-                .ok_or_else(|| JsValue::from_str("Failed to decode RawSensorFrame from bytes"))?
-        };
+        let slice = buf
+            .slice(0, input_len)
+            .ok_or_else(|| JsValue::from_str("Input length exceeds scratchpad buffer capacity"))?;
 
-        // 2. Multi-pass archival development
-        let (dev_w, dev_h, dev_u16) = firstproof_engine::develop_raw_sensor_frame_archival(
-            &frame,
-            &edits,
-            quality_mode,
-        );
+        // Multi-pass archival development (RAW sensor frame or standard raster image)
+        let (dev_w, dev_h, dev_u16) = if let Some(frame) = RawSensorFrame::decode_from_bytes(slice) {
+            firstproof_engine::develop_raw_sensor_frame_archival(
+                &frame,
+                &edits,
+                quality_mode,
+            )
+        } else if let Ok(dyn_img) = image::load_from_memory(slice) {
+            let rgb = dyn_img.to_rgb8();
+            firstproof_engine::develop_raster_image_archival(
+                rgb.as_raw(),
+                rgb.width() as usize,
+                rgb.height() as usize,
+                &edits,
+            )
+        } else {
+            return Err(JsValue::from_str("Unsupported image format: neither RAW sensor nor valid raster image"));
+        };
 
         // 3. Compute geometry & target dimensions
         let rot = edits.rotation.rem_euclid(360);
@@ -495,6 +525,60 @@ pub fn decode_preview_from_scratchpad(input_len: usize) -> Result<JsValue, JsVal
                     }
                 }
             }
+        }
+
+        // 4. Fallback to image::load_from_memory for standard raster images (PNG, TIFF, standalone JPEG, WebP)
+        if width == 0 || height == 0 {
+            if let Some(slice) = buf.slice(0, input_len) {
+                if let Ok(dyn_img) = image::load_from_memory(slice) {
+                    let rgb = dyn_img.to_rgb8();
+                    let orig_w = rgb.width();
+                    let orig_h = rgb.height();
+                    if orig_w > 0 && orig_h > 0 {
+                        let max_dim = 1920u32;
+                        let (prev_w, prev_h, prev_rgb) = if orig_w > max_dim || orig_h > max_dim {
+                            let (target_w, target_h) = if orig_w >= orig_h {
+                                (max_dim, ((orig_h as f32 * max_dim as f32) / orig_w as f32).round().max(1.0) as u32)
+                            } else {
+                                (((orig_w as f32 * max_dim as f32) / orig_h as f32).round().max(1.0) as u32, max_dim)
+                            };
+                            let resized = image::imageops::resize(&rgb, target_w, target_h, image::imageops::FilterType::Triangle);
+                            (target_w, target_h, resized.into_raw())
+                        } else {
+                            (orig_w, orig_h, rgb.into_raw())
+                        };
+
+                        let mut jpeg_buf = Vec::new();
+                        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buf, 90);
+                        if encoder.encode(&prev_rgb, prev_w, prev_h, image::ColorType::Rgb8).is_ok() {
+                            let raw_len = jpeg_buf.len();
+                            let scratch_len = buf.len();
+                            let aligned_offset = (input_len + 15) & !15;
+                            if aligned_offset + raw_len > scratch_len {
+                                buf.resize(aligned_offset + raw_len);
+                            }
+                            if let Some(target_slice) = buf.slice_mut(aligned_offset, raw_len) {
+                                target_slice.copy_from_slice(&jpeg_buf);
+                                preview_offset = aligned_offset as u64;
+                                preview_len = raw_len as u64;
+                                width = orig_w;
+                                height = orig_h;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut metadata = metadata;
+        if metadata.raw_width.is_none() && width > 0 {
+            metadata.raw_width = Some(width);
+        }
+        if metadata.raw_height.is_none() && height > 0 {
+            metadata.raw_height = Some(height);
+        }
+        if metadata.orientation.is_none() {
+            metadata.orientation = Some(1);
         }
 
         let res = PreviewResultRecord {
@@ -1221,5 +1305,26 @@ mod tests {
 
         assert!((convert_kelvin_to_mired_norm(2000.0) - 0.0).abs() < 1e-4);
         assert_eq!(convert_mired_norm_to_kelvin(0.0), 2000.0);
+    }
+
+    #[test]
+    fn test_raster_png_preview() {
+        let mut img = image::RgbImage::new(2, 2);
+        img.put_pixel(0, 0, image::Rgb([255, 0, 0]));
+        img.put_pixel(1, 0, image::Rgb([0, 255, 0]));
+        img.put_pixel(0, 1, image::Rgb([0, 0, 255]));
+        img.put_pixel(1, 1, image::Rgb([255, 255, 255]));
+        let mut png_bytes = Vec::new();
+        img.write_to(&mut std::io::Cursor::new(&mut png_bytes), image::ImageOutputFormat::Png).unwrap();
+
+        let dyn_img = image::load_from_memory(&png_bytes).expect("load_from_memory png failed");
+        assert_eq!(dyn_img.width(), 2);
+        assert_eq!(dyn_img.height(), 2);
+
+        let rgb = dyn_img.to_rgb8();
+        let mut jpeg_buf = Vec::new();
+        let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buf, 90);
+        let enc_res = encoder.encode(rgb.as_raw(), 2, 2, image::ColorType::Rgb8);
+        assert!(enc_res.is_ok(), "encoder.encode failed: {:?}", enc_res.err());
     }
 }

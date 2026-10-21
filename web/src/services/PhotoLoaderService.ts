@@ -116,18 +116,7 @@ export class PhotoLoaderService {
     if (!this.rawWorker) {
       const bytes = new Uint8Array(arrayBuffer);
       const res = this.bridge.decodeImageBytes(bytes);
-      const ext = fileName.split('.').pop()?.toLowerCase() || '';
-      const isRawFile = [
-        'cr2',
-        'cr3',
-        'nef',
-        'arw',
-        'dng',
-        'rw2',
-        'orf',
-        'pef',
-        'raf',
-      ].includes(ext);
+      const isRawFile = FolderIntake.isRawExtension(fileName);
       let linearData: Uint16Array | undefined;
       let linearW: number | undefined;
       let linearH: number | undefined;
@@ -247,14 +236,25 @@ export class PhotoLoaderService {
     try {
       const arrayBuffer = await entry.file.arrayBuffer();
       const res = await this.decodeInWorker(arrayBuffer, entry.name);
-      const blob = new Blob([new Uint8Array(res.imageSlice)], {
-        type: 'image/jpeg',
-      });
-      let imgBitmap: ImageBitmap;
-      try {
-        imgBitmap = await createImageBitmap(blob, { resizeWidth: 2560 });
-      } catch (_) {
-        imgBitmap = await createImageBitmap(blob);
+      let imgBitmap: ImageBitmap | null = null;
+      if (!FolderIntake.isRawExtension(entry.name)) {
+        try {
+          imgBitmap = await createImageBitmap(entry.file, {
+            resizeWidth: 2560,
+          });
+        } catch (_) {
+          // Fall back to preview slice if browser native decode fails
+        }
+      }
+      if (!imgBitmap) {
+        const blob = new Blob([new Uint8Array(res.imageSlice)], {
+          type: 'image/jpeg',
+        });
+        try {
+          imgBitmap = await createImageBitmap(blob, { resizeWidth: 2560 });
+        } catch (_) {
+          imgBitmap = await createImageBitmap(blob);
+        }
       }
 
       if (this.prewarmedCache.size >= 4) {
@@ -399,32 +399,45 @@ export class PhotoLoaderService {
     let linearH = res.linearH || 0;
 
     if (!isRawFile || !linear16Data) {
-      const blob = new Blob([new Uint8Array(res.imageSlice)], {
-        type: 'image/jpeg',
-      });
-      try {
-        imgBitmap = await createImageBitmap(blob, { resizeQuality: 'high' });
-      } catch (decodeErr) {
-        console.warn(
-          `[PhotoLoaderService] createImageBitmap failed for ${entry.name}, creating fallback canvas:`,
-          decodeErr,
-        );
-        const fallbackCanvas = document.createElement('canvas');
-        fallbackCanvas.width =
-          res.preview.width && res.preview.width > 0 ? res.preview.width : 1920;
-        fallbackCanvas.height =
-          res.preview.height && res.preview.height > 0
-            ? res.preview.height
-            : 1080;
-        const ctx = fallbackCanvas.getContext('2d');
-        if (ctx) {
-          ctx.fillStyle = '#111318';
-          ctx.fillRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
-          ctx.fillStyle = '#f1f5f9';
-          ctx.font = 'bold 24px sans-serif';
-          ctx.fillText(entry.name, 40, 60);
+      if (!isRawFile) {
+        try {
+          imgBitmap = await createImageBitmap(entry.file, {
+            resizeQuality: 'high',
+          });
+        } catch (_) {
+          // Native decode failed (e.g. TIFF on Chrome) -> fall back to preview slice
         }
-        imgBitmap = await createImageBitmap(fallbackCanvas);
+      }
+      if (!imgBitmap) {
+        const blob = new Blob([new Uint8Array(res.imageSlice)], {
+          type: 'image/jpeg',
+        });
+        try {
+          imgBitmap = await createImageBitmap(blob, { resizeQuality: 'high' });
+        } catch (decodeErr) {
+          console.warn(
+            `[PhotoLoaderService] createImageBitmap failed for ${entry.name}, creating fallback canvas:`,
+            decodeErr,
+          );
+          const fallbackCanvas = document.createElement('canvas');
+          fallbackCanvas.width =
+            res.preview.width && res.preview.width > 0
+              ? res.preview.width
+              : 1920;
+          fallbackCanvas.height =
+            res.preview.height && res.preview.height > 0
+              ? res.preview.height
+              : 1080;
+          const ctx = fallbackCanvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#111318';
+            ctx.fillRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
+            ctx.fillStyle = '#f1f5f9';
+            ctx.font = 'bold 24px sans-serif';
+            ctx.fillText(entry.name, 40, 60);
+          }
+          imgBitmap = await createImageBitmap(fallbackCanvas);
+        }
       }
     }
 
@@ -617,18 +630,7 @@ export class PhotoLoaderService {
       onProgress(`${prefix}Preparing ${entry.name}...`, i + 1, photos.length);
       await yieldToMain();
 
-      const fileExt = entry.name.split('.').pop()?.toLowerCase() || '';
-      const isRawFile = [
-        'cr2',
-        'cr3',
-        'nef',
-        'arw',
-        'dng',
-        'rw2',
-        'orf',
-        'pef',
-        'raf',
-      ].includes(fileExt);
+      const isRawFile = FolderIntake.isRawExtension(entry.name);
 
       let photoEdits: EditSettingsPayload;
       if (entry.name === activeEntryName && activeEdits) {
@@ -678,16 +680,22 @@ export class PhotoLoaderService {
         onProgress(`${prefix}Decoding ${entry.name}...`, i + 1, photos.length);
         await yieldToMain();
 
-        const arrayBuffer = await entry.file.arrayBuffer();
-        const res = await this.decodeInWorker(arrayBuffer, entry.name, false);
-        const blob = new Blob([new Uint8Array(res.imageSlice)], {
-          type: 'image/jpeg',
-        });
-        const imgBitmap = await createImageBitmap(blob);
+        let imgBitmap: ImageBitmap;
+        let baselineSharpness = 1.0;
+        try {
+          imgBitmap = await createImageBitmap(entry.file);
+        } catch {
+          const arrayBuffer = await entry.file.arrayBuffer();
+          const res = await this.decodeInWorker(arrayBuffer, entry.name, false);
+          const blob = new Blob([new Uint8Array(res.imageSlice)], {
+            type: 'image/jpeg',
+          });
+          imgBitmap = await createImageBitmap(blob);
+          baselineSharpness = res.preview?.metadata?.baseline_sharpness ?? 1.0;
+        }
+
         expRenderer.uploadImage(imgBitmap);
-        expRenderer.setBaselineSharpness(
-          res.preview?.metadata?.baseline_sharpness ?? 1.0,
-        );
+        expRenderer.setBaselineSharpness(baselineSharpness);
         let texW = imgBitmap.width;
         let texH = imgBitmap.height;
 

@@ -41,3 +41,12 @@ assets/lensfun/db/
 FirstProofApp/Resources/lensfun.json
 web/public/lensfun.json
 
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

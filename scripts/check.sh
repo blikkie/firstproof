@@ -8,13 +8,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+PYTHON="python3"
+if [[ -f "$ROOT_DIR/.venv/bin/python3" ]]; then
+    PYTHON="$ROOT_DIR/.venv/bin/python3"
+fi
+
 echo "========================================================"
 echo "  First Proof Pre-Flight Sensor & Linter Suite"
 echo "========================================================"
 
 # Step 1: Architectural Anti-Slop & Invariant Sensor
 echo "==> [1/4] Running Architectural Anti-Slop & Invariant Sensor..."
-python3 scripts/anti_slop_sensor.py
+"$PYTHON" scripts/anti_slop_sensor.py
 
 # Step 2: Concurrent Multi-Toolchain Execution (Rust, Web, Swift)
 echo "==> [2/4] Running Concurrent Verification Tracks (Rust, Web, Swift)..."
@@ -31,7 +36,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
     echo "    [Rust] Verifying canonical shader sync across Metal, WebGL, and WebGPU..."
     cargo run -p firstproof-core --bin firstproof-cli -- shaders --check
     echo "    [MCP] Running Model Context Protocol integration test..."
-    python3 tools/mcp/test_mcp.py
+    "$PYTHON" tools/mcp/test_mcp.py
     echo "    [Rust] Running Clippy linter..."
 
     cargo clippy --workspace --all-targets -- -D warnings

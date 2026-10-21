@@ -373,14 +373,25 @@ export class InspectorSyncController {
 
     this.updateSplitToningHint();
 
+    const isRaw = this.delegate.isCurrentPhotoRaw();
     const selectTone = document.getElementById(
       'select-tone-profile',
     ) as HTMLSelectElement | null;
-    if (selectTone && edits.tone_profile) {
-      if (edits.tone_profile.startsWith('Camera')) {
-        edits.tone_profile = 'AgxVivid';
+    const embeddedTone = document.getElementById('tone-profile-embedded');
+    if (selectTone) {
+      if (isRaw) {
+        selectTone.classList.remove('hidden');
+        embeddedTone?.classList.add('hidden');
+        if (edits.tone_profile) {
+          if (edits.tone_profile.startsWith('Camera')) {
+            edits.tone_profile = 'AgxVivid';
+          }
+          selectTone.value = edits.tone_profile;
+        }
+      } else {
+        selectTone.classList.add('hidden');
+        embeddedTone?.classList.remove('hidden');
       }
-      selectTone.value = edits.tone_profile;
     }
     const selectEmulsion = document.getElementById(
       'select-emulsion',

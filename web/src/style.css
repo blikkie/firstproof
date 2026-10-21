@@ -1049,6 +1049,19 @@ input[type="range"]:active::-moz-range-thumb {
   border-color: var(--accent-blue);
 }
 
+.embedded-profile-badge {
+  width: 100%;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 0.45rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: var(--font-sans);
+  cursor: default;
+  user-select: none;
+}
+
 .textarea-input {
   resize: vertical;
   min-height: 50px;

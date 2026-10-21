@@ -536,39 +536,49 @@ pub fn evaluate_display_luma(
         1.0 + (edits.contrast / 100.0) * 0.60
     };
 
-    match edits.tone_profile {
-        ColorProfileMode::AgxVivid => {
-            let srgb = agx_tone_map_vivid(rec2020, contrast_gain);
-            0.2627 * srgb.r().clamp(0.0, 1.0)
-                + 0.6780 * srgb.g().clamp(0.0, 1.0)
-                + 0.0593 * srgb.b().clamp(0.0, 1.0)
+    if !is_linear_rec2020 {
+        let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
+        let lum = 0.2627 * c_srgb.r().max(0.0) + 0.6780 * c_srgb.g().max(0.0) + 0.0593 * c_srgb.b().max(0.0);
+        if (contrast_gain - 1.0).abs() > 0.001 {
+            ((lum - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
+        } else {
+            lum.clamp(0.0, 1.0)
         }
-        ColorProfileMode::AgxFilmic => {
-            let srgb = agx_tone_map(rec2020, contrast_gain);
-            0.2627 * srgb.r().clamp(0.0, 1.0)
-                + 0.6780 * srgb.g().clamp(0.0, 1.0)
-                + 0.0593 * srgb.b().clamp(0.0, 1.0)
-        }
-        ColorProfileMode::AgxPhotographic => {
-            let srgb = agx_tone_map_photographic(rec2020, contrast_gain);
-            0.2627 * srgb.r().clamp(0.0, 1.0)
-                + 0.6780 * srgb.g().clamp(0.0, 1.0)
-                + 0.0593 * srgb.b().clamp(0.0, 1.0)
-        }
-        mode => {
-            let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
-            let lum = 0.2627 * c_srgb.r() + 0.6780 * c_srgb.g() + 0.0593 * c_srgb.b();
-            let curve = match mode {
-                ColorProfileMode::CameraPortrait => built_in_portrait_tone_curve(),
-                ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
-                ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
-                _ => built_in_standard_tone_curve(),
-            };
-            let lum_curved = evaluate_tone_curve(lum, &curve);
-            if (contrast_gain - 1.0).abs() > 0.001 {
-                ((lum_curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
-            } else {
-                lum_curved.clamp(0.0, 1.0)
+    } else {
+        match edits.tone_profile {
+            ColorProfileMode::AgxVivid => {
+                let srgb = agx_tone_map_vivid(rec2020, contrast_gain);
+                0.2627 * srgb.r().clamp(0.0, 1.0)
+                    + 0.6780 * srgb.g().clamp(0.0, 1.0)
+                    + 0.0593 * srgb.b().clamp(0.0, 1.0)
+            }
+            ColorProfileMode::AgxFilmic => {
+                let srgb = agx_tone_map(rec2020, contrast_gain);
+                0.2627 * srgb.r().clamp(0.0, 1.0)
+                    + 0.6780 * srgb.g().clamp(0.0, 1.0)
+                    + 0.0593 * srgb.b().clamp(0.0, 1.0)
+            }
+            ColorProfileMode::AgxPhotographic => {
+                let srgb = agx_tone_map_photographic(rec2020, contrast_gain);
+                0.2627 * srgb.r().clamp(0.0, 1.0)
+                    + 0.6780 * srgb.g().clamp(0.0, 1.0)
+                    + 0.0593 * srgb.b().clamp(0.0, 1.0)
+            }
+            mode => {
+                let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
+                let lum = 0.2627 * c_srgb.r() + 0.6780 * c_srgb.g() + 0.0593 * c_srgb.b();
+                let curve = match mode {
+                    ColorProfileMode::CameraPortrait => built_in_portrait_tone_curve(),
+                    ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
+                    ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
+                    _ => built_in_standard_tone_curve(),
+                };
+                let lum_curved = evaluate_tone_curve(lum, &curve);
+                if (contrast_gain - 1.0).abs() > 0.001 {
+                    ((lum_curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
+                } else {
+                    lum_curved.clamp(0.0, 1.0)
+                }
             }
         }
     }
@@ -759,31 +769,48 @@ pub fn develop_pixel_pipeline(
         1.0 + (edits.contrast / 100.0) * 0.60
     };
 
-    let mut srgb_linear_out: Color3 = match edits.tone_profile {
-        ColorProfileMode::AgxVivid => agx_tone_map_vivid(rec2020, contrast_gain),
-        ColorProfileMode::AgxFilmic => agx_tone_map(rec2020, contrast_gain),
-        ColorProfileMode::AgxPhotographic => agx_tone_map_photographic(rec2020, contrast_gain),
-        mode => {
-            let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
-            let curve = match mode {
-                ColorProfileMode::CameraPortrait => built_in_portrait_tone_curve(),
-                ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
-                ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
-                _ => built_in_standard_tone_curve(),
-            };
-            let apply_curve = |v: f32| -> f32 {
-                let c = evaluate_tone_curve(v.max(0.0), &curve);
-                if (contrast_gain - 1.0).abs() > 0.001 {
-                    ((c - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
-                } else {
-                    c.clamp(0.0, 1.0)
-                }
-            };
-            Color3::new(
-                apply_curve(c_srgb.r()),
-                apply_curve(c_srgb.g()),
-                apply_curve(c_srgb.b()),
-            )
+    let mut srgb_linear_out: Color3 = if !is_linear_rec2020 {
+        let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
+        let mut r = c_srgb.r().max(0.0);
+        let mut g = c_srgb.g().max(0.0);
+        let mut b = c_srgb.b().max(0.0);
+        if (contrast_gain - 1.0).abs() > 0.001 {
+            r = ((r - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+            g = ((g - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+            b = ((b - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+        } else {
+            r = r.clamp(0.0, 1.0);
+            g = g.clamp(0.0, 1.0);
+            b = b.clamp(0.0, 1.0);
+        }
+        Color3::new(r, g, b)
+    } else {
+        match edits.tone_profile {
+            ColorProfileMode::AgxVivid => agx_tone_map_vivid(rec2020, contrast_gain),
+            ColorProfileMode::AgxFilmic => agx_tone_map(rec2020, contrast_gain),
+            ColorProfileMode::AgxPhotographic => agx_tone_map_photographic(rec2020, contrast_gain),
+            mode => {
+                let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
+                let curve = match mode {
+                    ColorProfileMode::CameraPortrait => built_in_portrait_tone_curve(),
+                    ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
+                    ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
+                    _ => built_in_standard_tone_curve(),
+                };
+                let apply_curve = |v: f32| -> f32 {
+                    let c = evaluate_tone_curve(v.max(0.0), &curve);
+                    if (contrast_gain - 1.0).abs() > 0.001 {
+                        ((c - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
+                    } else {
+                        c.clamp(0.0, 1.0)
+                    }
+                };
+                Color3::new(
+                    apply_curve(c_srgb.r()),
+                    apply_curve(c_srgb.g()),
+                    apply_curve(c_srgb.b()),
+                )
+            }
         }
     };
 
@@ -1119,6 +1146,50 @@ pub fn develop_raw_sensor_frame_archival(
         rec2020_data[idx + 2] = c_rec.b().max(0.0);
     }
 
+    develop_rec2020_buffer_archival(
+        rec2020_data,
+        active_w,
+        active_h,
+        edits,
+        true,
+        frame.baseline_sharpness,
+        frame.profile_tone_curve.as_deref(),
+    )
+}
+
+/// Develops a standard raster master image (sRGB 8-bit RGB from PNG, JPEG, TIFF, WebP) into 16-bit RGB pixels ($0\dots65,535$).
+pub fn develop_raster_image_archival(
+    rgb_pixels: &[u8],
+    width: usize,
+    height: usize,
+    edits: &EditSettings,
+) -> (usize, usize, Vec<u16>) {
+    let total_pixels = width * height;
+    let mut rec2020_data = Vec::with_capacity(total_pixels * 3);
+    for i in 0..total_pixels {
+        let r_lin = srgb_gamma_to_linear(rgb_pixels[i * 3] as f32 / 255.0);
+        let g_lin = srgb_gamma_to_linear(rgb_pixels[i * 3 + 1] as f32 / 255.0);
+        let b_lin = srgb_gamma_to_linear(rgb_pixels[i * 3 + 2] as f32 / 255.0);
+        let c_rec = LINEAR_SRGB_TO_REC2020.multiply_vector(Color3::new(r_lin, g_lin, b_lin));
+        rec2020_data.push(c_rec.r().max(0.0));
+        rec2020_data.push(c_rec.g().max(0.0));
+        rec2020_data.push(c_rec.b().max(0.0));
+    }
+    develop_rec2020_buffer_archival(rec2020_data, width, height, edits, false, 1.0, None)
+}
+
+/// Multi-pass archival development pipeline operating directly on a Linear Rec.2020 buffer.
+pub fn develop_rec2020_buffer_archival(
+    mut rec2020_data: Vec<f32>,
+    active_w: usize,
+    active_h: usize,
+    edits: &EditSettings,
+    is_raw: bool,
+    baseline_sharpness: f32,
+    profile_tone_curve: Option<&[(f32, f32)]>,
+) -> (usize, usize, Vec<u16>) {
+    let total_pixels = active_w * active_h;
+
     // Edits setup
     let total_exposure = edits.exposure;
     let exposure_gain = 2.0f32.powf(total_exposure);
@@ -1282,11 +1353,11 @@ pub fn develop_raw_sensor_frame_archival(
             let r = rec2020_data[idx];
             let g = rec2020_data[idx + 1];
             let b = rec2020_data[idx + 2];
-            luma_plane.push(evaluate_display_luma(r, g, b, true, edits));
+            luma_plane.push(evaluate_display_luma(r, g, b, is_raw, edits));
         }
 
         let r_step = if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
-            (edits.sharpening_radius * frame.baseline_sharpness).max(0.5)
+            (edits.sharpening_radius * baseline_sharpness).max(0.5)
         } else {
             1.0
         };
@@ -1382,8 +1453,8 @@ pub fn develop_raw_sensor_frame_archival(
                 ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
                 ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
                 _ => {
-                    if let Some(ref ptc) = frame.profile_tone_curve {
-                        ptc.clone()
+                    if let Some(ptc) = profile_tone_curve {
+                        ptc.to_vec()
                     } else {
                         built_in_standard_tone_curve()
                     }
@@ -1415,33 +1486,49 @@ pub fn develop_raw_sensor_frame_archival(
         let mut b = rec2020_data[idx + 2];
 
         // Terminal tone mapping
-        match edits.tone_profile {
-            ColorProfileMode::AgxVivid => {
-                let c_srgb = agx_tone_map_vivid(Color3::new(r, g, b), contrast_gain);
-                r = c_srgb.r();
-                g = c_srgb.g();
-                b = c_srgb.b();
+        if !is_raw {
+            let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r, g, b));
+            let r_lin = c_srgb.r().max(0.0);
+            let g_lin = c_srgb.g().max(0.0);
+            let b_lin = c_srgb.b().max(0.0);
+            if (contrast_gain - 1.0).abs() > 0.001 {
+                r = ((r_lin - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+                g = ((g_lin - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+                b = ((b_lin - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0);
+            } else {
+                r = r_lin.clamp(0.0, 1.0);
+                g = g_lin.clamp(0.0, 1.0);
+                b = b_lin.clamp(0.0, 1.0);
             }
-            ColorProfileMode::AgxFilmic => {
-                let c_srgb = agx_tone_map(Color3::new(r, g, b), contrast_gain);
-                r = c_srgb.r();
-                g = c_srgb.g();
-                b = c_srgb.b();
-            }
-            _ => {
-                let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r, g, b));
-                if let Some(ref lut) = camera_curve_lut {
-                    let lut_size_f = (lut.len() - 1) as f32;
-                    let apply_curve = |v: f32| -> f32 {
-                        let pos = v.clamp(0.0, 1.0) * lut_size_f;
-                        let i0 = pos.floor() as usize;
-                        let i1 = (i0 + 1).min(lut.len() - 1);
-                        let frac = pos - i0 as f32;
-                        lut[i0] * (1.0 - frac) + lut[i1] * frac
-                    };
-                    r = apply_curve(c_srgb.r().max(0.0));
-                    g = apply_curve(c_srgb.g().max(0.0));
-                    b = apply_curve(c_srgb.b().max(0.0));
+        } else {
+            match edits.tone_profile {
+                ColorProfileMode::AgxVivid => {
+                    let c_srgb = agx_tone_map_vivid(Color3::new(r, g, b), contrast_gain);
+                    r = c_srgb.r();
+                    g = c_srgb.g();
+                    b = c_srgb.b();
+                }
+                ColorProfileMode::AgxFilmic => {
+                    let c_srgb = agx_tone_map(Color3::new(r, g, b), contrast_gain);
+                    r = c_srgb.r();
+                    g = c_srgb.g();
+                    b = c_srgb.b();
+                }
+                _ => {
+                    let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r, g, b));
+                    if let Some(ref lut) = camera_curve_lut {
+                        let lut_size_f = (lut.len() - 1) as f32;
+                        let apply_curve = |v: f32| -> f32 {
+                            let pos = v.clamp(0.0, 1.0) * lut_size_f;
+                            let i0 = pos.floor() as usize;
+                            let i1 = (i0 + 1).min(lut.len() - 1);
+                            let frac = pos - i0 as f32;
+                            lut[i0] * (1.0 - frac) + lut[i1] * frac
+                        };
+                        r = apply_curve(c_srgb.r().max(0.0));
+                        g = apply_curve(c_srgb.g().max(0.0));
+                        b = apply_curve(c_srgb.b().max(0.0));
+                    }
                 }
             }
         }
@@ -1705,6 +1792,29 @@ mod tests {
         // Both must differ from the grain-off baseline
         assert_ne!(out_35_grain, out_35_off, "35mm grain export must modify pixels from grain-off");
         assert_ne!(out_8_grain, out_8_off, "Super 8 grain export must modify pixels from grain-off");
+    }
+
+    #[test]
+    fn test_develop_raster_image_archival_clean_transfer() {
+        let w = 4;
+        let h = 4;
+        // Middle grey 128 (8-bit sRGB)
+        let pixels = vec![128u8; w * h * 3];
+        let edits = EditSettings::default();
+        let (out_w, out_h, out_u16) = develop_raster_image_archival(&pixels, w, h, &edits);
+
+        assert_eq!(out_w, w);
+        assert_eq!(out_h, h);
+        assert_eq!(out_u16.len(), w * h * 3);
+
+        // Middle grey 128 sRGB should remain close to 128 in 16-bit (128 / 255 * 65535 ≈ 32896)
+        // without AgX double-compression crushing it
+        let sample = out_u16[0];
+        assert!(
+            (sample as i32 - 32896).abs() < 1500,
+            "Raster development must preserve middle grey without double tone-mapping (got {}, expected ~32896)",
+            sample
+        );
     }
 }
 

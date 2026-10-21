@@ -63,7 +63,8 @@ pub use xmp::{
 pub use resample::resample_rgb16;
 pub use color::{
     develop_frame_pipeline, develop_pixel_pipeline,
-    develop_raw_sensor_frame_archival, evaluate_display_luma, is_neutral_edits,
+    develop_raster_image_archival, develop_raw_sensor_frame_archival,
+    develop_rec2020_buffer_archival, evaluate_display_luma, is_neutral_edits,
     linear_rgb_to_srgb8, linear_to_srgb_gamma, srgb_gamma_to_linear, Color3, ColorSpacePrimaries,
     Matrix3x3,
 };

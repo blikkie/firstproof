@@ -403,5 +403,50 @@ describe('Controller & First-Responder Architecture', () => {
       expect(edits.print_process_depth).toBe(100.0);
       expect(depthVal.textContent).toBe('100%');
     });
+
+    it('hides tone profile picker and displays embedded camera profile badge for non-raw photos', () => {
+      document.body.innerHTML = `
+        <select id="select-tone-profile" class="select-input">
+          <option value="AgxVivid">AgX Vivid</option>
+          <option value="AgxFilmic">AgX Filmic</option>
+        </select>
+        <div id="tone-profile-embedded" class="embedded-profile-badge hidden">Embedded Camera Profile</div>
+      `;
+
+      const edits: EditSettingsPayload = {
+        ...getDefaultEdits(),
+        tone_profile: 'AgxVivid',
+      };
+
+      let isRaw = true;
+      const mockDelegate: InspectorDelegate = {
+        getEdits: () => edits,
+        renderCanvas: vi.fn(),
+        autoSaveSidecar: vi.fn(),
+        isCurrentPhotoRaw: () => isRaw,
+        getDefaultEdits: () => ({ ...edits }),
+        getCurveWidget: () => null as unknown as ToneCurveWidget,
+        getRating: () => 0,
+        getStatus: () => 'None',
+        getActiveIndex: () => 0,
+      };
+
+      const controller = new InspectorSyncController(mockDelegate);
+      const selectTone = document.getElementById(
+        'select-tone-profile',
+      ) as HTMLSelectElement;
+      const embeddedBadge = document.getElementById('tone-profile-embedded')!;
+
+      // 1. RAW Photo: Picker visible, embedded badge hidden
+      controller.syncSliderUI();
+      expect(selectTone.classList.contains('hidden')).toBe(false);
+      expect(embeddedBadge.classList.contains('hidden')).toBe(true);
+
+      // 2. Non-RAW / JPEG / PNG Photo: Picker hidden, embedded badge visible
+      isRaw = false;
+      controller.syncSliderUI();
+      expect(selectTone.classList.contains('hidden')).toBe(true);
+      expect(embeddedBadge.classList.contains('hidden')).toBe(false);
+    });
   });
 });

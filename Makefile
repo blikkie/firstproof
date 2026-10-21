@@ -1,4 +1,4 @@
-.PHONY: all check build-core build-bridge build-wasm build-web clean test test-all run bundle build-cli package-dmg package-cli package harvest-hardware
+.PHONY: all check build-core build-bridge build-wasm build-web clean test test-all run bundle build-cli package-dmg package-cli package harvest-hardware venv
 
 ARCH := $(shell uname -m)
 VERSION ?= 0.3.0
@@ -116,6 +116,12 @@ test-calibration:
 setup-hooks:
 	pre-commit install
 	@echo "✅ Pre-commit hooks installed (.git/hooks/pre-commit)"
+
+venv:
+	python3 -m venv .venv
+	.venv/bin/pip install --upgrade pip
+	.venv/bin/pip install -r requirements.txt
+	@echo "✅ First Proof Python virtual environment ready at .venv"
 
 clean:
 	cargo clean
