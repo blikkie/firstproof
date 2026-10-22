@@ -2771,6 +2771,7 @@ kbd {
   overflow: hidden;
   border: 1px solid var(--border-color);
   user-select: none;
+  -webkit-user-select: none;
   touch-action: none;
   background: #000;
   cursor: ew-resize;
@@ -2784,6 +2785,9 @@ kbd {
   height: 100%;
   object-fit: cover;
   pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .comparison-layer-after {
@@ -2793,6 +2797,8 @@ kbd {
 .comparison-layer-before {
   z-index: 2;
   clip-path: polygon(0 0, var(--split-pos, 50%) 0, var(--split-pos, 50%) 100%, 0 100%);
+  transform: translateZ(0);
+  will-change: clip-path;
 }
 
 .comparison-divider {
@@ -2805,6 +2811,7 @@ kbd {
   z-index: 3;
   transform: translateX(-50%);
   pointer-events: none;
+  touch-action: none;
   box-shadow: 0 0 14px rgba(0, 0, 0, 0.7);
 }
 
@@ -2825,6 +2832,7 @@ kbd {
   color: #ffffff;
   font-size: 11px;
   letter-spacing: -1px;
+  touch-action: none;
 }
 
 .comparison-badge-left {

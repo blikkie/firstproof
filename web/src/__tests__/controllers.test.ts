@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ComparisonSliderController } from '../controllers/ComparisonSliderController';
 import {
   type InspectorDelegate,
   InspectorSyncController,
@@ -447,6 +448,199 @@ describe('Controller & First-Responder Architecture', () => {
       controller.syncSliderUI();
       expect(selectTone.classList.contains('hidden')).toBe(true);
       expect(embeddedBadge.classList.contains('hidden')).toBe(false);
+    });
+  });
+
+  describe('ComparisonSliderController Mobile & Touch Architecture', () => {
+    let container: HTMLDivElement;
+    let layerBefore: HTMLImageElement;
+    let btnJpeg: HTMLButtonElement;
+    let btnSplit: HTMLButtonElement;
+    let btnFirstProof: HTMLButtonElement;
+    let controller: ComparisonSliderController;
+
+    beforeEach(() => {
+      document.body.innerHTML = `
+        <div id="optical-comparison-viewer" class="comparison-viewer">
+          <img class="comparison-layer comparison-layer-after" />
+          <img class="comparison-layer comparison-layer-before" />
+          <div id="comparison-divider" class="comparison-divider"></div>
+        </div>
+        <div class="comparison-segmented">
+          <button id="btn-compare-jpeg" class="comparison-btn" type="button">In-Camera JPEG</button>
+          <button id="btn-compare-split" class="comparison-btn active" type="button">Split (50 / 50)</button>
+          <button id="btn-compare-firstproof" class="comparison-btn" type="button">First Proof</button>
+        </div>
+      `;
+
+      container = document.getElementById(
+        'optical-comparison-viewer',
+      ) as HTMLDivElement;
+      layerBefore = container.querySelector(
+        '.comparison-layer-before',
+      ) as HTMLImageElement;
+      btnJpeg = document.getElementById(
+        'btn-compare-jpeg',
+      ) as HTMLButtonElement;
+      btnSplit = document.getElementById(
+        'btn-compare-split',
+      ) as HTMLButtonElement;
+      btnFirstProof = document.getElementById(
+        'btn-compare-firstproof',
+      ) as HTMLButtonElement;
+
+      // Mock bounding box for container (1000px wide, left 100)
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+        left: 100,
+        top: 0,
+        right: 1100,
+        bottom: 600,
+        width: 1000,
+        height: 600,
+        x: 100,
+        y: 0,
+        toJSON: () => {},
+      });
+
+      controller = new ComparisonSliderController();
+    });
+
+    afterEach(() => {
+      controller.unbind();
+    });
+
+    it('initializes to 50% split position with CSS variable and direct inline clipPath', () => {
+      expect(controller.getSplitPosition()).toBe(50);
+      expect(container.style.getPropertyValue('--split-pos')).toBe('50%');
+      expect(layerBefore.style.clipPath).toBe(
+        'polygon(0 0, 50% 0, 50% 100%, 0 100%)',
+      );
+      expect(btnSplit.classList.contains('active')).toBe(true);
+      expect(btnJpeg.classList.contains('active')).toBe(false);
+      expect(btnFirstProof.classList.contains('active')).toBe(false);
+    });
+
+    it('updates position and active states when clicking segmented buttons', () => {
+      // In-Camera JPEG -> 100%
+      btnJpeg.click();
+      expect(controller.getSplitPosition()).toBe(100);
+      expect(container.style.getPropertyValue('--split-pos')).toBe('100%');
+      expect(layerBefore.style.clipPath).toBe(
+        'polygon(0 0, 100% 0, 100% 100%, 0 100%)',
+      );
+      expect(btnJpeg.classList.contains('active')).toBe(true);
+      expect(btnSplit.classList.contains('active')).toBe(false);
+      expect(btnFirstProof.classList.contains('active')).toBe(false);
+
+      // First Proof -> 0%
+      btnFirstProof.click();
+      expect(controller.getSplitPosition()).toBe(0);
+      expect(container.style.getPropertyValue('--split-pos')).toBe('0%');
+      expect(layerBefore.style.clipPath).toBe(
+        'polygon(0 0, 0% 0, 0% 100%, 0 100%)',
+      );
+      expect(btnFirstProof.classList.contains('active')).toBe(true);
+      expect(btnJpeg.classList.contains('active')).toBe(false);
+      expect(btnSplit.classList.contains('active')).toBe(false);
+
+      // Split -> 50%
+      btnSplit.click();
+      expect(controller.getSplitPosition()).toBe(50);
+      expect(btnSplit.classList.contains('active')).toBe(true);
+    });
+
+    it('tracks pointer drag and calls preventDefault to shield mobile Chrome gestures', () => {
+      const setPointerCaptureSpy = vi.fn();
+      const releasePointerCaptureSpy = vi.fn();
+      container.setPointerCapture = setPointerCaptureSpy;
+      container.releasePointerCapture = releasePointerCaptureSpy;
+
+      // Pointer down at clientX = 400 (rect.left = 100, width = 1000 => 30%)
+      const downEvent = new PointerEvent('pointerdown', {
+        clientX: 400,
+        clientY: 300,
+        pointerId: 1,
+        button: 0,
+        cancelable: true,
+      });
+      const preventDefaultSpy = vi.spyOn(downEvent, 'preventDefault');
+
+      container.dispatchEvent(downEvent);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(setPointerCaptureSpy).toHaveBeenCalledWith(1);
+      expect(controller.getSplitPosition()).toBe(30);
+      expect(container.style.getPropertyValue('--split-pos')).toBe('30%');
+      expect(layerBefore.style.clipPath).toBe(
+        'polygon(0 0, 30% 0, 30% 100%, 0 100%)',
+      );
+
+      // Drag to clientX = 850 (rect.left = 100 => 750 / 1000 = 75%)
+      const moveEvent = new PointerEvent('pointermove', {
+        clientX: 850,
+        clientY: 300,
+        pointerId: 1,
+        cancelable: true,
+      });
+      window.dispatchEvent(moveEvent);
+
+      expect(controller.getSplitPosition()).toBe(75);
+      expect(container.style.getPropertyValue('--split-pos')).toBe('75%');
+      expect(layerBefore.style.clipPath).toBe(
+        'polygon(0 0, 75% 0, 75% 100%, 0 100%)',
+      );
+
+      // Pointer up
+      const upEvent = new PointerEvent('pointerup', {
+        clientX: 850,
+        clientY: 300,
+        pointerId: 1,
+      });
+      window.dispatchEvent(upEvent);
+
+      expect(releasePointerCaptureSpy).toHaveBeenCalledWith(1);
+
+      // Moving after pointer up should not change position
+      const moveAfterUp = new PointerEvent('pointermove', {
+        clientX: 200,
+        clientY: 300,
+        pointerId: 1,
+      });
+      window.dispatchEvent(moveAfterUp);
+      expect(controller.getSplitPosition()).toBe(75);
+    });
+
+    it('tolerates pointer capture failures and cancellations gracefully', () => {
+      // Simulate Android Chrome throwing on setPointerCapture
+      container.setPointerCapture = vi.fn().mockImplementation(() => {
+        throw new Error('InvalidStateError');
+      });
+
+      const downEvent = new PointerEvent('pointerdown', {
+        clientX: 500,
+        clientY: 300,
+        pointerId: 2,
+        button: 0,
+      });
+      expect(() => container.dispatchEvent(downEvent)).not.toThrow();
+      expect(controller.getSplitPosition()).toBe(40); // (500 - 100) / 1000 = 40%
+
+      // Simulate pointercancel from Android Chrome gesture detector
+      const cancelEvent = new PointerEvent('pointercancel', {
+        clientX: 500,
+        clientY: 300,
+        pointerId: 2,
+      });
+      expect(() => window.dispatchEvent(cancelEvent)).not.toThrow();
+
+      // Subsequent moves should be ignored
+      const moveEvent = new PointerEvent('pointermove', {
+        clientX: 900,
+        clientY: 300,
+        pointerId: 2,
+      });
+      window.dispatchEvent(moveEvent);
+      expect(controller.getSplitPosition()).toBe(40);
     });
   });
 });
