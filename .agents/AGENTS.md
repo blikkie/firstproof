@@ -145,6 +145,13 @@
 - **Portable Catalogs on External Drives (`.firstproof/`)**:
   - Folder indexing on external storage volumes stores catalogs inside `<volume>/.firstproof/catalog.db` so the catalog travels with the external media.
 
+- **Native Platform Citizen Invariant (Zero Cross-Platform Idiom Contamination)**:
+  - First Proof must never impose the conventions, directory structures, or interaction models of one operating system onto another. When operating on a host OS, behave like an exemplary, native citizen of that platform:
+    - **macOS**: User-manageable assets (3D LUTs, presets) reside in `~/Library/Application Support/FirstProof/` with "Show in Finder" affordances; caches in `~/Library/Caches/photo.firstproof.app/`; ICC profiles in `~/Library/ColorSync/Profiles/` and `/Library/ColorSync/Profiles/`. Never scatter Unix dotfiles across the user's `$HOME`.
+    - **Linux / Headless CLI**: Strictly adhere to the XDG Base Directory specification (`$XDG_CONFIG_HOME/firstproof`, `$XDG_DATA_HOME/firstproof`, `$XDG_CACHE_HOME/firstproof`) and `/usr/share/color/icc/`.
+    - **Web**: Standard browser storage APIs (OPFS, IndexedDB) without synthetic desktop filesystem wrappers.
+    - **Single In-Place Exception**: The *only* permissible dotfile directory is `<volume>/.firstproof/catalog.db` on external storage, which exists solely so portable catalogs travel alongside master RAW files on removable media.
+
 - **Reference-First Architecture & Zero Greenfield Hallucination**:
   - Whenever building, porting, or refactoring subsystems in `web/`, `firstproof-wasm/`, or secondary targets where a native implementation already exists in `FirstProofApp/` (macOS Swift/Metal) or `firstproof-core/` (Rust):
   - **Never invent ad-hoc layout, math, or interaction models from general web/platform training priors.** (e.g. do not default to CSS `object-fit: contain` when native uses full-bleed vertex quad scaling; do not place floating tool dialogs in the photo center when native uses stationary bottom HUDs; do not hardcode landscape aspect ratios when native inverts them for portrait images).

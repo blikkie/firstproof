@@ -42,6 +42,13 @@ First Proof exists to restore **photographic honesty and creative restraint**. W
 * **Print & Web First (SDR by Default):** While the pipeline leverages wide-gamut Rec.2020 and Apple Silicon displays, the ultimate reference target is authentic SDR reproduction that translates honestly to the web and fine-art physical paper prints. Even on HDR/EDR-capable screens (Liquid Retina XDR), the viewport always defaults to standard SDR; EDR is an explicit opt-in diagnostic inspection mode, never the default canvas rendering.
 * **Standard Open Metadata:** Full IPTC Core, Dublin Core, EXIF, and standard XMP sidecar synchronization (`https://firstproof.photo/ns/pm/1.0/`).
 
+### V. The Native Platform Citizen (Deep Operating System Respect)
+* **Zero Cross-Platform Idiom Contamination:** First Proof never forces the conventions, directory structures, or interaction models of one operating system onto another. When running on a host platform, First Proof behaves like an exemplary, native citizen of that OS.
+* **macOS First-Class Citizen:** User presets, custom 3D LUTs, and application state live in standard Apple AppKit locations (`~/Library/Application Support/FirstProof/`), caches in `~/Library/Caches/photo.firstproof.app/`, and color profiles in standard system/user ColorSync directories (`~/Library/ColorSync/Profiles/`). Everything integrates seamlessly with macOS Finder ("Show in Finder"), Time Machine, native menus, and system accessibility.
+* **Linux / Headless CLI Citizen:** Strictly adheres to the XDG Base Directory specification (`$XDG_CONFIG_HOME/firstproof`, `$XDG_DATA_HOME/firstproof`, `$XDG_CACHE_HOME/firstproof`) and standard system color directories (`/usr/share/color/icc/`).
+* **Web Citizen:** Leverages standard browser primitives (Origin Private File System, IndexedDB, Web Workers, drag-and-drop) rather than imposing synthetic desktop filesystem metaphors.
+* **The Single Deliberate Exception (Portable Catalogs):** The only non-platform directory is `<volume>/.firstproof/catalog.db` on external storage, which deliberately lives adjacent to RAW files so catalogs seamlessly travel with physical media across operating systems.
+
 ---
 
 ## 3. Brand Voice & Audience

@@ -29,9 +29,9 @@ This document strictly tracks pending and deferred features calibrated against o
   - Substrate white-point reflectance and ink absorption limits (e.g. unbleached cotton rag matte, Hahnemühle Photo Rag, baryta surface sheen, commercial Lustre / Deep Matte) simulate the physical print media viewing environment via LittleCMS2 ICC proofing transforms.
   - Enforces the architectural invariant that develop adjustments never apply additive digital floor lifts to simulate paper—true carbon black ($D_{\max}$) is always preserved at $f(0.0) \equiv 0.0$ for output print fidelity.
 - **Lab & Output ICC Profile Management in Settings (`SettingsView.swift`)**:
-  - Dedicated "Color & Proofing" section in Settings to manage installed printer and paper ICC profiles.
-  - Scan system and user profile directories (`~/Library/ColorSync/Profiles`, `/Library/ColorSync/Profiles`, `~/.firstproof/profiles/`).
-  - Import custom print lab profiles (e.g. Printique, WhiteWall, or custom lab-calibrated sRGB/printer profiles) with 1-click import.
+  - Dedicated "Color & Proofing" section in Settings to manage installed printer and paper ICC profiles adhering strictly to native OS conventions.
+  - On macOS, scans standard user and system ColorSync directories (`~/Library/ColorSync/Profiles/`, `/Library/ColorSync/Profiles/`).
+  - Import custom print lab profiles (e.g. Printique, WhiteWall, or custom lab-calibrated sRGB/printer profiles) with 1-click import into `~/Library/ColorSync/Profiles/` (or platform equivalent, e.g. `/usr/share/color/icc/` on Linux).
   - Set a default proofing profile for rapid single-key toggle (`Cmd+Y` / toolbar button) during culling and editing.
 
 ### 3.23 Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification (P2)
@@ -57,8 +57,10 @@ This document strictly tracks pending and deferred features calibrated against o
   - Monochrome tone density fill or muted desaturated channel traces rendered in dark slate (`#1E1E1E`); zero primary-colored mountain graphs or dancing waveforms.
 
 ### 3.26 Global 3D LUT Library Management & Default Look Preset in Settings (P2)
-- **Account / App-Level 3D LUT Library**:
-  - Elevate `.cube` LUTs from transient, per-photo imports into a persistent global LUT library stored in `~/.firstproof/luts/` (macOS Application Support / user directory).
+- **Account / App-Level 3D LUT Library (Native OS Conventions)**:
+  - Elevate `.cube` LUTs from transient, per-photo imports into a persistent global LUT library honoring native OS filesystem conventions:
+    - **macOS**: `~/Library/Application Support/FirstProof/LUTs/` with a native "Show in Finder" button.
+    - **Linux / CLI**: `$XDG_DATA_HOME/firstproof/luts/` (or `~/.config/firstproof/luts/`).
   - All imported LUTs are permanently available across all photos, sessions, and catalog folders without needing to re-browse the filesystem.
 - **LUT Management in Settings (`SettingsView.swift`)**:
   - Dedicated "Look & 3D LUTs" management pane in Settings allowing users to add, rename, preview, and remove custom 3D LUTs.
