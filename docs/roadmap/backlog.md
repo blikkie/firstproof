@@ -6,8 +6,9 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ---
 
-## 🚀 Immediate Next Up (v0.1 Release Gate)
-1. **Story 4.10: Optical Chromatic Aberration Correction: Lateral TCA & Longitudinal Defringe** (P1)
+## 🚀 Active & In-Flight
+1. **Story 4.10: Optical Chromatic Aberration Correction: Lateral TCA & Longitudinal Defringe** (P1 - In Progress)
+   - See detailed spec below in Phase 4.
 
 
 ---
@@ -19,26 +20,29 @@ This document strictly tracks pending and deferred features calibrated against o
 > First Proof's primary workhorse default is **pure optical RAW capture via AgX filmic tone mapping**. The core workspaces (**Light**, **Color**, **Detail**, **Optics**) are dedicated strictly to sensor reality: standard White Balance (Temperature & Tint), exposure, tone recovery, and sensor sharpness. Photos look 90% finished immediately without any analog styling.  
 > 
 > Film stock and print media emulation are **not** the main workflow and **not** a complex simulator. They are an exquisite, 100% opt-in **fine-art treat and differentiator** housed in a dedicated **Emulsion** workspace tab (`InspectorTab.emulsion`). Default state is always `None / Bypass`. When activated, the engine does all the heavy lifting under the hood so the photographer simply selects a curated stock or print medium without fiddling with chemical dials.
->
-> **Roadmap Reconsideration: Physical Film Grain in Wide-Gamut Linear Space**  
-> Previous attempts at simulating film grain recoiled because grain was evaluated post-tone-mapping in narrow gamma-encoded sRGB, artificially amplifying shadow noise floors and clipping non-linearly. In real physical film, silver halide crystals and dye clouds react to incident scene photons in the optical domain before optical tone-mapping and print transfer. When re-evaluating grain down the roadmap, it must strictly execute inside the Wide-Gamut Linear Rec.2020 domain using physical sensitometric optical density ($D = \log_{10}(1/T)$) prior to the terminal display transform.
 
-### 3.4 ColorSync Soft Proofing (P2)
+### 3.4 ColorSync Soft Proofing & Lab ICC Profile Management (P2)
 - **Canvas Soft Proofing Mode**:
-  - Canvas toolbar mode simulating sRGB and standard print gamut clipping (e.g., ISO Coated v2 / US Web Coated SWOP) on wide-gamut displays.
+  - Canvas toolbar mode simulating sRGB and standard print gamut clipping (e.g., ISO Coated v2 / US Web Coated SWOP, Printique / WhiteWall paper profiles) on wide-gamut displays.
   - Gamut warning overlay highlighting out-of-gamut pixels in high-contrast overlay color.
 - **Paper Substrate & Media Proofing (Decoupled from Develop Adjustments)**:
-  - Substrate white-point reflectance and ink absorption limits (e.g. unbleached cotton rag matte, Hahnemühle Photo Rag, baryta surface sheen) simulate the physical print media viewing environment via LittleCMS2 ICC proofing transforms.
+  - Substrate white-point reflectance and ink absorption limits (e.g. unbleached cotton rag matte, Hahnemühle Photo Rag, baryta surface sheen, commercial Lustre / Deep Matte) simulate the physical print media viewing environment via LittleCMS2 ICC proofing transforms.
   - Enforces the architectural invariant that develop adjustments never apply additive digital floor lifts to simulate paper—true carbon black ($D_{\max}$) is always preserved at $f(0.0) \equiv 0.0$ for output print fidelity.
+- **Lab & Output ICC Profile Management in Settings (`SettingsView.swift`)**:
+  - Dedicated "Color & Proofing" section in Settings to manage installed printer and paper ICC profiles.
+  - Scan system and user profile directories (`~/Library/ColorSync/Profiles`, `/Library/ColorSync/Profiles`, `~/.firstproof/profiles/`).
+  - Import custom print lab profiles (e.g. Printique, WhiteWall, or custom lab-calibrated sRGB/printer profiles) with 1-click import.
+  - Set a default proofing profile for rapid single-key toggle (`Cmd+Y` / toolbar button) during culling and editing.
 
-### 3.23 Physical Proof Run Calibration & Real-Paper Dmax Verification (P2)
-- **Physical Test Batch Print Proofing**:
-  - Execute a comprehensive lab print batch run on authentic fine-art substrates: unbleached cotton rag (*Hahnemühle Photo Rag 308*, *Canson Rag Photographique*), warmtone chlorobromide selenium, and baryta fiber-base.
-  - Evaluate physical densitometry ($D_{\text{max}}$) under standard gallery illumination ($D_{50}$ / $D_{65}$) against digital screen rendering.
-  - Benchmark shadow floor formulations across physical prints: compare physical reflective carbon ink depth vs emissive display floor lift (Option A: natural restrained floor $\sim 0.004$; Option B: micro-contrast compression without additive lift; Option C: current localized Hermite toe).
+### 3.23 Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification (P2)
+- **Practical Commercial Lab Print Batch (Printique / Standard Lab Offerings)**:
+  - Instead of requiring unobtainable historical darkroom processes, execute a calibration test print run using accessible commercial fine-art lab options: e.g. Printique's Lustre, Glossy, Deep Matte, and Fine Art Cotton Rag (Hahnemühle Photo Rag).
+  - Evaluate how First Proof's AgX filmic tone curve, film emulsions, and print media archetypes translate to real-world commercial photo papers under standard gallery illumination ($D_{50}$ / $D_{65}$).
+  - Pair with Printique's downloadable ICC printer/paper profiles in Soft Proofing (Story 3.4) to benchmark on-screen soft-proof simulation against the physical delivered prints.
+  - Benchmark shadow floor formulations across physical prints: verify that carbon black ink ($D_{\max}$) remains deep and rich without milky digital floor lifts or premature shadow crushing.
   - Tune paper grade and process depth default presets to guarantee 1:1 perceptual fidelity between darkroom viewport and physical framed gallery print.
 
-### 3.24 Sensitometric EV Zone Histogram & Sensor Clipping HUD (P2 - Post v0.1)
+### 3.25 Sensitometric EV Zone Histogram & Sensor Clipping HUD (P2)
 - **Log₂ EV Stop Dynamic Range Scale**:
   - Horizontal axis calibrated in physical EV stops relative to 18% middle grey ($-8\text{ EV}$ to $+4\text{ EV}$) rather than an arbitrary 0–255 integer scale.
   - Evaluates linear scene radiance in Linear Rec.2020 prior to display tone-mapping, measuring true sensor exposure and optical dynamic range.
@@ -51,18 +55,23 @@ This document strictly tracks pending and deferred features calibrated against o
   - Evaluated asynchronously on a background worker or via GPU texture downsampling only when paused in the develop inspector or when toggled on demand via shortcut (`H`).
 - **Quiet Darkroom Visuals**:
   - Monochrome tone density fill or muted desaturated channel traces rendered in dark slate (`#1E1E1E`); zero primary-colored mountain graphs or dancing waveforms.
+
+### 3.26 Global 3D LUT Library Management & Default Look Preset in Settings (P2)
+- **Account / App-Level 3D LUT Library**:
+  - Elevate `.cube` LUTs from transient, per-photo imports into a persistent global LUT library stored in `~/.firstproof/luts/` (macOS Application Support / user directory).
+  - All imported LUTs are permanently available across all photos, sessions, and catalog folders without needing to re-browse the filesystem.
+- **LUT Management in Settings (`SettingsView.swift`)**:
+  - Dedicated "Look & 3D LUTs" management pane in Settings allowing users to add, rename, preview, and remove custom 3D LUTs.
+- **Default Signature Look Setting**:
+  - Allow users to set a "Default Look LUT" (with customizable default intensity, e.g. 100% or subtle 40%) in Settings.
+  - When enabled, newly imported photos or photos reset to default automatically inherit the photographer's signature LUT look, eliminating repetitive manual application across photo shoots.
+- **Inspector UI Integration**:
+  - Develop inspector's LUT dropdown automatically aggregates both First Proof built-in looks and all globally managed user LUTs, with an inline "+ Import..." button that automatically registers new LUTs into the persistent global library.
 ---
 
 
 
-## Phase 4: Pre-Release IP Audit, Code Cleanliness & Distribution (P0 / P1)
-
-### 4.2 Pre-Release Git History Scrubbing Pass (P2 - Pre-Push Gate)
-- **Git History Rewrite & Scrubbing Pass (`git-filter-repo` / BFG)**:
-  - *(Note: Active codebase path sanitization and test scratch cleanup completed; see completed.md)*
-  - Perform an automated history rewrite prior to public release to scrub local paths, developer usernames, private emails, and transient binary blobs from git commit history.
-  - Followed by aggressive reflog expiration and garbage collection (`git reflog expire --expire=now --all && git gc --prune=now --aggressive`).
-
+## Phase 4: Archival Formats, Optics & Core Workflows (P1 / P2)
 
 ### 4.7 Native macOS Desktop Archival DNG Ingest & Batch Action (P2)
 - **Ingest Flow Integration (`ImportSheetView.swift`, `AppViewModel.swift`)**:
@@ -75,7 +84,7 @@ This document strictly tracks pending and deferred features calibrated against o
 - **Sidecar & Catalog Sync**:
   - Automatically updates catalog database records (`catalog.db`) pointing photo paths to the new `.dng` file without dropping user ratings, flags, or undo history.
 
-### 4.10 Optical Chromatic Aberration Correction: Lateral TCA & Longitudinal Defringe (P1)
+### 4.10 Optical Chromatic Aberration Correction: Lateral TCA & Longitudinal Defringe (P1 - In Progress)
 - **Problem Statement & Physical Sensitometrics**:
   - High-contrast optical transitions (e.g. tree branches, window frames, architectural slats, and trellis wood against high-radiance sky) exhibit physical chromatic dispersion. Lateral (transverse) chromatic aberration manifests as radial color separation (red/cyan or blue/yellow fringes), while longitudinal (axial) chromatic aberration produces out-of-focus purple or green fringing.
   - When filmic tone mappers or wide-gamut saturation boosts (`AgxVivid`) are applied, subtle 2–3 count optical color fringes are amplified into visible unnatural halos.
@@ -85,24 +94,6 @@ This document strictly tracks pending and deferred features calibrated against o
 - **Longitudinal / Axial Purple Defringing**:
   - Implement edge-directed chromaticity attenuation on high-contrast specular borders to suppress residual purple/violet fringing.
   - Anchor defringe qualification to physical hue bands ($260^\circ - 340^\circ$) with smooth analytical edge-luminance weighting, preventing desaturation of legitimate subject colors (flowers, fabrics).
-
-### 4.12 Lightroom Migration & Master Ingest Sanitizer (P1)
-- **Problem Statement & Export Clutter Permutations**:
-  - Lightroom exports and migrations routinely generate redundant derivative files alongside original captures: `<base>_edited.jpg`, `<base>-1.dng`, `<base>_edited-1.jpg`, `<base> (1).jpg`, etc.
-  - Shallow single-pass suffix matching fails to strip numeric collision counters (`-1`, `-2`, ` (1)`) and compound suffix sequences (`_edited-1`), scattering duplicates across the library grid and managed import flows.
-  - For non-RAW captures (phone/compact camera JPEGs), arbitrary filesystem walk order can erroneously select the baked `_edited` clone over the true untouched master original.
-- **Recursive Canonical Stem Normalizer (`normalize_stem`)**:
-  - Deterministic multi-pass normalization loop stripping both collision indices (`-N`, `_N`, ` (N)`) and derivative keywords (`_edited`, `-edit`, `_export`, `_vN`, `_proof`) until the unadulterated base filename is resolved:
-    $$\text{"IMG\_1234\_edited-1"} \longrightarrow \text{"IMG\_1234\_edited"} \longrightarrow \text{"IMG\_1234"}$$
-- **Master Negative Precedence Hierarchy**:
-  - When clustering capture candidates sharing a normalized stem and matching capture timestamp ($\pm 5\text{s}$):
-    1. **Original Camera RAW Master**: Proprietary sensor formats (`.cr2`, `.cr3`, `.arw`, `.nef`, `.raf`, `.orf`, `.rw2`, `.pef`, `.raw`) take highest precedence.
-    2. **Archival DNG Master**: Un-suffixed `<base>.dng` preferred over collision exports (`<base>-1.dng`).
-    3. **Untouched Raster Master**: Exact clean un-suffixed `<base>.jpg`/`<base>.png` without derivative tokens preferred over `_edited` or `-N` clones.
-    4. **Active First Proof Edits**: Retains custom XMP adjustments if present.
-    5. **Deterministic Tie-Breaker**: Cleanest stem length followed by lexicographical sort.
-- **Library Grid Stacking & Derivative Suppression**:
-  - In-place folder browsing (`index_folder` / `get_all_photos`) option to automatically stack or suppress derivative clones, ensuring that opening an existing Lightroom export directory displays strictly the single pertinent master negative per capture.
 
 ---
 
