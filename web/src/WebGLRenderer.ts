@@ -723,7 +723,15 @@ export class WebGLRenderer {
     i[68] = (((effectiveEdits.rotation ?? 0) % 360) + 360) % 360;
     f[69] = 5500.0; // asShotTemperature
     f[70] = 0.0; // asShotTint
-    f[71] = 0.0; // pad
+    i[71] = 0; // hasTca
+    f[72] = 1.0; // tcaVr
+    f[73] = 1.0; // tcaVb
+    f[74] = 0.0; // tcaBr
+    f[75] = 0.0; // tcaBb
+    f[76] = 0.0; // tcaCr
+    f[77] = 0.0; // tcaCb
+    f[78] = edits.defringe_amount ?? 0.0;
+    i[79] = 1; // tcaCorrectionEnabled
 
     if (this.uboBuffer) {
       gl.bindBuffer(gl.UNIFORM_BUFFER, this.uboBuffer);

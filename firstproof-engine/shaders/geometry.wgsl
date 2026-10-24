@@ -1,8 +1,18 @@
 // Canonical Viewport Geometry, Perspective & Lens Distortion Transform
 
-fn transformGeometry(uv: vec2<f32>, uniforms: ShaderUniforms) -> vec2<f32> {
+struct GeometryCoordinates {
+    uv: vec2<f32>,
+    uvRed: vec2<f32>,
+    uvBlue: vec2<f32>,
+};
+
+fn transformGeometryChannels(uv: vec2<f32>, uniforms: ShaderUniforms) -> GeometryCoordinates {
+    var coords: GeometryCoordinates;
     if (uniforms.isOriginal >= 0.5 || uniforms.isIntermediate == 1) {
-        return uv;
+        coords.uv = uv;
+        coords.uvRed = uv;
+        coords.uvBlue = uv;
+        return coords;
     }
     
     let cropL = clamp(uniforms.cropLeft, 0.0, 0.99);
@@ -102,7 +112,26 @@ fn transformGeometry(uv: vec2<f32>, uniforms: ShaderUniforms) -> vec2<f32> {
         }
     }
     
-    geom.x = geom.x / (2.0 * A);
-    geom.y = geom.y / 2.0;
-    return geom + vec2<f32>(0.5, 0.5);
+    var geom_r = geom;
+    var geom_b = geom;
+    
+    // Transverse Chromatic Aberration (TCA) polynomial radial scaling: r_d = (v + b*r^2 + c*r^4) * r
+    if (uniforms.tcaCorrectionEnabled != 0 && uniforms.hasTca != 0) {
+        let r2 = dot(geom, geom);
+        let r4 = r2 * r2;
+        let scale_r = uniforms.tcaVr + uniforms.tcaBr * r2 + uniforms.tcaCr * r4;
+        let scale_b = uniforms.tcaVb + uniforms.tcaBb * r2 + uniforms.tcaCb * r4;
+        geom_r = geom * scale_r;
+        geom_b = geom * scale_b;
+    }
+    
+    let denomA = 2.0 * A;
+    coords.uv = vec2<f32>(geom.x / denomA + 0.5, geom.y * 0.5 + 0.5);
+    coords.uvRed = vec2<f32>(geom_r.x / denomA + 0.5, geom_r.y * 0.5 + 0.5);
+    coords.uvBlue = vec2<f32>(geom_b.x / denomA + 0.5, geom_b.y * 0.5 + 0.5);
+    return coords;
+}
+
+fn transformGeometry(uv: vec2<f32>, uniforms: ShaderUniforms) -> vec2<f32> {
+    return transformGeometryChannels(uv, uniforms).uv;
 }

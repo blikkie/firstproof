@@ -3,33 +3,20 @@ use firstproof_engine::xmp::{generate_xmp, parse_xmp, XmpData};
 
 /// Checks if an XMP record contains user edits or metadata adjustments beyond default identity.
 pub fn has_custom_adjustments(data: &XmpData) -> bool {
-    data.edits.exposure != 0.0
-        || data.edits.contrast != 0.0
-        || data.edits.highlights != 0.0
-        || data.edits.shadows != 0.0
-        || data.edits.whites != 0.0
-        || data.edits.blacks != 0.0
-        || data.edits.vibrance != 0.0
-        || data.edits.saturation != 0.0
-        || data.edits.deep_blue != 0.0
-        || data.edits.foliage != 0.0
-        || data.edits.crop_angle != 0.0
-        || data.edits.crop_left != 0.0
-        || data.edits.crop_top != 0.0
-        || data.edits.crop_right != 1.0
-        || data.edits.crop_bottom != 1.0
-        || data.edits.rotation != 0
-        || data.edits.flip_horizontal
-        || data.edits.flip_vertical
-        || (data.edits.temperature != 5000.0 && data.edits.temperature != 0.0)
-        || data.edits.tint != 0.0
-        || data.edits.lut_name.is_some()
-        || data.edits.emulsion_archetype != crate::EmulsionArchetype::None
-        || data.edits.curves != crate::curve::ToneCurvesRecord::default()
+    let default_5500 = firstproof_engine::settings::EditSettings::default();
+    let mut default_5000 = default_5500.clone();
+    default_5000.temperature = 5000.0;
+
+    (data.edits != default_5500 && data.edits != default_5000)
         || data.rating.is_some()
         || (data.status != "None" && !data.status.is_empty())
         || data.title.is_some()
         || data.description.is_some()
+        || data.creator.is_some()
+        || data.copyright.is_some()
+        || !data.keywords.is_empty()
+        || data.latitude.is_some()
+        || data.longitude.is_some()
 }
 
 /// Resolves the sidecar file path for reading XMP.

@@ -444,14 +444,6 @@ pub fn export_photo(
     demosaic_quality: Option<DemosaicQuality>,
     render_tier: Option<RenderTier>,
 ) -> bool {
-    let dist_tuple = lens_coeffs.as_ref().and_then(|c| {
-        if c.has_distortion {
-            Some((c.distortion.as_slice(), c.distortion_model.as_str()))
-        } else {
-            None
-        }
-    });
-    
     let cs = color_space.unwrap_or_default();
     let ri = rendering_intent.unwrap_or_default();
     let uhdr = ultra_hdr.unwrap_or(false);
@@ -462,7 +454,7 @@ pub fn export_photo(
         &input_path,
         &output_path,
         &edits,
-        dist_tuple,
+        lens_coeffs.as_ref(),
         quality as u8,
         max_dimension,
         cs,

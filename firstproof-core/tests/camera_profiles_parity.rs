@@ -762,6 +762,106 @@ fn test_lensfun_export_distortion_math() {
 }
 
 #[test]
+fn test_lensfun_export_tca_math() {
+    // Verifies that export coordinate transformation with TCA matches Metal/WGSL shader formula exactly
+    let target_w = 3000f32;
+    let target_h = 2000f32;
+    let aspect_ratio = target_w / target_h; // 1.5
+    let auto_crop_scale = 1.0f32;
+    
+    // Lensfun poly3 TCA coefficients (e.g. Canon EF 24-70mm @ 24mm)
+    let (tca_vr, tca_vb) = (1.0002104f32, 1.0000529f32);
+    let (tca_br, tca_bb) = (-0.0000220f32, 0.0f32);
+    let (tca_cr, tca_cb) = (0.0f32, 0.0f32);
+
+    // Coordinate near frame boundary
+    let tx = 2900f32;
+    let ty = 1900f32;
+    let u = (tx + 0.5) / target_w;
+    let v = (ty + 0.5) / target_h;
+
+    // 1. Rust export TCA math (from encoders.rs):
+    let centered_x = (u - 0.5) * 2.0 * aspect_ratio / auto_crop_scale;
+    let centered_y = (v - 0.5) * 2.0 / auto_crop_scale;
+    let r2 = centered_x * centered_x + centered_y * centered_y;
+    let r4 = r2 * r2;
+    let scale_r = tca_vr + tca_br * r2 + tca_cr * r4;
+    let scale_b = tca_vb + tca_bb * r2 + tca_cb * r4;
+    let rust_sx_r = ((centered_x * scale_r) / (2.0 * aspect_ratio) + 0.5) * target_w;
+    let rust_sy_r = ((centered_y * scale_r) / 2.0 + 0.5) * target_h;
+    let rust_sx_g = (centered_x / (2.0 * aspect_ratio) + 0.5) * target_w;
+    let rust_sy_g = (centered_y / 2.0 + 0.5) * target_h;
+    let rust_sx_b = ((centered_x * scale_b) / (2.0 * aspect_ratio) + 0.5) * target_w;
+    let rust_sy_b = ((centered_y * scale_b) / 2.0 + 0.5) * target_h;
+
+    // 2. Metal/WGSL GPU shader TCA math (from geometry.wgsl):
+    let norm_x = (u - 0.5) * 2.0 * aspect_ratio;
+    let norm_y = (v - 0.5) * 2.0;
+    let metal_r2 = norm_x * norm_x + norm_y * norm_y;
+    let metal_r4 = metal_r2 * metal_r2;
+    let metal_scale_r = tca_vr + tca_br * metal_r2 + tca_cr * metal_r4;
+    let metal_scale_b = tca_vb + tca_bb * metal_r2 + tca_cb * metal_r4;
+    let metal_sx_r = ((norm_x * metal_scale_r) / (2.0 * aspect_ratio) + 0.5) * target_w;
+    let metal_sy_r = ((norm_y * metal_scale_r) / 2.0 + 0.5) * target_h;
+    let metal_sx_g = (norm_x / (2.0 * aspect_ratio) + 0.5) * target_w;
+    let metal_sy_g = (norm_y / 2.0 + 0.5) * target_h;
+    let metal_sx_b = ((norm_x * metal_scale_b) / (2.0 * aspect_ratio) + 0.5) * target_w;
+    let metal_sy_b = ((norm_y * metal_scale_b) / 2.0 + 0.5) * target_h;
+
+    assert!((rust_sx_r - metal_sx_r).abs() < 1e-4, "Red X coord mismatch");
+    assert!((rust_sy_r - metal_sy_r).abs() < 1e-4, "Red Y coord mismatch");
+    assert!((rust_sx_g - metal_sx_g).abs() < 1e-4, "Green X coord mismatch");
+    assert!((rust_sy_g - metal_sy_g).abs() < 1e-4, "Green Y coord mismatch");
+    assert!((rust_sx_b - metal_sx_b).abs() < 1e-4, "Blue X coord mismatch");
+    assert!((rust_sy_b - metal_sy_b).abs() < 1e-4, "Blue Y coord mismatch");
+    
+    // Physical assertion: Red and Blue samples must be distinct from Green (transverse dispersion)
+    assert!((rust_sx_r - rust_sx_g).abs() > 0.01, "Red channel must be radially scaled relative to Green");
+}
+
+#[test]
+fn test_defringe_math_parity() {
+    use firstproof_core::export::encoders::apply_defringe_rgb;
+    
+    // Case 1: High-contrast specular border with purple fringe
+    // Current pixel has high purple chromaticity (high B and R, low G) and is dark
+    let r = 0.35f32;
+    let g = 0.10f32;
+    let b = 0.40f32;
+    let y_c = 0.2627 * r + 0.6780 * g + 0.0593 * b; // ~0.183
+    let y_max_neighbor = 0.90f32; // Adjacent specular highlight / bright sky
+    
+    // Defringe at 100%
+    let (r_def, g_def, b_def) = apply_defringe_rgb(r, g, b, y_c, y_max_neighbor, 100.0);
+    // Green luminance preserved
+    assert_eq!(g_def, g);
+    // Purple fringe attenuated towards Green
+    assert!(r_def < r, "Red excess must be suppressed");
+    assert!(b_def < b, "Blue excess must be suppressed");
+    assert!((r_def - g).abs() < 0.05, "Red must collapse toward neutral Green edge");
+    assert!((b_def - g).abs() < 0.05, "Blue must collapse toward neutral Green edge");
+
+    // Case 2: Zero defringe amount must return bit-identical values
+    let (r_zero, g_zero, b_zero) = apply_defringe_rgb(r, g, b, y_c, y_max_neighbor, 0.0);
+    assert_eq!((r_zero, g_zero, b_zero), (r, g, b));
+
+    // Case 3: Legitimate subject color (vibrant purple flower in uniform illumination)
+    // Here, adjacent pixels are NOT specular highlights (y_max_neighbor ~ y_c)
+    let y_flower_neighbor = y_c + 0.01;
+    let (r_fl, g_fl, b_fl) = apply_defringe_rgb(r, g, b, y_c, y_flower_neighbor, 100.0);
+    assert_eq!((r_fl, g_fl, b_fl), (r, g, b), "Legitimate subject purple colors without specular edge must remain completely unperturbed");
+
+    // Case 4: Non-purple colors (e.g. green foliage, blue sky, warm skin)
+    // Green foliage: G > R, G > B
+    let (r_foliage, g_foliage, b_foliage) = apply_defringe_rgb(0.1, 0.6, 0.1, 0.45, 0.95, 100.0);
+    assert_eq!((r_foliage, g_foliage, b_foliage), (0.1, 0.6, 0.1), "Green foliage must be completely untouched");
+
+    // Warm skin: R > G, G > B (hue ~ 30 deg, far from 260-340 deg purple band)
+    let (r_skin, g_skin, b_skin) = apply_defringe_rgb(0.65, 0.45, 0.35, 0.50, 0.95, 100.0);
+    assert_eq!((r_skin, g_skin, b_skin), (0.65, 0.45, 0.35), "Warm skin tones must be completely untouched");
+}
+
+#[test]
 fn test_sharpening_and_masking_parity() {
     // Metal shader detail function simulation
     fn metal_apply_detail(

@@ -9,14 +9,6 @@ pub fn export_batch_photos(
     items
         .into_par_iter()
         .map(|item| {
-            let dist_tuple = item.lens_coeffs.as_ref().and_then(|c| {
-                if c.has_distortion {
-                    Some((c.distortion.as_slice(), c.distortion_model.as_str()))
-                } else {
-                    None
-                }
-            });
-
             let demosaic_quality = item.demosaic_quality.unwrap_or_default();
             let render_tier = item.render_tier.unwrap_or(crate::RenderTier::ArchivalExport);
 
@@ -24,7 +16,7 @@ pub fn export_batch_photos(
                 &item.input_path,
                 &item.output_path,
                 &item.edits,
-                dist_tuple,
+                item.lens_coeffs.as_ref(),
                 item.quality as u8,
                 item.max_dimension,
                 item.color_space,

@@ -5,7 +5,7 @@ use image::{ColorType, ImageBuffer, ImageEncoder, Rgb, RgbImage};
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::tiff::TiffEncoder;
 
-use crate::{DemosaicQuality, EditSettings, ExportColorSpace, ExportRenderingIntent, RenderTier};
+use crate::{DemosaicQuality, EditSettings, ExportColorSpace, ExportRenderingIntent, LensCorrectionCoefficientsRecord, RenderTier};
 use crate::color::linear_to_srgb_gamma;
 use super::decode::{decode_image_with_quality, sample_bilinear};
 use super::pipeline::{apply_detail_and_sharpening_rgb, apply_edits_with_tier};
@@ -16,7 +16,7 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
     input_path: P,
     output_path: Q,
     edits: &EditSettings,
-    lens_distortion: Option<(&[f32], &str)>,
+    lens_coeffs: Option<&LensCorrectionCoefficientsRecord>,
     quality: u8,
     max_dimension: Option<u32>,
     color_space: ExportColorSpace,
@@ -27,7 +27,7 @@ pub fn export_photo_file<P: AsRef<Path>, Q: AsRef<Path>>(
         input_path,
         output_path,
         edits,
-        lens_distortion,
+        lens_coeffs,
         quality,
         max_dimension,
         color_space,
@@ -43,7 +43,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     input_path: P,
     output_path: Q,
     edits: &EditSettings,
-    lens_distortion: Option<(&[f32], &str)>,
+    lens_coeffs: Option<&LensCorrectionCoefficientsRecord>,
     quality: u8,
     max_dimension: Option<u32>,
     color_space: ExportColorSpace,
@@ -111,17 +111,33 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     let c_v = edits.perspective_vertical * 0.005;
     let c_h = edits.perspective_horizontal * 0.005;
     
-    let (has_dist, k1, k2, k3, is_ptlens) = if let Some((coeffs, model)) = lens_distortion {
-        if !coeffs.is_empty() {
-            let k1 = coeffs[0];
-            let k2 = if coeffs.len() > 1 { coeffs[1] } else { 0.0 };
-            let k3 = if coeffs.len() > 2 { coeffs[2] } else { 0.0 };
-            (true, k1, k2, k3, model == "ptlens")
+    let (has_dist, k1, k2, k3, is_ptlens) = if let Some(c) = lens_coeffs {
+        if c.has_distortion && !c.distortion.is_empty() {
+            let k1 = c.distortion[0];
+            let k2 = if c.distortion.len() > 1 { c.distortion[1] } else { 0.0 };
+            let k3 = if c.distortion.len() > 2 { c.distortion[2] } else { 0.0 };
+            (true, k1, k2, k3, c.distortion_model == "ptlens")
         } else {
             (false, 0.0, 0.0, 0.0, false)
         }
     } else {
         (false, 0.0, 0.0, 0.0, false)
+    };
+
+    let (has_tca, tca_vr, tca_vb, tca_br, tca_bb, tca_cr, tca_cb) = if let Some(c) = lens_coeffs {
+        if c.has_tca && !c.tca.is_empty() {
+            let vr = c.tca.first().copied().unwrap_or(1.0);
+            let vb = c.tca.get(1).copied().unwrap_or(1.0);
+            let br = c.tca.get(2).copied().unwrap_or(0.0);
+            let bb = c.tca.get(3).copied().unwrap_or(0.0);
+            let cr = c.tca.get(4).copied().unwrap_or(0.0);
+            let cb = c.tca.get(5).copied().unwrap_or(0.0);
+            (true, vr, vb, br, bb, cr, cb)
+        } else {
+            (false, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0)
+        }
+    } else {
+        (false, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0)
     };
 
     let mut auto_crop_scale = 1.0f32;
@@ -231,7 +247,23 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
             let sx = (geom_x / (2.0 * aspect_ratio) + 0.5) * (orig_width as f32);
             let sy = (geom_y / 2.0 + 0.5) * (orig_height as f32);
             
-            let (mut r_lin, mut g_lin, mut b_lin) = if !edits.crop_constrain && (sx < 0.0 || sx >= (orig_width - 1) as f32 || sy < 0.0 || sy >= (orig_height - 1) as f32) {
+            let (mut r_lin, mut g_lin, mut b_lin) = if has_tca {
+                let r2 = geom_x * geom_x + geom_y * geom_y;
+                let r4 = r2 * r2;
+                let scale_r = tca_vr + tca_br * r2 + tca_cr * r4;
+                let scale_b = tca_vb + tca_bb * r2 + tca_cb * r4;
+                let sx_r = ((geom_x * scale_r) / (2.0 * aspect_ratio) + 0.5) * (orig_width as f32);
+                let sy_r = ((geom_y * scale_r) / 2.0 + 0.5) * (orig_height as f32);
+                let sx_g = sx;
+                let sy_g = sy;
+                let sx_b = ((geom_x * scale_b) / (2.0 * aspect_ratio) + 0.5) * (orig_width as f32);
+                let sy_b = ((geom_y * scale_b) / 2.0 + 0.5) * (orig_height as f32);
+                
+                let (r_val, _, _) = sample_bilinear(&image, sx_r, sy_r);
+                let (_, g_val, _) = sample_bilinear(&image, sx_g, sy_g);
+                let (_, _, b_val) = sample_bilinear(&image, sx_b, sy_b);
+                (r_val, g_val, b_val)
+            } else if !edits.crop_constrain && (sx < 0.0 || sx >= (orig_width - 1) as f32 || sy < 0.0 || sy >= (orig_height - 1) as f32) {
                 (0.0, 0.0, 0.0)
             } else {
                 sample_bilinear(&image, sx, sy)
@@ -245,6 +277,32 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
                     g_lin = g_lin * (1.0 - lut_intensity) + lut_out[1] * lut_intensity;
                     b_lin = b_lin * (1.0 - lut_intensity) + lut_out[2] * lut_intensity;
                 }
+            }
+
+            // 3a. Longitudinal / Axial Purple Defringing
+            if edits.defringe_amount > 0.0 {
+                let (rl, gl, bl) = sample_bilinear(&image, sx - 1.0, sy);
+                let (rr, gr, br) = sample_bilinear(&image, sx + 1.0, sy);
+                let (rt, gt, bt) = sample_bilinear(&image, sx, sy - 1.0);
+                let (rb, gb, bb) = sample_bilinear(&image, sx, sy + 1.0);
+                let (rtl, gtl, btl) = sample_bilinear(&image, sx - 1.0, sy - 1.0);
+                let (rtr, gtr, btr) = sample_bilinear(&image, sx + 1.0, sy - 1.0);
+                let (rbl, gbl, bbl) = sample_bilinear(&image, sx - 1.0, sy + 1.0);
+                let (rbr, gbr, bbr) = sample_bilinear(&image, sx + 1.0, sy + 1.0);
+                let y_c = 0.2627 * r_lin + 0.6780 * g_lin + 0.0593 * b_lin;
+                let y_l = 0.2627 * rl + 0.6780 * gl + 0.0593 * bl;
+                let y_r = 0.2627 * rr + 0.6780 * gr + 0.0593 * br;
+                let y_t = 0.2627 * rt + 0.6780 * gt + 0.0593 * bt;
+                let y_b = 0.2627 * rb + 0.6780 * gb + 0.0593 * bb;
+                let y_tl = 0.2627 * rtl + 0.6780 * gtl + 0.0593 * btl;
+                let y_tr = 0.2627 * rtr + 0.6780 * gtr + 0.0593 * btr;
+                let y_bl = 0.2627 * rbl + 0.6780 * gbl + 0.0593 * bbl;
+                let y_br = 0.2627 * rbr + 0.6780 * gbr + 0.0593 * bbr;
+                let y_max_neighbor = y_l.max(y_r).max(y_t).max(y_b).max(y_tl).max(y_tr).max(y_bl).max(y_br);
+                let (r_def, g_def, b_def) = apply_defringe_rgb(r_lin, g_lin, b_lin, y_c, y_max_neighbor, edits.defringe_amount);
+                r_lin = r_def;
+                g_lin = g_def;
+                b_lin = b_def;
             }
 
             // 3b. Detail & Sharpening / Noise Reduction / Stochastic Emulsion Grain
@@ -465,4 +523,50 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     file.write_all(&final_jpeg_bytes).map_err(|e| format!("Failed to write JPEG: {}", e))?;
     
     Ok(())
+}
+
+/// Attenuates excess purple chrominance at high-contrast specular borders.
+#[inline]
+pub fn apply_defringe_rgb(
+    r: f32,
+    g: f32,
+    b: f32,
+    y_c: f32,
+    y_max_neighbor: f32,
+    defringe_amount: f32,
+) -> (f32, f32, f32) {
+    if defringe_amount <= 0.0 {
+        return (r, g, b);
+    }
+    let excess_b = b - g;
+    let excess_r = r - g;
+    if excess_b <= 0.0 || excess_r <= 0.0 {
+        return (r, g, b);
+    }
+    let u = 2.0 * r - g - b;
+    let v = 1.7320508 * (g - b);
+    let mut hue = v.atan2(u).to_degrees();
+    if hue < 0.0 {
+        hue += 360.0;
+    }
+    let w_hue = smoothstep(250.0, 270.0, hue) * (1.0 - smoothstep(330.0, 350.0, hue));
+    if w_hue <= 0.001 {
+        return (r, g, b);
+    }
+    let edge_contrast = y_max_neighbor - y_c;
+    let w_edge = smoothstep(0.04, 0.25, edge_contrast);
+    let w_highlight = smoothstep(0.04, 0.25, y_max_neighbor);
+    let w_fringe = w_hue * w_edge * w_highlight * (defringe_amount / 100.0);
+    if w_fringe <= 0.001 {
+        return (r, g, b);
+    }
+    let r_adj = r - w_fringe * excess_r;
+    let b_adj = b - w_fringe * excess_b;
+    (r_adj, g, b_adj)
+}
+
+#[inline]
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }

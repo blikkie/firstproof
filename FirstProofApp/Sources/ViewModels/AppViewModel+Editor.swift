@@ -56,7 +56,10 @@ extension AppViewModel {
             enlargerFilter: self.enlargerFilter,
             printPaperGrade: self.printPaperGrade,
             printBaseWarmth: self.printBaseWarmth,
-            printProcessDepth: self.printProcessDepth
+            printProcessDepth: self.printProcessDepth,
+            defringeAmount: self.defringeAmount,
+            lensCorrectionEnabled: self.lensCorrectionEnabled,
+            tcaCorrectionEnabled: self.tcaCorrectionEnabled
         )
     }
 }
@@ -125,7 +128,10 @@ extension EditSettings {
             enlargerFilter: .neutralPanchromatic,
             printPaperGrade: 0.0,
             printBaseWarmth: 0.0,
-            printProcessDepth: 100.0
+            printProcessDepth: 100.0,
+            defringeAmount: 0.0,
+            lensCorrectionEnabled: false,
+            tcaCorrectionEnabled: true
         )
     }
 }
@@ -186,6 +192,9 @@ extension AppViewModel {
         self.printPaperGrade = edits.printPaperGrade
         self.printBaseWarmth = edits.printBaseWarmth
         self.printProcessDepth = edits.printProcessDepth
+        self.defringeAmount = edits.defringeAmount
+        self.lensCorrectionEnabled = edits.lensCorrectionEnabled
+        self.tcaCorrectionEnabled = edits.tcaCorrectionEnabled
     }
     
     public func saveCurrentEdits() {
@@ -304,6 +313,8 @@ extension AppViewModel {
                 title = "Base Warmth (\(printBaseWarmth >= 0 ? "+" : "")\(Int(printBaseWarmth)))"
             case .printProcessDepth:
                 title = "Process Depth (\(Int(printProcessDepth))%)"
+            case .defringeAmount:
+                title = "Defringe (\(Int(defringeAmount)))"
             }
             endSliderScrub(actionName: title)
         }
@@ -808,6 +819,8 @@ extension AppViewModel {
             printBaseWarmth = 0.0
         case .printProcessDepth:
             printProcessDepth = 100.0
+        case .defringeAmount:
+            defringeAmount = 0.0
         }
         registerDiscreteEdit(title: "Reset \(type.displayName)", before: before)
     }
@@ -885,6 +898,9 @@ extension AppViewModel {
         printPaperGrade = 0.0
         printBaseWarmth = 0.0
         printProcessDepth = 100.0
+        defringeAmount = 0.0
+        lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
+        tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
         registerDiscreteEdit(title: "Reset All Edits", before: before)
         notifyThumbnailChanged()
     }
@@ -1021,6 +1037,39 @@ extension AppViewModel {
         let before = currentEdits
         cropConstrain.toggle()
         registerDiscreteEdit(title: cropConstrain ? "Enable Constrain Crop" : "Disable Constrain Crop", before: before)
+    }
+    
+    public func toggleLensCorrection() {
+        let before = currentEdits
+        lensCorrectionEnabled.toggle()
+        registerDiscreteEdit(title: lensCorrectionEnabled ? "Enable Distortion Correction" : "Disable Distortion Correction", before: before)
+        notifyThumbnailChanged()
+    }
+    
+    public func toggleTcaCorrection() {
+        let before = currentEdits
+        tcaCorrectionEnabled.toggle()
+        registerDiscreteEdit(title: tcaCorrectionEnabled ? "Enable CA Correction" : "Disable CA Correction", before: before)
+        notifyThumbnailChanged()
+    }
+    
+    /// Universal undo-aware binding generator for any boolean darkroom toggle.
+    /// Captures the pre-edit snapshot, mutates state, and records the discrete history step.
+    public func editToggleBinding(
+        titleOn: String,
+        titleOff: String,
+        keyPath: ReferenceWritableKeyPath<AppViewModel, Bool>
+    ) -> Binding<Bool> {
+        Binding<Bool>(
+            get: { self[keyPath: keyPath] },
+            set: { newValue in
+                guard self[keyPath: keyPath] != newValue else { return }
+                let before = self.currentEdits
+                self[keyPath: keyPath] = newValue
+                self.registerDiscreteEdit(title: newValue ? titleOn : titleOff, before: before)
+                self.notifyThumbnailChanged()
+            }
+        )
     }
     
     // MARK: - Curated Fine-Art Print Media

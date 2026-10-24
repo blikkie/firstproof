@@ -138,6 +138,163 @@ def check_no_liquid_glass():
                 
     return violations
 
+def check_inspector_undo_handling():
+    """Ensure Inspector views do not bind directly to '$viewModel.<property>' without undo handling."""
+    inspector_dir = ROOT_DIR / "FirstProofApp" / "Sources" / "Views" / "Inspector"
+    if not inspector_dir.exists():
+        return []
+        
+    violations = []
+    pattern = re.compile(r"Toggle\([^,]+,\s*isOn:\s*\$viewModel\.[a-zA-Z0-9_]+")
+    
+    for path in inspector_dir.rglob("*.swift"):
+        try:
+            content = path.read_text(encoding="utf-8")
+            for idx, line in enumerate(content.splitlines(), start=1):
+                if pattern.search(line):
+                    violations.append(
+                        f"{path.relative_to(ROOT_DIR)}:{idx} -> Direct $viewModel toggle binding bypasses darkroom Undo/Redo history! Use viewModel.editToggleBinding(...) or a dedicated viewModel.toggle...() action: {line.strip()}"
+                    )
+        except Exception as e:
+            violations.append(f"Could not read {path}: {e}")
+            
+    return violations
+
+def check_edit_settings_parity():
+    """Ensure EditSettings fields in Rust have 1:1 parity with currentEdits and applyEdits in Swift."""
+    settings_rs = ROOT_DIR / "firstproof-engine" / "src" / "settings.rs"
+    editor_swift = ROOT_DIR / "FirstProofApp" / "Sources" / "ViewModels" / "AppViewModel+Editor.swift"
+    if not settings_rs.exists() or not editor_swift.exists():
+        return []
+
+    violations = []
+    try:
+        content_rs = settings_rs.read_text(encoding="utf-8")
+        match = re.search(r"pub\s+struct\s+EditSettings\s*\{([^}]+)\}", content_rs)
+        if not match:
+            return ["Could not find EditSettings struct in settings.rs"]
+            
+        rust_fields = []
+        for line in match.group(1).splitlines():
+            line = line.strip()
+            if line.startswith("pub ") and ":" in line:
+                field_name = line.split()[1].rstrip(":")
+                rust_fields.append(field_name)
+
+        def to_camel(s):
+            parts = s.split("_")
+            return parts[0] + "".join(p.capitalize() for p in parts[1:])
+
+        content_swift = editor_swift.read_text(encoding="utf-8")
+        
+        # Extract the entire body of currentEdits using balanced braces
+        ce_idx = content_swift.find("public var currentEdits: EditSettings {")
+        if ce_idx == -1:
+            return ["Could not find currentEdits in AppViewModel+Editor.swift"]
+        brace_start = content_swift.find("{", ce_idx)
+        brace_count = 1
+        i = brace_start + 1
+        while i < len(content_swift) and brace_count > 0:
+            if content_swift[i] == "{":
+                brace_count += 1
+            elif content_swift[i] == "}":
+                brace_count -= 1
+            i += 1
+        current_edits_text = content_swift[brace_start:i]
+
+        # Extract the entire body of applyEdits using balanced braces
+        ae_idx = content_swift.find("public func applyEdits(_ edits: EditSettings) {")
+        if ae_idx == -1:
+            return ["Could not find applyEdits in AppViewModel+Editor.swift"]
+        brace_start = content_swift.find("{", ae_idx)
+        brace_count = 1
+        i = brace_start + 1
+        while i < len(content_swift) and brace_count > 0:
+            if content_swift[i] == "{":
+                brace_count += 1
+            elif content_swift[i] == "}":
+                brace_count -= 1
+            i += 1
+        apply_edits_text = content_swift[brace_start:i]
+
+        for r_field in rust_fields:
+            c_field = to_camel(r_field)
+            if c_field not in current_edits_text:
+                violations.append(f"EditSettings.{r_field} ({c_field}) is missing from AppViewModel.currentEdits in AppViewModel+Editor.swift")
+            if f"edits.{c_field}" not in apply_edits_text and c_field not in apply_edits_text:
+                violations.append(f"EditSettings.{r_field} ({c_field}) is not restored by AppViewModel.applyEdits in AppViewModel+Editor.swift")
+
+    except Exception as e:
+        violations.append(f"Failed to check EditSettings parity: {e}")
+
+    return violations
+
+def check_xmp_sidecar_parity():
+    """Ensure every EditSettings field in Rust is serialized and deserialized in XMP sidecars."""
+    settings_rs = ROOT_DIR / "firstproof-engine" / "src" / "settings.rs"
+    xmp_rs = ROOT_DIR / "firstproof-engine" / "src" / "xmp.rs"
+    if not settings_rs.exists() or not xmp_rs.exists():
+        return []
+
+    violations = []
+    try:
+        content_settings = settings_rs.read_text(encoding="utf-8")
+        match = re.search(r"pub\s+struct\s+EditSettings\s*\{([^}]+)\}", content_settings)
+        if not match:
+            return ["Could not find EditSettings struct in settings.rs"]
+
+        rust_fields = []
+        for line in match.group(1).splitlines():
+            line = line.strip()
+            if line.startswith("pub ") and ":" in line:
+                field_name = line.split()[1].rstrip(":")
+                rust_fields.append(field_name)
+
+        content_xmp = xmp_rs.read_text(encoding="utf-8")
+
+        # Extract generate_xmp_sidecar body
+        gen_match = re.search(r"pub fn generate_xmp_sidecar\([^)]*\)\s*->\s*String\s*\{", content_xmp)
+        if not gen_match:
+            return ["Could not find generate_xmp_sidecar in xmp.rs"]
+        brace_start = gen_match.end() - 1
+        brace_count = 1
+        i = brace_start + 1
+        while i < len(content_xmp) and brace_count > 0:
+            if content_xmp[i] == "{":
+                brace_count += 1
+            elif content_xmp[i] == "}":
+                brace_count -= 1
+            i += 1
+        gen_text = content_xmp[brace_start:i]
+
+        # Extract parse_xmp_sidecar body
+        parse_match = re.search(r"pub fn parse_xmp_sidecar\([^)]*\)\s*->\s*Result<XmpData,\s*String>\s*\{", content_xmp)
+        if not parse_match:
+            return ["Could not find parse_xmp_sidecar in xmp.rs"]
+        brace_start = parse_match.end() - 1
+        brace_count = 1
+        i = brace_start + 1
+        while i < len(content_xmp) and brace_count > 0:
+            if content_xmp[i] == "{":
+                brace_count += 1
+            elif content_xmp[i] == "}":
+                brace_count -= 1
+            i += 1
+        parse_text = content_xmp[brace_start:i]
+
+        for r_field in rust_fields:
+            # Check serialization
+            if f"data.edits.{r_field}" not in gen_text:
+                violations.append(f"EditSettings.{r_field} is NOT serialized into XMP in firstproof-engine/src/xmp.rs generate_xmp_sidecar")
+            # Check deserialization
+            if f"data.edits.{r_field} =" not in parse_text and f"data.edits.{r_field}." not in parse_text:
+                violations.append(f"EditSettings.{r_field} is NOT deserialized from XMP in firstproof-engine/src/xmp.rs parse_xmp_sidecar")
+
+    except Exception as e:
+        violations.append(f"Failed to check XMP sidecar parity: {e}")
+
+    return violations
+
 def main():
     all_violations = []
     
@@ -160,6 +317,18 @@ def main():
     glass_violations = check_no_liquid_glass()
     if glass_violations:
         all_violations.extend(["[Liquid Glass & Translucency Violations]", *glass_violations])
+
+    inspector_violations = check_inspector_undo_handling()
+    if inspector_violations:
+        all_violations.extend(["[Inspector Undo/Redo Missing Handling Violations]", *inspector_violations])
+
+    parity_violations = check_edit_settings_parity()
+    if parity_violations:
+        all_violations.extend(["[EditSettings Darkroom History Parity Violations]", *parity_violations])
+
+    xmp_violations = check_xmp_sidecar_parity()
+    if xmp_violations:
+        all_violations.extend(["[XMP Sidecar EditSettings Parity Violations]", *xmp_violations])
 
     if all_violations:
         print("❌ Architectural Anti-Slop & Invariant Sensor FAILED:")

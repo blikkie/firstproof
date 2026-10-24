@@ -33,15 +33,24 @@ fn ign(p: vec2<f32>) -> f32 {
 @fragment
 fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
     // 1. Geometry, Perspective & Crop Homography
-    let uv = transformGeometry(in.texCoord, uniforms);
+    let coords = transformGeometryChannels(in.texCoord, uniforms);
+    let uv = coords.uv;
     
     // Discard / letterbox pixels outside valid texture bounds
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
         return vec4<f32>(0.08, 0.08, 0.08, 1.0); // Neutral dark canvas background
     }
     
-    // Sample texture
-    let sampledColor = textureSample(u_texture, u_sampler, uv);
+    // Sample texture (with per-channel TCA realignment when active)
+    var sampledColor: vec4<f32>;
+    if (uniforms.tcaCorrectionEnabled != 0 && uniforms.hasTca != 0) {
+        let sampleG = textureSample(u_texture, u_sampler, uv);
+        let sampleR = textureSample(u_texture, u_sampler, coords.uvRed);
+        let sampleB = textureSample(u_texture, u_sampler, coords.uvBlue);
+        sampledColor = vec4<f32>(sampleR.r, sampleG.g, sampleB.b, sampleG.a);
+    } else {
+        sampledColor = textureSample(u_texture, u_sampler, uv);
+    }
     
     // Fast-path: When displaying an already-rendered intermediate preview snapshot,
     // return the sampled color directly without re-applying tone mapping, curves, or color transforms.
@@ -72,6 +81,7 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
                           (uniforms.lutEnabled == 0) &&
                           (uniforms.sharpeningAmount == 0.0) &&
                           (uniforms.noiseReduction == 0.0) &&
+                          (uniforms.defringeAmount == 0.0) &&
                           (uniforms.emulsionArchetype == 0) &&
                           (uniforms.halationMode == 0) &&
                           (uniforms.emulsionGrainMode == 0) &&
@@ -323,7 +333,7 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
         editGrainMode = 0;
     }
 
-    if (editSharpening > 0.0 || editNoiseReduction > 0.0 || editGrainMode != 0) {
+    if (editSharpening > 0.0 || editNoiseReduction > 0.0 || editGrainMode != 0 || uniforms.defringeAmount > 0.0) {
         var formatMag: f32 = 1.0;
         if (uniforms.emulsionFormat == 1) { formatMag = 0.48; }
         else if (uniforms.emulsionFormat == 2) { formatMag = 0.28; }
@@ -336,7 +346,7 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
         let y_c = dot(rec2020Color, vec3<f32>(0.2627, 0.6780, 0.0593));
         let wbExposureScale = vec3<f32>(rScale, gScale, bScale) * exposureGain;
 
-        if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
+        if (editSharpening > 0.0 || editNoiseReduction > 0.0 || uniforms.defringeAmount > 0.0) {
             let effectiveRadius = max(uniforms.sharpeningRadius * uniforms.baselineSharpness, 0.5);
             let sharpenOffset = texelSize * effectiveRadius;
             let leftSample   = textureSample(u_texture, u_sampler, uv - vec2<f32>(sharpenOffset.x, 0.0));
@@ -370,13 +380,20 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
                 y_br = dot(brSample.rgb     * wbExposureScale, vec3<f32>(0.2627, 0.6780, 0.0593));
             }
 
-            rec2020Color = applyDetailAndSharpening(
-                rec2020Color,
-                y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br,
-                editSharpening,
-                uniforms.sharpeningMasking,
-                editNoiseReduction
-            );
+            let y_max_neighbor = max(max(max(y_l, y_r), max(y_t, y_b)), max(max(y_tl, y_tr), max(y_bl, y_br)));
+            if (uniforms.defringeAmount > 0.0 && uniforms.isOriginal < 0.5) {
+                rec2020Color = applyDefringe(rec2020Color, y_c, y_max_neighbor, uniforms.defringeAmount);
+            }
+
+            if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
+                rec2020Color = applyDetailAndSharpening(
+                    rec2020Color,
+                    y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br,
+                    editSharpening,
+                    uniforms.sharpeningMasking,
+                    editNoiseReduction
+                );
+            }
         }
 
         if (editGrainMode != 0) {

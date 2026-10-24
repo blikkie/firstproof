@@ -4139,6 +4139,16 @@ public func evaluateCurveLut(points: [CurvePointRecord]) -> [Float] {
     )
 })
 }
+/**
+ * Executes a canonical [`DarkroomCommand`] in headless mode and returns a structured JSON response.
+ */
+public func executeDarkroomCommandHeadless(jsonStr: String) -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_execute_darkroom_command_headless(
+        FfiConverterString.lower(jsonStr),$0
+    )
+})
+}
 public func exportBatchPhotos(items: [BatchExportItemRecord]) -> [BatchExportResultRecord] {
     return try!  FfiConverterSequenceTypeBatchExportResultRecord.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_export_batch_photos(
@@ -4388,6 +4398,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_evaluate_curve_lut() != 25736) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_execute_darkroom_command_headless() != 37880) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_export_batch_photos() != 38182) {

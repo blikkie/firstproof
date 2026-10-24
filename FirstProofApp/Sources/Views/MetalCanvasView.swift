@@ -161,6 +161,7 @@ public struct MetalCanvasView: NSViewRepresentable {
             isOriginal: isShowingOriginal,
             isCropToolActive: isCropToolActive,
             lensCorrectionEnabled: viewModel.isIntermediatePreviewActive ? false : viewModel.lensCorrectionEnabled,
+            tcaCorrectionEnabled: viewModel.isIntermediatePreviewActive ? false : viewModel.tcaCorrectionEnabled,
             lensCoefficients: viewModel.isIntermediatePreviewActive ? nil : viewModel.lensCoefficients,
             edrHeadroom: viewModel.isScreenHdrCapable ? viewModel.edrHeadroom : 1.0,
             edrEnabled: viewModel.isScreenHdrCapable && viewModel.isHdrEnabled,
@@ -242,6 +243,7 @@ public struct MetalCanvasView: NSViewRepresentable {
                 isOriginal: false,
                 isCropToolActive: false,
                 lensCorrectionEnabled: vm.lensCorrectionEnabled,
+                tcaCorrectionEnabled: vm.tcaCorrectionEnabled,
                 lensCoefficients: vm.lensCoefficients,
                 asShotTemperature: vm.asShotTemperature,
                 asShotTint: vm.asShotTint
@@ -276,6 +278,7 @@ public struct MetalCanvasView: NSViewRepresentable {
                 isOriginal: false,
                 isCropToolActive: false,
                 lensCorrectionEnabled: vm.lensCorrectionEnabled,
+                tcaCorrectionEnabled: vm.tcaCorrectionEnabled,
                 lensCoefficients: vm.lensCoefficients,
                 asShotTemperature: vm.asShotTemperature,
                 asShotTint: vm.asShotTint

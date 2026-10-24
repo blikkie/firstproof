@@ -886,10 +886,13 @@ public struct EditSettings {
     public var printPaperGrade: Float
     public var printBaseWarmth: Float
     public var printProcessDepth: Float
+    public var defringeAmount: Float
+    public var lensCorrectionEnabled: Bool
+    public var tcaCorrectionEnabled: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, emulsionGrainMode: EmulsionGrainMode, grainScale: Float, grainSize: Float, grainAmount: Float, emulsionArchetype: EmulsionArchetype, emulsionFormat: EmulsionFormat, emulsionExposure: Float, remjetBacking: RemjetBackingMode, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float, printMedia: PrintMediaMode, enlargerFilter: EnlargerFilterMode, printPaperGrade: Float, printBaseWarmth: Float, printProcessDepth: Float) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, emulsionGrainMode: EmulsionGrainMode, grainScale: Float, grainSize: Float, grainAmount: Float, emulsionArchetype: EmulsionArchetype, emulsionFormat: EmulsionFormat, emulsionExposure: Float, remjetBacking: RemjetBackingMode, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float, printMedia: PrintMediaMode, enlargerFilter: EnlargerFilterMode, printPaperGrade: Float, printBaseWarmth: Float, printProcessDepth: Float, defringeAmount: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -939,6 +942,9 @@ public struct EditSettings {
         self.printPaperGrade = printPaperGrade
         self.printBaseWarmth = printBaseWarmth
         self.printProcessDepth = printProcessDepth
+        self.defringeAmount = defringeAmount
+        self.lensCorrectionEnabled = lensCorrectionEnabled
+        self.tcaCorrectionEnabled = tcaCorrectionEnabled
     }
 }
 
@@ -1093,6 +1099,15 @@ extension EditSettings: Equatable, Hashable {
         if lhs.printProcessDepth != rhs.printProcessDepth {
             return false
         }
+        if lhs.defringeAmount != rhs.defringeAmount {
+            return false
+        }
+        if lhs.lensCorrectionEnabled != rhs.lensCorrectionEnabled {
+            return false
+        }
+        if lhs.tcaCorrectionEnabled != rhs.tcaCorrectionEnabled {
+            return false
+        }
         return true
     }
 
@@ -1146,6 +1161,9 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(printPaperGrade)
         hasher.combine(printBaseWarmth)
         hasher.combine(printProcessDepth)
+        hasher.combine(defringeAmount)
+        hasher.combine(lensCorrectionEnabled)
+        hasher.combine(tcaCorrectionEnabled)
     }
 }
 
@@ -1205,7 +1223,10 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 enlargerFilter: FfiConverterTypeEnlargerFilterMode.read(from: &buf), 
                 printPaperGrade: FfiConverterFloat.read(from: &buf), 
                 printBaseWarmth: FfiConverterFloat.read(from: &buf), 
-                printProcessDepth: FfiConverterFloat.read(from: &buf)
+                printProcessDepth: FfiConverterFloat.read(from: &buf), 
+                defringeAmount: FfiConverterFloat.read(from: &buf), 
+                lensCorrectionEnabled: FfiConverterBool.read(from: &buf), 
+                tcaCorrectionEnabled: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -1259,6 +1280,9 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.printPaperGrade, into: &buf)
         FfiConverterFloat.write(value.printBaseWarmth, into: &buf)
         FfiConverterFloat.write(value.printProcessDepth, into: &buf)
+        FfiConverterFloat.write(value.defringeAmount, into: &buf)
+        FfiConverterBool.write(value.lensCorrectionEnabled, into: &buf)
+        FfiConverterBool.write(value.tcaCorrectionEnabled, into: &buf)
     }
 }
 

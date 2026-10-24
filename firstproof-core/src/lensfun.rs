@@ -22,7 +22,7 @@ pub struct DistortionCalib {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TcaCalib {
     pub focal_length: f32,
-    pub coefficients: [f32; 2], // [kr, kb] (red & blue scale relative to green)
+    pub coefficients: Vec<f32>, // [vr, vb, br, bb, cr, cb] (or legacy [kr, kb])
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -329,8 +329,20 @@ impl LensfunDatabase {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
             {
-                res.tca = tca.coefficients.to_vec();
-                res.has_tca = true;
+                res.tca = tca.coefficients.clone();
+                let vr = res.tca.first().copied().unwrap_or(1.0);
+                let vb = res.tca.get(1).copied().unwrap_or(1.0);
+                let br = res.tca.get(2).copied().unwrap_or(0.0);
+                let bb = res.tca.get(3).copied().unwrap_or(0.0);
+                let cr = res.tca.get(4).copied().unwrap_or(0.0);
+                let cb = res.tca.get(5).copied().unwrap_or(0.0);
+                let is_identity = (vr - 1.0).abs() < 1e-6
+                    && (vb - 1.0).abs() < 1e-6
+                    && br.abs() < 1e-7
+                    && bb.abs() < 1e-7
+                    && cr.abs() < 1e-7
+                    && cb.abs() < 1e-7;
+                res.has_tca = !is_identity;
             }
         }
 
@@ -509,12 +521,24 @@ fn parse_distortion(node: &roxmltree::Node) -> Option<DistortionCalib> {
 
 fn parse_tca(node: &roxmltree::Node) -> Option<TcaCalib> {
     let focal_length = node.attribute("focal").and_then(|f| f.parse::<f32>().ok())?;
-    let kr = node.attribute("kr").and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0);
-    let kb = node.attribute("kb").and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0);
+    let vr = node
+        .attribute("vr")
+        .or_else(|| node.attribute("kr"))
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(1.0);
+    let vb = node
+        .attribute("vb")
+        .or_else(|| node.attribute("kb"))
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(1.0);
+    let br = node.attribute("br").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+    let bb = node.attribute("bb").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+    let cr = node.attribute("cr").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+    let cb = node.attribute("cb").and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
 
     Some(TcaCalib {
         focal_length,
-        coefficients: [kr, kb],
+        coefficients: vec![vr, vb, br, bb, cr, cb],
     })
 }
 
@@ -594,6 +618,9 @@ mod tests {
         assert_eq!(coeffs.distortion[0], 0.02964);
         assert_eq!(coeffs.distortion_model, "ptlens");
         assert!(coeffs.has_tca);
+        assert!((coeffs.tca[0] - 1.0002104).abs() < 1e-6); // vr
+        assert!((coeffs.tca[1] - 1.0000529).abs() < 1e-6); // vb
+        assert!((coeffs.tca[2] - (-0.0000220)).abs() < 1e-7); // br
         assert!(coeffs.has_vignetting);
         
         // Test user's Canon EOS 60D + EF28mm f/2.8 setup

@@ -16,7 +16,7 @@ import json
 import socket
 import subprocess
 
-SOCKET_PATH = "/tmp/firstproof-debug.sock"
+SOCKET_PATH = os.environ.get("FIRSTPROOF_SOCKET", "/tmp/firstproof-debug.sock")
 WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CLI_BIN = os.path.join(WORKSPACE_ROOT, "target", "debug", "firstproof-cli")
 INSPECT_BIN = os.path.join(WORKSPACE_ROOT, "target", "debug", "inspect")

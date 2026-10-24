@@ -876,7 +876,7 @@ fn cmd_shaders(args: &[String]) -> Result<(), String> {
 export const FRAGMENT_SHADER_SOURCE = `{}`;
 
 export const SHADER_UNIFORM_BLOCK_NAME = 'ShaderUniforms_block_0Fragment';
-export const SHADER_UNIFORM_SIZE_BYTES = 288;
+export const SHADER_UNIFORM_SIZE_BYTES = 320;
 
 export const SHADER_SAMPLER_NAMES = {{
   texture: '_group_0_binding_1_fs',

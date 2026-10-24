@@ -73,7 +73,15 @@ struct ShaderUniforms {
     rotation: i32,
     asShotTemperature: f32,
     asShotTint: f32,
-    pad: f32, // 16-byte std140/WebGPU alignment padding (72 fields * 4 bytes = 288 bytes = 18 * 16)
+    hasTca: i32,
+    tcaVr: f32,
+    tcaVb: f32,
+    tcaBr: f32,
+    tcaBb: f32,
+    tcaCr: f32,
+    tcaCb: f32,
+    defringeAmount: f32,
+    tcaCorrectionEnabled: i32, // 16-byte std140/WebGPU alignment (80 fields * 4 bytes = 320 bytes = 20 * 16)
 };
 
 struct VertexOutput {

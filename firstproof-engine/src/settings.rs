@@ -65,6 +65,9 @@ pub struct EditSettings {
     pub print_paper_grade: f32,
     pub print_base_warmth: f32,
     pub print_process_depth: f32,
+    pub defringe_amount: f32,
+    pub lens_correction_enabled: bool,
+    pub tca_correction_enabled: bool,
 }
 
 impl Default for EditSettings {
@@ -119,6 +122,9 @@ impl Default for EditSettings {
             print_paper_grade: 0.0,
             print_base_warmth: 0.0,
             print_process_depth: 100.0,
+            defringe_amount: 0.0,
+            lens_correction_enabled: false,
+            tca_correction_enabled: true,
         }
     }
 }

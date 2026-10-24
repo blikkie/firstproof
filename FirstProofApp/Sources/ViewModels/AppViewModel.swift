@@ -54,6 +54,7 @@ public enum EditSliderType {
     case printPaperGrade
     case printBaseWarmth
     case printProcessDepth
+    case defringeAmount
     
     public var displayName: String {
         switch self {
@@ -88,6 +89,7 @@ public enum EditSliderType {
         case .printPaperGrade: return "Paper Grade"
         case .printBaseWarmth: return "Base Warmth"
         case .printProcessDepth: return "Process Depth"
+        case .defringeAmount: return "Defringe"
         }
     }
     
@@ -111,6 +113,7 @@ public enum EditSliderType {
         case .noiseReduction: return "noise_reduction"
         case .printPaperGrade: return "paper_grade"
         case .printProcessDepth: return "process_depth"
+        case .defringeAmount: return "defringe_amount"
         default: return nil
         }
     }
@@ -450,6 +453,7 @@ public final class AppViewModel {
     public var printPaperGrade: Float = 0.0     // -2.0 .. +2.0
     public var printBaseWarmth: Float = 0.0     // -100 .. +100
     public var printProcessDepth: Float = 100.0 // 0 .. 100
+    public var defringeAmount: Float = 0.0      // 0 .. 100 (Axial Purple Defringe)
 
     public var defaultSharpeningAmount: Float { 0.0 }
     public var defaultSharpeningRadius: Float { 1.0 }
@@ -479,7 +483,8 @@ public final class AppViewModel {
     public var isCropToolActive: Bool = false
     public var cropAspectRatioPreset: CropAspectRatioPreset = .original
     @ObservationIgnored public var cropSessionSnapshot: CropSessionSnapshot? = nil
-    public var lensCorrectionEnabled: Bool = true
+    public var lensCorrectionEnabled: Bool = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
+    public var tcaCorrectionEnabled: Bool = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
     public var toneProfile: ColorProfileMode = .agxVivid
     public var selectedLutName: String? = nil
     public var lutIntensity: Float = 1.0
@@ -828,17 +833,44 @@ public final class AppViewModel {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty } ?? existing?.keywords ?? []
 
+            let finalTitle = (title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? title : existing?.title
+            let finalDescription = (description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? description : existing?.description
+            let finalCreator = (creator?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? creator : existing?.creator
+            let finalCopyright = (copyright?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? copyright : existing?.copyright
+
+            let finalEdits: EditSettings
+            if isCurrent {
+                finalEdits = activeSnapshot
+            } else if let e = existing?.edits {
+                finalEdits = e
+            } else {
+                var baseline = EditSettings.defaultIdentity
+                if let asShot = getAsShotWhiteBalance(path: path) {
+                    baseline.temperature = asShot.temperature
+                    baseline.tint = asShot.tint
+                }
+                if let orient = extractMetadata(path: path)?.orientation {
+                    let dec = decodeExifOrientation(orientation: orient)
+                    baseline.rotation = Int32(dec.rotation)
+                    baseline.flipHorizontal = dec.flipHorizontal
+                    baseline.flipVertical = dec.flipVertical
+                }
+                baseline.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
+                baseline.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+                finalEdits = baseline
+            }
+
             let record = XmpDataRecord(
                 rating: currentRating ?? existing?.rating,
                 status: currentStatus,
-                title: title ?? existing?.title,
-                description: description ?? existing?.description,
-                creator: creator ?? existing?.creator,
-                copyright: copyright ?? existing?.copyright,
+                title: finalTitle,
+                description: finalDescription,
+                creator: finalCreator,
+                copyright: finalCopyright,
                 keywords: splitKeywords,
-                latitude: currentLat ?? existing?.latitude,
-                longitude: currentLon ?? existing?.longitude,
-                edits: isCurrent ? activeSnapshot : (existing?.edits ?? EditSettings.defaultIdentity)
+                latitude: existing?.latitude ?? currentLat,
+                longitude: existing?.longitude ?? currentLon,
+                edits: finalEdits
             )
             _ = writeXmp(path: path, record: record)
         }

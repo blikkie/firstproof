@@ -253,7 +253,19 @@ extension AppViewModel {
 
         let targetEdits: EditSettings
         if let xmp = readXmp(path: photo.filePath) {
-            targetEdits = xmp.edits.migratingLegacyProfiles
+            var edits = xmp.edits.migratingLegacyProfiles
+            if !editsHasModifications(edits: edits, asShotTemp: asShotTemp, asShotTint: asShotTint) {
+                // Sidecar has no custom develop adjustments (e.g. metadata-only sidecar):
+                // preserve camera as-shot WB, baseline EXIF orientation, and user default lens preferences.
+                edits.temperature = asShotTemp
+                edits.tint = asShotTint
+                edits.rotation = Int32(exifRotation)
+                edits.flipHorizontal = exifFlipH
+                edits.flipVertical = exifFlipV
+                edits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
+                edits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+            }
+            targetEdits = edits
         } else {
             var defaultEdits = EditSettings.defaultIdentity
             defaultEdits.rotation = Int32(exifRotation)
@@ -261,6 +273,8 @@ extension AppViewModel {
             defaultEdits.flipVertical = exifFlipV
             defaultEdits.temperature = asShotTemp
             defaultEdits.tint = asShotTint
+            defaultEdits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
+            defaultEdits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
             targetEdits = defaultEdits
         }
         
@@ -519,14 +533,7 @@ extension AppViewModel {
     }
     
     func syncXmp(for filePath: String, rating: Int32??, status: String?, edits: EditSettings? = nil) {
-        let currentPhoto = photos.first(where: { $0.filePath == filePath })
-        let finalRating: Int32?
-        if let r = rating {
-            finalRating = r
-        } else {
-            finalRating = currentPhoto?.rating
-        }
-        let finalStatus = status ?? currentPhoto?.status ?? "none"
+        let currentPhoto = (selectedPhoto?.filePath == filePath ? selectedPhoto : nil) ?? photos.first(where: { $0.filePath == filePath })
         let photoKeywords = currentPhoto?.keywords
         let photoTitle = currentPhoto?.title
         let photoDescription = currentPhoto?.description
@@ -534,27 +541,83 @@ extension AppViewModel {
         let photoCopyright = currentPhoto?.copyright
         let photoLat = currentPhoto?.latitude
         let photoLon = currentPhoto?.longitude
+        let photoStatus = currentPhoto?.status
 
         Task.detached(priority: .utility) {
             let existingXmp = readXmp(path: filePath)
-            let finalEdits = edits ?? existingXmp?.edits ?? EditSettings.defaultIdentity
+            let finalEdits: EditSettings
+            if let e = edits {
+                finalEdits = e
+            } else if let e = existingXmp?.edits {
+                finalEdits = e
+            } else {
+                var baseline = EditSettings.defaultIdentity
+                if let asShot = getAsShotWhiteBalance(path: filePath) {
+                    baseline.temperature = asShot.temperature
+                    baseline.tint = asShot.tint
+                }
+                if let orient = extractMetadata(path: filePath)?.orientation {
+                    let dec = decodeExifOrientation(orientation: orient)
+                    baseline.rotation = Int32(dec.rotation)
+                    baseline.flipHorizontal = dec.flipHorizontal
+                    baseline.flipVertical = dec.flipVertical
+                }
+                baseline.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
+                baseline.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+                finalEdits = baseline
+            }
+
+            // Resolve Keywords: preserve existing if in-memory is nil or empty
             let splitKeywords: [String]
-            if let kw = photoKeywords {
+            if let kw = photoKeywords, !kw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 splitKeywords = kw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             } else {
                 splitKeywords = existingXmp?.keywords ?? []
             }
 
+            // Resolve Rating:
+            // - If rating was explicitly provided as .some(val): use val (can be nil to clear).
+            // - If rating was nil (not provided): preserve in-memory rating or existing XMP rating.
+            let finalRating: Int32?
+            if let explicitRating = rating {
+                finalRating = explicitRating
+            } else {
+                finalRating = currentPhoto?.rating ?? existingXmp?.rating
+            }
+
+            // Resolve Status:
+            // - If status was explicitly provided: use it.
+            // - If status was nil: preserve in-memory if non-empty and not "none", else preserve existing XMP status.
+            let finalStatus: String
+            if let s = status {
+                finalStatus = s
+            } else if let s = photoStatus, !s.isEmpty && s.lowercased() != "none" {
+                finalStatus = s
+            } else {
+                finalStatus = existingXmp?.status ?? "none"
+            }
+
+            // Resolve Title / Description / Creator / Copyright:
+            // Preserve existing XMP values if in-memory values are empty or nil
+            let finalTitle = (photoTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? photoTitle : existingXmp?.title
+            let finalDescription = (photoDescription?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? photoDescription : existingXmp?.description
+            let finalCreator = (photoCreator?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? photoCreator : existingXmp?.creator
+            let finalCopyright = (photoCopyright?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? photoCopyright : existingXmp?.copyright
+            // GPS coordinates: Sidecar coordinates (from geotagging tools or previous edits)
+            // strictly take precedence over camera raw EXIF coordinates.
+            let finalLat = existingXmp?.latitude ?? photoLat
+            let finalLon = existingXmp?.longitude ?? photoLon
+
             let record = XmpDataRecord(
-                rating: finalRating ?? existingXmp?.rating,
+                rating: finalRating,
                 status: finalStatus,
-                title: photoTitle ?? existingXmp?.title,
-                description: photoDescription ?? existingXmp?.description,
-                creator: photoCreator ?? existingXmp?.creator,
-                copyright: photoCopyright ?? existingXmp?.copyright,
+                title: finalTitle,
+                description: finalDescription,
+                creator: finalCreator,
+                copyright: finalCopyright,
                 keywords: splitKeywords,
-                latitude: photoLat ?? existingXmp?.latitude,
-                longitude: photoLon ?? existingXmp?.longitude,
+                latitude: finalLat,
+                longitude: finalLon,
                 edits: finalEdits
             )
             _ = writeXmp(path: filePath, record: record)

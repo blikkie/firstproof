@@ -42,6 +42,9 @@ pub struct EditDelta {
     pub print_paper_grade: Option<f32>,
     pub print_base_warmth: Option<f32>,
     pub print_process_depth: Option<f32>,
+    pub defringe_amount: Option<f32>,
+    pub lens_correction_enabled: Option<bool>,
+    pub tca_correction_enabled: Option<bool>,
 }
 
 impl EditDelta {
@@ -80,6 +83,9 @@ impl EditDelta {
         if let Some(v) = self.print_paper_grade { settings.print_paper_grade = v; }
         if let Some(v) = self.print_base_warmth { settings.print_base_warmth = v; }
         if let Some(v) = self.print_process_depth { settings.print_process_depth = v; }
+        if let Some(v) = self.defringe_amount { settings.defringe_amount = v; }
+        if let Some(v) = self.lens_correction_enabled { settings.lens_correction_enabled = v; }
+        if let Some(v) = self.tca_correction_enabled { settings.tca_correction_enabled = v; }
     }
 }
 

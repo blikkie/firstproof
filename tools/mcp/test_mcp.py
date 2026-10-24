@@ -17,12 +17,15 @@ MCP_SERVER = os.path.join(SCRIPT_DIR, "firstproof_mcp.py")
 
 class TestFirstProofMCP(unittest.TestCase):
     def setUp(self):
+        env = os.environ.copy()
+        env["FIRSTPROOF_SOCKET"] = "/tmp/firstproof-test-isolated.sock"
         self.proc = subprocess.Popen(
             [sys.executable, MCP_SERVER],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            env=env
         )
 
     def tearDown(self):

@@ -542,3 +542,18 @@ This archive tracks completed stories and features moved from the active backlog
   - Web Darkroom parity: exported `execute_darkroom_command` from `firstproof-wasm` directly to JavaScript.
   - Upgraded `tools/mcp/firstproof_mcp.py` to production-grade Model Context Protocol (MCP) server exposing 12 formal tools with automatic fallback from live GUI socket to headless CLI runner.
   - Authored comprehensive documentation in `docs/architecture/cli_and_mcp.md`.
+
+- **Story 4.10: Optical Chromatic Aberration Correction: Lateral TCA & Longitudinal Defringe**:
+  - *Transverse Chromatic Aberration (TCA) Pipeline Integration*:
+    - Upgraded `LensfunDatabase` and `TcaCalib` in `firstproof-core/src/lensfun.rs` to extract full 6-parameter polynomial calibrations (`[vr, vb, br, bb, cr, cb]`) matching Lensfun's `poly3` and `linear` models from upstream database snapshot.
+    - Re-indexed 56 XML files into `assets/lensfun/lensfun.json` (3.96 MB), mirrored to macOS App resources and web public assets.
+    - Implemented radial per-channel coordinate scaling ($r_r = [v_r + b_r r^2 + c_r r^4] \cdot r$, $r_b = [v_b + b_b r^2 + c_b r^4] \cdot r$) in canonical WGSL geometry (`geometry.wgsl`), Metal shaders, WebGL 2, and the Rust CPU export demosaic pipeline (`export/encoders.rs`).
+    - Bit-level parity verified with automated test `test_lensfun_export_tca_math` in `camera_profiles_parity.rs`.
+  - *Longitudinal / Axial Purple Defringing*:
+    - Formulated edge-directed chromaticity attenuation in Linear Rec.2020 working space (`applyDefringe` in `detail.wgsl` and `apply_defringe_rgb` in `encoders.rs`).
+    - Anchored sensitometric hue qualification to the physical purple fringe band ($260^\circ - 340^\circ$) using smooth analytical $C^1$ Hermite bell curves ($w_{\text{hue}}$) and local neighborhood specular edge weighting ($w_{\text{edge}} \cdot w_{\text{highlight}}$), completely protecting legitimate subject colors (such as purple flowers or textiles).
+    - Added user-facing "Defringe" tactile slider (0..100) in `OpticsGeometryWorkspaceView.swift` and `AppViewModel.swift`, with real-time viewport feedback and full undo/redo scrubbing integration.
+    - Parity and edge selectivity verified with `test_defringe_math_parity`.
+  - *Unified Shader & Engine Synchronization*:
+    - Expanded `ShaderUniforms` to 320 bytes (exact 20 × 16-byte std140/WebGPU alignment), updating Metal C headers, Naga transpiled GLSL/WGSL, and WebGL renderer.
+    - Full WebAssembly and TypeScript parity updated in `firstproof-wasm` and `web/`.

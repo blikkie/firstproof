@@ -49,6 +49,9 @@ mod tests {
         data.edits.rotation = 90;
         data.edits.flip_horizontal = true;
         data.edits.flip_vertical = false;
+        data.edits.remjet_backing = firstproof_engine::modes::RemjetBackingMode::Stripped;
+        data.edits.lens_correction_enabled = true;
+        data.edits.tca_correction_enabled = false;
         
         let path = "test_image_metadata.xmp";
         write_xmp_file(path, &data).unwrap();
@@ -93,6 +96,9 @@ mod tests {
         assert_eq!(parsed.edits.rotation, 90);
         assert_eq!(parsed.edits.flip_horizontal, true);
         assert_eq!(parsed.edits.flip_vertical, false);
+        assert_eq!(parsed.edits.remjet_backing, firstproof_engine::modes::RemjetBackingMode::Stripped);
+        assert_eq!(parsed.edits.lens_correction_enabled, true);
+        assert_eq!(parsed.edits.tca_correction_enabled, false);
     }
 
     #[test]

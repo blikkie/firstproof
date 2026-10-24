@@ -1029,6 +1029,9 @@ export interface EditSettings {
     print_paper_grade: number;
     print_base_warmth: number;
     print_process_depth: number;
+    defringe_amount?: number;
+    lens_correction_enabled?: boolean;
+    tca_correction_enabled?: boolean;
 }
 
 export interface XmpData {

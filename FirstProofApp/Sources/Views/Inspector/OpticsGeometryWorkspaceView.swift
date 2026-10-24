@@ -151,8 +151,21 @@ public struct OpticsGeometryWorkspaceView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
                 
-                Toggle("Lens Correction", isOn: $viewModel.lensCorrectionEnabled)
-                    .toggleStyle(.switch)
+                Toggle("Geometric Distortion", isOn: viewModel.editToggleBinding(
+                    titleOn: "Enable Distortion Correction",
+                    titleOff: "Disable Distortion Correction",
+                    keyPath: \.lensCorrectionEnabled
+                ))
+                .toggleStyle(.switch)
+                .disabled(viewModel.lensCoefficients?.hasDistortion != true)
+                
+                Toggle("Chromatic Aberration", isOn: viewModel.editToggleBinding(
+                    titleOn: "Enable CA Correction",
+                    titleOff: "Disable CA Correction",
+                    keyPath: \.tcaCorrectionEnabled
+                ))
+                .toggleStyle(.switch)
+                .disabled(viewModel.lensCoefficients?.hasTca != true)
                 
                 if let coeff = viewModel.lensCoefficients {
                     VStack(alignment: .leading, spacing: 2) {
@@ -162,15 +175,40 @@ public struct OpticsGeometryWorkspaceView: View {
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                         }
-                        Text("Model: \(coeff.distortionModel.uppercased())")
-                            .font(.system(size: 9))
-                            .foregroundColor(.secondary.opacity(0.8))
+                        if coeff.hasDistortion {
+                            Text("Distortion Model: \(coeff.distortionModel.uppercased())")
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary.opacity(0.8))
+                        } else {
+                            Text("Distortion Model: None")
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary.opacity(0.8))
+                        }
+                        if coeff.hasTca {
+                            Text("Lateral CA: Calibrated")
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary.opacity(0.8))
+                        } else {
+                            Text("Lateral CA: Uncalibrated (Use Defringe)")
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary.opacity(0.8))
+                        }
                     }
                     .padding(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.secondary.opacity(0.08))
                     .cornerRadius(4)
                 }
+                
+                SliderRow(
+                    label: "Defringe",
+                    value: $viewModel.defringeAmount,
+                    range: 0.0...100.0,
+                    format: "%.0f",
+                    onReset: { viewModel.resetSlider(.defringeAmount) },
+                    onEditingChanged: { viewModel.handleSliderEditing($0, slider: .defringeAmount) },
+                    onCancel: { viewModel.cancelSliderScrub() }
+                )
                 
                 Text("Lens metadata comes from [Lensfun](https://lensfun.github.io) under the [CC-BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) license.")
                     .font(.caption2)

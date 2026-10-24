@@ -44,6 +44,57 @@ fn applyDetailAndSharpening(
     return clamp(color + vec3<f32>(delta_adj), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
+// MARK: - Longitudinal / Axial Purple Defringing
+fn applyDefringe(
+    color: vec3<f32>,
+    y_c: f32,
+    y_max_neighbor: f32,
+    defringeAmount: f32
+) -> vec3<f32> {
+    if (defringeAmount <= 0.0) {
+        return color;
+    }
+    
+    // Only process if both Red and Blue exceed Green (purple/magenta chromaticity)
+    let excess_b = color.b - color.g;
+    let excess_r = color.r - color.g;
+    if (excess_b <= 0.0 || excess_r <= 0.0) {
+        return color;
+    }
+    
+    // 1. Sensitometric Hue Qualification in Linear Rec.2020:
+    // Hue angle in degrees: Red = 0, Yellow = 60, Green = 120, Cyan = 180, Blue = 240, Magenta/Purple = 300
+    let u = 2.0 * color.r - color.g - color.b;
+    let v = 1.7320508 * (color.g - color.b);
+    var hue = atan2(v, u) * 57.2957795; // 180 / pi
+    if (hue < 0.0) {
+        hue = hue + 360.0;
+    }
+    
+    // Smooth C1 Hermite trapezoid anchored to the physical purple fringe band (260 - 340 deg)
+    let w_hue = smoothstep(250.0, 270.0, hue) * (1.0 - smoothstep(330.0, 350.0, hue));
+    if (w_hue <= 0.001) {
+        return color;
+    }
+    
+    // 2. High-contrast specular border / edge qualification:
+    // Fringe must be adjacent to a significantly brighter highlight region
+    let edge_contrast = y_max_neighbor - y_c;
+    let w_edge = smoothstep(0.04, 0.25, edge_contrast);
+    let w_highlight = smoothstep(0.04, 0.25, y_max_neighbor);
+    
+    let w_fringe = w_hue * w_edge * w_highlight * (defringeAmount / 100.0);
+    if (w_fringe <= 0.001) {
+        return color;
+    }
+    
+    // 3. Attenuate excess purple chrominance smoothly toward local green luminance
+    let r_adj = color.r - w_fringe * excess_r;
+    let b_adj = color.b - w_fringe * excess_b;
+    
+    return vec3<f32>(r_adj, color.g, b_adj);
+}
+
 // MARK: - Stochastic Emulsion Resynthesis & Physical Optical Grain Engine
 fn proceduralGrainNoise(u: f32, v: f32) -> f32 {
     let p = 50.0 * fract(vec2<f32>(u, v) * 0.3183099 + vec2<f32>(0.71, 0.113));

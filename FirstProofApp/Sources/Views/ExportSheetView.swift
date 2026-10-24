@@ -278,7 +278,7 @@ public struct ExportSheetView: View {
                 .path
             
             let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits.migratingLegacyProfiles ?? .defaultIdentity)
-            let lensCoeffs = (photo.filePath == viewModel.selectedPhoto?.filePath && viewModel.lensCorrectionEnabled) ? viewModel.lensCoefficients : nil
+            let lensCoeffs = resolvedLensCoefficients(for: photo)
             
             let dq: DemosaicQuality = (demosaicQualityChoice == "Archival") ? .archival : .standard
             
@@ -320,7 +320,7 @@ public struct ExportSheetView: View {
                     .appendingPathComponent("\(baseName)_FirstProof.\(ext)")
                     .path
                 let edits = (photo.filePath == viewModel.selectedPhoto?.filePath) ? viewModel.currentEdits : (readXmp(path: photo.filePath)?.edits.migratingLegacyProfiles ?? .defaultIdentity)
-                let lensCoeffs = (photo.filePath == viewModel.selectedPhoto?.filePath && viewModel.lensCorrectionEnabled) ? viewModel.lensCoefficients : nil
+                let lensCoeffs = resolvedLensCoefficients(for: photo)
                 
                 items.append(BatchExportItemRecord(
                     inputPath: photo.filePath,
@@ -388,5 +388,26 @@ public struct ExportSheetView: View {
                 }
             }
         }
+    }
+    
+    private func resolvedLensCoefficients(for photo: PhotoRecord) -> LensCorrectionCoefficientsRecord? {
+        guard photo.filePath == viewModel.selectedPhoto?.filePath,
+              let c = viewModel.lensCoefficients else {
+            return nil
+        }
+        let distOn = viewModel.lensCorrectionEnabled && c.hasDistortion
+        let tcaOn = viewModel.tcaCorrectionEnabled && c.hasTca
+        if distOn || tcaOn {
+            return LensCorrectionCoefficientsRecord(
+                distortion: c.distortion,
+                tca: c.tca,
+                vignetting: c.vignetting,
+                distortionModel: c.distortionModel,
+                hasDistortion: distOn,
+                hasTca: tcaOn,
+                hasVignetting: c.hasVignetting
+            )
+        }
+        return nil
     }
 }

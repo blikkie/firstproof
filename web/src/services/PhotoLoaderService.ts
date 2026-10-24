@@ -346,7 +346,11 @@ export class PhotoLoaderService {
       edits = getDefaultEdits(isRaw);
     }
 
-    if (edits.rotation === undefined || edits.rotation === null) {
+    if (
+      edits.rotation === undefined ||
+      edits.rotation === null ||
+      !hasModifications(edits, 1)
+    ) {
       edits.rotation = defaultRotation;
       edits.flip_horizontal = defaultFlipH;
       edits.flip_vertical = defaultFlipV;

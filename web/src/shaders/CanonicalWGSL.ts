@@ -76,7 +76,15 @@ struct ShaderUniforms {
     rotation: i32,
     asShotTemperature: f32,
     asShotTint: f32,
-    pad: f32, // 16-byte std140/WebGPU alignment padding (72 fields * 4 bytes = 288 bytes = 18 * 16)
+    hasTca: i32,
+    tcaVr: f32,
+    tcaVb: f32,
+    tcaBr: f32,
+    tcaBb: f32,
+    tcaCr: f32,
+    tcaCb: f32,
+    defringeAmount: f32,
+    tcaCorrectionEnabled: i32, // 16-byte std140/WebGPU alignment (80 fields * 4 bytes = 320 bytes = 20 * 16)
 };
 
 struct VertexOutput {
@@ -238,9 +246,19 @@ const FERMAT_WEIGHTS = array<f32, 16>(
 
 // Canonical Viewport Geometry, Perspective & Lens Distortion Transform
 
-fn transformGeometry(uv: vec2<f32>, uniforms: ShaderUniforms) -> vec2<f32> {
+struct GeometryCoordinates {
+    uv: vec2<f32>,
+    uvRed: vec2<f32>,
+    uvBlue: vec2<f32>,
+};
+
+fn transformGeometryChannels(uv: vec2<f32>, uniforms: ShaderUniforms) -> GeometryCoordinates {
+    var coords: GeometryCoordinates;
     if (uniforms.isOriginal >= 0.5 || uniforms.isIntermediate == 1) {
-        return uv;
+        coords.uv = uv;
+        coords.uvRed = uv;
+        coords.uvBlue = uv;
+        return coords;
     }
     
     let cropL = clamp(uniforms.cropLeft, 0.0, 0.99);
@@ -340,9 +358,28 @@ fn transformGeometry(uv: vec2<f32>, uniforms: ShaderUniforms) -> vec2<f32> {
         }
     }
     
-    geom.x = geom.x / (2.0 * A);
-    geom.y = geom.y / 2.0;
-    return geom + vec2<f32>(0.5, 0.5);
+    var geom_r = geom;
+    var geom_b = geom;
+    
+    // Transverse Chromatic Aberration (TCA) polynomial radial scaling: r_d = (v + b*r^2 + c*r^4) * r
+    if (uniforms.tcaCorrectionEnabled != 0 && uniforms.hasTca != 0) {
+        let r2 = dot(geom, geom);
+        let r4 = r2 * r2;
+        let scale_r = uniforms.tcaVr + uniforms.tcaBr * r2 + uniforms.tcaCr * r4;
+        let scale_b = uniforms.tcaVb + uniforms.tcaBb * r2 + uniforms.tcaCb * r4;
+        geom_r = geom * scale_r;
+        geom_b = geom * scale_b;
+    }
+    
+    let denomA = 2.0 * A;
+    coords.uv = vec2<f32>(geom.x / denomA + 0.5, geom.y * 0.5 + 0.5);
+    coords.uvRed = vec2<f32>(geom_r.x / denomA + 0.5, geom_r.y * 0.5 + 0.5);
+    coords.uvBlue = vec2<f32>(geom_b.x / denomA + 0.5, geom_b.y * 0.5 + 0.5);
+    return coords;
+}
+
+fn transformGeometry(uv: vec2<f32>, uniforms: ShaderUniforms) -> vec2<f32> {
+    return transformGeometryChannels(uv, uniforms).uv;
 }
 
 // Canonical Detail, Sharpening & Stochastic Optical Grain Engine
@@ -389,6 +426,57 @@ fn applyDetailAndSharpening(
 
     let delta_adj = sharp_term - nr_term;
     return clamp(color + vec3<f32>(delta_adj), vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
+// MARK: - Longitudinal / Axial Purple Defringing
+fn applyDefringe(
+    color: vec3<f32>,
+    y_c: f32,
+    y_max_neighbor: f32,
+    defringeAmount: f32
+) -> vec3<f32> {
+    if (defringeAmount <= 0.0) {
+        return color;
+    }
+    
+    // Only process if both Red and Blue exceed Green (purple/magenta chromaticity)
+    let excess_b = color.b - color.g;
+    let excess_r = color.r - color.g;
+    if (excess_b <= 0.0 || excess_r <= 0.0) {
+        return color;
+    }
+    
+    // 1. Sensitometric Hue Qualification in Linear Rec.2020:
+    // Hue angle in degrees: Red = 0, Yellow = 60, Green = 120, Cyan = 180, Blue = 240, Magenta/Purple = 300
+    let u = 2.0 * color.r - color.g - color.b;
+    let v = 1.7320508 * (color.g - color.b);
+    var hue = atan2(v, u) * 57.2957795; // 180 / pi
+    if (hue < 0.0) {
+        hue = hue + 360.0;
+    }
+    
+    // Smooth C1 Hermite trapezoid anchored to the physical purple fringe band (260 - 340 deg)
+    let w_hue = smoothstep(250.0, 270.0, hue) * (1.0 - smoothstep(330.0, 350.0, hue));
+    if (w_hue <= 0.001) {
+        return color;
+    }
+    
+    // 2. High-contrast specular border / edge qualification:
+    // Fringe must be adjacent to a significantly brighter highlight region
+    let edge_contrast = y_max_neighbor - y_c;
+    let w_edge = smoothstep(0.04, 0.25, edge_contrast);
+    let w_highlight = smoothstep(0.04, 0.25, y_max_neighbor);
+    
+    let w_fringe = w_hue * w_edge * w_highlight * (defringeAmount / 100.0);
+    if (w_fringe <= 0.001) {
+        return color;
+    }
+    
+    // 3. Attenuate excess purple chrominance smoothly toward local green luminance
+    let r_adj = color.r - w_fringe * excess_r;
+    let b_adj = color.b - w_fringe * excess_b;
+    
+    return vec3<f32>(r_adj, color.g, b_adj);
 }
 
 // MARK: - Stochastic Emulsion Resynthesis & Physical Optical Grain Engine
@@ -1376,15 +1464,24 @@ fn ign(p: vec2<f32>) -> f32 {
 @fragment
 fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
     // 1. Geometry, Perspective & Crop Homography
-    let uv = transformGeometry(in.texCoord, uniforms);
+    let coords = transformGeometryChannels(in.texCoord, uniforms);
+    let uv = coords.uv;
     
     // Discard / letterbox pixels outside valid texture bounds
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
         return vec4<f32>(0.08, 0.08, 0.08, 1.0); // Neutral dark canvas background
     }
     
-    // Sample texture
-    let sampledColor = textureSample(u_texture, u_sampler, uv);
+    // Sample texture (with per-channel TCA realignment when active)
+    var sampledColor: vec4<f32>;
+    if (uniforms.tcaCorrectionEnabled != 0 && uniforms.hasTca != 0) {
+        let sampleG = textureSample(u_texture, u_sampler, uv);
+        let sampleR = textureSample(u_texture, u_sampler, coords.uvRed);
+        let sampleB = textureSample(u_texture, u_sampler, coords.uvBlue);
+        sampledColor = vec4<f32>(sampleR.r, sampleG.g, sampleB.b, sampleG.a);
+    } else {
+        sampledColor = textureSample(u_texture, u_sampler, uv);
+    }
     
     // Fast-path: When displaying an already-rendered intermediate preview snapshot,
     // return the sampled color directly without re-applying tone mapping, curves, or color transforms.
@@ -1415,6 +1512,7 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
                           (uniforms.lutEnabled == 0) &&
                           (uniforms.sharpeningAmount == 0.0) &&
                           (uniforms.noiseReduction == 0.0) &&
+                          (uniforms.defringeAmount == 0.0) &&
                           (uniforms.emulsionArchetype == 0) &&
                           (uniforms.halationMode == 0) &&
                           (uniforms.emulsionGrainMode == 0) &&
@@ -1666,7 +1764,7 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
         editGrainMode = 0;
     }
 
-    if (editSharpening > 0.0 || editNoiseReduction > 0.0 || editGrainMode != 0) {
+    if (editSharpening > 0.0 || editNoiseReduction > 0.0 || editGrainMode != 0 || uniforms.defringeAmount > 0.0) {
         var formatMag: f32 = 1.0;
         if (uniforms.emulsionFormat == 1) { formatMag = 0.48; }
         else if (uniforms.emulsionFormat == 2) { formatMag = 0.28; }
@@ -1679,7 +1777,7 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
         let y_c = dot(rec2020Color, vec3<f32>(0.2627, 0.6780, 0.0593));
         let wbExposureScale = vec3<f32>(rScale, gScale, bScale) * exposureGain;
 
-        if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
+        if (editSharpening > 0.0 || editNoiseReduction > 0.0 || uniforms.defringeAmount > 0.0) {
             let effectiveRadius = max(uniforms.sharpeningRadius * uniforms.baselineSharpness, 0.5);
             let sharpenOffset = texelSize * effectiveRadius;
             let leftSample   = textureSample(u_texture, u_sampler, uv - vec2<f32>(sharpenOffset.x, 0.0));
@@ -1713,13 +1811,20 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
                 y_br = dot(brSample.rgb     * wbExposureScale, vec3<f32>(0.2627, 0.6780, 0.0593));
             }
 
-            rec2020Color = applyDetailAndSharpening(
-                rec2020Color,
-                y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br,
-                editSharpening,
-                uniforms.sharpeningMasking,
-                editNoiseReduction
-            );
+            let y_max_neighbor = max(max(max(y_l, y_r), max(y_t, y_b)), max(max(y_tl, y_tr), max(y_bl, y_br)));
+            if (uniforms.defringeAmount > 0.0 && uniforms.isOriginal < 0.5) {
+                rec2020Color = applyDefringe(rec2020Color, y_c, y_max_neighbor, uniforms.defringeAmount);
+            }
+
+            if (editSharpening > 0.0 || editNoiseReduction > 0.0) {
+                rec2020Color = applyDetailAndSharpening(
+                    rec2020Color,
+                    y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br,
+                    editSharpening,
+                    uniforms.sharpeningMasking,
+                    editNoiseReduction
+                );
+            }
         }
 
         if (editGrainMode != 0) {

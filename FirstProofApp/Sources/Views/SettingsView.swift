@@ -9,6 +9,8 @@ public struct SettingsView: View {
     @AppStorage("defaultDeduplicateRawOverJpeg") private var defaultDeduplicateRawOverJpeg: Bool = true
     @AppStorage("defaultSkipDuplicates") private var defaultSkipDuplicates: Bool = true
     @AppStorage("defaultConsolidateSidecars") private var defaultConsolidateSidecars: Bool = true
+    @AppStorage("defaultAutoTca") private var defaultAutoTca: Bool = true
+    @AppStorage("defaultAutoDistortion") private var defaultAutoDistortion: Bool = false
     @AppStorage("customMainLibraryPath") private var customMainLibraryPath: String = ""
     
     @State private var pendingNewLibraryPath: String? = nil
@@ -64,6 +66,23 @@ public struct SettingsView: View {
                 Toggle("Prefer RAW over JPEG when both exist for a photo", isOn: $defaultDeduplicateRawOverJpeg)
                 Toggle("Skip duplicate photos already present in library", isOn: $defaultSkipDuplicates)
                 Toggle("Consolidate third-party sidecars into First Proof XMP", isOn: $defaultConsolidateSidecars)
+            }
+            
+            Divider()
+            
+            // MARK: - Optical Corrections
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Optical Corrections")
+                    .font(.headline)
+                
+                Toggle("Auto-correct chromatic aberration when lens profile is available", isOn: $defaultAutoTca)
+                Toggle("Auto-correct geometric distortion when lens profile is available", isOn: $defaultAutoDistortion)
+                
+                Text("Default states applied to newly opened photos without existing edits. Individual photos can toggle corrections at any time in the Optics panel.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(20)

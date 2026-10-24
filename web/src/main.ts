@@ -1063,29 +1063,35 @@ class DarkroomApp {
   }
 
   private getActivePhotoRecord(): PhotoRecord {
-    const title =
-      (this.elements['meta-input-title'] as HTMLInputElement)?.value.trim() ||
-      '';
-    const description =
-      (
-        this.elements['meta-input-caption'] as HTMLTextAreaElement
-      )?.value.trim() || '';
-    const creator =
-      (this.elements['meta-input-creator'] as HTMLInputElement)?.value.trim() ||
-      '';
-    const kwStr = (this.elements['meta-input-keywords'] as HTMLInputElement)
-      ?.value;
-    const keywords = kwStr
-      ? kwStr
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : [];
-
     const activeEntry = this.filmstripController.getActiveEntry();
     const existing = activeEntry
       ? this.loaderService.getPhotoRecord(activeEntry.name)
       : undefined;
+
+    const titleInput = (
+      this.elements['meta-input-title'] as HTMLInputElement
+    )?.value.trim();
+    const title = titleInput ? titleInput : existing?.title || '';
+
+    const descInput = (
+      this.elements['meta-input-caption'] as HTMLTextAreaElement
+    )?.value.trim();
+    const description = descInput ? descInput : existing?.description || '';
+
+    const creatorInput = (
+      this.elements['meta-input-creator'] as HTMLInputElement
+    )?.value.trim();
+    const creator = creatorInput ? creatorInput : existing?.creator || '';
+
+    const kwStr = (this.elements['meta-input-keywords'] as HTMLInputElement)
+      ?.value;
+    const keywords =
+      kwStr && kwStr.trim().length > 0
+        ? kwStr
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : existing?.keywords || [];
 
     return {
       edits: { ...this.edits },

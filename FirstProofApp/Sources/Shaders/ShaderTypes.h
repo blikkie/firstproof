@@ -89,7 +89,15 @@ struct ShaderUniforms {
     int32_t rotation;              // 0, 90, 180, 270
     float asShotTemperature;       // Photo's native correlated color temperature in Kelvin (default 5500K)
     float asShotTint;              // Photo's native tint (default 0.0)
-    float pad;                     // 16-byte std140/WebGPU alignment padding
+    int32_t hasTca;                // 1 = TCA active, 0 = disabled
+    float tcaVr;                   // Red linear radial scale (default 1.0)
+    float tcaVb;                   // Blue linear radial scale (default 1.0)
+    float tcaBr;                   // Red cubic radial scale (default 0.0)
+    float tcaBb;                   // Blue cubic radial scale (default 0.0)
+    float tcaCr;                   // Red 5th-order radial scale (default 0.0)
+    float tcaCb;                   // Blue 5th-order radial scale (default 0.0)
+    float defringeAmount;          // 0.0 .. 100.0 (default 0.0)
+    int32_t tcaCorrectionEnabled;  // 1 = Lateral CA enabled, 0 = disabled (16-byte std140/WebGPU alignment padding)
 };
 
 #endif /* ShaderTypes_h */

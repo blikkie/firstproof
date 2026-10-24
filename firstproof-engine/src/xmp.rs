@@ -1,7 +1,7 @@
 use crate::curve::CurvePointRecord;
 use crate::modes::{
     ColorProfileMode, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode,
-    PrintMediaMode,
+    PrintMediaMode, RemjetBackingMode,
 };
 use crate::settings::EditSettings;
 use roxmltree::{Document, Node};
@@ -326,6 +326,12 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
     writer
         .element("emulsionExposure", pm_ns.clone())
         .value(format!("{:.4}", data.edits.emulsion_exposure).as_str());
+    writer
+        .element("remjetBacking", pm_ns.clone())
+        .value(match data.edits.remjet_backing {
+            RemjetBackingMode::Intact => "Intact",
+            RemjetBackingMode::Stripped => "Stripped",
+        });
 
     writer
         .element("splitToningShadowHue", pm_ns.clone())
@@ -374,6 +380,15 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
     writer
         .element("printProcessDepth", pm_ns.clone())
         .value(format!("{:.4}", data.edits.print_process_depth).as_str());
+    writer
+        .element("defringeAmount", pm_ns.clone())
+        .value(format!("{:.4}", data.edits.defringe_amount).as_str());
+    writer
+        .element("lensCorrectionEnabled", pm_ns.clone())
+        .value(if data.edits.lens_correction_enabled { "True" } else { "False" });
+    writer
+        .element("tcaCorrectionEnabled", pm_ns.clone())
+        .value(if data.edits.tca_correction_enabled { "True" } else { "False" });
 
     writer
         .element("curveMaster", pm_ns.clone())
@@ -643,6 +658,12 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
             data.edits.emulsion_exposure = val;
         }
     }
+    if let Some(rj_str) = get(pm, "remjetBacking") {
+        data.edits.remjet_backing = match rj_str.trim() {
+            "Stripped" => RemjetBackingMode::Stripped,
+            _ => RemjetBackingMode::Intact,
+        };
+    }
     if let Some(temp_str) = get(pm, "temperature") {
         if let Ok(val) = temp_str.parse::<f32>() {
             data.edits.temperature = val;
@@ -750,6 +771,17 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
         if let Ok(val) = ppd_str.parse::<f32>() {
             data.edits.print_process_depth = val;
         }
+    }
+    if let Some(df_str) = get(pm, "defringeAmount") {
+        if let Ok(val) = df_str.parse::<f32>() {
+            data.edits.defringe_amount = val;
+        }
+    }
+    if let Some(lc_str) = get(pm, "lensCorrectionEnabled") {
+        data.edits.lens_correction_enabled = lc_str.eq_ignore_ascii_case("true") || lc_str == "1";
+    }
+    if let Some(tca_str) = get(pm, "tcaCorrectionEnabled") {
+        data.edits.tca_correction_enabled = tca_str.eq_ignore_ascii_case("true") || tca_str == "1";
     }
     if let Some(lut_name_str) = get(pm, "lutName") {
         if !lut_name_str.trim().is_empty() {
@@ -893,7 +925,7 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
             }
         }
     }
-    if data.edits.temperature == 5000.0 {
+    if data.edits.temperature == 5500.0 {
         if let Some(temp_str) = desc.attribute((crs_ns, "Temperature")).or_else(|| desc.attribute("Temperature")) {
             if let Ok(val) = temp_str.parse::<f32>() {
                 data.edits.temperature = val;

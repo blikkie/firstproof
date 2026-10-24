@@ -13,6 +13,7 @@ extension MetalRenderer {
         isOriginal: Bool = false,
         isCropToolActive: Bool = false,
         lensCorrectionEnabled: Bool = true,
+        tcaCorrectionEnabled: Bool = true,
         lensCoefficients: LensCorrectionCoefficientsRecord? = nil,
         edrHeadroom: Float = 1.0,
         edrEnabled: Bool = true,
@@ -42,6 +43,7 @@ extension MetalRenderer {
         uniforms.straightenAngle = edits.cropAngle * (.pi / 180.0)
         uniforms.aspectRatio = imageAspect
         uniforms.lensCorrectionEnabled = lensCorrectionEnabled ? 1 : 0
+        uniforms.tcaCorrectionEnabled = tcaCorrectionEnabled ? 1 : 0
         uniforms.isOriginal = isOriginal ? 1.0 : 0.0
         uniforms.isLinearRaw = isLinearRaw ? 1 : 0
         uniforms.lutEnabled = (edits.lutName != nil) ? 1 : 0
@@ -190,6 +192,26 @@ extension MetalRenderer {
             uniforms.k3 = 0.0
             uniforms.k4 = 0.0
         }
+
+        if let coeff = lensCoefficients, coeff.hasTca {
+            uniforms.hasTca = 1
+            uniforms.tcaVr = coeff.tca.indices.contains(0) ? coeff.tca[0] : 1.0
+            uniforms.tcaVb = coeff.tca.indices.contains(1) ? coeff.tca[1] : 1.0
+            uniforms.tcaBr = coeff.tca.indices.contains(2) ? coeff.tca[2] : 0.0
+            uniforms.tcaBb = coeff.tca.indices.contains(3) ? coeff.tca[3] : 0.0
+            uniforms.tcaCr = coeff.tca.indices.contains(4) ? coeff.tca[4] : 0.0
+            uniforms.tcaCb = coeff.tca.indices.contains(5) ? coeff.tca[5] : 0.0
+        } else {
+            uniforms.hasTca = 0
+            uniforms.tcaVr = 1.0
+            uniforms.tcaVb = 1.0
+            uniforms.tcaBr = 0.0
+            uniforms.tcaBb = 0.0
+            uniforms.tcaCr = 0.0
+            uniforms.tcaCb = 0.0
+        }
+
+        uniforms.defringeAmount = edits.defringeAmount
         
         self.rotationDegrees = Int(edits.rotation)
         self.flipHorizontal = edits.flipHorizontal
