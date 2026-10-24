@@ -91,12 +91,23 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ## Phase 5: Post-v1 & Long-Term Vision
 
-### 5.1 Google Liberation Bridge & Cloud Quarantine (Post-v1)
-- **Air-Gapped Cloud Rejects Quarantine**:
-  - Decouple local reject flagging (`X`) from remote cloud deletion.
-  - Dedicated "Rejected Google Photos" sidebar scope where candidates must be explicitly reviewed.
-  - Batch "Remove from Cloud" action with confirmation dialog, moving remote items to Google Photos Trash rather than permanent obliteration.
-  - Provider-agnostic interface (`CloudProviderBridge`) prepared for future iCloud/Dropbox integrations.
+### 5.1 First Proof Local Peer-to-Peer Sync Bridge & Cloud Liberation (Post-v1)
+- **Google Photos Reality & Liberation via Takeout**:
+  - Acknowledge Google Photos as a locked, read-restricted walled garden: official APIs forbid background library crawling and remote media deletion/trashing.
+  - Liberation relies on the high-fidelity **Google Takeout Ingest Bridge** (Story 5): parsing JSON sidecars, resolving truncated filenames, and consolidating metadata into canonical `.xmp` sidecars on the local disk.
+- **Interactive Google Photos Picker Ingest**:
+  - On-demand modal import invoking the official Google Photos Picker API (`photospicker.mediaitems.readonly`), allowing the photographer to pull specific shoots, albums, or date ranges into First Proof.
+  - Streams original binary assets directly to catalog storage via `baseUrl=d`, ingesting full in-camera embedded EXIF (shutter, aperture, ISO, lens) and native GPS directly into SQLite and canonical `.xmp` sidecars.
+  - **Quiet Transcode / Storage-Saver Telemetry**: If Google returns an asset as a lossy JPEG rather than the camera's original RAW format (indicating Google "Storage Saver" downsampling), display a subtle, quiet badge in the import summary and metadata inspector (e.g., `Transcoded JPEG` in muted slate `#888888`), maintaining honest optical transparency without intrusive modal warnings.
+- **Serverless Local Peer-to-Peer Mobile Bridge (Future First Proof Mobile Companion)**:
+  - **Zero-Cloud, Zero-Hosting Invariant**: No intermediary relay servers, central databases, or cloud accounts. Transfers occur at line speed over the local network (LAN / Wi-Fi).
+  - **Cryptographic Device Pairing (Same-User Authentication)**:
+    - Desktop app generates an ephemeral QR code encoding a local Ed25519 public key fingerprint and LAN connection parameters.
+    - Mobile app scans the QR code to establish mutual TLS (mTLS) with public key pinning saved in the system Keychain.
+    - Local network discovery via Bonjour / mDNS (`_firstproof._tcp`); sync only proceeds if both endpoints mutually prove ownership of the paired keypair.
+  - **Differential Sync**:
+    - Streams new RAW captures from mobile camera roll to desktop catalog storage.
+    - Synchronizes non-destructive culling state (star ratings `1`..`5`, pick/reject flags `P`/`X`) bidirectionally directly into catalog records and XMP sidecars without touching cloud storage.
 
 ### 5.2 Light-Touch Video Cataloging & Metadata Ingestion (Post-v2)
 - **Unified Mixed-Media Chronology**:
