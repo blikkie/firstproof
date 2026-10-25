@@ -464,16 +464,21 @@ fn test_dng_collision_reconciles_existing_dng_and_reclaims_space() {
     fs::copy(&cr2_src, &raw_file).expect("Copy test fixture");
     let raw_size = fs::metadata(&raw_file).unwrap().len();
 
-    // 1. Initial conversion so coexisting.dng exists alongside coexisting.CR2
-    let init_opts = DngConvertOptions {
-        output_path: None,
-        delete_original: false, // keep original to simulate messy co-existing library
-        verify: true,
-        quiet: true,
-    };
-    let initial_rep = convert_raw_to_dng(&raw_file, &init_opts).expect("Initial DNG generation");
-    assert!(!initial_rep.already_existed, "First conversion creates new DNG");
+    // 1. Provide pre-converted coexisting.dng alongside coexisting.CR2 to simulate co-existing library
     let target_dng = sandbox.join("coexisting.dng");
+    let dng_fixture = manifest_dir.join("tests/fixtures/_MG_2651.dng");
+    if dng_fixture.exists() {
+        fs::copy(&dng_fixture, &target_dng).expect("Copy DNG fixture");
+    } else {
+        let init_opts = DngConvertOptions {
+            output_path: None,
+            delete_original: false,
+            verify: true,
+            quiet: true,
+        };
+        let initial_rep = convert_raw_to_dng(&raw_file, &init_opts).expect("Initial DNG generation");
+        assert!(!initial_rep.already_existed, "First conversion creates new DNG");
+    }
     assert!(target_dng.exists());
 
     // 2. Index both files into catalog.db

@@ -1,4 +1,4 @@
-.PHONY: all check build-core build-bridge build-wasm build-web clean test test-all run bundle build-cli package-dmg package-cli package harvest-hardware venv
+.PHONY: all check check-all build-core build-bridge build-wasm build-web clean test test-all run bundle build-cli package-dmg package-cli package harvest-hardware venv
 
 ARCH := $(shell uname -m)
 VERSION ?= 0.4.0
@@ -12,6 +12,9 @@ all: build-bridge
 
 check:
 	./scripts/check.sh
+
+check-all:
+	./scripts/check.sh --all
 
 shaders:
 	cargo run -p firstproof-core --bin firstproof-cli -- shaders

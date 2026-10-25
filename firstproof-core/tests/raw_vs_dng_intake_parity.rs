@@ -181,6 +181,7 @@ fn test_synthetic_dual_format_container_parity() {
 }
 
 #[test]
+#[ignore = "Slow multi-MB real RAW decode benchmark"]
 fn test_leica_q2_matrix_parity() {
     use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder, RawSensorFrameExt};
     let path = Path::new("../target/raw_samples/leica_q2.dng");
@@ -196,6 +197,7 @@ fn test_leica_q2_matrix_parity() {
 }
 
 #[test]
+#[ignore = "Slow multi-MB real RAW decode benchmark"]
 fn test_fuji_xt3_decode() {
     use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
     let path = Path::new("../target/raw_samples/fuji_xt3.raf");
@@ -244,6 +246,7 @@ fn test_fuji_xt3_decode() {
 }
 
 #[test]
+#[ignore = "Slow multi-MB real RAW decode benchmark"]
 fn test_sample_metadata_extraction() {
     let files = [
         "canon_5div.cr2",
@@ -280,6 +283,7 @@ fn test_sample_metadata_extraction() {
 }
 
 #[test]
+#[ignore = "Slow multi-MB real RAW decode benchmark"]
 fn test_olympus_color_chart_engine_parity_and_stability() {
     let path = Path::new("../target/raw_samples/olympus_em1.orf");
     if !path.exists() {
