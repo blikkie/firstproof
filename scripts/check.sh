@@ -168,6 +168,8 @@ if [[ "$RUN_SWIFT" -eq 1 && "$(uname)" == "Darwin" ]]; then
         echo "    [Swift] Verifying Swift packages and Metal targets..."
         swift build --package-path FirstProofBridge >/dev/null
         swift build --package-path FirstProofApp >/dev/null
+        echo "    [Swift] Running in-process Swift Testing unit suite..."
+        swift test --package-path FirstProofApp >/dev/null
         echo "    ✅ [Swift Track] Passed cleanly"
     ) > "$TMP_DIR/swift.log" 2>&1 &
     PID_SWIFT=$!

@@ -1,4 +1,4 @@
-.PHONY: all check check-all build-core build-bridge build-wasm build-web clean test test-all run bundle build-cli package-dmg package-cli package harvest-hardware venv
+.PHONY: all check check-all build-core build-bridge build-wasm build-web clean test test-swift test-all run bundle build-cli package-dmg package-cli package harvest-hardware venv
 
 ARCH := $(shell uname -m)
 VERSION ?= 0.4.0
@@ -94,6 +94,9 @@ harvest-hardware:
 
 test:
 	GIT_CONFIG_GLOBAL=/dev/null cargo test -p firstproof-core
+
+test-swift:
+	swift test --package-path FirstProofApp
 
 test-all:
 	GIT_CONFIG_GLOBAL=/dev/null cargo test --workspace

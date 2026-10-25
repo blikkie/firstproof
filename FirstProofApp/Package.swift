@@ -22,6 +22,14 @@ let package = Package(
             exclude: [
                 "Shaders"
             ]
+        ),
+        .testTarget(
+            name: "FirstProofAppTests",
+            dependencies: [
+                "FirstProofApp",
+                .product(name: "FirstProofBridge", package: "FirstProofBridge")
+            ],
+            path: "Tests"
         )
     ]
 )

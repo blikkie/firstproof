@@ -159,10 +159,8 @@ struct MainView: View {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { event in
             // Skip hotkeys if user is editing in a text field, search box, or any text editor
-            if let responder = NSApp.keyWindow?.firstResponder {
-                if responder is NSTextInputClient || responder is NSTextView || responder is NSTextField || responder is NSSearchField {
-                    return event
-                }
+            if KeyboardShielding.shouldShieldKeyboardEvent(responder: NSApp.keyWindow?.firstResponder) {
+                return event
             }
             
             // If the Settings window is active, Escape dismisses it and canvas hotkeys are shielded
