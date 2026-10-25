@@ -1,5 +1,5 @@
 use rayon::prelude::*;
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, OptionalExtension, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -869,6 +869,292 @@ impl Database {
         Ok(count)
     }
 
+    /// Updates the file path, file name, and file size of a photo record after DNG conversion.
+    /// If the destination DNG path already exists in the catalog database, reconciles and merges
+    /// metadata, star ratings, and picks, deleting the obsolete source record to prevent UNIQUE constraint failures.
+    pub fn update_photo_path(
+        &self,
+        old_file_path: &str,
+        new_file_path: &str,
+        new_file_size: i64,
+    ) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let now = current_timestamp();
+        let new_name = Path::new(new_file_path)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        // Check if new_file_path is already indexed in the catalog
+        let existing_dng: Option<(i64, Option<i32>, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)> = conn.query_row(
+            "SELECT id, rating, status, title, description, creator, copyright, keywords FROM photos WHERE file_path = ?1",
+            params![new_file_path],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+        ).optional()?;
+
+        if let Some((dng_id, dng_rating, dng_status, dng_title, dng_desc, dng_creator, dng_copy, dng_kw)) = existing_dng {
+            let old_record: Option<(Option<i32>, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)> = conn.query_row(
+                "SELECT rating, status, title, description, creator, copyright, keywords FROM photos WHERE file_path = ?1",
+                params![old_file_path],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+            ).optional()?;
+
+            if let Some((old_rating, old_status, old_title, old_desc, old_creator, old_copy, old_kw)) = old_record {
+                let merged_rating = match (old_rating, dng_rating) {
+                    (Some(r1), Some(_)) if r1 > 0 => Some(r1),
+                    (Some(_), Some(r2)) if r2 > 0 => Some(r2),
+                    (Some(r1), None) => Some(r1),
+                    (None, Some(r2)) => Some(r2),
+                    _ => dng_rating,
+                };
+                let merged_status = if old_status != "None" && !old_status.is_empty() {
+                    old_status
+                } else {
+                    dng_status
+                };
+                let merged_title = old_title.or(dng_title);
+                let merged_desc = old_desc.or(dng_desc);
+                let merged_creator = old_creator.or(dng_creator);
+                let merged_copy = old_copy.or(dng_copy);
+                let merged_kw = match (old_kw, dng_kw) {
+                    (Some(k1), Some(k2)) if !k1.is_empty() && !k2.is_empty() => {
+                        let mut set: std::collections::BTreeSet<String> = k1.split(',').map(|s| s.trim().to_string()).collect();
+                        for item in k2.split(',') {
+                            set.insert(item.trim().to_string());
+                        }
+                        let joined: Vec<String> = set.into_iter().filter(|s| !s.is_empty()).collect();
+                        Some(joined.join(", "))
+                    }
+                    (Some(k1), _) if !k1.is_empty() => Some(k1),
+                    (_, Some(k2)) => Some(k2),
+                    _ => None,
+                };
+
+                conn.execute(
+                    "UPDATE photos SET file_size = ?1, rating = ?2, status = ?3, title = ?4, description = ?5, creator = ?6, copyright = ?7, keywords = ?8, updated_at = ?9 WHERE id = ?10",
+                    params![new_file_size, merged_rating, merged_status, merged_title, merged_desc, merged_creator, merged_copy, merged_kw, now, dng_id],
+                )?;
+
+                let _ = conn.execute("DELETE FROM photos WHERE file_path = ?1", params![old_file_path]);
+                return Ok(true);
+            }
+        }
+
+        let rows = conn.execute(
+            "UPDATE photos SET file_path = ?1, file_name = ?2, file_size = ?3, updated_at = ?4 WHERE file_path = ?5",
+            params![new_file_path, new_name, new_file_size, now, old_file_path],
+        )?;
+        Ok(rows > 0)
+    }
+
+    /// Inserts a new catalog record for a converted DNG photo based on its source RAW record,
+    /// leaving the source RAW record untouched in the catalog (used when delete_original is false).
+    pub fn insert_dng_photo_from_source(
+        &self,
+        source_file_path: &str,
+        dng_file_path: &str,
+        dng_file_size: i64,
+    ) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let now = current_timestamp();
+        let dng_name = Path::new(dng_file_path)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        let existing_dng: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM photos WHERE file_path = ?1",
+                params![dng_file_path],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        if let Some(id) = existing_dng {
+            conn.execute(
+                "UPDATE photos SET file_size = ?1, updated_at = ?2 WHERE id = ?3",
+                params![dng_file_size, now, id],
+            )?;
+            return Ok(true);
+        }
+
+        let source_record: Option<PhotoRecord> = {
+            let mut stmt = conn.prepare(
+                "SELECT id, file_path, file_name, file_size, modified_time,
+                        camera_make, camera_model, lens_model, iso, aperture, shutter_speed, focal_length,
+                        taken_time, latitude, longitude, title, description, creator, copyright, keywords, rating, status,
+                        has_xmp, has_takeout, created_at, updated_at
+                 FROM photos WHERE file_path = ?1",
+            )?;
+            let mut rows = stmt.query(params![source_file_path])?;
+            if let Some(row) = rows.next()? {
+                Some(PhotoRecord {
+                    id: row.get(0)?,
+                    file_path: row.get(1)?,
+                    file_name: row.get(2)?,
+                    file_size: row.get(3)?,
+                    modified_time: row.get(4)?,
+                    camera_make: row.get(5)?,
+                    camera_model: row.get(6)?,
+                    lens_model: row.get(7)?,
+                    iso: row.get(8)?,
+                    aperture: row.get(9)?,
+                    shutter_speed: row.get(10)?,
+                    focal_length: row.get(11)?,
+                    taken_time: row.get(12)?,
+                    latitude: row.get(13)?,
+                    longitude: row.get(14)?,
+                    title: row.get(15)?,
+                    description: row.get(16)?,
+                    creator: row.get(17)?,
+                    copyright: row.get(18)?,
+                    keywords: row.get(19)?,
+                    rating: row.get(20)?,
+                    status: row.get(21)?,
+                    has_xmp: row.get::<_, i32>(22)? != 0,
+                    has_takeout: row.get::<_, i32>(23)? != 0,
+                    created_at: row.get(24)?,
+                    updated_at: row.get(25)?,
+                })
+            } else {
+                None
+            }
+        };
+
+        if let Some(src) = source_record {
+            conn.execute(
+                "INSERT INTO photos (
+                    file_path, file_name, file_size, modified_time,
+                    camera_make, camera_model, lens_model, iso, aperture, shutter_speed, focal_length,
+                    taken_time, latitude, longitude, title, description, creator, copyright, keywords, rating, status,
+                    has_xmp, has_takeout, created_at, updated_at
+                ) VALUES (
+                    ?1, ?2, ?3, ?4,
+                    ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                    ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21,
+                    1, ?22, ?23, ?24
+                )",
+                params![
+                    dng_file_path, dng_name, dng_file_size, src.modified_time,
+                    src.camera_make, src.camera_model, src.lens_model, src.iso, src.aperture, src.shutter_speed, src.focal_length,
+                    src.taken_time, src.latitude, src.longitude, src.title, src.description, src.creator, src.copyright, src.keywords, src.rating, src.status,
+                    if src.has_takeout { 1 } else { 0 }, now, now
+                ],
+            )?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Batch converts selected catalog photos into Archival DNG containers.
+    /// Filters out already-DNG and non-RAW files automatically.
+    /// Updates the SQLite catalog records in-place, preserving star ratings, flags, and XMP edits.
+    pub fn batch_convert_catalog_to_dng<P: AsRef<Path>>(
+        catalog_folder: P,
+        photo_paths: &[String],
+        delete_original: bool,
+        progress: Option<&dyn Fn(u32, u32, &str)>,
+    ) -> std::result::Result<DngBatchReport, String> {
+        let catalog_path = Self::resolve_catalog_path(catalog_folder.as_ref(), false);
+        let db = Self::open(&catalog_path).map_err(|e| e.to_string())?;
+
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        let mut skipped_count = 0u32;
+        for path_str in photo_paths {
+            let p = Path::new(path_str);
+            let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+            if ext == "dng" || !is_raw_format(p) {
+                skipped_count += 1;
+            } else {
+                candidates.push(p.to_path_buf());
+            }
+        }
+
+        let total_candidates = candidates.len() as u32;
+        let mut converted_count = 0u32;
+        let mut reconciled_existing_count = 0u32;
+        let mut failed_count = 0u32;
+        let mut total_source_bytes = 0u64;
+        let mut total_dng_bytes = 0u64;
+        let mut space_reclaimed_bytes = 0u64;
+        let mut reports: Vec<crate::dng::DngConvertReport> = Vec::new();
+        let mut error_messages: Vec<String> = Vec::new();
+
+        for (idx, src_path) in candidates.iter().enumerate() {
+            let file_name = src_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            if let Some(cb) = progress {
+                cb(idx as u32, total_candidates, &file_name);
+            }
+
+            if !src_path.exists() {
+                failed_count += 1;
+                error_messages.push(format!("Source RAW file not found: {}", src_path.display()));
+                continue;
+            }
+
+            let dng_opts = crate::dng::DngConvertOptions {
+                output_path: None, // allows smart collision verification & disambiguation
+                delete_original,
+                verify: true,
+                quiet: true,
+            };
+
+            match crate::dng::convert_raw_to_dng(src_path, &dng_opts) {
+                Ok(rep) => {
+                    let src_str = src_path.to_string_lossy().to_string();
+                    let dng_str = rep.dng_path.to_string_lossy().to_string();
+                    if delete_original {
+                        if let Err(e) = db.update_photo_path(&src_str, &dng_str, rep.dng_size_bytes as i64) {
+                            error_messages.push(format!("Failed to update database for {}: {}", dng_str, e));
+                        }
+                    } else {
+                        if let Err(e) = db.insert_dng_photo_from_source(&src_str, &dng_str, rep.dng_size_bytes as i64) {
+                            error_messages.push(format!("Failed to insert DNG record in database for {}: {}", dng_str, e));
+                        }
+                    }
+                    if rep.already_existed {
+                        reconciled_existing_count += 1;
+                    }
+                    if rep.deleted_original {
+                        if rep.already_existed {
+                            // Entire duplicate original RAW was deleted with zero new bytes written to disk
+                            space_reclaimed_bytes += rep.source_size_bytes;
+                        } else if rep.source_size_bytes > rep.dng_size_bytes {
+                            // A newly transcoded DNG was written to disk; net space reclaimed is the size difference
+                            space_reclaimed_bytes += rep.source_size_bytes - rep.dng_size_bytes;
+                        }
+                    }
+                    converted_count += 1;
+                    total_source_bytes += rep.source_size_bytes;
+                    total_dng_bytes += rep.dng_size_bytes;
+                    reports.push(rep);
+                }
+                Err(e) => {
+                    failed_count += 1;
+                    error_messages.push(format!("Failed to convert {}: {}", src_path.display(), e));
+                }
+            }
+        }
+
+        if let Some(cb) = progress {
+            cb(total_candidates, total_candidates, "Batch conversion complete");
+        }
+
+        Ok(DngBatchReport {
+            total_requested: photo_paths.len() as u32,
+            converted_count,
+            reconciled_existing_count,
+            skipped_count,
+            failed_count,
+            total_source_bytes,
+            total_dng_bytes,
+            space_reclaimed_bytes,
+            reports,
+            error_messages,
+        })
+    }
+
     /// Exports a selection of photos to an isolated portable project package.
     /// Copies/moves RAW images, XMP sidecars, and Takeout JSON files, and builds a dedicated .firstproof/catalog.db.
     pub fn export_portable_package<P: AsRef<Path>>(
@@ -1030,6 +1316,7 @@ impl Database {
         let mut raw_over_jpeg_suppressed = 0u32;
         let mut duplicate_clones_suppressed = 0u32;
         let mut consolidated_sidecars = 0u32;
+        let mut dng_converted_count = 0u32;
         let mut error_count = 0u32;
         let mut error_messages = Vec::new();
 
@@ -1265,48 +1552,116 @@ impl Database {
             }
 
             // Transfer master negative
-            if options.move_files {
-                if let Err(e) = fs::copy(&src_path, &final_dest_file_path) {
-                    error_count += 1;
-                    error_messages.push(format!("Failed to copy {}: {}", src_path.display(), e));
-                    continue;
-                }
+            let is_convertible_raw = options.convert_to_dng
+                && is_raw_format(&src_path)
+                && src_path.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase()) != Some("dng".to_string());
 
-                // Bit-level cryptographic verification before source deletion
-                match crate::checksum::verify_files_identical(&src_path, &final_dest_file_path) {
-                    Ok(true) => {
-                        if let Err(e) = fs::remove_file(&src_path) {
-                            error_count += 1;
-                            error_messages.push(format!("Failed to remove source negative {}: {}", src_path.display(), e));
-                        }
-                    }
-                    Ok(false) => {
-                        error_count += 1;
-                        error_messages.push(format!("Cryptographic checksum verification failed for {}: source negative preserved", src_path.display()));
-                        continue;
+            let (actual_dest_path, actual_dest_size) = if is_convertible_raw {
+                let target_dng_name = format!("{}.dng", src_path.file_stem().unwrap_or_default().to_string_lossy());
+                let dest_dng_candidate = dest_folder.join(&target_dng_name);
+                let final_dng_path = if dest_dng_candidate.exists() {
+                    resolve_unique_destination_path(&dest_folder, std::ffi::OsStr::new(&target_dng_name))
+                } else {
+                    dest_dng_candidate
+                };
+
+                let dng_opts = crate::dng::DngConvertOptions {
+                    output_path: Some(final_dng_path.clone()),
+                    delete_original: options.move_files,
+                    verify: true,
+                    quiet: true,
+                };
+
+                match crate::dng::convert_raw_to_dng(&src_path, &dng_opts) {
+                    Ok(rep) => {
+                        dng_converted_count += 1;
+                        (rep.dng_path, rep.dng_size_bytes as i64)
                     }
                     Err(e) => {
                         error_count += 1;
-                        error_messages.push(format!("Verification I/O error for {}: {}. Source negative preserved", src_path.display(), e));
+                        error_messages.push(format!("Failed to convert {} to Archival DNG: {}", src_path.display(), e));
                         continue;
                     }
                 }
             } else {
-                if let Err(e) = fs::copy(&src_path, &final_dest_file_path) {
-                    error_count += 1;
-                    error_messages.push(format!("Failed to copy {}: {}", src_path.display(), e));
-                    continue;
-                }
-            }
+                if options.move_files {
+                    if let Err(e) = fs::copy(&src_path, &final_dest_file_path) {
+                        error_count += 1;
+                        error_messages.push(format!("Failed to copy {}: {}", src_path.display(), e));
+                        continue;
+                    }
 
-            dest_by_name_and_size.insert((src_file_name_lower.clone(), src_size));
+                    // Bit-level cryptographic verification before source deletion
+                    match crate::checksum::verify_files_identical(&src_path, &final_dest_file_path) {
+                        Ok(true) => {
+                            if let Err(e) = fs::remove_file(&src_path) {
+                                error_count += 1;
+                                error_messages.push(format!("Failed to remove source negative {}: {}", src_path.display(), e));
+                            }
+                        }
+                        Ok(false) => {
+                            error_count += 1;
+                            error_messages.push(format!("Cryptographic checksum verification failed for {}: source negative preserved", src_path.display()));
+                            continue;
+                        }
+                        Err(e) => {
+                            error_count += 1;
+                            error_messages.push(format!("Verification I/O error for {}: {}. Source negative preserved", src_path.display(), e));
+                            continue;
+                        }
+                    }
+                } else {
+                    if let Err(e) = fs::copy(&src_path, &final_dest_file_path) {
+                        error_count += 1;
+                        error_messages.push(format!("Failed to copy {}: {}", src_path.display(), e));
+                        continue;
+                    }
+                }
+                (final_dest_file_path, src_size)
+            };
+
+            let actual_name_lower = actual_dest_path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+            dest_by_name_and_size.insert((actual_name_lower, actual_dest_size));
 
             // Collect record for atomic SQL batch insert into destination catalog database
             if let Ok(Some(mut record)) = self.get_photo(&src_path_str) {
-                record.file_path = final_dest_file_path.to_string_lossy().to_string();
-                record.file_name = final_dest_file_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| file_name.to_string_lossy().to_string());
+                record.file_path = actual_dest_path.to_string_lossy().to_string();
+                record.file_name = actual_dest_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| file_name.to_string_lossy().to_string());
+                record.file_size = actual_dest_size;
                 record.updated_at = current_timestamp();
                 records_to_insert.push(record);
+            } else {
+                let raw_meta = raw::extract_metadata(&actual_dest_path).ok();
+                let now = current_timestamp();
+                let new_record = PhotoRecord {
+                    id: 0,
+                    file_path: actual_dest_path.to_string_lossy().to_string(),
+                    file_name: actual_dest_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                    file_size: actual_dest_size,
+                    modified_time: now,
+                    camera_make: raw_meta.as_ref().and_then(|m| m.camera_make.clone()),
+                    camera_model: raw_meta.as_ref().and_then(|m| m.camera_model.clone()),
+                    lens_model: raw_meta.as_ref().and_then(|m| m.lens_model.clone()),
+                    iso: raw_meta.as_ref().and_then(|m| m.iso),
+                    aperture: raw_meta.as_ref().and_then(|m| m.aperture),
+                    shutter_speed: raw_meta.as_ref().and_then(|m| m.shutter_speed.clone()),
+                    focal_length: raw_meta.as_ref().and_then(|m| m.focal_length),
+                    taken_time: raw_meta.as_ref().and_then(|m| m.taken_time),
+                    latitude: raw_meta.as_ref().and_then(|m| m.latitude),
+                    longitude: raw_meta.as_ref().and_then(|m| m.longitude),
+                    title: None,
+                    description: raw_meta.as_ref().and_then(|m| m.description.clone()),
+                    creator: raw_meta.as_ref().and_then(|m| m.creator.clone()),
+                    copyright: raw_meta.as_ref().and_then(|m| m.copyright.clone()),
+                    keywords: None,
+                    rating: None,
+                    status: "None".to_string(),
+                    has_xmp: actual_dest_path.with_extension("xmp").exists(),
+                    has_takeout: false,
+                    created_at: now,
+                    updated_at: now,
+                };
+                records_to_insert.push(new_record);
             }
 
             if options.move_files {
@@ -1382,6 +1737,7 @@ impl Database {
             error_count,
             destination_catalog_path: dest_catalog_path.to_string_lossy().to_string(),
             error_messages,
+            dng_converted_count,
         })
     }
 }
@@ -1470,6 +1826,7 @@ pub struct ImportOptions {
     pub skip_duplicates: bool,
     pub verify_checksum: bool,
     pub subfolder_name: Option<String>,
+    pub convert_to_dng: bool,
 }
 
 impl Default for ImportOptions {
@@ -1481,6 +1838,7 @@ impl Default for ImportOptions {
             skip_duplicates: true,
             verify_checksum: true,
             subfolder_name: None,
+            convert_to_dng: false,
         }
     }
 }
@@ -1495,6 +1853,21 @@ pub struct ImportReport {
     pub consolidated_sidecars: u32,
     pub error_count: u32,
     pub destination_catalog_path: String,
+    pub error_messages: Vec<String>,
+    pub dng_converted_count: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DngBatchReport {
+    pub total_requested: u32,
+    pub converted_count: u32,
+    pub reconciled_existing_count: u32,
+    pub skipped_count: u32,
+    pub failed_count: u32,
+    pub total_source_bytes: u64,
+    pub total_dng_bytes: u64,
+    pub space_reclaimed_bytes: u64,
+    pub reports: Vec<crate::dng::DngConvertReport>,
     pub error_messages: Vec<String>,
 }
 
@@ -2040,6 +2413,7 @@ mod tests {
             skip_duplicates: true,
             verify_checksum: true,
             subfolder_name: Some("2026-09-13".to_string()),
+            convert_to_dng: false,
         };
 
         let report = src_db.import_to_library(
@@ -2108,6 +2482,7 @@ mod tests {
             skip_duplicates: true,
             verify_checksum: true,
             subfolder_name: None,
+            convert_to_dng: false,
         };
 
         let report = src_db.import_to_library(
@@ -2223,6 +2598,7 @@ mod tests {
             skip_duplicates: true,
             verify_checksum: true,
             subfolder_name: None,
+            convert_to_dng: false,
         };
 
         let report = src_db.import_to_library(
@@ -2329,6 +2705,7 @@ mod tests {
             skip_duplicates: true,
             verify_checksum: true,
             subfolder_name: Some("2026-10-18 - Lightroom Export".to_string()),
+            convert_to_dng: false,
         };
 
         let report = src_db.import_to_library(
@@ -2385,6 +2762,7 @@ mod tests {
             skip_duplicates: true,
             verify_checksum: true,
             subfolder_name: Some("Masters Ingest".to_string()),
+            convert_to_dng: false,
         };
 
         let report = src_db.import_to_library(

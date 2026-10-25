@@ -67,7 +67,7 @@ pub fn resolve_xmp_read_path<P: AsRef<Path>>(path: P) -> Option<PathBuf> {
 }
 
 /// Helper to merge non-destructive metadata from secondary sidecar into primary if missing.
-fn merge_metadata(primary: &mut XmpData, secondary: &XmpData) {
+pub fn merge_metadata(primary: &mut XmpData, secondary: &XmpData) {
     if primary.rating.is_none() && secondary.rating.is_some() {
         primary.rating = secondary.rating;
     }
@@ -168,8 +168,47 @@ pub fn read_xmp_file<P: AsRef<Path>>(path: P) -> std::io::Result<XmpData> {
         }
         (Some(data), None) => Ok(data),
         (None, Some(data)) => Ok(data),
-        (None, None) => Err(std::io::Error::new(std::io::ErrorKind::NotFound, "No XMP sidecar found")),
+        (None, None) => {
+            // Sibling search if path is a DNG or converted container:
+            // If neither photo.dng.xmp nor photo.xmp exists, check for sibling photo.<ext>.xmp (e.g. photo.CR2.xmp)
+            if let (Some(parent), Some(stem)) = (p.parent(), p.file_stem()) {
+                let stem_str = stem.to_string_lossy();
+                let stem_dot = format!("{}.", stem_str);
+                if let Ok(entries) = std::fs::read_dir(parent) {
+                    for entry in entries.flatten() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        if name.starts_with(&stem_dot) && name.ends_with(".xmp") {
+                            if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                                if let Ok(parsed) = parse_xmp(&content) {
+                                    return Ok(parsed);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Embedded XMP packet extraction fallback (e.g. DNG or TIFF with embedded XMP)
+            if let Some(embedded) = extract_embedded_xmp(p) {
+                return Ok(embedded);
+            }
+
+            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "No XMP sidecar found"))
+        }
     }
+}
+
+/// Extracts embedded XMP packet directly from an image container (DNG, TIFF, JPEG).
+pub fn extract_embedded_xmp<P: AsRef<Path>>(path: P) -> Option<XmpData> {
+    let bytes = std::fs::read(path).ok()?;
+    let start_needle = b"<?xpacket begin=";
+    let end_needle = b"<?xpacket end=";
+    let start = bytes.windows(start_needle.len()).position(|w| w == start_needle)?;
+    let end_rel = bytes[start..].windows(end_needle.len()).position(|w| w == end_needle)?;
+    let end_close = bytes[start + end_rel..].iter().position(|&b| b == b'>')?;
+    let xmp_bytes = &bytes[start..start + end_rel + end_close + 1];
+    let xmp_str = std::str::from_utf8(xmp_bytes).ok()?;
+    parse_xmp(xmp_str).ok()
 }
 
 /// Writes XMP to a file path or photo path by resolving sidecars.

@@ -12,6 +12,7 @@ public struct ImportSheetView: View {
     @AppStorage("defaultConsolidateSidecars") private var consolidateSidecars: Bool = true
     @State private var deduplicateRawOverJpeg: Bool = true
     @AppStorage("defaultSkipDuplicates") private var skipDuplicates: Bool = true
+    @AppStorage("defaultConvertToDng") private var convertToDng: Bool = false
     @State private var deleteFromCard: Bool = false
     
     @State private var isImporting: Bool = false
@@ -155,6 +156,16 @@ public struct ImportSheetView: View {
                 
                 Toggle("Skip duplicates already present in library", isOn: $skipDuplicates)
                     .font(.subheadline)
+                
+                Toggle("Convert to Archival DNG on Ingest", isOn: $convertToDng)
+                    .font(.subheadline)
+                
+                if convertToDng {
+                    Text("Transcodes proprietary camera RAWs (.CR2, .NEF, .ARW) into open-standard Adobe DNG with independent cryptographic SHA-256 CFA read-back verification.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 20)
+                }
             }
             
             // Transfer Method / Safety
@@ -321,6 +332,9 @@ public struct ImportSheetView: View {
                 if report.rawOverJpegSuppressed > 0 {
                     statTile(title: "Suppressed JPEGs", value: "\(report.rawOverJpegSuppressed)", icon: "sparkles", color: .purple)
                 }
+                if report.dngConvertedCount > 0 {
+                    statTile(title: "Converted to Archival DNG", value: "\(report.dngConvertedCount)", icon: "archivebox.fill", color: .indigo)
+                }
                 statTile(title: "Already in Library", value: "\(report.skippedDuplicates)", icon: "arrow.triangle.merge", color: .secondary)
             }
             .padding(.horizontal, 12)
@@ -418,7 +432,8 @@ public struct ImportSheetView: View {
             deduplicateRawOverJpeg: deduplicateRawOverJpeg,
             skipDuplicates: skipDuplicates,
             verifyChecksum: true,
-            subfolderName: subfolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : subfolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+            subfolderName: subfolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : subfolderName.trimmingCharacters(in: .whitespacesAndNewlines),
+            convertToDng: convertToDng
         )
         
         let dest = viewModel.mainLibraryPath

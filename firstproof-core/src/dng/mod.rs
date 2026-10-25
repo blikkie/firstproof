@@ -20,9 +20,25 @@ use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub use sidecar::{load_source_xmp_packet, migrate_sidecars_on_deletion};
+pub use sidecar::{load_source_xmp_packet, migrate_sidecars_on_deletion, propagate_sidecars_for_dng, reconcile_sidecars_for_existing_dng};
 pub use verify::{verify_dng_from_disk, DngVerificationReport};
-pub use writer::{generate_agx_preview, hash_cfa_data, write_archival_dng, WriteDngParams};
+pub use writer::{compute_source_cfa_hash, generate_agx_preview, hash_cfa_data, write_archival_dng, WriteDngParams};
+
+fn resolve_unique_dng_path(path: &Path) -> PathBuf {
+    if !path.exists() {
+        return path.to_path_buf();
+    }
+    let parent = path.parent().unwrap_or_else(|| Path::new(""));
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
+    let mut counter = 1;
+    loop {
+        let candidate = parent.join(format!("{}_{}.dng", stem, counter));
+        if !candidate.exists() {
+            return candidate;
+        }
+        counter += 1;
+    }
+}
 
 /// Configuration options for DNG conversion.
 #[derive(Clone, Debug, Default)]
@@ -38,7 +54,7 @@ pub struct DngConvertOptions {
 }
 
 /// Detailed execution report returned upon successful DNG conversion.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct DngConvertReport {
     pub source_path: PathBuf,
     pub dng_path: PathBuf,
@@ -50,6 +66,7 @@ pub struct DngConvertReport {
     pub verification_passed: bool,
     pub elapsed_ms: f64,
     pub deleted_original: bool,
+    pub already_existed: bool,
     pub sidecars_migrated: Vec<PathBuf>,
 }
 
@@ -76,10 +93,70 @@ pub fn convert_raw_to_dng<P: AsRef<Path>>(
     let source_size_bytes = source_meta.len();
 
     // Determine final target DNG path
-    let target_dng_path = match &options.output_path {
+    let mut target_dng_path = match &options.output_path {
         Some(p) => p.clone(),
         None => input_path.with_extension("dng"),
     };
+
+    // If destination DNG already exists on disk, perform cryptographic verification
+    if target_dng_path.exists() {
+        if let Ok(source_cfa_hash) = compute_source_cfa_hash(input_path) {
+            if let Ok(report) = verify_dng_from_disk(&target_dng_path, Some(&source_cfa_hash)) {
+                if report.bit_for_bit_match {
+                    // Exact match: the existing DNG already contains the exact sensor photons!
+                    // Reconcile and merge sidecars so neither side loses edits or ratings
+                    reconcile_sidecars_for_existing_dng(input_path, &target_dng_path);
+
+                    let mut deleted_original = false;
+                    let mut sidecars_migrated = Vec::new();
+                    if options.delete_original {
+                        sidecars_migrated = migrate_sidecars_on_deletion(input_path, &target_dng_path);
+                        if let Err(e) = std::fs::remove_file(input_path) {
+                            log::error!("Failed to unlink original source file {}: {}", input_path.display(), e);
+                        } else {
+                            deleted_original = true;
+                        }
+                    }
+
+                    let dng_meta = std::fs::metadata(&target_dng_path)
+                        .map_err(|e| format!("Failed to read existing DNG metadata: {}", e))?;
+                    let dng_size_bytes = dng_meta.len();
+                    let compression_ratio = if source_size_bytes > 0 {
+                        ((source_size_bytes as f64 - dng_size_bytes as f64) / source_size_bytes as f64 * 100.0) as f32
+                    } else {
+                        0.0
+                    };
+
+                    return Ok(DngConvertReport {
+                        source_path: input_path.to_path_buf(),
+                        dng_path: target_dng_path,
+                        source_size_bytes,
+                        dng_size_bytes,
+                        compression_ratio,
+                        source_cfa_sha256: source_cfa_hash.clone(),
+                        disk_cfa_sha256: report.dng_cfa_sha256,
+                        verification_passed: true,
+                        elapsed_ms: start_time.elapsed().as_secs_f64() * 1000.0,
+                        deleted_original,
+                        already_existed: true,
+                        sidecars_migrated,
+                    });
+                }
+            }
+        }
+
+        // The existing file on disk does NOT match the source capture (different photo / collision).
+        // If caller explicitly provided an output_path, fail safely to avoid data loss.
+        // If path was automatically inferred, resolve a unique disambiguated name (e.g. <stem>_1.dng).
+        if options.output_path.is_some() {
+            return Err(format!(
+                "Destination file {} already exists with different sensor data",
+                target_dng_path.display()
+            ));
+        } else {
+            target_dng_path = resolve_unique_dng_path(&target_dng_path);
+        }
+    }
 
     // Atomic temporary file path
     let pid = std::process::id();
@@ -147,16 +224,17 @@ pub fn convert_raw_to_dng<P: AsRef<Path>>(
 
     // Optional safe deletion of original and sidecar migration
     let mut deleted_original = false;
-    let mut sidecars_migrated = Vec::new();
-
-    if options.delete_original {
-        sidecars_migrated = migrate_sidecars_on_deletion(input_path, &target_dng_path);
+    let sidecars_migrated = if options.delete_original {
+        let migrated = migrate_sidecars_on_deletion(input_path, &target_dng_path);
         if let Err(e) = std::fs::remove_file(input_path) {
             log::error!("Failed to unlink original source file {}: {}", input_path.display(), e);
         } else {
             deleted_original = true;
         }
-    }
+        migrated
+    } else {
+        propagate_sidecars_for_dng(input_path, &target_dng_path)
+    };
 
     let dng_meta = std::fs::metadata(&target_dng_path)
         .map_err(|e| format!("Failed to read target DNG metadata: {}", e))?;
@@ -182,6 +260,7 @@ pub fn convert_raw_to_dng<P: AsRef<Path>>(
         verification_passed,
         elapsed_ms,
         deleted_original,
+        already_existed: false,
         sidecars_migrated,
     })
 }

@@ -120,6 +120,19 @@ This archive tracks completed stories and features moved from the active backlog
     - Direct macOS System Trash integration (`FileManager.default.trashItem`) safely trashing culled duplicate files and companion `.xmp` sidecars.
     - Accessible via right-click context menu on sessions and the Main Library, as well as menu shortcut (`⌥⌘D`).
   - *Terminology Modernization*: Shifted from legacy "Master" to "Original" across the catalog, grid filters, import modal, and status telemetry.
+- **Story 4.7: Native macOS Desktop Archival DNG Ingest & Batch Action**:
+  - *Archival DNG Intake Stream (`import_to_library` & `ImportSheetView`)*:
+    - Added "Convert to Archival DNG on Ingest" option in the intake sheet (`ImportSheetView.swift`) with responsive status telemetry.
+    - Streams imported camera RAW captures through `firstproof_core::dng::convert_raw_to_dng` with post-write SHA-256 CFA mosaic read-back verification before inserting records into catalog SQLite.
+    - Preserves unadulterated camera sensor pixels in uncompressed raw CFA format with standard TIFF IFD0 / SubIFD metadata and authentic linear retina previews.
+  - *Multi-Selection Batch Conversion Action*:
+    - Added `Photo -> Convert to Archival DNG...` menu item (`Cmd+Shift+D`) and right-click context menu integration across `FilmstripView` and `PhotoGridCollectionView`.
+    - Smart filtering: silently filters out non-RAW raster images (JPEGs, PNGs, TIFFs) and existing `.dng` files, operating strictly on proprietary camera RAWs (`PhotoRecord.isProprietaryRaw`).
+    - Dedicated progress sheet (`DngConversionSheetView.swift`) with file-by-file progress, cancel safety, and optional "Move original RAW files to macOS Trash" toggle.
+  - *In-Place Catalog & Sidecar Synchronization*:
+    - `Database::update_photo_path` and `Database::batch_convert_catalog_to_dng`: Updates catalog database records in `catalog.db` in-place without dropping user ratings, flags, or undo history.
+    - Companion sidecar migration: Migrates `.xmp` sidecars (`migrate_sidecars_on_deletion` moving `photo.CR2.xmp` $\to$ `photo.dng.xmp`).
+    - Real-time thumbnail cache invalidation (`ThumbnailCache.shared.removeImage`) and notification dispatch (`.thumbnailDidChange`).
 
 ---
 

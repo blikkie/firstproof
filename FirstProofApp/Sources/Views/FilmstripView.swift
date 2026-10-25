@@ -127,6 +127,7 @@ struct FilmstripScrollListener: NSViewRepresentable {
 }
 
 struct FilmstripThumbnailCell: View, Equatable {
+    @Environment(AppViewModel.self) private var viewModel
     let photo: PhotoRecord
     let isSelected: Bool
     let action: () -> Void
@@ -194,5 +195,35 @@ struct FilmstripThumbnailCell: View, Equatable {
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: action)
+        .contextMenu {
+            if photo.isProprietaryRaw {
+                Button("Convert to Archival DNG...") {
+                    viewModel.startDngConversionFlow(targetPhoto: photo)
+                }
+                Divider()
+            }
+            Button("Mark as Pick (P)") {
+                if viewModel.selectedPhoto?.filePath != photo.filePath {
+                    viewModel.selectPhoto(photo)
+                }
+                viewModel.setStatus("pick")
+            }
+            Button("Mark as Reject (X)") {
+                if viewModel.selectedPhoto?.filePath != photo.filePath {
+                    viewModel.selectPhoto(photo)
+                }
+                viewModel.setStatus("reject")
+            }
+            Button("Clear Flag") {
+                if viewModel.selectedPhoto?.filePath != photo.filePath {
+                    viewModel.selectPhoto(photo)
+                }
+                viewModel.setStatus("none")
+            }
+            Divider()
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.selectFile(photo.filePath, inFileViewerRootedAtPath: "")
+            }
+        }
     }
 }

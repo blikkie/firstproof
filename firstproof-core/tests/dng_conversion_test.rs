@@ -107,6 +107,15 @@ fn test_dng_conversion_and_disk_verification() {
         "Developed JPEG must have non-trivial size"
     );
 
+    // 5. Verify embedded preview brightness / gamma encoding
+    let preview_bytes = firstproof_core::raw::extract_preview_jpeg(&dng_out).expect("Extract embedded DNG preview");
+    let preview_img = image::load_from_memory(&preview_bytes).expect("Decode embedded preview JPEG");
+    let rgb = preview_img.to_rgb8();
+    let sum_luma: u64 = rgb.pixels().map(|p| (p[0] as u64 + p[1] as u64 + p[2] as u64) / 3).sum();
+    let avg_luma = sum_luma / (rgb.width() as u64 * rgb.height() as u64);
+    println!("DNG embedded preview avg luma: {}", avg_luma);
+    assert!(avg_luma >= 40, "Embedded preview must be sRGB gamma-encoded, not crushed linear values (avg luma: {})", avg_luma);
+
     // Cleanup
     let _ = fs::remove_file(&developed_jpg);
     let _ = fs::remove_file(&dng_out);
@@ -237,3 +246,355 @@ fn test_dng_failure_safety_negative_case() {
     let _ = fs::remove_file(&sandboxed_cr2);
     let _ = fs::remove_dir(&sandbox_dir);
 }
+
+#[test]
+fn test_dng_convert_on_library_ingest() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
+
+    if !cr2_src.exists() {
+        return;
+    }
+
+    let sandbox = std::env::temp_dir().join("firstproof_dng_ingest_test");
+    let src_dir = sandbox.join("source_card");
+    let dst_dir = sandbox.join("main_library");
+    let _ = fs::remove_dir_all(&sandbox);
+    let _ = fs::create_dir_all(&src_dir);
+    let _ = fs::create_dir_all(&dst_dir);
+
+    let raw_file = src_dir.join("_MG_2651.CR2");
+    fs::copy(&cr2_src, &raw_file).expect("Copy test fixture");
+
+    // Write source sidecar with 5-star rating
+    let xmp_file = src_dir.join("_MG_2651.xmp");
+    fs::write(
+        &xmp_file,
+        b"<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\"><xmp:Rating>5</xmp:Rating><dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">Ingest Horizon</rdf:li></rdf:Alt></dc:title></rdf:Description></rdf:RDF></x:xmpmeta>",
+    )
+    .unwrap();
+
+    let src_catalog = firstproof_core::db::Database::resolve_catalog_path(&src_dir, true);
+    let src_db = firstproof_core::db::Database::open(&src_catalog).unwrap();
+    src_db.index_folder(&src_dir).unwrap();
+
+    let options = firstproof_core::db::ImportOptions {
+        move_files: false,
+        consolidate_sidecars: true,
+        deduplicate_raw_over_jpeg: true,
+        skip_duplicates: true,
+        verify_checksum: true,
+        subfolder_name: Some("Archival Roll".to_string()),
+        convert_to_dng: true,
+    };
+
+    let report = src_db
+        .import_to_library(
+            &[src_dir.to_string_lossy().to_string()],
+            &dst_dir,
+            &options,
+            None,
+        )
+        .expect("Import with DNG conversion must succeed");
+
+    assert_eq!(report.imported_count, 1);
+    assert_eq!(report.dng_converted_count, 1, "DNG converted count must be 1");
+    assert_eq!(report.error_count, 0);
+
+    let roll_folder = dst_dir.join("Archival Roll");
+    let target_dng = roll_folder.join("_MG_2651.dng");
+    assert!(target_dng.exists(), "Target DNG must exist in destination subfolder");
+
+    let target_xmp = roll_folder.join("_MG_2651.xmp");
+    assert!(target_xmp.exists(), "Consolidated XMP sidecar must exist in destination");
+
+    let parsed_xmp = read_xmp_file(&target_dng).expect("Read XMP for ingested DNG");
+    assert_eq!(parsed_xmp.rating, Some(5), "Rating must be preserved");
+    assert_eq!(parsed_xmp.title.as_deref(), Some("Ingest Horizon"), "Title must be preserved");
+
+    // Destination catalog verification
+    let dst_catalog = firstproof_core::db::Database::resolve_catalog_path(&dst_dir, false);
+    let dst_db = firstproof_core::db::Database::open(&dst_catalog).unwrap();
+    let all_photos = dst_db.get_all_photos().unwrap();
+    assert_eq!(all_photos.len(), 1);
+    assert!(all_photos[0].file_path.ends_with("_MG_2651.dng"), "Catalog record must point to .dng file");
+
+    let _ = fs::remove_dir_all(&sandbox);
+}
+
+#[test]
+fn test_dng_batch_convert_catalog_photos() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
+
+    if !cr2_src.exists() {
+        return;
+    }
+
+    let sandbox = std::env::temp_dir().join("firstproof_dng_batch_test");
+    let _ = fs::remove_dir_all(&sandbox);
+    let _ = fs::create_dir_all(&sandbox);
+
+    let raw_file = sandbox.join("batch_01.CR2");
+    fs::copy(&cr2_src, &raw_file).expect("Copy test fixture");
+
+    let jpg_dummy = sandbox.join("raster_dummy.jpg");
+    fs::write(&jpg_dummy, b"Fake JPEG dummy file").unwrap();
+
+    let catalog_path = firstproof_core::db::Database::resolve_catalog_path(&sandbox, false);
+    let db = firstproof_core::db::Database::open(&catalog_path).unwrap();
+    db.index_folder(&sandbox).unwrap();
+
+    // Set a custom 4-star rating on the RAW in catalog
+    db.update_rating_status(&raw_file.to_string_lossy(), Some(4), "pick").unwrap();
+
+    let photo_paths = vec![
+        raw_file.to_string_lossy().to_string(),
+        jpg_dummy.to_string_lossy().to_string(),
+    ];
+
+    let batch_report = firstproof_core::db::Database::batch_convert_catalog_to_dng(
+        &sandbox,
+        &photo_paths,
+        true, // delete original RAW after verified read-back
+        None,
+    )
+    .expect("Batch conversion must succeed");
+
+    assert_eq!(batch_report.total_requested, 2);
+    assert_eq!(batch_report.converted_count, 1);
+    assert_eq!(batch_report.skipped_count, 1, "Raster dummy must be safely skipped");
+    assert_eq!(batch_report.failed_count, 0);
+    assert_eq!(
+        batch_report.space_reclaimed_bytes,
+        batch_report.total_source_bytes - batch_report.total_dng_bytes,
+        "Net space reclaimed must equal size difference when new DNG is written"
+    );
+
+    let target_dng = sandbox.join("batch_01.dng");
+    assert!(target_dng.exists(), "Target batch_01.dng must exist on disk");
+    assert!(!raw_file.exists(), "Source batch_01.CR2 must be safely deleted");
+
+    // Catalog verification: in-place update
+    let updated_rec = db.get_photo(&target_dng.to_string_lossy()).unwrap().expect("Record for DNG must exist in catalog");
+    assert_eq!(updated_rec.rating, Some(4), "Rating must be preserved in catalog SQLite");
+    assert_eq!(updated_rec.status, "pick", "Status must be preserved in catalog SQLite");
+    assert!(updated_rec.file_size > 0);
+
+    let _ = fs::remove_dir_all(&sandbox);
+}
+
+#[test]
+fn test_dng_batch_convert_catalog_photos_keep_original() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
+
+    if !cr2_src.exists() {
+        return;
+    }
+
+    let sandbox = std::env::temp_dir().join("firstproof_dng_batch_keep_original_test");
+    let _ = fs::remove_dir_all(&sandbox);
+    let _ = fs::create_dir_all(&sandbox);
+
+    let raw_file = sandbox.join("batch_keep.CR2");
+    fs::copy(&cr2_src, &raw_file).expect("Copy test fixture");
+
+    let catalog_path = firstproof_core::db::Database::resolve_catalog_path(&sandbox, false);
+    let db = firstproof_core::db::Database::open(&catalog_path).unwrap();
+    db.index_folder(&sandbox).unwrap();
+
+    // Set a custom 5-star rating on the RAW in catalog
+    db.update_rating_status(&raw_file.to_string_lossy(), Some(5), "pick").unwrap();
+
+    let photo_paths = vec![raw_file.to_string_lossy().to_string()];
+
+    let batch_report = firstproof_core::db::Database::batch_convert_catalog_to_dng(
+        &sandbox,
+        &photo_paths,
+        false, // do NOT delete original RAW
+        None,
+    )
+    .expect("Batch conversion must succeed");
+
+    assert_eq!(batch_report.total_requested, 1);
+    assert_eq!(batch_report.converted_count, 1);
+    assert_eq!(batch_report.failed_count, 0);
+
+    let target_dng = sandbox.join("batch_keep.dng");
+    assert!(raw_file.exists(), "Source batch_keep.CR2 must remain on disk");
+    assert!(target_dng.exists(), "Target batch_keep.dng must exist on disk");
+
+    // Catalog verification: BOTH records must exist in SQLite catalog
+    let all_photos = db.get_all_photos().unwrap();
+    assert_eq!(all_photos.len(), 2, "Catalog must retain both original RAW and new DNG");
+
+    let original_rec = db
+        .get_photo(&raw_file.to_string_lossy())
+        .unwrap()
+        .expect("Record for original RAW must remain in catalog");
+    assert_eq!(original_rec.rating, Some(5));
+    assert_eq!(original_rec.status, "pick");
+
+    let dng_rec = db
+        .get_photo(&target_dng.to_string_lossy())
+        .unwrap()
+        .expect("Record for DNG must be inserted into catalog");
+    assert_eq!(dng_rec.rating, Some(5));
+    assert_eq!(dng_rec.status, "pick");
+    assert!(dng_rec.file_size > 0);
+
+    let _ = fs::remove_dir_all(&sandbox);
+}
+
+#[test]
+fn test_dng_collision_reconciles_existing_dng_and_reclaims_space() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
+
+    if !cr2_src.exists() {
+        return;
+    }
+
+    let sandbox = std::env::temp_dir().join("firstproof_dng_reconcile_test");
+    let _ = fs::remove_dir_all(&sandbox);
+    let _ = fs::create_dir_all(&sandbox);
+
+    let raw_file = sandbox.join("coexisting.CR2");
+    fs::copy(&cr2_src, &raw_file).expect("Copy test fixture");
+    let raw_size = fs::metadata(&raw_file).unwrap().len();
+
+    // 1. Initial conversion so coexisting.dng exists alongside coexisting.CR2
+    let init_opts = DngConvertOptions {
+        output_path: None,
+        delete_original: false, // keep original to simulate messy co-existing library
+        verify: true,
+        quiet: true,
+    };
+    let initial_rep = convert_raw_to_dng(&raw_file, &init_opts).expect("Initial DNG generation");
+    assert!(!initial_rep.already_existed, "First conversion creates new DNG");
+    let target_dng = sandbox.join("coexisting.dng");
+    assert!(target_dng.exists());
+
+    // 2. Index both files into catalog.db
+    let catalog_path = firstproof_core::db::Database::resolve_catalog_path(&sandbox, false);
+    let db = firstproof_core::db::Database::open(&catalog_path).unwrap();
+    db.index_folder(&sandbox).unwrap();
+
+    // The user performed culling/rating on the CR2: rating 5, status "Pick"
+    db.update_rating_status(&raw_file.to_string_lossy(), Some(5), "Pick").unwrap();
+
+    // 3. Batch convert coexisting.CR2 with delete_original: true
+    let batch_report = firstproof_core::db::Database::batch_convert_catalog_to_dng(
+        &sandbox,
+        &[raw_file.to_string_lossy().to_string()],
+        true, // delete original RAW
+        None,
+    )
+    .expect("Batch conversion must succeed");
+
+    assert_eq!(batch_report.converted_count, 1);
+    assert_eq!(batch_report.reconciled_existing_count, 1, "Existing DNG must be identified and reconciled");
+    assert_eq!(batch_report.space_reclaimed_bytes, raw_size, "Original RAW size must be reported as reclaimed space");
+    assert!(batch_report.reports[0].already_existed, "Report must indicate DNG was already present");
+    assert!(batch_report.reports[0].deleted_original, "Source CR2 must be marked as deleted");
+
+    // File assertions
+    assert!(target_dng.exists(), "Reconciled DNG must still exist on disk");
+    assert!(!raw_file.exists(), "Duplicate source CR2 must be safely deleted from disk");
+
+    // Catalog assertions: merged record with winning rating and pick
+    let dng_rec = db.get_photo(&target_dng.to_string_lossy()).unwrap().expect("DNG record must exist in catalog");
+    assert_eq!(dng_rec.rating, Some(5), "Winning 5-star rating from CR2 must be reconciled into DNG record");
+    assert_eq!(dng_rec.status, "Pick", "Winning Pick status from CR2 must be reconciled into DNG record");
+
+    let old_rec = db.get_photo(&raw_file.to_string_lossy()).unwrap();
+    assert!(old_rec.is_none(), "Obsolete CR2 catalog row must be removed to prevent UNIQUE constraint collisions");
+
+    let _ = fs::remove_dir_all(&sandbox);
+}
+
+#[test]
+fn test_dng_collision_unrelated_disambiguation() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
+
+    if !cr2_src.exists() {
+        return;
+    }
+
+    let sandbox = std::env::temp_dir().join("firstproof_dng_disambig_test");
+    let _ = fs::remove_dir_all(&sandbox);
+    let _ = fs::create_dir_all(&sandbox);
+
+    let raw_file = sandbox.join("rollover.CR2");
+    fs::copy(&cr2_src, &raw_file).expect("Copy test fixture");
+
+    // Create an unrelated rollover.dng file with different content
+    let existing_unrelated_dng = sandbox.join("rollover.dng");
+    fs::write(&existing_unrelated_dng, b"Different capture dummy payload").unwrap();
+
+    let opts = DngConvertOptions {
+        output_path: None, // automatic naming
+        delete_original: false,
+        verify: true,
+        quiet: true,
+    };
+
+    let rep = convert_raw_to_dng(&raw_file, &opts).expect("Conversion must succeed with disambiguated name");
+    assert_eq!(rep.dng_path, sandbox.join("rollover_1.dng"), "Must disambiguate to rollover_1.dng");
+    assert!(!rep.already_existed);
+
+    // Assert existing file was NOT overwritten
+    let existing_content = fs::read(&existing_unrelated_dng).unwrap();
+    assert_eq!(existing_content, b"Different capture dummy payload", "Existing unrelated DNG must not be clobbered");
+    assert!(sandbox.join("rollover_1.dng").exists(), "Disambiguated DNG must be written");
+
+    let _ = fs::remove_dir_all(&sandbox);
+}
+
+#[test]
+fn test_dng_conversion_preserves_rotation_and_propagates_sidecars() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
+    if !cr2_src.exists() {
+        return;
+    }
+
+    let sandbox = std::env::temp_dir().join("firstproof_dng_rotation_test");
+    let _ = fs::remove_dir_all(&sandbox);
+    let _ = fs::create_dir_all(&sandbox);
+
+    let raw_file = sandbox.join("rotated_test.CR2");
+    fs::copy(&cr2_src, &raw_file).expect("Copy test fixture");
+
+    // Write a Darktable-style sidecar with 270 degree rotation
+    let cr2_xmp = sandbox.join("rotated_test.CR2.xmp");
+    let xmp_xml = r#"<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:pm="https://firstproof.photo/ns/pm/1.0/">
+   <pm:rotation>270</pm:rotation>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>"#;
+    fs::write(&cr2_xmp, xmp_xml).expect("Write test XMP");
+
+    let opts = DngConvertOptions {
+        output_path: None,
+        delete_original: false, // non-destructive conversion
+        verify: true,
+        quiet: true,
+    };
+
+    let rep = convert_raw_to_dng(&raw_file, &opts).expect("Conversion must succeed");
+    assert!(rep.dng_path.exists(), "DNG must exist");
+
+    // Assert that sidecars were propagated for the DNG even though original was not deleted
+    let dng_xmp = read_xmp_file(&rep.dng_path).expect("DNG must resolve sidecar or embedded edits");
+    assert_eq!(dng_xmp.edits.rotation, 270, "Rotation of 270 must be preserved for converted DNG");
+
+    let _ = fs::remove_dir_all(&sandbox);
+}
+

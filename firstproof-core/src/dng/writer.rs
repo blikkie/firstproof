@@ -21,7 +21,7 @@ use rawler::tags::{DngTag, ExifTag, TiffCommonTag};
 use rawler::RawImageData;
 use sha2::{Digest, Sha256};
 
-use crate::color::Color3;
+use crate::color::{Color3, linear_to_srgb_gamma};
 use crate::export::decode::f16_to_f32;
 use crate::export::decode_raw_preview_binned_buffer;
 
@@ -41,6 +41,18 @@ pub fn hash_cfa_data(data: &RawImageData) -> String {
         }
     }
     format!("{:x}", hasher.finalize())
+}
+
+/// Computes the cryptographic SHA-256 digest of a source RAW file's uncompressed CFA mosaic.
+pub fn compute_source_cfa_hash<P: AsRef<Path>>(source_raw_path: P) -> Result<String, String> {
+    let source_raw_path = source_raw_path.as_ref();
+    let rawsource = Arc::new(RawSource::new(source_raw_path).map_err(|e| e.to_string())?);
+    let decoder = rawler::get_decoder(&rawsource).map_err(|e| e.to_string())?;
+    let raw_params = RawDecodeParams { image_index: 0 };
+    let rawimage = decoder
+        .raw_image(&rawsource, &raw_params, false)
+        .map_err(|e| format!("Failed to decode RAW image from {}: {}", source_raw_path.display(), e))?;
+    Ok(hash_cfa_data(&rawimage.data))
 }
 
 /// Generates an authentic First Proof AgX filmic preview image.
@@ -70,9 +82,12 @@ pub fn generate_agx_preview<P: AsRef<Path>>(input_path: P) -> Option<DynamicImag
         let b_rec = f16_to_f32(b_f16);
 
         let mapped = crate::color::agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), 1.0);
-        rgb8.push((mapped.r().clamp(0.0, 1.0) * 255.0).round() as u8);
-        rgb8.push((mapped.g().clamp(0.0, 1.0) * 255.0).round() as u8);
-        rgb8.push((mapped.b().clamp(0.0, 1.0) * 255.0).round() as u8);
+        let r_disp = linear_to_srgb_gamma(mapped.r().clamp(0.0, 1.0));
+        let g_disp = linear_to_srgb_gamma(mapped.g().clamp(0.0, 1.0));
+        let b_disp = linear_to_srgb_gamma(mapped.b().clamp(0.0, 1.0));
+        rgb8.push((r_disp * 255.0).round().clamp(0.0, 255.0) as u8);
+        rgb8.push((g_disp * 255.0).round().clamp(0.0, 255.0) as u8);
+        rgb8.push((b_disp * 255.0).round().clamp(0.0, 255.0) as u8);
     }
 
     RgbImage::from_raw(bin_w, bin_h, rgb8).map(DynamicImage::ImageRgb8)

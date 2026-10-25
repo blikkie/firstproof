@@ -588,12 +588,14 @@ use std::sync::Arc;
 #[derive(Debug, uniffi::Error)]
 pub enum FirstProofError {
     DatabaseError { reason: String },
+    DngError { reason: String },
 }
 
 impl std::fmt::Display for FirstProofError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FirstProofError::DatabaseError { reason } => write!(f, "Database error: {}", reason),
+            FirstProofError::DngError { reason } => write!(f, "DNG conversion error: {}", reason),
         }
     }
 }
@@ -746,6 +748,7 @@ pub struct ImportOptionsRecord {
     pub skip_duplicates: bool,
     pub verify_checksum: bool,
     pub subfolder_name: Option<String>,
+    pub convert_to_dng: bool,
 }
 
 impl From<ImportOptionsRecord> for db::ImportOptions {
@@ -757,6 +760,7 @@ impl From<ImportOptionsRecord> for db::ImportOptions {
             skip_duplicates: r.skip_duplicates,
             verify_checksum: r.verify_checksum,
             subfolder_name: r.subfolder_name,
+            convert_to_dng: r.convert_to_dng,
         }
     }
 }
@@ -772,6 +776,7 @@ pub struct ImportReportRecord {
     pub error_count: u32,
     pub destination_catalog_path: String,
     pub error_messages: Vec<String>,
+    pub dng_converted_count: u32,
 }
 
 impl From<db::ImportReport> for ImportReportRecord {
@@ -786,6 +791,7 @@ impl From<db::ImportReport> for ImportReportRecord {
             error_count: r.error_count,
             destination_catalog_path: r.destination_catalog_path,
             error_messages: r.error_messages,
+            dng_converted_count: r.dng_converted_count,
         }
     }
 }
@@ -853,6 +859,120 @@ pub fn import_to_library(
         .import_to_library(&source_paths_or_folders, &destination_folder, &opts, progress_ref)
         .map(Into::into)
         .map_err(|e| FirstProofError::DatabaseError { reason: e })
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct DngConvertOptionsRecord {
+    pub output_path: Option<String>,
+    pub delete_original: bool,
+    pub verify: bool,
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct DngConvertReportRecord {
+    pub source_path: String,
+    pub dng_path: String,
+    pub source_size_bytes: u64,
+    pub dng_size_bytes: u64,
+    pub compression_ratio: f32,
+    pub verification_passed: bool,
+    pub deleted_original: bool,
+    pub already_existed: bool,
+    pub elapsed_ms: f64,
+}
+
+impl From<crate::dng::DngConvertReport> for DngConvertReportRecord {
+    fn from(r: crate::dng::DngConvertReport) -> Self {
+        Self {
+            source_path: r.source_path.to_string_lossy().to_string(),
+            dng_path: r.dng_path.to_string_lossy().to_string(),
+            source_size_bytes: r.source_size_bytes,
+            dng_size_bytes: r.dng_size_bytes,
+            compression_ratio: r.compression_ratio,
+            verification_passed: r.verification_passed,
+            deleted_original: r.deleted_original,
+            already_existed: r.already_existed,
+            elapsed_ms: r.elapsed_ms,
+        }
+    }
+}
+
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct DngBatchReportRecord {
+    pub total_requested: u32,
+    pub converted_count: u32,
+    pub reconciled_existing_count: u32,
+    pub skipped_count: u32,
+    pub failed_count: u32,
+    pub total_source_bytes: u64,
+    pub total_dng_bytes: u64,
+    pub space_reclaimed_bytes: u64,
+    pub reports: Vec<DngConvertReportRecord>,
+    pub error_messages: Vec<String>,
+}
+
+impl From<db::DngBatchReport> for DngBatchReportRecord {
+    fn from(r: db::DngBatchReport) -> Self {
+        Self {
+            total_requested: r.total_requested,
+            converted_count: r.converted_count,
+            reconciled_existing_count: r.reconciled_existing_count,
+            skipped_count: r.skipped_count,
+            failed_count: r.failed_count,
+            total_source_bytes: r.total_source_bytes,
+            total_dng_bytes: r.total_dng_bytes,
+            space_reclaimed_bytes: r.space_reclaimed_bytes,
+            reports: r.reports.into_iter().map(Into::into).collect(),
+            error_messages: r.error_messages,
+        }
+    }
+}
+
+#[uniffi::export(callback_interface)]
+pub trait DngProgressCallback: Send + Sync + std::fmt::Debug {
+    fn on_progress(&self, current: u32, total: u32, current_file: String);
+}
+
+#[uniffi::export]
+pub fn convert_raw_to_dng(
+    input_path: String,
+    options: DngConvertOptionsRecord,
+) -> Result<DngConvertReportRecord, FirstProofError> {
+    let opts = crate::dng::DngConvertOptions {
+        output_path: options.output_path.map(std::path::PathBuf::from),
+        delete_original: options.delete_original,
+        verify: options.verify,
+        quiet: true,
+    };
+    crate::dng::convert_raw_to_dng(input_path, &opts)
+        .map(Into::into)
+        .map_err(|e| FirstProofError::DngError { reason: e })
+}
+
+#[uniffi::export]
+pub fn batch_convert_catalog_to_dng(
+    catalog_folder: String,
+    photo_paths: Vec<String>,
+    delete_original: bool,
+    progress: Option<Box<dyn DngProgressCallback>>,
+) -> Result<DngBatchReportRecord, FirstProofError> {
+    let progress_fn = progress.as_ref().map(|cb| {
+        move |curr: u32, tot: u32, file: &str| {
+            cb.on_progress(curr, tot, file.to_string());
+        }
+    });
+    let progress_ref: Option<&dyn Fn(u32, u32, &str)> = match &progress_fn {
+        Some(f) => Some(f),
+        None => None,
+    };
+    db::Database::batch_convert_catalog_to_dng(
+        catalog_folder,
+        &photo_paths,
+        delete_original,
+        progress_ref,
+    )
+    .map(Into::into)
+    .map_err(|e| FirstProofError::DngError { reason: e })
 }
 
 #[uniffi::export]

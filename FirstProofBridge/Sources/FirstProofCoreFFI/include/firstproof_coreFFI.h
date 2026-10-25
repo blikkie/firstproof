@@ -251,11 +251,26 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStr
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_DNG_PROGRESS_CALLBACK_METHOD0
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_DNG_PROGRESS_CALLBACK_METHOD0
+typedef void (*UniffiCallbackInterfaceDngProgressCallbackMethod0)(uint64_t, uint32_t, uint32_t, RustBuffer, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_IMPORT_PROGRESS_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_IMPORT_PROGRESS_CALLBACK_METHOD0
 typedef void (*UniffiCallbackInterfaceImportProgressCallbackMethod0)(uint64_t, uint32_t, uint32_t, RustBuffer, void* _Nonnull, 
         RustCallStatus *_Nonnull uniffiCallStatus
     );
+
+#endif
+#ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_DNG_PROGRESS_CALLBACK
+#define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_DNG_PROGRESS_CALLBACK
+typedef struct UniffiVTableCallbackInterfaceDngProgressCallback {
+    UniffiCallbackInterfaceDngProgressCallbackMethod0 _Nonnull onProgress;
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+} UniffiVTableCallbackInterfaceDngProgressCallback;
 
 #endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_IMPORT_PROGRESS_CALLBACK
@@ -377,9 +392,19 @@ int8_t uniffi_firstproof_core_fn_method_firstprooflensfun_load_xml_string(void*_
 RustBuffer uniffi_firstproof_core_fn_method_firstprooflensfun_resolve_coefficients(void*_Nonnull ptr, RustBuffer camera_make, RustBuffer camera_model, RustBuffer lens_model, float focal_length, RustBuffer aperture, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_INIT_CALLBACK_VTABLE_DNGPROGRESSCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_INIT_CALLBACK_VTABLE_DNGPROGRESSCALLBACK
+void uniffi_firstproof_core_fn_init_callback_vtable_dngprogresscallback(UniffiVTableCallbackInterfaceDngProgressCallback* _Nonnull vtable
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_INIT_CALLBACK_VTABLE_IMPORTPROGRESSCALLBACK
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_INIT_CALLBACK_VTABLE_IMPORTPROGRESSCALLBACK
 void uniffi_firstproof_core_fn_init_callback_vtable_importprogresscallback(UniffiVTableCallbackInterfaceImportProgressCallback* _Nonnull vtable
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_BATCH_CONVERT_CATALOG_TO_DNG
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_BATCH_CONVERT_CATALOG_TO_DNG
+RustBuffer uniffi_firstproof_core_fn_func_batch_convert_catalog_to_dng(RustBuffer catalog_folder, RustBuffer photo_paths, int8_t delete_original, RustBuffer progress, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CALCULATE_TARGET_CROP_RATIO
@@ -426,6 +451,11 @@ double uniffi_firstproof_core_fn_func_convert_kelvin_to_mired_norm(double kelvin
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_MIRED_NORM_TO_KELVIN
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_MIRED_NORM_TO_KELVIN
 double uniffi_firstproof_core_fn_func_convert_mired_norm_to_kelvin(double norm, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_RAW_TO_DNG
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_RAW_TO_DNG
+RustBuffer uniffi_firstproof_core_fn_func_convert_raw_to_dng(RustBuffer input_path, RustBuffer options, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DECODE_EXIF_ORIENTATION
@@ -875,6 +905,12 @@ void ffi_firstproof_core_rust_future_free_void(uint64_t handle
 void ffi_firstproof_core_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_BATCH_CONVERT_CATALOG_TO_DNG
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_BATCH_CONVERT_CATALOG_TO_DNG
+uint16_t uniffi_firstproof_core_checksum_func_batch_convert_catalog_to_dng(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CALCULATE_TARGET_CROP_RATIO
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CALCULATE_TARGET_CROP_RATIO
 uint16_t uniffi_firstproof_core_checksum_func_calculate_target_crop_ratio(void
@@ -926,6 +962,12 @@ uint16_t uniffi_firstproof_core_checksum_func_convert_kelvin_to_mired_norm(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CONVERT_MIRED_NORM_TO_KELVIN
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CONVERT_MIRED_NORM_TO_KELVIN
 uint16_t uniffi_firstproof_core_checksum_func_convert_mired_norm_to_kelvin(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CONVERT_RAW_TO_DNG
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CONVERT_RAW_TO_DNG
+uint16_t uniffi_firstproof_core_checksum_func_convert_raw_to_dng(void
     
 );
 #endif
@@ -1232,6 +1274,12 @@ uint16_t uniffi_firstproof_core_checksum_constructor_firstproofdatabase_open(voi
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_CONSTRUCTOR_FIRSTPROOFLENSFUN_NEW
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_CONSTRUCTOR_FIRSTPROOFLENSFUN_NEW
 uint16_t uniffi_firstproof_core_checksum_constructor_firstprooflensfun_new(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_METHOD_DNGPROGRESSCALLBACK_ON_PROGRESS
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_METHOD_DNGPROGRESSCALLBACK_ON_PROGRESS
+uint16_t uniffi_firstproof_core_checksum_method_dngprogresscallback_on_progress(void
     
 );
 #endif

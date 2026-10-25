@@ -135,6 +135,9 @@ struct MainView: View {
         .sheet(isPresented: $viewModel.isCullDuplicatesSheetPresented) {
             CullDuplicatesSheetView()
         }
+        .sheet(isPresented: $viewModel.isDngConversionSheetPresented) {
+            DngConversionSheetView()
+        }
         .onAppear {
             setupKeyboardMonitor()
         }

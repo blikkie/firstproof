@@ -232,9 +232,19 @@ public final class ThumbnailCache {
     }
     
     public func removeImage(for path: String) {
+        let key = ThumbnailCache.cacheKey(filePath: path)
+        let interKey = "inter_" + key
+        cache.removeObject(forKey: key as NSString)
         cache.removeObject(forKey: path as NSString)
         cache.removeObject(forKey: "fast_\(path)" as NSString)
+        cache.removeObject(forKey: interKey as NSString)
+        cache.removeObject(forKey: ("inter_" + path) as NSString)
         clearRefinedThumbnail(for: path)
+        
+        let fileURL = diskCacheURL.appendingPathComponent("\(key).jpg")
+        let interURL = diskCacheURL.appendingPathComponent("\(interKey).jpg")
+        try? FileManager.default.removeItem(at: fileURL)
+        try? FileManager.default.removeItem(at: interURL)
     }
     
     // MARK: - Fast Embedded Preview Extraction (2-5 ms)
@@ -245,12 +255,19 @@ public final class ThumbnailCache {
     ) -> NSImage? {
         if isCancelled?() == true { return nil }
         var loaded: NSImage? = nil
+        var alreadyAppliedExif = false
         
         // 1. Fast-path for RAW photos: Extract embedded camera JPEG preview
         if let data = extractPreview(path: filePath) {
             if isCancelled?() == true { return nil }
             if let src = CGImageSourceCreateWithData(data as CFData, nil) {
                 if isCancelled?() == true { return nil }
+                if let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [String: Any],
+                   let orient = props[kCGImagePropertyOrientation as String] as? UInt32,
+                   orient > 1 {
+                    alreadyAppliedExif = true
+                }
+                
                 let options: [CFString: Any] = [
                     kCGImageSourceCreateThumbnailFromImageAlways: true,
                     kCGImageSourceCreateThumbnailWithTransform: true,
@@ -278,6 +295,7 @@ public final class ThumbnailCache {
                 ]
                 if let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) {
                     loaded = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
+                    alreadyAppliedExif = true
                 }
             }
         }
@@ -286,27 +304,32 @@ public final class ThumbnailCache {
         
         // 3. Apply rotation / flips from XMP or EXIF
         if var base = loaded {
-            let userRot = Int(xmp?.edits.rotation ?? 0)
-            let userFlipH = xmp?.edits.flipHorizontal ?? false
-            let userFlipV = xmp?.edits.flipVertical ?? false
+            let meta = extractMetadata(path: filePath)
+            let exifDec = meta?.orientation.map { decodeExifOrientation(orientation: $0) }
+            let exifRot = Int(exifDec?.rotation ?? 0)
+            let exifFlipH = exifDec?.flipHorizontal ?? false
+            let exifFlipV = exifDec?.flipVertical ?? false
             
-            // Fast-path: Only probe EXIF orientation if user XMP specified an orientation override
-            if userRot != 0 || userFlipH || userFlipV {
-                let meta = extractMetadata(path: filePath)
-                let exifDec = meta?.orientation.map { decodeExifOrientation(orientation: $0) }
-                let exifRot = Int(exifDec?.rotation ?? 0)
-                let exifFlipH = exifDec?.flipHorizontal ?? false
-                let exifFlipV = exifDec?.flipVertical ?? false
-                
-                let deltaRot = (userRot - exifRot + 360) % 360
-                let deltaFlipH = userFlipH != exifFlipH
-                let deltaFlipV = userFlipV != exifFlipV
-                
-                if deltaRot != 0 || deltaFlipH || deltaFlipV {
-                    if isCancelled?() == true { return nil }
-                    base = base.transformed(rotationDegrees: CGFloat(deltaRot), flipH: deltaFlipH, flipV: deltaFlipV)
-                    loaded = base
-                }
+            let hasUserOverride = (xmp?.edits.rotation != nil && xmp!.edits.rotation != 0) ||
+                                  (xmp?.edits.flipHorizontal == true) ||
+                                  (xmp?.edits.flipVertical == true)
+            
+            let targetRot = hasUserOverride ? Int(xmp?.edits.rotation ?? 0) : exifRot
+            let targetFlipH = hasUserOverride ? (xmp?.edits.flipHorizontal ?? false) : exifFlipH
+            let targetFlipV = hasUserOverride ? (xmp?.edits.flipVertical ?? false) : exifFlipV
+            
+            let currentRot = alreadyAppliedExif ? exifRot : 0
+            let currentFlipH = alreadyAppliedExif ? exifFlipH : false
+            let currentFlipV = alreadyAppliedExif ? exifFlipV : false
+            
+            let deltaRot = (targetRot - currentRot + 360) % 360
+            let deltaFlipH = targetFlipH != currentFlipH
+            let deltaFlipV = targetFlipV != currentFlipV
+            
+            if deltaRot != 0 || deltaFlipH || deltaFlipV {
+                if isCancelled?() == true { return nil }
+                base = base.transformed(rotationDegrees: CGFloat(deltaRot), flipH: deltaFlipH, flipV: deltaFlipV)
+                loaded = base
             }
         }
         

@@ -7,7 +7,8 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up (v0.1 Release Gate)
-1. **Story 4.7: Native macOS Desktop Archival DNG Ingest & Batch Action** (P2)
+1. **Story 3.4: ColorSync Soft Proofing & Lab ICC Profile Management** (P2)
+2. **Story 3.25: Sensitometric EV Zone Histogram & Sensor Clipping HUD** (P2)
 
 
 ---

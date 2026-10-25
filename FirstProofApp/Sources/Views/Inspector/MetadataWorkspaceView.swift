@@ -55,6 +55,12 @@ public struct MetadataWorkspaceView: View {
             if let lat = photo.latitude, let lon = photo.longitude {
                 MetadataRow(label: "GPS", value: String(format: "%.4f, %.4f", lat, lon))
             }
+            if photo.fileSize > 0 {
+                MetadataRow(label: "File Size", value: formatFileSize(photo.fileSize))
+            }
+            if photo.hasXmp {
+                MetadataRow(label: "XMP Sidecar", value: xmpSidecarStatus(for: photo))
+            }
             
             let hasTakeout = viewModel.takeoutMatches.contains(where: { $0.imagePath == photo.filePath })
             HStack {
@@ -74,6 +80,32 @@ public struct MetadataWorkspaceView: View {
             }
             .padding(.top, 2)
         }
+    }
+    
+    private func formatFileSize(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "—" }
+        let bcf = ByteCountFormatter()
+        bcf.allowedUnits = [.useAll]
+        bcf.countStyle = .file
+        return bcf.string(fromByteCount: bytes)
+    }
+    
+    private func xmpSidecarStatus(for photo: PhotoRecord) -> String {
+        let basePath = photo.filePath
+        let stemXmp = URL(fileURLWithPath: basePath).deletingPathExtension().appendingPathExtension("xmp")
+        let extXmp = URL(fileURLWithPath: basePath.appending(".xmp"))
+        
+        let fm = FileManager.default
+        let checkPath: URL? = fm.fileExists(atPath: extXmp.path) ? extXmp : (fm.fileExists(atPath: stemXmp.path) ? stemXmp : nil)
+        
+        if let path = checkPath, let attrs = try? fm.attributesOfItem(atPath: path.path), let size = attrs[.size] as? Int64 {
+            let bcf = ByteCountFormatter()
+            bcf.allowedUnits = [.useAll]
+            bcf.countStyle = .file
+            return "Synchronized (\(bcf.string(fromByteCount: size)))"
+        }
+        
+        return photo.hasXmp ? "Synchronized (.xmp)" : "Embedded / Pending"
     }
     
     private func formatDate(_ timestamp: Int64) -> String {

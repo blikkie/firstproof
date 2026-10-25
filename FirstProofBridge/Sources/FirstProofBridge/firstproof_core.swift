@@ -431,6 +431,22 @@ fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
     typealias FfiType = Int64
     typealias SwiftType = Int64
@@ -1331,6 +1347,332 @@ public func FfiConverterTypeCubeLutRecord_lower(_ value: CubeLutRecord) -> RustB
 }
 
 
+public struct DngBatchReportRecord {
+    public var totalRequested: UInt32
+    public var convertedCount: UInt32
+    public var reconciledExistingCount: UInt32
+    public var skippedCount: UInt32
+    public var failedCount: UInt32
+    public var totalSourceBytes: UInt64
+    public var totalDngBytes: UInt64
+    public var spaceReclaimedBytes: UInt64
+    public var reports: [DngConvertReportRecord]
+    public var errorMessages: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(totalRequested: UInt32, convertedCount: UInt32, reconciledExistingCount: UInt32, skippedCount: UInt32, failedCount: UInt32, totalSourceBytes: UInt64, totalDngBytes: UInt64, spaceReclaimedBytes: UInt64, reports: [DngConvertReportRecord], errorMessages: [String]) {
+        self.totalRequested = totalRequested
+        self.convertedCount = convertedCount
+        self.reconciledExistingCount = reconciledExistingCount
+        self.skippedCount = skippedCount
+        self.failedCount = failedCount
+        self.totalSourceBytes = totalSourceBytes
+        self.totalDngBytes = totalDngBytes
+        self.spaceReclaimedBytes = spaceReclaimedBytes
+        self.reports = reports
+        self.errorMessages = errorMessages
+    }
+}
+
+
+
+extension DngBatchReportRecord: Equatable, Hashable {
+    public static func ==(lhs: DngBatchReportRecord, rhs: DngBatchReportRecord) -> Bool {
+        if lhs.totalRequested != rhs.totalRequested {
+            return false
+        }
+        if lhs.convertedCount != rhs.convertedCount {
+            return false
+        }
+        if lhs.reconciledExistingCount != rhs.reconciledExistingCount {
+            return false
+        }
+        if lhs.skippedCount != rhs.skippedCount {
+            return false
+        }
+        if lhs.failedCount != rhs.failedCount {
+            return false
+        }
+        if lhs.totalSourceBytes != rhs.totalSourceBytes {
+            return false
+        }
+        if lhs.totalDngBytes != rhs.totalDngBytes {
+            return false
+        }
+        if lhs.spaceReclaimedBytes != rhs.spaceReclaimedBytes {
+            return false
+        }
+        if lhs.reports != rhs.reports {
+            return false
+        }
+        if lhs.errorMessages != rhs.errorMessages {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(totalRequested)
+        hasher.combine(convertedCount)
+        hasher.combine(reconciledExistingCount)
+        hasher.combine(skippedCount)
+        hasher.combine(failedCount)
+        hasher.combine(totalSourceBytes)
+        hasher.combine(totalDngBytes)
+        hasher.combine(spaceReclaimedBytes)
+        hasher.combine(reports)
+        hasher.combine(errorMessages)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDngBatchReportRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DngBatchReportRecord {
+        return
+            try DngBatchReportRecord(
+                totalRequested: FfiConverterUInt32.read(from: &buf), 
+                convertedCount: FfiConverterUInt32.read(from: &buf), 
+                reconciledExistingCount: FfiConverterUInt32.read(from: &buf), 
+                skippedCount: FfiConverterUInt32.read(from: &buf), 
+                failedCount: FfiConverterUInt32.read(from: &buf), 
+                totalSourceBytes: FfiConverterUInt64.read(from: &buf), 
+                totalDngBytes: FfiConverterUInt64.read(from: &buf), 
+                spaceReclaimedBytes: FfiConverterUInt64.read(from: &buf), 
+                reports: FfiConverterSequenceTypeDngConvertReportRecord.read(from: &buf), 
+                errorMessages: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DngBatchReportRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.totalRequested, into: &buf)
+        FfiConverterUInt32.write(value.convertedCount, into: &buf)
+        FfiConverterUInt32.write(value.reconciledExistingCount, into: &buf)
+        FfiConverterUInt32.write(value.skippedCount, into: &buf)
+        FfiConverterUInt32.write(value.failedCount, into: &buf)
+        FfiConverterUInt64.write(value.totalSourceBytes, into: &buf)
+        FfiConverterUInt64.write(value.totalDngBytes, into: &buf)
+        FfiConverterUInt64.write(value.spaceReclaimedBytes, into: &buf)
+        FfiConverterSequenceTypeDngConvertReportRecord.write(value.reports, into: &buf)
+        FfiConverterSequenceString.write(value.errorMessages, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDngBatchReportRecord_lift(_ buf: RustBuffer) throws -> DngBatchReportRecord {
+    return try FfiConverterTypeDngBatchReportRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDngBatchReportRecord_lower(_ value: DngBatchReportRecord) -> RustBuffer {
+    return FfiConverterTypeDngBatchReportRecord.lower(value)
+}
+
+
+public struct DngConvertOptionsRecord {
+    public var outputPath: String?
+    public var deleteOriginal: Bool
+    public var verify: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(outputPath: String?, deleteOriginal: Bool, verify: Bool) {
+        self.outputPath = outputPath
+        self.deleteOriginal = deleteOriginal
+        self.verify = verify
+    }
+}
+
+
+
+extension DngConvertOptionsRecord: Equatable, Hashable {
+    public static func ==(lhs: DngConvertOptionsRecord, rhs: DngConvertOptionsRecord) -> Bool {
+        if lhs.outputPath != rhs.outputPath {
+            return false
+        }
+        if lhs.deleteOriginal != rhs.deleteOriginal {
+            return false
+        }
+        if lhs.verify != rhs.verify {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(outputPath)
+        hasher.combine(deleteOriginal)
+        hasher.combine(verify)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDngConvertOptionsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DngConvertOptionsRecord {
+        return
+            try DngConvertOptionsRecord(
+                outputPath: FfiConverterOptionString.read(from: &buf), 
+                deleteOriginal: FfiConverterBool.read(from: &buf), 
+                verify: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DngConvertOptionsRecord, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.outputPath, into: &buf)
+        FfiConverterBool.write(value.deleteOriginal, into: &buf)
+        FfiConverterBool.write(value.verify, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDngConvertOptionsRecord_lift(_ buf: RustBuffer) throws -> DngConvertOptionsRecord {
+    return try FfiConverterTypeDngConvertOptionsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDngConvertOptionsRecord_lower(_ value: DngConvertOptionsRecord) -> RustBuffer {
+    return FfiConverterTypeDngConvertOptionsRecord.lower(value)
+}
+
+
+public struct DngConvertReportRecord {
+    public var sourcePath: String
+    public var dngPath: String
+    public var sourceSizeBytes: UInt64
+    public var dngSizeBytes: UInt64
+    public var compressionRatio: Float
+    public var verificationPassed: Bool
+    public var deletedOriginal: Bool
+    public var alreadyExisted: Bool
+    public var elapsedMs: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sourcePath: String, dngPath: String, sourceSizeBytes: UInt64, dngSizeBytes: UInt64, compressionRatio: Float, verificationPassed: Bool, deletedOriginal: Bool, alreadyExisted: Bool, elapsedMs: Double) {
+        self.sourcePath = sourcePath
+        self.dngPath = dngPath
+        self.sourceSizeBytes = sourceSizeBytes
+        self.dngSizeBytes = dngSizeBytes
+        self.compressionRatio = compressionRatio
+        self.verificationPassed = verificationPassed
+        self.deletedOriginal = deletedOriginal
+        self.alreadyExisted = alreadyExisted
+        self.elapsedMs = elapsedMs
+    }
+}
+
+
+
+extension DngConvertReportRecord: Equatable, Hashable {
+    public static func ==(lhs: DngConvertReportRecord, rhs: DngConvertReportRecord) -> Bool {
+        if lhs.sourcePath != rhs.sourcePath {
+            return false
+        }
+        if lhs.dngPath != rhs.dngPath {
+            return false
+        }
+        if lhs.sourceSizeBytes != rhs.sourceSizeBytes {
+            return false
+        }
+        if lhs.dngSizeBytes != rhs.dngSizeBytes {
+            return false
+        }
+        if lhs.compressionRatio != rhs.compressionRatio {
+            return false
+        }
+        if lhs.verificationPassed != rhs.verificationPassed {
+            return false
+        }
+        if lhs.deletedOriginal != rhs.deletedOriginal {
+            return false
+        }
+        if lhs.alreadyExisted != rhs.alreadyExisted {
+            return false
+        }
+        if lhs.elapsedMs != rhs.elapsedMs {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(sourcePath)
+        hasher.combine(dngPath)
+        hasher.combine(sourceSizeBytes)
+        hasher.combine(dngSizeBytes)
+        hasher.combine(compressionRatio)
+        hasher.combine(verificationPassed)
+        hasher.combine(deletedOriginal)
+        hasher.combine(alreadyExisted)
+        hasher.combine(elapsedMs)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDngConvertReportRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DngConvertReportRecord {
+        return
+            try DngConvertReportRecord(
+                sourcePath: FfiConverterString.read(from: &buf), 
+                dngPath: FfiConverterString.read(from: &buf), 
+                sourceSizeBytes: FfiConverterUInt64.read(from: &buf), 
+                dngSizeBytes: FfiConverterUInt64.read(from: &buf), 
+                compressionRatio: FfiConverterFloat.read(from: &buf), 
+                verificationPassed: FfiConverterBool.read(from: &buf), 
+                deletedOriginal: FfiConverterBool.read(from: &buf), 
+                alreadyExisted: FfiConverterBool.read(from: &buf), 
+                elapsedMs: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DngConvertReportRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.sourcePath, into: &buf)
+        FfiConverterString.write(value.dngPath, into: &buf)
+        FfiConverterUInt64.write(value.sourceSizeBytes, into: &buf)
+        FfiConverterUInt64.write(value.dngSizeBytes, into: &buf)
+        FfiConverterFloat.write(value.compressionRatio, into: &buf)
+        FfiConverterBool.write(value.verificationPassed, into: &buf)
+        FfiConverterBool.write(value.deletedOriginal, into: &buf)
+        FfiConverterBool.write(value.alreadyExisted, into: &buf)
+        FfiConverterDouble.write(value.elapsedMs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDngConvertReportRecord_lift(_ buf: RustBuffer) throws -> DngConvertReportRecord {
+    return try FfiConverterTypeDngConvertReportRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDngConvertReportRecord_lower(_ value: DngConvertReportRecord) -> RustBuffer {
+    return FfiConverterTypeDngConvertReportRecord.lower(value)
+}
+
+
 public struct DuplicateClusterRecord {
     public var original: PhotoRecord
     public var duplicates: [PhotoRecord]
@@ -1852,16 +2194,18 @@ public struct ImportOptionsRecord {
     public var skipDuplicates: Bool
     public var verifyChecksum: Bool
     public var subfolderName: String?
+    public var convertToDng: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(moveFiles: Bool, consolidateSidecars: Bool, deduplicateRawOverJpeg: Bool, skipDuplicates: Bool, verifyChecksum: Bool, subfolderName: String?) {
+    public init(moveFiles: Bool, consolidateSidecars: Bool, deduplicateRawOverJpeg: Bool, skipDuplicates: Bool, verifyChecksum: Bool, subfolderName: String?, convertToDng: Bool) {
         self.moveFiles = moveFiles
         self.consolidateSidecars = consolidateSidecars
         self.deduplicateRawOverJpeg = deduplicateRawOverJpeg
         self.skipDuplicates = skipDuplicates
         self.verifyChecksum = verifyChecksum
         self.subfolderName = subfolderName
+        self.convertToDng = convertToDng
     }
 }
 
@@ -1887,6 +2231,9 @@ extension ImportOptionsRecord: Equatable, Hashable {
         if lhs.subfolderName != rhs.subfolderName {
             return false
         }
+        if lhs.convertToDng != rhs.convertToDng {
+            return false
+        }
         return true
     }
 
@@ -1897,6 +2244,7 @@ extension ImportOptionsRecord: Equatable, Hashable {
         hasher.combine(skipDuplicates)
         hasher.combine(verifyChecksum)
         hasher.combine(subfolderName)
+        hasher.combine(convertToDng)
     }
 }
 
@@ -1913,7 +2261,8 @@ public struct FfiConverterTypeImportOptionsRecord: FfiConverterRustBuffer {
                 deduplicateRawOverJpeg: FfiConverterBool.read(from: &buf), 
                 skipDuplicates: FfiConverterBool.read(from: &buf), 
                 verifyChecksum: FfiConverterBool.read(from: &buf), 
-                subfolderName: FfiConverterOptionString.read(from: &buf)
+                subfolderName: FfiConverterOptionString.read(from: &buf), 
+                convertToDng: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -1924,6 +2273,7 @@ public struct FfiConverterTypeImportOptionsRecord: FfiConverterRustBuffer {
         FfiConverterBool.write(value.skipDuplicates, into: &buf)
         FfiConverterBool.write(value.verifyChecksum, into: &buf)
         FfiConverterOptionString.write(value.subfolderName, into: &buf)
+        FfiConverterBool.write(value.convertToDng, into: &buf)
     }
 }
 
@@ -1953,10 +2303,11 @@ public struct ImportReportRecord {
     public var errorCount: UInt32
     public var destinationCatalogPath: String
     public var errorMessages: [String]
+    public var dngConvertedCount: UInt32
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(totalFound: UInt32, importedCount: UInt32, skippedDuplicates: UInt32, rawOverJpegSuppressed: UInt32, duplicateClonesSuppressed: UInt32, consolidatedSidecars: UInt32, errorCount: UInt32, destinationCatalogPath: String, errorMessages: [String]) {
+    public init(totalFound: UInt32, importedCount: UInt32, skippedDuplicates: UInt32, rawOverJpegSuppressed: UInt32, duplicateClonesSuppressed: UInt32, consolidatedSidecars: UInt32, errorCount: UInt32, destinationCatalogPath: String, errorMessages: [String], dngConvertedCount: UInt32) {
         self.totalFound = totalFound
         self.importedCount = importedCount
         self.skippedDuplicates = skippedDuplicates
@@ -1966,6 +2317,7 @@ public struct ImportReportRecord {
         self.errorCount = errorCount
         self.destinationCatalogPath = destinationCatalogPath
         self.errorMessages = errorMessages
+        self.dngConvertedCount = dngConvertedCount
     }
 }
 
@@ -2000,6 +2352,9 @@ extension ImportReportRecord: Equatable, Hashable {
         if lhs.errorMessages != rhs.errorMessages {
             return false
         }
+        if lhs.dngConvertedCount != rhs.dngConvertedCount {
+            return false
+        }
         return true
     }
 
@@ -2013,6 +2368,7 @@ extension ImportReportRecord: Equatable, Hashable {
         hasher.combine(errorCount)
         hasher.combine(destinationCatalogPath)
         hasher.combine(errorMessages)
+        hasher.combine(dngConvertedCount)
     }
 }
 
@@ -2032,7 +2388,8 @@ public struct FfiConverterTypeImportReportRecord: FfiConverterRustBuffer {
                 consolidatedSidecars: FfiConverterUInt32.read(from: &buf), 
                 errorCount: FfiConverterUInt32.read(from: &buf), 
                 destinationCatalogPath: FfiConverterString.read(from: &buf), 
-                errorMessages: FfiConverterSequenceString.read(from: &buf)
+                errorMessages: FfiConverterSequenceString.read(from: &buf), 
+                dngConvertedCount: FfiConverterUInt32.read(from: &buf)
         )
     }
 
@@ -2046,6 +2403,7 @@ public struct FfiConverterTypeImportReportRecord: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.errorCount, into: &buf)
         FfiConverterString.write(value.destinationCatalogPath, into: &buf)
         FfiConverterSequenceString.write(value.errorMessages, into: &buf)
+        FfiConverterUInt32.write(value.dngConvertedCount, into: &buf)
     }
 }
 
@@ -2983,6 +3341,8 @@ public enum FirstProofError {
     
     case DatabaseError(reason: String
     )
+    case DngError(reason: String
+    )
 }
 
 
@@ -3002,6 +3362,9 @@ public struct FfiConverterTypeFirstProofError: FfiConverterRustBuffer {
         case 1: return .DatabaseError(
             reason: try FfiConverterString.read(from: &buf)
             )
+        case 2: return .DngError(
+            reason: try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3016,6 +3379,11 @@ public struct FfiConverterTypeFirstProofError: FfiConverterRustBuffer {
         
         case let .DatabaseError(reason):
             writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .DngError(reason):
+            writeInt(&buf, Int32(2))
             FfiConverterString.write(reason, into: &buf)
             
         }
@@ -3034,7 +3402,7 @@ extension FirstProofError: Foundation.LocalizedError {
 
 
 
-public protocol ImportProgressCallback : AnyObject {
+public protocol DngProgressCallback : AnyObject {
     
     func onProgress(current: UInt32, total: UInt32, currentFile: String) 
     
@@ -3047,6 +3415,109 @@ private let IDX_CALLBACK_FREE: Int32 = 0
 private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
 private let UNIFFI_CALLBACK_ERROR: Int32 = 1
 private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceDngProgressCallback {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    static var vtable: UniffiVTableCallbackInterfaceDngProgressCallback = UniffiVTableCallbackInterfaceDngProgressCallback(
+        onProgress: { (
+            uniffiHandle: UInt64,
+            current: UInt32,
+            total: UInt32,
+            currentFile: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceDngProgressCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onProgress(
+                     current: try FfiConverterUInt32.lift(current),
+                     total: try FfiConverterUInt32.lift(total),
+                     currentFile: try FfiConverterString.lift(currentFile)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterCallbackInterfaceDngProgressCallback.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface DngProgressCallback: handle missing in uniffiFree")
+            }
+        }
+    )
+}
+
+private func uniffiCallbackInitDngProgressCallback() {
+    uniffi_firstproof_core_fn_init_callback_vtable_dngprogresscallback(&UniffiCallbackInterfaceDngProgressCallback.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceDngProgressCallback {
+    fileprivate static var handleMap = UniffiHandleMap<DngProgressCallback>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceDngProgressCallback : FfiConverter {
+    typealias SwiftType = DngProgressCallback
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+
+
+public protocol ImportProgressCallback : AnyObject {
+    
+    func onProgress(current: UInt32, total: UInt32, currentFile: String) 
+    
+}
+
+
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
 fileprivate struct UniffiCallbackInterfaceImportProgressCallback {
@@ -3575,6 +4046,30 @@ fileprivate struct FfiConverterOptionTypeXmpDataRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionCallbackInterfaceDngProgressCallback: FfiConverterRustBuffer {
+    typealias SwiftType = DngProgressCallback?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterCallbackInterfaceDngProgressCallback.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterCallbackInterfaceDngProgressCallback.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionCallbackInterfaceImportProgressCallback: FfiConverterRustBuffer {
     typealias SwiftType = ImportProgressCallback?
 
@@ -3843,6 +4338,31 @@ fileprivate struct FfiConverterSequenceTypeBatchExportResultRecord: FfiConverter
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeDngConvertReportRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [DngConvertReportRecord]
+
+    public static func write(_ value: [DngConvertReportRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeDngConvertReportRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [DngConvertReportRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [DngConvertReportRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeDngConvertReportRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeDuplicateClusterRecord: FfiConverterRustBuffer {
     typealias SwiftType = [DuplicateClusterRecord]
 
@@ -3990,6 +4510,16 @@ fileprivate struct FfiConverterSequenceTypeCurvePointRecord: FfiConverterRustBuf
 
 
 
+public func batchConvertCatalogToDng(catalogFolder: String, photoPaths: [String], deleteOriginal: Bool, progress: DngProgressCallback?)throws  -> DngBatchReportRecord {
+    return try  FfiConverterTypeDngBatchReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
+    uniffi_firstproof_core_fn_func_batch_convert_catalog_to_dng(
+        FfiConverterString.lower(catalogFolder),
+        FfiConverterSequenceString.lower(photoPaths),
+        FfiConverterBool.lower(deleteOriginal),
+        FfiConverterOptionCallbackInterfaceDngProgressCallback.lower(progress),$0
+    )
+})
+}
 public func calculateTargetCropRatio(preset: CropAspectRatioPreset, imageAspect: Float, isPortrait: Bool) -> Float? {
     return try!  FfiConverterOptionFloat.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_calculate_target_crop_ratio(
@@ -4060,6 +4590,14 @@ public func convertMiredNormToKelvin(norm: Double) -> Double {
     return try!  FfiConverterDouble.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_convert_mired_norm_to_kelvin(
         FfiConverterDouble.lower(norm),$0
+    )
+})
+}
+public func convertRawToDng(inputPath: String, options: DngConvertOptionsRecord)throws  -> DngConvertReportRecord {
+    return try  FfiConverterTypeDngConvertReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
+    uniffi_firstproof_core_fn_func_convert_raw_to_dng(
+        FfiConverterString.lower(inputPath),
+        FfiConverterTypeDngConvertOptionsRecord.lower(options),$0
     )
 })
 }
@@ -4349,6 +4887,9 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_firstproof_core_checksum_func_batch_convert_catalog_to_dng() != 44329) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_func_calculate_target_crop_ratio() != 7171) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4374,6 +4915,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_convert_mired_norm_to_kelvin() != 43230) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_convert_raw_to_dng() != 1473) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_decode_exif_orientation() != 3086) {
@@ -4529,10 +5073,14 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_constructor_firstprooflensfun_new() != 43384) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_method_dngprogresscallback_on_progress() != 55621) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_method_importprogresscallback_on_progress() != 41040) {
         return InitializationResult.apiChecksumMismatch
     }
 
+    uniffiCallbackInitDngProgressCallback()
     uniffiCallbackInitImportProgressCallback()
     return InitializationResult.ok
 }()

@@ -151,6 +151,7 @@ struct PhotoGridCollectionView: NSViewRepresentable {
     let onExportPackage: (PhotoRecord) -> Void
     let onExportRendered: (PhotoRecord) -> Void
     let onSetStatus: (PhotoRecord, String) -> Void
+    var onConvertToDng: ((PhotoRecord) -> Void)? = nil
     var onColumnsChanged: ((Int) -> Void)? = nil
     
     func makeCoordinator() -> Coordinator {
@@ -489,6 +490,12 @@ struct PhotoGridCollectionView: NSViewRepresentable {
             )
             .id(photo.filePath)
             .contextMenu { [weak self] in
+                if photo.isProprietaryRaw {
+                    Button("Convert to Archival DNG...") {
+                        self?.parent.onConvertToDng?(photo)
+                    }
+                    Divider()
+                }
                 Button("Export Selection as Portable Library...") {
                     self?.parent.onExportPackage(photo)
                 }

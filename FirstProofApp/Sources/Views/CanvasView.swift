@@ -234,6 +234,9 @@ struct CanvasView: View {
                             }
                             viewModel.setStatus(status)
                         },
+                        onConvertToDng: { photo in
+                            viewModel.startDngConversionFlow(targetPhoto: photo)
+                        },
                         onColumnsChanged: { cols in
                             DispatchQueue.main.async {
                                 if viewModel.gridColumnCount != cols {

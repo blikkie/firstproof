@@ -9,6 +9,11 @@ extension PhotoRecord {
         let ext = URL(fileURLWithPath: filePath).pathExtension.lowercased()
         return ["cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "raf", "pef", "raw"].contains(ext)
     }
+    
+    public var isProprietaryRaw: Bool {
+        let ext = URL(fileURLWithPath: filePath).pathExtension.lowercased()
+        return isRaw && ext != "dng"
+    }
 }
 
 extension ToneCurvesRecord {
@@ -327,6 +332,25 @@ public final class AppViewModel {
     public var isFilmstripFollowingSelection: Bool = true
     public var filmstripScrollTrigger: UUID = UUID()
     public var gridColumnCount: Int = 4
+    
+    // MARK: - Archival DNG Conversion State (Story 4.7)
+    public var isDngConversionSheetPresented: Bool = false
+    public var isConvertingDng: Bool = false
+    public var dngProgressCurrent: UInt32 = 0
+    public var dngProgressTotal: UInt32 = 0
+    public var dngProgressFileName: String = ""
+    public var dngBatchReport: DngBatchReportRecord? = nil
+    public var dngBatchErrorMessage: String? = nil
+    @ObservationIgnored public var activeDngConversionTask: Task<Void, Never>? = nil
+    
+    public var convertibleRawPhotosSelected: [PhotoRecord] {
+        if !selectedPhotoPaths.isEmpty {
+            return photos.filter { selectedPhotoPaths.contains($0.filePath) && $0.isProprietaryRaw }
+        } else if let sel = selectedPhoto, sel.isProprietaryRaw {
+            return [sel]
+        }
+        return []
+    }
     
     // MARK: - Navigation & Inspector State (macOS 14 Modernization)
     public var isInspectorPresented: Bool = true

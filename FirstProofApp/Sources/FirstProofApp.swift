@@ -137,6 +137,13 @@ struct FirstProofApp: App {
                 
                 Divider()
                 
+                Button("Convert to Archival DNG...") {
+                    viewModel.startDngConversionFlow()
+                }
+                .disabled(viewModel.convertibleRawPhotosSelected.isEmpty)
+                
+                Divider()
+                
                 Button("Rotate Clockwise") {
                     viewModel.rotateClockwise()
                 }
