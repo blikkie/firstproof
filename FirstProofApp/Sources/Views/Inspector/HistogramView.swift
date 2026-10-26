@@ -4,7 +4,7 @@ import FirstProofBridge
 
 public struct HistogramView: View {
     @Environment(AppViewModel.self) private var viewModel
-    @State private var hoverX: CGFloat? = nil
+    @State private var hoverFrac: CGFloat? = nil
     
     public init() {}
     
@@ -38,94 +38,118 @@ public struct HistogramView: View {
         )
     }
     
-    // MARK: - HUD Header Bar
+    // MARK: - HUD Header Bar (2-Line Layout to prevent truncation & support Dynamic Type)
     private var hudHeader: some View {
         let shadowClip = viewModel.histogramRecord?.shadowClipPercent ?? 0.0
         let sensorClip = viewModel.histogramRecord?.sensorClipPercent ?? 0.0
         let rolloff = viewModel.histogramRecord?.displayRolloffPercent ?? 0.0
         
-        return HStack(spacing: 6) {
-            // Shadow Floor Clipping Badge
-            Button(action: {
-                viewModel.toggleClippingOverlay()
-            }) {
-                HStack(spacing: 3) {
-                    Image(systemName: "arrowtriangle.left.fill")
-                        .font(.system(size: 8))
-                    Text(String(format: "%.1f%%", shadowClip))
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+        return VStack(alignment: .leading, spacing: 5) {
+            // Line 1: Section Title & Interactive Hover Zone Readout + Collapse Button
+            HStack {
+                if let frac = hoverFrac {
+                    let info = zoneReadout(for: frac)
+                    HStack(spacing: 4) {
+                        Text(info.zone)
+                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(.primary)
+                        Text("•")
+                            .foregroundColor(.secondary.opacity(0.5))
+                        Text(info.ev)
+                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(info.ev.contains("+") ? Color(red: 0.95, green: 0.55, blue: 0.35) : (info.ev.contains("-") ? Color(red: 0.35, green: 0.65, blue: 0.95) : .accentColor))
+                        Text("•")
+                            .foregroundColor(.secondary.opacity(0.5))
+                        Text(info.description)
+                            .font(.system(size: 8.5, weight: .regular))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .help("\(info.zone) (\(info.description)): \(info.ev) relative to 18% middle grey (Zone V)")
+                } else {
+                    Text("HISTOGRAM (EV)")
+                        .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                        .foregroundColor(.secondary.opacity(0.8))
                 }
-                .foregroundColor(shadowClip > 0.05 ? Color(red: 0.35, green: 0.60, blue: 0.95) : .secondary.opacity(0.5))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(shadowClip > 0.05 ? Color.blue.opacity(0.15) : Color.clear)
-                .cornerRadius(3)
-            }
-            .buttonStyle(.plain)
-            .help("Shadow Floor: \(String(format: "%.2f%%", shadowClip)) crushed at noise floor (≤ −8.0 EV). Click or press J to toggle clipping overlay.")
-            
-            Spacer()
-            
-            // Center Readout: Interactive Hover Zone or Mode Label
-            if let hx = hoverX, let info = zoneReadout(for: hx) {
-                Text("\(info.zone) • \(info.ev)")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(.primary.opacity(0.85))
-            } else {
-                Text("HISTOGRAM (EV)")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(.secondary.opacity(0.7))
-            }
-            
-            Spacer()
-            
-            // AgX Shoulder Roll-Off Telemetry Badge
-            if rolloff > 0.05 {
-                HStack(spacing: 3) {
-                    Text("AgX")
-                        .font(.system(size: 8, weight: .bold))
-                    Text(String(format: "%.1f%%", rolloff))
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                
+                Spacer(minLength: 4)
+                
+                // Collapse / Expand Toggle
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        viewModel.toggleHistogram()
+                    }
+                }) {
+                    Image(systemName: viewModel.isHistogramVisible ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.secondary.opacity(0.7))
+                        .padding(2)
+                        .contentShape(Rectangle())
                 }
-                .foregroundColor(Color(red: 0.90, green: 0.68, blue: 0.35))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(Color.orange.opacity(0.12))
-                .cornerRadius(3)
-                .help("AgX Shoulder: \(String(format: "%.2f%%", rolloff)) in preserved highlight compression (Zone VII+).")
+                .buttonStyle(.plain)
+                .help(viewModel.isHistogramVisible ? "Hide Histogram (H)" : "Show Histogram (H)")
             }
+            .frame(minHeight: 20)
             
-            // Hardware Photosite Saturation Badge
-            Button(action: {
-                viewModel.toggleClippingOverlay()
-            }) {
-                HStack(spacing: 3) {
-                    Text(String(format: "%.1f%%", sensorClip))
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    Image(systemName: "arrowtriangle.right.fill")
-                        .font(.system(size: 8))
+            // Line 2: Telemetry Badges (Shadow Floor, AgX Roll-Off, Sensor Saturation)
+            HStack(spacing: 5) {
+                // Shadow Floor Clipping Badge
+                Button(action: {
+                    viewModel.toggleClippingOverlay()
+                }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrowtriangle.left.fill")
+                            .font(.system(size: 7.5))
+                        Text(String(format: "Floor %.1f%%", shadowClip))
+                            .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+                    }
+                    .foregroundColor(shadowClip > 0.05 ? Color(red: 0.35, green: 0.60, blue: 0.95) : .secondary.opacity(0.6))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2.5)
+                    .background(shadowClip > 0.05 ? Color.blue.opacity(0.18) : Color.secondary.opacity(0.08))
+                    .cornerRadius(4)
                 }
-                .foregroundColor(sensorClip > 0.05 ? Color(red: 0.95, green: 0.30, blue: 0.30) : .secondary.opacity(0.5))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(sensorClip > 0.05 ? Color.red.opacity(0.15) : Color.clear)
-                .cornerRadius(3)
-            }
-            .buttonStyle(.plain)
-            .help("Sensor Saturation: \(String(format: "%.2f%%", sensorClip)) blown raw Bayer photosites (≥ 1.0 capacity). Click or press J to toggle clipping overlay.")
-            
-            // Collapse / Expand Toggle
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    viewModel.toggleHistogram()
+                .buttonStyle(.plain)
+                .help("Shadow Floor: \(String(format: "%.2f%%", shadowClip)) crushed at noise floor (≤ −8.0 EV). Click or press J to toggle clipping overlay.")
+                
+                // AgX Shoulder Roll-Off Telemetry Badge
+                if rolloff > 0.05 {
+                    HStack(spacing: 3) {
+                        Text("AgX")
+                            .font(.system(size: 7.5, weight: .bold))
+                        Text(String(format: "%.1f%%", rolloff))
+                            .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+                    }
+                    .foregroundColor(Color(red: 0.92, green: 0.70, blue: 0.35))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2.5)
+                    .background(Color.orange.opacity(0.14))
+                    .cornerRadius(4)
+                    .help("AgX Shoulder: \(String(format: "%.2f%%", rolloff)) in preserved highlight compression (Zone VII+).")
                 }
-            }) {
-                Image(systemName: viewModel.isHistogramVisible ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(.secondary.opacity(0.6))
+                
+                // Hardware Photosite Saturation Badge
+                Button(action: {
+                    viewModel.toggleClippingOverlay()
+                }) {
+                    HStack(spacing: 3) {
+                        Text(String(format: "Clip %.1f%%", sensorClip))
+                            .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+                        Image(systemName: "arrowtriangle.right.fill")
+                            .font(.system(size: 7.5))
+                    }
+                    .foregroundColor(sensorClip > 0.05 ? Color(red: 0.95, green: 0.30, blue: 0.30) : .secondary.opacity(0.6))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2.5)
+                    .background(sensorClip > 0.05 ? Color.red.opacity(0.18) : Color.secondary.opacity(0.08))
+                    .cornerRadius(4)
+                }
+                .buttonStyle(.plain)
+                .help("Sensor Saturation: \(String(format: "%.2f%%", sensorClip)) blown raw Bayer photosites (≥ 1.0 capacity). Click or press J to toggle clipping overlay.")
+                
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.plain)
-            .help("Toggle Histogram View (H)")
         }
     }
     
@@ -149,7 +173,8 @@ public struct HistogramView: View {
                 }
                 
                 // 3. Hover Hairline Indicator
-                if let hx = hoverX {
+                if let frac = hoverFrac {
+                    let hx = frac * w
                     Path { p in
                         p.move(to: CGPoint(x: hx, y: 0))
                         p.addLine(to: CGPoint(x: hx, y: h))
@@ -161,9 +186,9 @@ public struct HistogramView: View {
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let point):
-                    hoverX = min(max(point.x, 0), w)
+                    hoverFrac = w > 0 ? min(max(point.x / w, 0.0), 1.0) : 0.0
                 case .ended:
-                    hoverX = nil
+                    hoverFrac = nil
                 }
             }
         }
@@ -246,57 +271,85 @@ public struct HistogramView: View {
         ctx.stroke(lumStroke, with: .color(Color.white.opacity(0.55)), lineWidth: 1.0)
     }
     
-    // MARK: - Scale Labels
+    // MARK: - Scale Labels (2-Line Layout for EV Stops & Zone Landmarks)
     private var zoneScaleLabels: some View {
-        HStack {
-            Text("−8 EV")
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Zone 0 (Dmax)")
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 18)
-            Text("Zone V (18%)")
-                .foregroundColor(.accentColor.opacity(0.85))
-                .fontWeight(.semibold)
-                .frame(maxWidth: .infinity, alignment: .center)
-            Text("+4 EV")
-                .frame(maxWidth: .infinity, alignment: .trailing)
+        VStack(spacing: 3) {
+            // Line 1: Physical Exposure Stops (-8 EV Noise Floor to +4 EV Sensor Saturation)
+            HStack {
+                Text("−8 EV (Floor)")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("0 EV (18%)")
+                    .foregroundColor(.accentColor.opacity(0.90))
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text("+4 EV (Clip)")
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            
+            // Line 2: Ansel Adams Tonal Zone Landmarks
+            HStack {
+                Text("Zone 0 (Dmax)")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Zone V (Grey)")
+                    .foregroundColor(.accentColor.opacity(0.90))
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text("Zone VIII+ (White)")
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
-        .font(.system(size: 8, weight: .regular, design: .monospaced))
-        .foregroundColor(.secondary.opacity(0.65))
+        .font(.system(size: 8.5, weight: .regular, design: .monospaced))
+        .foregroundColor(.secondary.opacity(0.70))
+        .fixedSize(horizontal: false, vertical: true)
     }
     
     // MARK: - Zone System Readout Helper
-    private func zoneReadout(for x: CGFloat) -> (zone: String, ev: String)? {
-        let totalStops: CGFloat = 12.0
-        let frac = min(max(x / 250.0, 0.0), 1.0) // approximate width normalization
-        let ev = -8.0 + Float(frac) * Float(totalStops)
+    private func zoneReadout(for frac: CGFloat) -> (zone: String, description: String, ev: String) {
+        let totalStops: Float = 12.0
+        let clampedFrac = Float(min(max(frac, 0.0), 1.0))
+        let ev = -8.0 + clampedFrac * totalStops
         let evString = String(format: "%+.1f EV", ev)
         
         let zone: String
-        if ev < -4.5 {
-            zone = "Zone 0 (Dmax)"
+        let desc: String
+        if ev < -5.5 {
+            zone = "Zone 0"
+            desc = "Sub-Floor / Noise"
+        } else if ev < -4.5 {
+            zone = "Zone 0"
+            desc = "Dmax Maximum Black"
         } else if ev < -3.5 {
-            zone = "Zone I (Deep Shadow)"
+            zone = "Zone I"
+            desc = "Deep Shadow"
         } else if ev < -2.5 {
-            zone = "Zone II (First Texture)"
+            zone = "Zone II"
+            desc = "First Texture"
         } else if ev < -1.5 {
-            zone = "Zone III (Shadow Detail)"
+            zone = "Zone III"
+            desc = "Shadow Detail"
         } else if ev < -0.5 {
-            zone = "Zone IV (Low Midtone)"
+            zone = "Zone IV"
+            desc = "Low Midtone"
         } else if ev <= 0.5 {
-            zone = "Zone V (18% Grey)"
+            zone = "Zone V"
+            desc = "18% Middle Grey"
         } else if ev <= 1.5 {
-            zone = "Zone VI (Skin Midtone)"
+            zone = "Zone VI"
+            desc = "Skin Midtone"
         } else if ev <= 2.5 {
-            zone = "Zone VII (Textured White)"
+            zone = "Zone VII"
+            desc = "Textured White"
         } else if ev <= 3.5 {
-            zone = "Zone VIII (High Texture)"
-        } else if ev <= 4.5 {
-            zone = "Zone IX (Blank White)"
+            zone = "Zone VIII"
+            desc = "High Texture"
+        } else if ev <= 4.0 {
+            zone = "Zone IX"
+            desc = "Blank White"
         } else {
-            zone = "Zone X (Specular Clip)"
+            zone = "Zone X"
+            desc = "Sensor Saturation"
         }
         
-        return (zone, evString)
+        return (zone, desc, evString)
     }
 }

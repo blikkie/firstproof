@@ -9,8 +9,8 @@ pub use firstproof_engine::{
     kelvin_to_mired_norm, mired_norm_to_kelvin, parse_xmp_sidecar, AdjustmentDescriptor,
     AllCurvesLutRecord, AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode,
     CropAspectRatioPreset, CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype,
-    EmulsionFormat, EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace,
-    ExportRenderingIntent, f16_to_f32, ImageMetadataRecord, PreviewResultRecord, PrintMediaMode,
+    EmulsionFormat, EnlargerFilterMode, EvHistogramRecord, ExifOrientationRecord, ExportColorSpace,
+    ExportRenderingIntent, f16_to_f32, f32_to_f16, ImageMetadataRecord, PreviewResultRecord, PrintMediaMode,
     RawLinearResultRecord, RawSensorFrame, RemjetBackingMode, RenderTier, ScaleMode,
     ToneCurvesRecord, WhiteBalancePreset, WorkspaceCategory, XmpData,
 };
@@ -1149,9 +1149,68 @@ pub fn execute_darkroom_command(json_str: &str) -> String {
     }
 }
 
+#[wasm_bindgen]
+pub fn compute_ev_histogram_from_bytes(
+    data: &[u8],
+    width: u32,
+    height: u32,
+    exposure: f32,
+    contrast: f32,
+    highlights: f32,
+    shadows: f32,
+    whites: f32,
+    blacks: f32,
+    crop_left: f32,
+    crop_top: f32,
+    crop_right: f32,
+    crop_bottom: f32,
+    lens_correction_enabled: bool,
+    tca_correction_enabled: bool,
+) -> Result<JsValue, JsValue> {
+    let record = firstproof_engine::histogram::compute_ev_histogram_from_f16_buffer(
+        width,
+        height,
+        data,
+        exposure,
+        contrast,
+        highlights,
+        shadows,
+        whites,
+        blacks,
+        crop_left,
+        crop_top,
+        crop_right,
+        crop_bottom,
+        lens_correction_enabled,
+        tca_correction_enabled,
+    )
+    .ok_or_else(|| JsValue::from_str("Failed to compute EV histogram from buffer"))?;
+
+    serde_wasm_bindgen::to_value(&record).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_wasm_compute_ev_histogram() {
+        // 10x10 f16 buffer (100 pixels * 8 bytes = 800 bytes)
+        let mut buf = vec![0u8; 800];
+        let mid_u16 = f32_to_f16(0.18);
+        for i in 0..100 {
+            let offset = i * 8;
+            buf[offset..offset + 2].copy_from_slice(&mid_u16.to_le_bytes());
+            buf[offset + 2..offset + 4].copy_from_slice(&mid_u16.to_le_bytes());
+            buf[offset + 4..offset + 6].copy_from_slice(&mid_u16.to_le_bytes());
+            buf[offset + 6..offset + 8].copy_from_slice(&f32_to_f16(1.0).to_le_bytes());
+        }
+        let record = firstproof_engine::histogram::compute_ev_histogram_from_f16_buffer(
+            10, 10, &buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, false,
+        ).unwrap();
+        assert_eq!(record.num_bins, 120);
+        assert!(record.bins_luminance.iter().sum::<f32>() > 0.0);
+    }
 
     #[test]
     fn test_wasm_execute_darkroom_command() {

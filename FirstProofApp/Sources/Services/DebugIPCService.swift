@@ -193,6 +193,16 @@ public final class DebugIPCService {
             let path = (params["photo_path"] as? String) ?? (params["path"] as? String)
             return inspectMetadataResponse(photoPath: path)
             
+        case "toggle_clipping_overlay":
+            return toggleClippingOverlayResponse()
+            
+        case "set_clipping_overlay":
+            let active = (params["active"] as? Bool) ?? (params["enabled"] as? Bool) ?? true
+            return setClippingOverlayResponse(active: active)
+            
+        case "get_histogram":
+            return getHistogramResponse()
+            
         default:
             return "{\"status\":\"error\",\"message\":\"Unknown command or method: \(method)\"}\n"
         }
@@ -214,6 +224,8 @@ public final class DebugIPCService {
                 result["isRaw"] = vm.selectedPhotoIsRaw
                 result["canvasMode"] = "\(vm.canvasMode)"
                 result["lensCorrectionEnabled"] = vm.lensCorrectionEnabled
+                result["isClippingOverlayActive"] = vm.isClippingOverlayActive
+                result["isHistogramVisible"] = vm.isHistogramVisible
                 result["emulsionArchetype"] = "\(vm.emulsionArchetype)"
                 result["emulsionFormat"] = "\(vm.emulsionFormat)"
                 result["emulsionExposure"] = vm.emulsionExposure
@@ -601,4 +613,57 @@ public final class DebugIPCService {
         let data = (try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted])) ?? Data()
         return String(data: data, encoding: .utf8) ?? "{\"status\":\"ok\"}\n"
     }
+    
+    private func toggleClippingOverlayResponse() -> String {
+        var active = false
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                vm.toggleClippingOverlay()
+                active = vm.isClippingOverlayActive
+            }
+        }
+        return "{\"status\":\"ok\",\"isClippingOverlayActive\":\(active)}\n"
+    }
+    
+    private func setClippingOverlayResponse(active: Bool) -> String {
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else { return }
+                if vm.isClippingOverlayActive != active {
+                    vm.toggleClippingOverlay()
+                }
+            }
+        }
+        return "{\"status\":\"ok\",\"isClippingOverlayActive\":\(active)}\n"
+    }
+    
+    private func getHistogramResponse() -> String {
+        var result: [String: Any] = ["status": "ok"]
+        DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                guard let vm = self.viewModel else {
+                    result["status"] = "error"
+                    result["message"] = "ViewModel not attached"
+                    return
+                }
+                result["isHistogramVisible"] = vm.isHistogramVisible
+                result["isClippingOverlayActive"] = vm.isClippingOverlayActive
+                if let hist = vm.histogramRecord {
+                    result["evMin"] = hist.evMin
+                    result["evMax"] = hist.evMax
+                    result["numBins"] = hist.numBins
+                    result["shadowClipPercent"] = hist.shadowClipPercent
+                    result["sensorClipPercent"] = hist.sensorClipPercent
+                    result["displayRolloffPercent"] = hist.displayRolloffPercent
+                    result["binsLuminance"] = hist.binsLuminance
+                } else {
+                    result["message"] = "No histogram computed yet"
+                }
+            }
+        }
+        let data = (try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted])) ?? Data()
+        return String(data: data, encoding: .utf8) ?? "{\"status\":\"ok\"}\n"
+    }
 }
+

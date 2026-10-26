@@ -7,6 +7,7 @@ import { KeyboardShortcutController } from './controllers/KeyboardShortcutContro
 import { PageNavController } from './controllers/PageNavController';
 import { type ExportExecutionOptions, ExportModal } from './ExportModal';
 import { FolderIntake, type PhotoFileEntry } from './FolderIntake';
+import { HistogramWidget } from './HistogramWidget';
 import { ParityModal } from './parity/ParityModal';
 import {
   PhotoLoaderService,
@@ -30,6 +31,8 @@ class DarkroomApp {
   private renderer!: WebGLRenderer;
   private loaderService!: PhotoLoaderService;
   private curveWidget!: ToneCurveWidget;
+  private histogramWidget!: HistogramWidget;
+  private histogramDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private parityModal: ParityModal = new ParityModal();
   private exportModal: ExportModal = new ExportModal();
   private cropController!: CropController;
@@ -259,6 +262,14 @@ class DarkroomApp {
       onApplyAutoTone: () => this.applyAutoTone(),
       onOpenExportModal: () => this.openExportModal(),
       onToggleMetadata: () => this.toggleMetadataPanel(),
+      onToggleClippingOverlay: () => {
+        this.renderer.clippingOverlayActive =
+          !this.renderer.clippingOverlayActive;
+        this.renderCanvas();
+      },
+      onToggleHistogram: () => {
+        this.histogramWidget?.toggleCollapse();
+      },
       onSetRating: (rating) => {
         this.currentRating = rating;
         this.syncRatingFlagUI();
@@ -298,6 +309,23 @@ class DarkroomApp {
       onResetAllEdits: () => this.resetAllEdits(),
     });
     this.inspectorController.bind();
+
+    // 9b. Init Sensitometric EV Zone Histogram HUD (Story 3.25)
+    const histRoot = document.getElementById('histogram-root');
+    if (histRoot) {
+      this.histogramWidget = new HistogramWidget(histRoot, {
+        onToggleClippingOverlay: () => {
+          this.renderer.clippingOverlayActive =
+            !this.renderer.clippingOverlayActive;
+          this.renderCanvas();
+        },
+        onToggleCollapse: (collapsed) => {
+          if (!collapsed) {
+            this.scheduleHistogramUpdate();
+          }
+        },
+      });
+    }
 
     // 10. Bind UI Controls
     this.bindEvents();
@@ -1038,7 +1066,37 @@ class DarkroomApp {
         this.isCropActive,
       );
       this.updatePeekBadge();
+      this.scheduleHistogramUpdate();
     }
+  }
+
+  private scheduleHistogramUpdate() {
+    if (!this.histogramWidget || this.histogramWidget.getIsCollapsed()) {
+      return;
+    }
+    if (this.histogramDebounceTimer) {
+      clearTimeout(this.histogramDebounceTimer);
+    }
+    this.histogramDebounceTimer = setTimeout(() => {
+      this.histogramDebounceTimer = null;
+      if (
+        this.activeLinearData &&
+        this.activeLinearW > 0 &&
+        this.activeLinearH > 0
+      ) {
+        const hist = this.bridge.computeEvHistogram(
+          this.activeLinearData,
+          this.activeLinearW,
+          this.activeLinearH,
+          this.edits,
+          false,
+          false,
+        );
+        this.histogramWidget.setRecord(hist);
+      } else {
+        this.histogramWidget.setRecord(null);
+      }
+    }, 24);
   }
 
   private updatePeekBadge() {

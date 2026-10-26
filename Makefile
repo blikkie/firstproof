@@ -36,8 +36,8 @@ build-bridge: build-core
 		--out-dir FirstProofBridge/Sources/FirstProofBridge/ \
 		--no-format \
 		--metadata-no-deps
-	mv FirstProofBridge/Sources/FirstProofBridge/firstproof_coreFFI.h FirstProofBridge/Sources/FirstProofCoreFFI/include/
-	mv FirstProofBridge/Sources/FirstProofBridge/firstproof_engineFFI.h FirstProofBridge/Sources/FirstProofCoreFFI/include/
+	[ ! -f FirstProofBridge/Sources/FirstProofBridge/firstproof_coreFFI.h ] || mv FirstProofBridge/Sources/FirstProofBridge/firstproof_coreFFI.h FirstProofBridge/Sources/FirstProofCoreFFI/include/
+	[ ! -f FirstProofBridge/Sources/FirstProofBridge/firstproof_engineFFI.h ] || mv FirstProofBridge/Sources/FirstProofBridge/firstproof_engineFFI.h FirstProofBridge/Sources/FirstProofCoreFFI/include/
 	rm -f FirstProofBridge/Sources/FirstProofBridge/firstproof_*FFI.modulemap
 	printf 'module firstproof_coreFFI {\n    header "firstproof_coreFFI.h"\n    export *\n}\n\nmodule firstproof_engineFFI {\n    header "firstproof_engineFFI.h"\n    export *\n}\n' > FirstProofBridge/Sources/FirstProofCoreFFI/include/module.modulemap
 	cp FirstProofApp/Sources/Shaders/ShaderTypes.h FirstProofBridge/Sources/FirstProofShaderTypes/include/ShaderTypes.h

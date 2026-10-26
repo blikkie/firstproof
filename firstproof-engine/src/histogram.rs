@@ -150,10 +150,7 @@ pub fn compute_ev_histogram_from_f16_buffer(
         let raw_g = crate::raw::f16_to_f32(g_u16);
         let mut raw_b = crate::raw::f16_to_f32(b_u16);
 
-        // Hardware sensor photosite saturation check (evaluates pre-exposure physical sensor photosite value)
-        if raw_r >= 1.0 || raw_g >= 1.0 || raw_b >= 1.0 {
-            sensor_clipped += 1;
-        }
+        let is_sensor_saturated = raw_r >= 1.0 || raw_g >= 1.0 || raw_b >= 1.0;
 
         // Transverse chromatic aberration (TCA) alignment: reconciles R and B lateral phase misalignments
         if tca_correction_enabled {
@@ -197,6 +194,15 @@ pub fn compute_ev_histogram_from_f16_buffer(
         }
 
         let lum = REC2020_LUM_R * r + REC2020_LUM_G * g + REC2020_LUM_B * b;
+
+        // Highlight clipping check: true silicon sensor saturation OR post-develop highlight clipping exceeding Zone X (+4.0 EV ceiling)
+        let is_develop_highlight_clipped = r >= (MIDDLE_GREY_LUM * 2.0f32.powf(EV_MAX))
+            || g >= (MIDDLE_GREY_LUM * 2.0f32.powf(EV_MAX))
+            || b >= (MIDDLE_GREY_LUM * 2.0f32.powf(EV_MAX));
+
+        if is_sensor_saturated || is_develop_highlight_clipped {
+            sensor_clipped += 1;
+        }
 
         // Shadow floor clip check: scene radiance at or below -8.0 EV
         if lum <= (MIDDLE_GREY_LUM * 2.0f32.powf(EV_MIN)) {

@@ -30,6 +30,8 @@ describe('KeyboardShortcutController', () => {
       onToggleEyedropper: vi.fn(),
       onPeekOriginal: vi.fn(),
       onNavigate: vi.fn(),
+      onToggleClippingOverlay: vi.fn(),
+      onToggleHistogram: vi.fn(),
       isCropActive: vi.fn().mockReturnValue(false),
     };
 
@@ -70,6 +72,22 @@ describe('KeyboardShortcutController', () => {
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z' }));
       expect(actions.onTogglePixelPeep).toHaveBeenCalledTimes(1);
+    });
+
+    it('toggles clipping overlay with J', () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' }));
+      expect(actions.onToggleClippingOverlay).toHaveBeenCalledTimes(1);
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'J' }));
+      expect(actions.onToggleClippingOverlay).toHaveBeenCalledTimes(2);
+    });
+
+    it('toggles histogram with H', () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'h' }));
+      expect(actions.onToggleHistogram).toHaveBeenCalledTimes(1);
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'H' }));
+      expect(actions.onToggleHistogram).toHaveBeenCalledTimes(2);
     });
 
     it('rotates canvas with [ and ]', () => {

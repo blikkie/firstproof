@@ -379,7 +379,7 @@ fn applyColorAdjustments(
         return rgb;
     }
     
-    var c = clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+    var c = max(rgb, vec3<f32>(0.0));
     let lum = 0.2627 * c.r + 0.6780 * c.g + 0.0593 * c.b;
 
     if (saturation != 0.0) {
@@ -423,7 +423,8 @@ fn applyColorAdjustments(
 
         var vibGain: f32 = (vibrance / 100.0) * 0.6;
         if (vibrance > 0.0) {
-            vibGain = (vibrance / 100.0) * (1.0 - chroma) * 0.8 * skinProtect;
+            let normChroma = clamp(chroma / max(lum, 1e-4), 0.0, 1.0);
+            vibGain = (vibrance / 100.0) * (1.0 - normChroma) * 0.8 * skinProtect;
         }
 
         c = c + (c - vec3<f32>(lum)) * vibGain;
@@ -453,7 +454,7 @@ fn applyColorAdjustments(
         }
     }
 
-    return clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
+    return max(c, vec3<f32>(0.0));
 }
 
 // MARK: - Split Toning & Color Grading

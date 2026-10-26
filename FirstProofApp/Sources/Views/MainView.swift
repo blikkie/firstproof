@@ -223,20 +223,6 @@ struct MainView: View {
                 }
             }
             
-            // J key: Hold for Camera JPEG in Detail mode
-            if event.keyCode == 38 || event.characters?.lowercased() == "j" {
-                if viewModel.canvasMode == .detail {
-                    if event.type == .keyDown {
-                        if !event.isARepeat {
-                            viewModel.isShowingCameraJpeg = true
-                        }
-                    } else if event.type == .keyUp {
-                        viewModel.isShowingCameraJpeg = false
-                    }
-                    return nil
-                }
-            }
-            
             if event.type == .keyUp {
                 return event
             }

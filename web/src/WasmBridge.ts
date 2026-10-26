@@ -64,6 +64,19 @@ export type ToneCurvesPayload = ToneCurvesRecord;
 export type CurvePoint = CurvePointRecord;
 export type EvaluatedLut = AllCurvesLutRecord;
 
+export interface EvHistogramRecord {
+  bins_luminance: number[];
+  bins_r: number[];
+  bins_g: number[];
+  bins_b: number[];
+  shadow_clip_percent: number;
+  sensor_clip_percent: number;
+  display_rolloff_percent: number;
+  ev_min: number;
+  ev_max: number;
+  num_bins: number;
+}
+
 export interface ArchivalDevelopResult {
   linear_offset: number;
   linear_len: number;
@@ -310,6 +323,47 @@ export class WasmBridge {
       height,
     ) as AutoWhiteBalanceResultRecord | null;
     return res ?? null;
+  }
+
+  public computeEvHistogram(
+    linearData: Uint16Array | Uint8Array,
+    width: number,
+    height: number,
+    edits: EditSettingsPayload,
+    lensCorrectionEnabled: boolean = false,
+    tcaCorrectionEnabled: boolean = false,
+  ): EvHistogramRecord | null {
+    try {
+      const byteView =
+        linearData instanceof Uint8Array
+          ? linearData
+          : new Uint8Array(
+              linearData.buffer,
+              linearData.byteOffset,
+              linearData.byteLength,
+            );
+      const res = wasm.compute_ev_histogram_from_bytes(
+        byteView,
+        width,
+        height,
+        edits.exposure,
+        edits.contrast,
+        edits.highlights,
+        edits.shadows,
+        edits.whites,
+        edits.blacks,
+        edits.crop_left,
+        edits.crop_top,
+        edits.crop_right,
+        edits.crop_bottom,
+        lensCorrectionEnabled,
+        tcaCorrectionEnabled,
+      );
+      return (res as EvHistogramRecord) ?? null;
+    } catch (err) {
+      console.error('[WasmBridge] computeEvHistogram failed:', err);
+      return null;
+    }
   }
 
   public calculateWhiteBalanceFromSample(

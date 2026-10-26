@@ -242,6 +242,20 @@ struct FirstProofApp: App {
                 
                 Divider()
                 
+                Button(viewModel.isHistogramVisible ? "Hide Sensitometric Histogram" : "Show Sensitometric Histogram") {
+                    viewModel.toggleHistogram()
+                }
+                .keyboardShortcut("h", modifiers: [])
+                .disabled(viewModel.canvasMode != .detail)
+                
+                Button(viewModel.isClippingOverlayActive ? "Hide Clipping Overlay" : "Show Clipping Overlay") {
+                    viewModel.toggleClippingOverlay()
+                }
+                .keyboardShortcut("j", modifiers: [])
+                .disabled(viewModel.canvasMode != .detail)
+                
+                Divider()
+                
                 Button(viewModel.isInspectorPresented ? "Hide Inspector" : "Show Inspector") {
                     viewModel.toggleInspector()
                 }

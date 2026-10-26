@@ -72,7 +72,7 @@ class TestFirstProofMCP(unittest.TestCase):
         }
         resp = self._rpc_call(req)
         tools = resp.get("result", {}).get("tools", [])
-        self.assertEqual(len(tools), 12, f"Expected 12 tools, got {len(tools)}")
+        self.assertEqual(len(tools), 16, f"Expected 16 tools, got {len(tools)}")
 
         tool_names = {t["name"] for t in tools}
         expected_tools = {
@@ -88,6 +88,10 @@ class TestFirstProofMCP(unittest.TestCase):
             "firstproof_develop_photo",
             "firstproof_convert_dng",
             "firstproof_audit_parity",
+            "firstproof_toggle_clipping_overlay",
+            "firstproof_set_clipping_overlay",
+            "firstproof_get_histogram",
+            "firstproof_diagnose_viewport",
         }
         self.assertEqual(tool_names, expected_tools)
 

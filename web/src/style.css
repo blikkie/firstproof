@@ -630,6 +630,193 @@ body.darkroom-body {
   text-overflow: ellipsis;
 }
 
+/* --- Sensitometric EV Zone Histogram (Story 3.25) --- */
+.histogram-card {
+  padding: 8px 10px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  user-select: none;
+}
+
+.histogram-hud-header {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.histogram-header-line1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 20px;
+}
+
+.histogram-title-readout {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.histogram-title-readout .zone-name {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.histogram-title-readout .sep {
+  opacity: 0.5;
+}
+
+.histogram-title-readout .zone-ev.ev-highlight {
+  color: rgb(242, 140, 90);
+}
+
+.histogram-title-readout .zone-ev.ev-shadow {
+  color: rgb(90, 165, 242);
+}
+
+.histogram-title-readout .zone-ev.ev-mid {
+  color: var(--accent-orange, rgb(235, 140, 50));
+}
+
+.histogram-title-readout .zone-desc {
+  font-family: var(--font-main, sans-serif);
+  font-size: 0.58rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.histogram-collapse-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.histogram-collapse-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.histogram-header-line2 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.histogram-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2.5px 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.histogram-badge:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--text-main);
+}
+
+.histogram-badge.badge-shadow.badge-active {
+  background: rgba(85, 153, 255, 0.18);
+  color: rgb(90, 165, 242);
+  border-color: rgba(85, 153, 255, 0.3);
+}
+
+.histogram-badge.badge-sensor.badge-active {
+  background: rgba(242, 75, 75, 0.18);
+  color: rgb(242, 75, 75);
+  border-color: rgba(242, 75, 75, 0.3);
+}
+
+.histogram-badge.badge-agx {
+  background: rgba(235, 140, 50, 0.14);
+  color: rgb(235, 178, 90);
+  cursor: default;
+}
+
+.histogram-badge.badge-agx .badge-tag {
+  font-weight: 700;
+  font-size: 0.52rem;
+}
+
+.histogram-graph-container {
+  width: 100%;
+  height: 64px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.histogram-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+}
+
+.histogram-scale-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  color: rgba(255, 255, 255, 0.50);
+}
+
+.scale-line {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.scale-stop, .scale-zone {
+  flex: 1;
+}
+
+.scale-stop.left, .scale-zone.left {
+  text-align: left;
+}
+
+.scale-stop.center, .scale-zone.center {
+  text-align: center;
+}
+
+.scale-stop.right, .scale-zone.right {
+  text-align: right;
+}
+
+.scale-stop.accent, .scale-zone.accent {
+  color: var(--accent-orange, rgb(235, 140, 50));
+  font-weight: 600;
+}
+
 /* Rating & Flag Toolbar */
 .rating-flag-toolbar {
   display: flex;

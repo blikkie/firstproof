@@ -29,6 +29,8 @@ export interface KeyboardActions {
   onToggleEyedropper: (mode: 'wb') => void;
   onPeekOriginal: (active: boolean) => void;
   onNavigate: (direction: -1 | 1) => void;
+  onToggleClippingOverlay?: () => void;
+  onToggleHistogram?: () => void;
   isCropActive: () => boolean;
 }
 
@@ -170,6 +172,18 @@ export class KeyboardShortcutController {
       case 'i':
       case 'I':
         this.actions.onToggleMetadata();
+        break;
+      case 'j':
+      case 'J':
+        if (this.actions.onToggleClippingOverlay) {
+          this.actions.onToggleClippingOverlay();
+        }
+        break;
+      case 'h':
+      case 'H':
+        if (this.actions.onToggleHistogram) {
+          this.actions.onToggleHistogram();
+        }
         break;
       case '[':
         this.actions.onRotate(-90);

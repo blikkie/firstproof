@@ -40,8 +40,8 @@ fn applyDetailAndSharpening(
     let sharp_term = sharp_gain * w_edge * delta_y;
     let nr_term = (noiseReduction / 100.0) * (1.0 - w_edge) * delta_y;
 
-    let delta_adj = sharp_term - nr_term;
-    return clamp(color + vec3<f32>(delta_adj), vec3<f32>(0.0), vec3<f32>(1.0));
+    let delta_adj = max(sharp_term - nr_term, -0.75 * y_c);
+    return max(color + vec3<f32>(delta_adj), vec3<f32>(0.0));
 }
 
 // MARK: - Longitudinal / Axial Purple Defringing

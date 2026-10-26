@@ -259,6 +259,52 @@ TOOLS = [
             },
             "required": []
         }
+    },
+    {
+        "name": "firstproof_toggle_clipping_overlay",
+        "description": "Toggle the live highlight (red) and shadow (blue) clipping zebra HUD in FirstProofApp.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "firstproof_set_clipping_overlay",
+        "description": "Explicitly enable or disable the live clipping zebra HUD in FirstProofApp.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean",
+                    "description": "True to show clipping overlay, False to hide."
+                }
+            },
+            "required": ["active"]
+        }
+    },
+    {
+        "name": "firstproof_get_histogram",
+        "description": "Retrieve the live 12-zone sensitometric EV histogram, middle grey distribution, and clipping telemetry from FirstProofApp.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "firstproof_diagnose_viewport",
+        "description": "Comprehensive diagnostic health check: queries active state, dumps histogram clipping telemetry, samples probe coordinates across highlights, midtones, and shadows, and captures a canvas snapshot.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "capture_path": {
+                    "type": "string",
+                    "description": "Destination file path for snapshot. Default: /tmp/firstproof_diagnostics.png"
+                }
+            },
+            "required": []
+        }
     }
 ]
 
@@ -357,6 +403,42 @@ def handle_tool_call(name: str, args: dict) -> str:
             return proc.stdout
         except subprocess.CalledProcessError as e:
             return f"Audit failed with exit code {e.returncode}:\nStdout: {e.stdout}\nStderr: {e.stderr}"
+
+    elif name == "firstproof_toggle_clipping_overlay":
+        res = send_socket_command({"command": "toggle_clipping_overlay"})
+        return json.dumps(res, indent=2)
+
+    elif name == "firstproof_set_clipping_overlay":
+        res = send_socket_command({"command": "set_clipping_overlay", "active": args.get("active", True)})
+        return json.dumps(res, indent=2)
+
+    elif name == "firstproof_get_histogram":
+        res = send_socket_command({"command": "get_histogram"})
+        return json.dumps(res, indent=2)
+
+    elif name == "firstproof_diagnose_viewport":
+        out_path = args.get("capture_path", "/tmp/firstproof_diagnostics.png")
+        state = send_socket_command({"command": "get_state"})
+        histogram = send_socket_command({"command": "get_histogram"})
+        capture = send_socket_command({"command": "capture_canvas", "output_path": out_path})
+        samples = send_socket_command({
+            "command": "sample_viewport",
+            "points": [
+                [0.50, 0.50],  # Center
+                [0.52, 0.38],  # Upper forehead highlight
+                [0.55, 0.45],  # Cheek skin
+                [0.35, 0.85],  # Lower torso / shoulder
+                [0.85, 0.15],  # Specular background / sky
+            ]
+        })
+        diag = {
+            "status": "ok",
+            "state": state,
+            "histogram": histogram,
+            "viewport_samples": samples.get("samples", []),
+            "canvas_capture": capture
+        }
+        return json.dumps(diag, indent=2)
 
     return json.dumps({"error": f"Unknown tool: {name}"})
 

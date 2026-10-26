@@ -66,6 +66,7 @@ export class WebGLRenderer {
   private isIntermediate: boolean = false;
   private isLinearRec2020: boolean = false;
   private baselineSharpness: number = 1.0;
+  public clippingOverlayActive: boolean = false;
   private vbo: WebGLBuffer | null = null;
   private texWidth: number = 1920;
   private texHeight: number = 1080;
@@ -379,6 +380,7 @@ export class WebGLRenderer {
     this.texHeight = height;
     const gl = this.gl;
     gl.getExtension('EXT_color_buffer_float');
+    gl.getExtension('OES_texture_float_linear');
 
     if (!this.texture) {
       this.texture = gl.createTexture();
@@ -732,7 +734,7 @@ export class WebGLRenderer {
     f[77] = 0.0; // tcaCb
     f[78] = edits.defringe_amount ?? 0.0;
     i[79] = 1; // tcaCorrectionEnabled
-    i[80] = 0; // clippingOverlayActive
+    i[80] = this.clippingOverlayActive ? 1 : 0;
     f[81] = 0.0; // pad0
     f[82] = 0.0; // pad1
     f[83] = 0.0; // pad2

@@ -743,7 +743,8 @@ struct DetailMetalCanvasContainer: View {
                 zoomScale: viewModel.zoomScale,
                 panOffset: viewModel.panOffset,
                 isShowingOriginal: isShowingOriginal,
-                isCropToolActive: viewModel.isCropToolActive
+                isCropToolActive: viewModel.isCropToolActive,
+                isClippingOverlayActive: viewModel.isClippingOverlayActive
             )
             
             if viewModel.isCropToolActive && !isShowingOriginal {

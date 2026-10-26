@@ -16,6 +16,7 @@ public struct MetalCanvasView: NSViewRepresentable {
     let panOffset: CGPoint
     let isShowingOriginal: Bool
     let isCropToolActive: Bool
+    let isClippingOverlayActive: Bool
     
     public init(
         viewModel: AppViewModel? = nil,
@@ -23,7 +24,8 @@ public struct MetalCanvasView: NSViewRepresentable {
         zoomScale: Float,
         panOffset: CGPoint,
         isShowingOriginal: Bool,
-        isCropToolActive: Bool = false
+        isCropToolActive: Bool = false,
+        isClippingOverlayActive: Bool = false
     ) {
         self.explicitViewModel = viewModel
         self.edits = edits
@@ -31,6 +33,7 @@ public struct MetalCanvasView: NSViewRepresentable {
         self.panOffset = panOffset
         self.isShowingOriginal = isShowingOriginal
         self.isCropToolActive = isCropToolActive
+        self.isClippingOverlayActive = isClippingOverlayActive
     }
     
     public func makeCoordinator() -> Coordinator {

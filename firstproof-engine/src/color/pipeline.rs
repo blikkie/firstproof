@@ -316,7 +316,8 @@ pub fn apply_color_adjustments(
         let skin_protect = 1.0 - 0.85 * skin_metric;
 
         let vib_gain = if vibrance > 0.0 {
-            (vibrance / 100.0) * (1.0 - chroma) * 0.8 * skin_protect
+            let norm_chroma = (chroma / lum.max(1e-4)).clamp(0.0, 1.0);
+            (vibrance / 100.0) * (1.0 - norm_chroma) * 0.8 * skin_protect
         } else {
             (vibrance / 100.0) * 0.6
         };
@@ -352,7 +353,7 @@ pub fn apply_color_adjustments(
         }
     }
 
-    (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0))
+    (r.max(0.0), g.max(0.0), b.max(0.0))
 }
 
 /// Applies Split Toning & Color Grading with optical balance anchoring in Linear Rec.2020.
