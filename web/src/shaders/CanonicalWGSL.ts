@@ -84,7 +84,11 @@ struct ShaderUniforms {
     tcaCr: f32,
     tcaCb: f32,
     defringeAmount: f32,
-    tcaCorrectionEnabled: i32, // 16-byte std140/WebGPU alignment (80 fields * 4 bytes = 320 bytes = 20 * 16)
+    tcaCorrectionEnabled: i32,
+    clippingOverlayActive: i32,
+    pad0: f32,
+    pad1: f32,
+    pad2: f32, // 16-byte std140/WebGPU alignment (84 fields * 4 bytes = 336 bytes = 21 * 16)
 };
 
 struct VertexOutput {
@@ -1976,9 +1980,29 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
         }
         
         finalColor = max(LINEAR_SRGB_TO_DISPLAY_P3 * finalColor, vec3<f32>(0.0));
+        if (uniforms.clippingOverlayActive != 0 && uniforms.isOriginal < 0.5) {
+            let isSensorClip = (uniforms.isLinearRaw == 1 && (sampledColor.r >= 1.0 || sampledColor.g >= 1.0 || sampledColor.b >= 1.0)) || max(finalColor.r, max(finalColor.g, finalColor.b)) >= headroom * 0.999;
+            let sceneLum = dot(rec2020Color, vec3<f32>(0.2627, 0.6780, 0.0593));
+            let isShadowClip = sceneLum <= 0.0007 || max(finalColor.r, max(finalColor.g, finalColor.b)) <= 0.0005;
+            if (isSensorClip) {
+                return vec4<f32>(1.0, 0.0, 0.0, sampledColor.a);
+            } else if (isShadowClip) {
+                return vec4<f32>(0.0, 0.25, 1.0, sampledColor.a);
+            }
+        }
         return vec4<f32>(finalColor, sampledColor.a);
     } else {
         finalColor = clamp(finalColor, vec3<f32>(0.0), vec3<f32>(1.0));
+        if (uniforms.clippingOverlayActive != 0 && uniforms.isOriginal < 0.5) {
+            let isSensorClip = (uniforms.isLinearRaw == 1 && (sampledColor.r >= 1.0 || sampledColor.g >= 1.0 || sampledColor.b >= 1.0)) || max(finalColor.r, max(finalColor.g, finalColor.b)) >= 0.999;
+            let sceneLum = dot(rec2020Color, vec3<f32>(0.2627, 0.6780, 0.0593));
+            let isShadowClip = sceneLum <= 0.0007 || max(finalColor.r, max(finalColor.g, finalColor.b)) <= 0.0005;
+            if (isSensorClip) {
+                return vec4<f32>(1.0, 0.0, 0.0, sampledColor.a);
+            } else if (isShadowClip) {
+                return vec4<f32>(0.0, 0.25, 1.0, sampledColor.a);
+            }
+        }
         let dither = (ign(in.position.xy) - 0.5) / 255.0;
         return vec4<f32>(clamp(linearToSrgbGamma3(finalColor) + vec3<f32>(dither), vec3<f32>(0.0), vec3<f32>(1.0)), sampledColor.a);
     }

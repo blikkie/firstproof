@@ -59,6 +59,9 @@ struct InspectorView: View {
             PermanentHeaderCard(photo: photo)
             
             if viewModel.canvasMode == .detail {
+                // Sensitometric EV Zone Histogram & Sensor Clipping HUD (Story 3.25)
+                HistogramView()
+                
                 // In Detail Mode: Full Development Workspace Tabs & Reset All Button
                 HStack(spacing: 8) {
                     Picker("Workspace Tab", selection: $viewModel.selectedInspectorTab) {

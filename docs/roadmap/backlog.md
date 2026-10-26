@@ -7,13 +7,27 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up (v0.1 Release Gate)
-1. **Story 3.4: ColorSync Soft Proofing & Lab ICC Profile Management** (P2)
-2. **Story 3.25: Sensitometric EV Zone Histogram & Sensor Clipping HUD** (P2)
-
+1. **Story 3.27: Independent Lens Vignetting Correction Toggle & Sensitometric Histogram Reactivity** (P2)
+2. **Story 3.4: ColorSync Soft Proofing & Lab ICC Profile Management** (P2)
+3. **Story 4.7: Native macOS Desktop Archival DNG Ingest & Batch Action** (P2)
 
 ---
 
 ## Phase 3: Fine-Art Darkroom Chemistry, Archival Formats & Web Playground (P1 / P2)
+
+### 3.27 Independent Lens Vignetting Correction Toggle & Sensitometric Histogram Reactivity (P2)
+- **Decoupled Three-Toggle Lens Corrections Card (`OpticsGeometryWorkspaceView.swift`)**:
+  - Expose a dedicated third switch toggle: *"Vignetting (Peripheral Falloff)"* in the Optics & Geometry workspace alongside *"Geometric Distortion"* and *"Chromatic Aberration"*.
+  - Decouple peripheral illumination correction from geometric distortion, honoring photographers who embrace organic lens character / optical falloff while demanding straight lines (or vice versa).
+  - Bind to `viewModel.vignettingCorrectionEnabled` with disabled state when `viewModel.lensCoefficients?.hasVignetting != true`.
+  - Wire to `EditSettings`, XMP sidecars, and Undo/Redo history.
+- **Continuous Physical Radial Illumination Gain**:
+  - Implement radial illumination gain $g(r) = 1 + k_1 r^2 + k_2 r^4 + k_3 r^6 + k_4 r^8$ based on Lensfun polynomial calibration and DNG Opcode 3 (`OPCODE_FIX_VIGNETTE_RADIAL`).
+  - Maintain 1:1 multi-engine parity across Metal (`Shaders.metal`), WebGL 2 / WebGPU WGSL (`geometry.wgsl`), and Rust CPU export (`encoders.rs`).
+- **Sensitometric EV Zone Histogram Reactivity (Mandatory Acceptance Criterion)**:
+  - **AC Invariant**: Toggling or adjusting Vignetting Correction MUST immediately schedule and update the Sensitometric EV Zone Histogram (`scheduleHistogramUpdate()`).
+  - The histogram solver must apply the radial illumination gain $g(r)$ across subsampled coordinates $(x, y)$, lifting the peripheral shadow floor (Zone I/II into Zone III/IV) and updating clipping badges and tonal distribution in real time.
+  - Automated tests asserting that toggling vignetting correction modifies the histogram EV distribution and eliminates spurious shadow clipping caused by mechanical lens barrel falloff.
 
 
 > **Product Invariant: The Primary Engine vs. The Fine-Art "Treat"**  
@@ -42,19 +56,6 @@ This document strictly tracks pending and deferred features calibrated against o
   - Benchmark shadow floor formulations across physical prints: verify that carbon black ink ($D_{\max}$) remains deep and rich without milky digital floor lifts or premature shadow crushing.
   - Tune paper grade and process depth default presets to guarantee 1:1 perceptual fidelity between darkroom viewport and physical framed gallery print.
 
-### 3.25 Sensitometric EV Zone Histogram & Sensor Clipping HUD (P2)
-- **Log₂ EV Stop Dynamic Range Scale**:
-  - Horizontal axis calibrated in physical EV stops relative to 18% middle grey ($-8\text{ EV}$ to $+4\text{ EV}$) rather than an arbitrary 0–255 integer scale.
-  - Evaluates linear scene radiance in Linear Rec.2020 prior to display tone-mapping, measuring true sensor exposure and optical dynamic range.
-- **Ansel Adams Zone System Reference Overlay**:
-  - Discrete, understated tick markers indicating Zones 0 through X (Zone 0 = pure print carbon black $D_{\max}$, Zone V = 18% middle grey, Zone VIII = textured high-value white, Zone X = specular clip).
-- **Sensor Saturation vs. Display Roll-Off Telemetry**:
-  - Distinct clipping sensors distinguishing between true hardware Bayer photosite saturation (blown raw sensor highlights) and AgX filmic shoulder compression (preserved highlights rolled off into display white).
-- **Dual-Domain Performance Asymmetry & Decoupled Execution**:
-  - Never runs in the fast 10–15ms burst culling or carousel navigation loop.
-  - Evaluated asynchronously on a background worker or via GPU texture downsampling only when paused in the develop inspector or when toggled on demand via shortcut (`H`).
-- **Quiet Darkroom Visuals**:
-  - Monochrome tone density fill or muted desaturated channel traces rendered in dark slate (`#1E1E1E`); zero primary-colored mountain graphs or dancing waveforms.
 
 ### 3.26 Global 3D LUT Library Management & Default Look Preset in Settings (P2)
 - **Account / App-Level 3D LUT Library (Native OS Conventions)**:

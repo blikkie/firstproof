@@ -167,7 +167,8 @@ public struct MetalCanvasView: NSViewRepresentable {
             edrEnabled: viewModel.isScreenHdrCapable && viewModel.isHdrEnabled,
             isIntermediate: viewModel.isIntermediatePreviewActive,
             asShotTemperature: viewModel.asShotTemperature,
-            asShotTint: viewModel.asShotTint
+            asShotTint: viewModel.asShotTint,
+            clippingOverlayActive: viewModel.isClippingOverlayActive
         )
         
         // 3. Update 3D LUT texture if LUT selection changed

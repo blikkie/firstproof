@@ -732,6 +732,10 @@ export class WebGLRenderer {
     f[77] = 0.0; // tcaCb
     f[78] = edits.defringe_amount ?? 0.0;
     i[79] = 1; // tcaCorrectionEnabled
+    i[80] = 0; // clippingOverlayActive
+    f[81] = 0.0; // pad0
+    f[82] = 0.0; // pad1
+    f[83] = 0.0; // pad2
 
     if (this.uboBuffer) {
       gl.bindBuffer(gl.UNIFORM_BUFFER, this.uboBuffer);

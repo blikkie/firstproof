@@ -443,6 +443,16 @@ RustBuffer uniffi_firstproof_core_fn_func_compute_auto_white_balance(RustBuffer 
 RustBuffer uniffi_firstproof_core_fn_func_compute_auto_white_balance_from_buffer(uint32_t width, uint32_t height, RustBuffer data, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM
+RustBuffer uniffi_firstproof_core_fn_func_compute_ev_histogram(uint32_t width, uint32_t height, RustBuffer data, float exposure, float contrast, float highlights, float shadows, float whites, float blacks, float crop_left, float crop_top, float crop_right, float crop_bottom, int8_t lens_correction_enabled, int8_t tca_correction_enabled, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM_FROM_PATH
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM_FROM_PATH
+RustBuffer uniffi_firstproof_core_fn_func_compute_ev_histogram_from_path(RustBuffer path, float exposure, float contrast, float highlights, float shadows, float whites, float blacks, float crop_left, float crop_top, float crop_right, float crop_bottom, int8_t lens_correction_enabled, int8_t tca_correction_enabled, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_KELVIN_TO_MIRED_NORM
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_KELVIN_TO_MIRED_NORM
 double uniffi_firstproof_core_fn_func_convert_kelvin_to_mired_norm(double kelvin, RustCallStatus *_Nonnull out_status
@@ -950,6 +960,18 @@ uint16_t uniffi_firstproof_core_checksum_func_compute_auto_white_balance(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_AUTO_WHITE_BALANCE_FROM_BUFFER
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_AUTO_WHITE_BALANCE_FROM_BUFFER
 uint16_t uniffi_firstproof_core_checksum_func_compute_auto_white_balance_from_buffer(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_EV_HISTOGRAM
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_EV_HISTOGRAM
+uint16_t uniffi_firstproof_core_checksum_func_compute_ev_histogram(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_EV_HISTOGRAM_FROM_PATH
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_EV_HISTOGRAM_FROM_PATH
+uint16_t uniffi_firstproof_core_checksum_func_compute_ev_histogram_from_path(void
     
 );
 #endif

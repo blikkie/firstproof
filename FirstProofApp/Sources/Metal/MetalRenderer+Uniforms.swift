@@ -20,12 +20,17 @@ extension MetalRenderer {
         isIntermediate: Bool = false,
         baselineSharpness: Float = 1.0,
         asShotTemperature: Float = 5500.0,
-        asShotTint: Float = 0.0
+        asShotTint: Float = 0.0,
+        clippingOverlayActive: Bool = false
     ) {
         uniforms.isIntermediate = isIntermediate ? 1 : 0
         uniforms.baselineSharpness = baselineSharpness
         uniforms.asShotTemperature = asShotTemperature
         uniforms.asShotTint = asShotTint
+        uniforms.clippingOverlayActive = clippingOverlayActive ? 1 : 0
+        uniforms.pad0 = 0.0
+        uniforms.pad1 = 0.0
+        uniforms.pad2 = 0.0
         uniforms.exposure = edits.exposure
         uniforms.temperature = edits.temperature
         uniforms.tint = edits.tint

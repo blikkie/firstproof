@@ -1302,6 +1302,136 @@ public func FfiConverterTypeEditSettings_lower(_ value: EditSettings) -> RustBuf
 }
 
 
+public struct EvHistogramRecord {
+    public var binsLuminance: [Float]
+    public var binsR: [Float]
+    public var binsG: [Float]
+    public var binsB: [Float]
+    public var shadowClipPercent: Float
+    public var sensorClipPercent: Float
+    public var displayRolloffPercent: Float
+    public var evMin: Float
+    public var evMax: Float
+    public var numBins: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(binsLuminance: [Float], binsR: [Float], binsG: [Float], binsB: [Float], shadowClipPercent: Float, sensorClipPercent: Float, displayRolloffPercent: Float, evMin: Float, evMax: Float, numBins: UInt32) {
+        self.binsLuminance = binsLuminance
+        self.binsR = binsR
+        self.binsG = binsG
+        self.binsB = binsB
+        self.shadowClipPercent = shadowClipPercent
+        self.sensorClipPercent = sensorClipPercent
+        self.displayRolloffPercent = displayRolloffPercent
+        self.evMin = evMin
+        self.evMax = evMax
+        self.numBins = numBins
+    }
+}
+
+
+
+extension EvHistogramRecord: Equatable, Hashable {
+    public static func ==(lhs: EvHistogramRecord, rhs: EvHistogramRecord) -> Bool {
+        if lhs.binsLuminance != rhs.binsLuminance {
+            return false
+        }
+        if lhs.binsR != rhs.binsR {
+            return false
+        }
+        if lhs.binsG != rhs.binsG {
+            return false
+        }
+        if lhs.binsB != rhs.binsB {
+            return false
+        }
+        if lhs.shadowClipPercent != rhs.shadowClipPercent {
+            return false
+        }
+        if lhs.sensorClipPercent != rhs.sensorClipPercent {
+            return false
+        }
+        if lhs.displayRolloffPercent != rhs.displayRolloffPercent {
+            return false
+        }
+        if lhs.evMin != rhs.evMin {
+            return false
+        }
+        if lhs.evMax != rhs.evMax {
+            return false
+        }
+        if lhs.numBins != rhs.numBins {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(binsLuminance)
+        hasher.combine(binsR)
+        hasher.combine(binsG)
+        hasher.combine(binsB)
+        hasher.combine(shadowClipPercent)
+        hasher.combine(sensorClipPercent)
+        hasher.combine(displayRolloffPercent)
+        hasher.combine(evMin)
+        hasher.combine(evMax)
+        hasher.combine(numBins)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEvHistogramRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EvHistogramRecord {
+        return
+            try EvHistogramRecord(
+                binsLuminance: FfiConverterSequenceFloat.read(from: &buf), 
+                binsR: FfiConverterSequenceFloat.read(from: &buf), 
+                binsG: FfiConverterSequenceFloat.read(from: &buf), 
+                binsB: FfiConverterSequenceFloat.read(from: &buf), 
+                shadowClipPercent: FfiConverterFloat.read(from: &buf), 
+                sensorClipPercent: FfiConverterFloat.read(from: &buf), 
+                displayRolloffPercent: FfiConverterFloat.read(from: &buf), 
+                evMin: FfiConverterFloat.read(from: &buf), 
+                evMax: FfiConverterFloat.read(from: &buf), 
+                numBins: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: EvHistogramRecord, into buf: inout [UInt8]) {
+        FfiConverterSequenceFloat.write(value.binsLuminance, into: &buf)
+        FfiConverterSequenceFloat.write(value.binsR, into: &buf)
+        FfiConverterSequenceFloat.write(value.binsG, into: &buf)
+        FfiConverterSequenceFloat.write(value.binsB, into: &buf)
+        FfiConverterFloat.write(value.shadowClipPercent, into: &buf)
+        FfiConverterFloat.write(value.sensorClipPercent, into: &buf)
+        FfiConverterFloat.write(value.displayRolloffPercent, into: &buf)
+        FfiConverterFloat.write(value.evMin, into: &buf)
+        FfiConverterFloat.write(value.evMax, into: &buf)
+        FfiConverterUInt32.write(value.numBins, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEvHistogramRecord_lift(_ buf: RustBuffer) throws -> EvHistogramRecord {
+    return try FfiConverterTypeEvHistogramRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEvHistogramRecord_lower(_ value: EvHistogramRecord) -> RustBuffer {
+    return FfiConverterTypeEvHistogramRecord.lower(value)
+}
+
+
 public struct ExifOrientationRecord {
     public var rotation: Int32
     public var flipHorizontal: Bool

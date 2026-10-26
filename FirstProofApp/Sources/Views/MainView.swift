@@ -331,6 +331,16 @@ struct MainView: View {
                         viewModel.toggleCropTool()
                         return nil
                     }
+                case "h", "H":
+                    if viewModel.canvasMode == .detail {
+                        viewModel.toggleHistogram()
+                        return nil
+                    }
+                case "j", "J":
+                    if viewModel.canvasMode == .detail {
+                        viewModel.toggleClippingOverlay()
+                        return nil
+                    }
                 case "1":
                     viewModel.setRating(1)
                     return nil

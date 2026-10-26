@@ -81,7 +81,11 @@ struct ShaderUniforms {
     tcaCr: f32,
     tcaCb: f32,
     defringeAmount: f32,
-    tcaCorrectionEnabled: i32, // 16-byte std140/WebGPU alignment (80 fields * 4 bytes = 320 bytes = 20 * 16)
+    tcaCorrectionEnabled: i32,
+    clippingOverlayActive: i32,
+    pad0: f32,
+    pad1: f32,
+    pad2: f32, // 16-byte std140/WebGPU alignment (84 fields * 4 bytes = 336 bytes = 21 * 16)
 };
 
 struct VertexOutput {

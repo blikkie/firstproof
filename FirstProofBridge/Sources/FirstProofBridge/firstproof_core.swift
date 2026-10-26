@@ -4142,6 +4142,30 @@ fileprivate struct FfiConverterOptionTypeDemosaicQuality: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeEvHistogramRecord: FfiConverterRustBuffer {
+    typealias SwiftType = EvHistogramRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeEvHistogramRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeEvHistogramRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeExportColorSpace: FfiConverterRustBuffer {
     typealias SwiftType = ExportColorSpace?
 
@@ -4510,6 +4534,8 @@ fileprivate struct FfiConverterSequenceTypeCurvePointRecord: FfiConverterRustBuf
 
 
 
+
+
 public func batchConvertCatalogToDng(catalogFolder: String, photoPaths: [String], deleteOriginal: Bool, progress: DngProgressCallback?)throws  -> DngBatchReportRecord {
     return try  FfiConverterTypeDngBatchReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
     uniffi_firstproof_core_fn_func_batch_convert_catalog_to_dng(
@@ -4576,6 +4602,46 @@ public func computeAutoWhiteBalanceFromBuffer(width: UInt32, height: UInt32, dat
         FfiConverterUInt32.lower(width),
         FfiConverterUInt32.lower(height),
         FfiConverterData.lower(data),$0
+    )
+})
+}
+public func computeEvHistogram(width: UInt32, height: UInt32, data: Data, exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool) -> EvHistogramRecord? {
+    return try!  FfiConverterOptionTypeEvHistogramRecord.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_compute_ev_histogram(
+        FfiConverterUInt32.lower(width),
+        FfiConverterUInt32.lower(height),
+        FfiConverterData.lower(data),
+        FfiConverterFloat.lower(exposure),
+        FfiConverterFloat.lower(contrast),
+        FfiConverterFloat.lower(highlights),
+        FfiConverterFloat.lower(shadows),
+        FfiConverterFloat.lower(whites),
+        FfiConverterFloat.lower(blacks),
+        FfiConverterFloat.lower(cropLeft),
+        FfiConverterFloat.lower(cropTop),
+        FfiConverterFloat.lower(cropRight),
+        FfiConverterFloat.lower(cropBottom),
+        FfiConverterBool.lower(lensCorrectionEnabled),
+        FfiConverterBool.lower(tcaCorrectionEnabled),$0
+    )
+})
+}
+public func computeEvHistogramFromPath(path: String, exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool) -> EvHistogramRecord? {
+    return try!  FfiConverterOptionTypeEvHistogramRecord.lift(try! rustCall() {
+    uniffi_firstproof_core_fn_func_compute_ev_histogram_from_path(
+        FfiConverterString.lower(path),
+        FfiConverterFloat.lower(exposure),
+        FfiConverterFloat.lower(contrast),
+        FfiConverterFloat.lower(highlights),
+        FfiConverterFloat.lower(shadows),
+        FfiConverterFloat.lower(whites),
+        FfiConverterFloat.lower(blacks),
+        FfiConverterFloat.lower(cropLeft),
+        FfiConverterFloat.lower(cropTop),
+        FfiConverterFloat.lower(cropRight),
+        FfiConverterFloat.lower(cropBottom),
+        FfiConverterBool.lower(lensCorrectionEnabled),
+        FfiConverterBool.lower(tcaCorrectionEnabled),$0
     )
 })
 }
@@ -4909,6 +4975,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance_from_buffer() != 16899) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram() != 22251) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram_from_path() != 26480) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_convert_kelvin_to_mired_norm() != 11770) {

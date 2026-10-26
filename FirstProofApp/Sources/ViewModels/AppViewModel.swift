@@ -360,6 +360,12 @@ public final class AppViewModel {
         isInspectorPresented.toggle()
     }
     
+    // MARK: - Sensitometric EV Zone Histogram & Sensor Clipping HUD (Story 3.25)
+    public var histogramRecord: EvHistogramRecord? = nil
+    public var isHistogramVisible: Bool = true
+    public var isClippingOverlayActive: Bool = false
+    @ObservationIgnored public var histogramDebounceTask: Task<Void, Never>? = nil
+    
     var currentlyLoadedPhotoPath: String? = nil
     @ObservationIgnored public var lastNavDirection: NavigationDirection = .neutral
     
@@ -435,12 +441,36 @@ public final class AppViewModel {
     }
     
     // MARK: - Edit Sliders (P0 + Lens Corrections)
-    public var exposure: Float = 0.0      // -3.0 .. +3.0 EV
-    public var contrast: Float = 0.0      // -100 .. +100
-    public var highlights: Float = 0.0    // -100 .. +100
-    public var shadows: Float = 0.0       // -100 .. +100
-    public var whites: Float = 0.0        // -100 .. +100
-    public var blacks: Float = 0.0        // -100 .. +100
+    public var exposure: Float = 0.0 {      // -3.0 .. +3.0 EV
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
+    public var contrast: Float = 0.0 {      // -100 .. +100
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
+    public var highlights: Float = 0.0 {    // -100 .. +100
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
+    public var shadows: Float = 0.0 {       // -100 .. +100
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
+    public var whites: Float = 0.0 {        // -100 .. +100
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
+    public var blacks: Float = 0.0 {        // -100 .. +100
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
     public var vibrance: Float = 0.0      // -100 .. +100
     public var saturation: Float = 0.0    // -100 .. +100
     public var deepBlue: Float = 0.0      // -100 .. +100
@@ -496,19 +526,47 @@ public final class AppViewModel {
             asShotTint: Double(asShotTint)
         )
     }
-    public var straightenAngle: Float = 0.0 // -45 .. +45 deg
-    public var cropLeft: Float = 0.0
-    public var cropTop: Float = 0.0
-    public var cropRight: Float = 1.0
-    public var cropBottom: Float = 1.0
+    public var straightenAngle: Float = 0.0 { // -45 .. +45 deg
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
+    public var cropLeft: Float = 0.0 {
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
+    public var cropTop: Float = 0.0 {
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
+    public var cropRight: Float = 1.0 {
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
+    public var cropBottom: Float = 1.0 {
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
     public var perspectiveVertical: Float = 0.0 // -100 .. +100
     public var perspectiveHorizontal: Float = 0.0 // -100 .. +100
     public var cropConstrain: Bool = true
     public var isCropToolActive: Bool = false
     public var cropAspectRatioPreset: CropAspectRatioPreset = .original
     @ObservationIgnored public var cropSessionSnapshot: CropSessionSnapshot? = nil
-    public var lensCorrectionEnabled: Bool = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
-    public var tcaCorrectionEnabled: Bool = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+    public var lensCorrectionEnabled: Bool = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false {
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
+    public var tcaCorrectionEnabled: Bool = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true {
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
     public var toneProfile: ColorProfileMode = .agxVivid
     public var selectedLutName: String? = nil
     public var lutIntensity: Float = 1.0

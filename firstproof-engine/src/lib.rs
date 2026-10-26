@@ -7,6 +7,7 @@ pub mod color;
 pub mod command;
 pub mod container;
 pub mod curve;
+pub mod histogram;
 pub mod modes;
 pub mod preview;
 pub mod raw;
@@ -39,6 +40,10 @@ pub use auto::{
 pub use curve::{
     evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, CurvePointRecord,
     ToneCurvesRecord,
+};
+pub use histogram::{
+    compute_ev_histogram_from_f16_buffer, EvHistogramRecord, EV_MAX, EV_MIN, MIDDLE_GREY_LUM,
+    NUM_BINS,
 };
 pub use modes::{
     ColorProfileMode, CropAspectRatioPreset, DemosaicQuality, EmulsionArchetype, EmulsionFormat,

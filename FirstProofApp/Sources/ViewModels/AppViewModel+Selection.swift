@@ -134,6 +134,9 @@ extension AppViewModel {
         if let current = selectedPhoto {
             loadPreview(for: current)
         }
+        if isHistogramVisible {
+            scheduleHistogramUpdate()
+        }
     }
     
     public func enterGridMode() {
@@ -303,6 +306,9 @@ extension AppViewModel {
                 self.previewImage = nil
                 self.isIntermediatePreviewActive = false
                 self.isDemosaicing = false
+                if self.canvasMode == .detail && self.isHistogramVisible {
+                    self.scheduleHistogramUpdate()
+                }
             } else if let intermediate = ThumbnailCache.shared.intermediateImage(for: photo.filePath, edits: targetEdits) {
                 // Tier 1: Instant First Proof Intermediate render matching targetEdits
                 self.previewImage = intermediate
@@ -337,6 +343,9 @@ extension AppViewModel {
                             self.previewImage = nil
                             self.isIntermediatePreviewActive = false
                             self.isDemosaicing = false
+                            if self.canvasMode == .detail && self.isHistogramVisible {
+                                self.scheduleHistogramUpdate()
+                            }
                         }
                     }
                 }
@@ -355,6 +364,9 @@ extension AppViewModel {
                         self.rawPreviewRecord = fullRecord
                         self.isIntermediatePreviewActive = false
                         self.isDemosaicing = false
+                        if self.canvasMode == .detail && self.isHistogramVisible {
+                            self.scheduleHistogramUpdate()
+                        }
                     }
                 } else {
                     self.isDemosaicing = false

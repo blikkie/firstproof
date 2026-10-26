@@ -24,7 +24,7 @@ pub use firstproof_engine::{
     evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, ColorProfileMode,
     CommandResponse, CropAspectRatioPreset, CurvePointRecord, DarkroomCommand, DemosaicQuality,
     EditDelta, EditSettings, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode,
-    EnlargerFilterMode, ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent,
+    EnlargerFilterMode, EvHistogramRecord, ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent,
     PrintMediaMode, RemjetBackingMode, RenderTier, ToneCurvesRecord, WhiteBalancePreset,
     WhiteBalanceResult,
 };
@@ -536,6 +536,58 @@ pub fn compute_auto_white_balance(path: String) -> Option<WhiteBalanceResult> {
 #[uniffi::export]
 pub fn compute_auto_white_balance_from_buffer(width: u32, height: u32, data: Vec<u8>) -> Option<WhiteBalanceResult> {
     Some(auto::compute_auto_white_balance_from_f16_buffer(width, height, &data))
+}
+
+#[uniffi::export]
+pub fn compute_ev_histogram(
+    width: u32,
+    height: u32,
+    data: Vec<u8>,
+    exposure: f32,
+    contrast: f32,
+    highlights: f32,
+    shadows: f32,
+    whites: f32,
+    blacks: f32,
+    crop_left: f32,
+    crop_top: f32,
+    crop_right: f32,
+    crop_bottom: f32,
+    lens_correction_enabled: bool,
+    tca_correction_enabled: bool,
+) -> Option<EvHistogramRecord> {
+    firstproof_engine::histogram::compute_ev_histogram_from_f16_buffer(
+        width, height, &data, exposure, contrast, highlights, shadows, whites, blacks,
+        crop_left, crop_top, crop_right, crop_bottom,
+        lens_correction_enabled, tca_correction_enabled,
+    )
+}
+
+#[uniffi::export]
+pub fn compute_ev_histogram_from_path(
+    path: String,
+    exposure: f32,
+    contrast: f32,
+    highlights: f32,
+    shadows: f32,
+    whites: f32,
+    blacks: f32,
+    crop_left: f32,
+    crop_top: f32,
+    crop_right: f32,
+    crop_bottom: f32,
+    lens_correction_enabled: bool,
+    tca_correction_enabled: bool,
+) -> Option<EvHistogramRecord> {
+    if let Ok((width, height, data)) = export::decode_raw_preview_binned_buffer(&path) {
+        firstproof_engine::histogram::compute_ev_histogram_from_f16_buffer(
+            width, height, &data, exposure, contrast, highlights, shadows, whites, blacks,
+            crop_left, crop_top, crop_right, crop_bottom,
+            lens_correction_enabled, tca_correction_enabled,
+        )
+    } else {
+        None
+    }
 }
 
 #[uniffi::export]
