@@ -1,6 +1,6 @@
 [package]
 name = "firstproof-core"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 license.workspace = true
 
@@ -14,7 +14,7 @@ name = "firstproof_core"
 [dependencies]
 firstproof-engine = { path = "../firstproof-engine", features = ["uniffi"] }
 # Core dependencies
-uniffi = { version = "0.28", features = ["cli"] }
+uniffi = { version = "0.32", features = ["cli"] }
 rawler = "0.8"
 kamadak-exif = "0.5.5"
 rusqlite = { version = "0.31.0", features = ["bundled"] }

@@ -9,7 +9,10 @@ no-default-features = false
 feature-depth = 1
 
 [advisories]
-ignore = []
+ignore = [
+    # basic-toml 0.1.10 is unmaintained; transitively pulled in by askama_parser/askama_derive inside uniffi_bindgen 0.32
+    "RUSTSEC-2026-0374",
+]
 
 [licenses]
 allow = [

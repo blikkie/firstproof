@@ -39,6 +39,52 @@ fileprivate extension ForeignBytes {
     init(bufferPointer: UnsafeBufferPointer<UInt8>) {
         self.init(len: Int32(bufferPointer.count), data: bufferPointer.baseAddress)
     }
+
+    init(rawBufferPointer: UnsafeRawBufferPointer) {
+        self.init(
+            len: Int32(rawBufferPointer.count),
+            data: rawBufferPointer.baseAddress?.assumingMemoryBound(to: UInt8.self)
+        )
+    }
+}
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Conforms to `FfiConverter` so the compiler enforces the full converter
+// method set. Only the scope-bound `lower(_:_body:)` overload is sound —
+// zero-copy byte buffers only flow foreign -> Rust, and only in argument
+// position. The four protocol-witness methods (`lift`, `lower`, `read`,
+// `write`) `fatalError` at runtime if anyone reaches them.
+//
+// The scope-bound `lower` takes a closure because the `ForeignBytes`
+// pointer is only guaranteed valid for the duration of
+// `Data.withUnsafeBytes`. Callers must run the full FFI call inside
+// the closure body.
+fileprivate enum FfiConverterByRefBytes: FfiConverter {
+    typealias SwiftType = Data
+    typealias FfiType = ForeignBytes
+
+    static func lower<R>(_ value: Data, _ body: (ForeignBytes) throws -> R) rethrows -> R {
+        return try value.withUnsafeBytes { rawBuf in
+            try body(ForeignBytes(rawBufferPointer: rawBuf))
+        }
+    }
+
+    static func lower(_ value: Data) -> ForeignBytes {
+        fatalError("ByRef bytes cannot use the plain lower: returning ForeignBytes escapes the Data.withUnsafeBytes scope. Use the scope-bound lower(_:_body:) overload instead.")
+    }
+
+    static func lift(_ value: ForeignBytes) throws -> Data {
+        fatalError("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        fatalError("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
+
+    static func write(_ value: Data, into buf: inout [UInt8]) {
+        fatalError("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
 }
 
 // For every type used in the interface, we provide helper methods for conveniently
@@ -281,7 +327,7 @@ private func makeRustCall<T, E: Swift.Error>(
     _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T,
     errorHandler: ((RustBuffer) throws -> E)?
 ) throws -> T {
-    uniffiEnsureInitialized()
+    uniffiEnsureFirstproofCoreInitialized()
     var callStatus = RustCallStatus.init()
     let returnedVal = callback(&callStatus)
     try uniffiCheckCallStatus(callStatus: callStatus, errorHandler: errorHandler)
@@ -352,18 +398,29 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-fileprivate class UniffiHandleMap<T> {
-    private var map: [UInt64: T] = [:]
+// Initial value and increment amount for handles. 
+// These ensure that SWIFT handles always have the lowest bit set
+fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
+fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
+
+fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
+    // All mutation happens with this lock held, which is why we implement @unchecked Sendable.
     private let lock = NSLock()
-    private var currentHandle: UInt64 = 1
+    private var map: [UInt64: T] = [:]
+    private var currentHandle: UInt64 = UNIFFI_HANDLEMAP_INITIAL
 
     func insert(obj: T) -> UInt64 {
         lock.withLock {
-            let handle = currentHandle
-            currentHandle += 1
-            map[handle] = obj
-            return handle
+            return doInsert(obj)
         }
+    }
+
+    // Low-level insert function, this assumes `lock` is held.
+    private func doInsert(_ obj: T) -> UInt64 {
+        let handle = currentHandle
+        currentHandle += UNIFFI_HANDLEMAP_DELTA
+        map[handle] = obj
+        return handle
     }
 
      func get(handle: UInt64) throws -> T {
@@ -372,6 +429,15 @@ fileprivate class UniffiHandleMap<T> {
                 throw UniffiInternalError.unexpectedStaleHandle
             }
             return obj
+        }
+    }
+
+     func clone(handle: UInt64) throws -> UInt64 {
+        try lock.withLock {
+            guard let obj = map[handle] else {
+                throw UniffiInternalError.unexpectedStaleHandle
+            }
+            return doInsert(obj)
         }
     }
 
@@ -394,7 +460,13 @@ fileprivate class UniffiHandleMap<T> {
 
 
 // Public interface members begin here.
-
+// Magic number for the Rust proxy to call using the same mechanism as every other method,
+// to free the callback once it's dropped by Rust.
+private let IDX_CALLBACK_FREE: Int32 = 0
+// Callback return codes
+private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
+private let UNIFFI_CALLBACK_ERROR: Int32 = 1
+private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -531,7 +603,11 @@ fileprivate struct FfiConverterString: FfiConverter {
             return String()
         }
         let bytes = UnsafeBufferPointer<UInt8>(start: value.data!, count: Int(value.len))
-        return String(bytes: bytes, encoding: String.Encoding.utf8)!
+        // Use Swift's native UTF-8 decoder; `String(bytes:encoding:.utf8)` goes
+        // through Foundation's NSString and silently strips a leading U+FEFF BOM.
+        // Invalid UTF-8 substitutes U+FFFD instead of trapping (unreachable
+        // given Rust's `String` invariant).
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     public static func lower(_ value: String) -> RustBuffer {
@@ -547,7 +623,8 @@ fileprivate struct FfiConverterString: FfiConverter {
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> String {
         let len: Int32 = try readInt(&buf)
-        return String(bytes: try readBytes(&buf, count: Int(len)), encoding: String.Encoding.utf8)!
+        // See `lift` above for why we avoid Foundation's NSString-backed decoder here.
+        return String(decoding: try readBytes(&buf, count: Int(len)), as: UTF8.self)
     }
 
     public static func write(_ value: String, into buf: inout [UInt8]) {
@@ -578,7 +655,7 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 
-public protocol FirstProofDatabaseProtocol : AnyObject {
+public protocol FirstProofDatabaseProtocol: AnyObject, Sendable {
     
     func close() 
     
@@ -605,229 +682,249 @@ public protocol FirstProofDatabaseProtocol : AnyObject {
     func updateRatingStatusBatch(filePaths: [String], rating: Int32?, updateRating: Bool, status: String?)  -> UInt32
     
 }
+open class FirstProofDatabase: FirstProofDatabaseProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
 
-open class FirstProofDatabase:
-    FirstProofDatabaseProtocol {
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public struct NoPointer {
+    public struct NoHandle {
         public init() {}
     }
 
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
     }
 
     // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
     //
     // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
+    public init(noHandle: NoHandle) {
+        self.handle = 0
     }
 
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_firstproof_core_fn_clone_firstproofdatabase(self.pointer, $0) }
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_firstproof_core_fn_clone_firstproofdatabase(self.handle, $0) }
     }
     // No primary constructor declared for this class.
 
     deinit {
-        guard let pointer = pointer else {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
             return
         }
 
-        try! rustCall { uniffi_firstproof_core_fn_free_firstproofdatabase(pointer, $0) }
+        try! rustCall { uniffi_firstproof_core_fn_free_firstproofdatabase(handle, $0) }
     }
 
     
-public static func `open`(dbPath: String)throws  -> FirstProofDatabase {
-    return try  FfiConverterTypeFirstProofDatabase.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
+public static func `open`(dbPath: String)throws  -> FirstProofDatabase  {
+    return try  FfiConverterTypeFirstProofDatabase_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_constructor_firstproofdatabase_open(
-        FfiConverterString.lower(dbPath),$0
+        FfiConverterString.lower(dbPath),uniffiCallStatus
     )
 })
 }
     
 
     
-open func close() {try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_close(self.uniffiClonePointer(),$0
+open func close()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_close(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
 }
     
-open func deletePhotos(filePaths: [String]) -> UInt32 {
+open func deletePhotos(filePaths: [String]) -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_delete_photos(self.uniffiClonePointer(),
-        FfiConverterSequenceString.lower(filePaths),$0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_delete_photos(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceString.lower(filePaths),uniffiCallStatus
     )
 })
 }
     
-open func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool)throws  -> ExportPackageReport {
-    return try  FfiConverterTypeExportPackageReport.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_export_portable_package(self.uniffiClonePointer(),
+open func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool)throws  -> ExportPackageReport  {
+    return try  FfiConverterTypeExportPackageReport_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_export_portable_package(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(sourcePhotoPaths),
         FfiConverterString.lower(destinationFolder),
-        FfiConverterBool.lower(moveFiles),$0
+        FfiConverterBool.lower(moveFiles),uniffiCallStatus
     )
 })
 }
     
-open func findDuplicateClusters() -> [DuplicateClusterRecord] {
+open func findDuplicateClusters() -> [DuplicateClusterRecord]  {
     return try!  FfiConverterSequenceTypeDuplicateClusterRecord.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_find_duplicate_clusters(self.uniffiClonePointer(),$0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_find_duplicate_clusters(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
-open func getAllPhotos() -> [PhotoRecord] {
+open func getAllPhotos() -> [PhotoRecord]  {
     return try!  FfiConverterSequenceTypePhotoRecord.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_get_all_photos(self.uniffiClonePointer(),$0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_get_all_photos(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
-open func getMasterPhotos() -> [PhotoRecord] {
+open func getMasterPhotos() -> [PhotoRecord]  {
     return try!  FfiConverterSequenceTypePhotoRecord.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_get_master_photos(self.uniffiClonePointer(),$0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_get_master_photos(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
     
-open func getPhoto(filePath: String) -> PhotoRecord? {
+open func getPhoto(filePath: String) -> PhotoRecord?  {
     return try!  FfiConverterOptionTypePhotoRecord.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_get_photo(self.uniffiClonePointer(),
-        FfiConverterString.lower(filePath),$0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_get_photo(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(filePath),uniffiCallStatus
     )
 })
 }
     
-open func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord, progress: ImportProgressCallback?)throws  -> ImportReportRecord {
-    return try  FfiConverterTypeImportReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_import_to_library(self.uniffiClonePointer(),
+open func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord, progress: ImportProgressCallback?)throws  -> ImportReportRecord  {
+    return try  FfiConverterTypeImportReportRecord_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_import_to_library(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(sourcePathsOrFolders),
         FfiConverterString.lower(destinationFolder),
-        FfiConverterTypeImportOptionsRecord.lower(options),
-        FfiConverterOptionCallbackInterfaceImportProgressCallback.lower(progress),$0
+        FfiConverterTypeImportOptionsRecord_lower(options),
+        FfiConverterOptionCallbackInterfaceImportProgressCallback.lower(progress),uniffiCallStatus
     )
 })
 }
     
-open func indexFolder(folderPath: String) -> UInt32 {
+open func indexFolder(folderPath: String) -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_index_folder(self.uniffiClonePointer(),
-        FfiConverterString.lower(folderPath),$0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_index_folder(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(folderPath),uniffiCallStatus
     )
 })
 }
     
-open func updatePhotoMetadata(filePath: String, title: String?, description: String?, creator: String?, copyright: String?, keywords: String?) -> Bool {
+open func updatePhotoMetadata(filePath: String, title: String?, description: String?, creator: String?, copyright: String?, keywords: String?) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_update_photo_metadata(self.uniffiClonePointer(),
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_update_photo_metadata(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(filePath),
         FfiConverterOptionString.lower(title),
         FfiConverterOptionString.lower(description),
         FfiConverterOptionString.lower(creator),
         FfiConverterOptionString.lower(copyright),
-        FfiConverterOptionString.lower(keywords),$0
+        FfiConverterOptionString.lower(keywords),uniffiCallStatus
     )
 })
 }
     
-open func updateRatingStatus(filePath: String, rating: Int32?, status: String) -> Bool {
+open func updateRatingStatus(filePath: String, rating: Int32?, status: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_update_rating_status(self.uniffiClonePointer(),
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_update_rating_status(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(filePath),
         FfiConverterOptionInt32.lower(rating),
-        FfiConverterString.lower(status),$0
+        FfiConverterString.lower(status),uniffiCallStatus
     )
 })
 }
     
-open func updateRatingStatusBatch(filePaths: [String], rating: Int32?, updateRating: Bool, status: String?) -> UInt32 {
+open func updateRatingStatusBatch(filePaths: [String], rating: Int32?, updateRating: Bool, status: String?) -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstproofdatabase_update_rating_status_batch(self.uniffiClonePointer(),
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstproofdatabase_update_rating_status_batch(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(filePaths),
         FfiConverterOptionInt32.lower(rating),
         FfiConverterBool.lower(updateRating),
-        FfiConverterOptionString.lower(status),$0
+        FfiConverterOptionString.lower(status),uniffiCallStatus
     )
 })
 }
     
 
+    
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeFirstProofDatabase: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
+    typealias FfiType = UInt64
     typealias SwiftType = FirstProofDatabase
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FirstProofDatabase {
-        return FirstProofDatabase(unsafeFromRawPointer: pointer)
+    public static func lift(_ handle: UInt64) throws -> FirstProofDatabase {
+        return FirstProofDatabase(unsafeFromHandle: handle)
     }
 
-    public static func lower(_ value: FirstProofDatabase) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+    public static func lower(_ value: FirstProofDatabase) -> UInt64 {
+        return value.uniffiCloneHandle()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FirstProofDatabase {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
     }
 
     public static func write(_ value: FirstProofDatabase, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+        writeInt(&buf, lower(value))
     }
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFirstProofDatabase_lift(_ pointer: UnsafeMutableRawPointer) throws -> FirstProofDatabase {
-    return try FfiConverterTypeFirstProofDatabase.lift(pointer)
+public func FfiConverterTypeFirstProofDatabase_lift(_ handle: UInt64) throws -> FirstProofDatabase {
+    return try FfiConverterTypeFirstProofDatabase.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFirstProofDatabase_lower(_ value: FirstProofDatabase) -> UnsafeMutableRawPointer {
+public func FfiConverterTypeFirstProofDatabase_lower(_ value: FirstProofDatabase) -> UInt64 {
     return FfiConverterTypeFirstProofDatabase.lower(value)
 }
 
 
 
 
-public protocol FirstProofLensfunProtocol : AnyObject {
+
+
+public protocol FirstProofLensfunProtocol: AnyObject, Sendable {
     
     func loadDirectory(dirPath: String)  -> UInt32
     
@@ -838,156 +935,160 @@ public protocol FirstProofLensfunProtocol : AnyObject {
     func resolveCoefficients(cameraMake: String, cameraModel: String, lensModel: String, focalLength: Float, aperture: Float?)  -> LensCorrectionCoefficientsRecord
     
 }
+open class FirstProofLensfun: FirstProofLensfunProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
 
-open class FirstProofLensfun:
-    FirstProofLensfunProtocol {
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public struct NoPointer {
+    public struct NoHandle {
         public init() {}
     }
 
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
     }
 
     // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
     //
     // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
+    public init(noHandle: NoHandle) {
+        self.handle = 0
     }
 
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_firstproof_core_fn_clone_firstprooflensfun(self.pointer, $0) }
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_firstproof_core_fn_clone_firstprooflensfun(self.handle, $0) }
     }
 public convenience init() {
-    let pointer =
+    let handle =
         try! rustCall() {
-    uniffi_firstproof_core_fn_constructor_firstprooflensfun_new($0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_constructor_firstprooflensfun_new(uniffiCallStatus
     )
 }
-    self.init(unsafeFromRawPointer: pointer)
+    self.init(unsafeFromHandle: handle)
 }
 
     deinit {
-        guard let pointer = pointer else {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
             return
         }
 
-        try! rustCall { uniffi_firstproof_core_fn_free_firstprooflensfun(pointer, $0) }
+        try! rustCall { uniffi_firstproof_core_fn_free_firstprooflensfun(handle, $0) }
     }
 
     
 
     
-open func loadDirectory(dirPath: String) -> UInt32 {
+open func loadDirectory(dirPath: String) -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstprooflensfun_load_directory(self.uniffiClonePointer(),
-        FfiConverterString.lower(dirPath),$0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstprooflensfun_load_directory(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(dirPath),uniffiCallStatus
     )
 })
 }
     
-open func loadJsonFile(path: String) -> Bool {
+open func loadJsonFile(path: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstprooflensfun_load_json_file(self.uniffiClonePointer(),
-        FfiConverterString.lower(path),$0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstprooflensfun_load_json_file(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 })
 }
     
-open func loadXmlString(xmlContent: String) -> Bool {
+open func loadXmlString(xmlContent: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstprooflensfun_load_xml_string(self.uniffiClonePointer(),
-        FfiConverterString.lower(xmlContent),$0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstprooflensfun_load_xml_string(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(xmlContent),uniffiCallStatus
     )
 })
 }
     
-open func resolveCoefficients(cameraMake: String, cameraModel: String, lensModel: String, focalLength: Float, aperture: Float?) -> LensCorrectionCoefficientsRecord {
-    return try!  FfiConverterTypeLensCorrectionCoefficientsRecord.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_method_firstprooflensfun_resolve_coefficients(self.uniffiClonePointer(),
+open func resolveCoefficients(cameraMake: String, cameraModel: String, lensModel: String, focalLength: Float, aperture: Float?) -> LensCorrectionCoefficientsRecord  {
+    return try!  FfiConverterTypeLensCorrectionCoefficientsRecord_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_method_firstprooflensfun_resolve_coefficients(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(cameraMake),
         FfiConverterString.lower(cameraModel),
         FfiConverterString.lower(lensModel),
         FfiConverterFloat.lower(focalLength),
-        FfiConverterOptionFloat.lower(aperture),$0
+        FfiConverterOptionFloat.lower(aperture),uniffiCallStatus
     )
 })
 }
     
 
+    
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeFirstProofLensfun: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
+    typealias FfiType = UInt64
     typealias SwiftType = FirstProofLensfun
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FirstProofLensfun {
-        return FirstProofLensfun(unsafeFromRawPointer: pointer)
+    public static func lift(_ handle: UInt64) throws -> FirstProofLensfun {
+        return FirstProofLensfun(unsafeFromHandle: handle)
     }
 
-    public static func lower(_ value: FirstProofLensfun) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+    public static func lower(_ value: FirstProofLensfun) -> UInt64 {
+        return value.uniffiCloneHandle()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FirstProofLensfun {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
     }
 
     public static func write(_ value: FirstProofLensfun, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+        writeInt(&buf, lower(value))
     }
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFirstProofLensfun_lift(_ pointer: UnsafeMutableRawPointer) throws -> FirstProofLensfun {
-    return try FfiConverterTypeFirstProofLensfun.lift(pointer)
+public func FfiConverterTypeFirstProofLensfun_lift(_ handle: UInt64) throws -> FirstProofLensfun {
+    return try FfiConverterTypeFirstProofLensfun.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFirstProofLensfun_lower(_ value: FirstProofLensfun) -> UnsafeMutableRawPointer {
+public func FfiConverterTypeFirstProofLensfun_lower(_ value: FirstProofLensfun) -> UInt64 {
     return FfiConverterTypeFirstProofLensfun.lower(value)
 }
 
 
-public struct AutoAdjustments {
+
+
+public struct AutoAdjustments: Equatable, Hashable {
     public var exposure: Float
     public var contrast: Float
 
@@ -997,27 +1098,15 @@ public struct AutoAdjustments {
         self.exposure = exposure
         self.contrast = contrast
     }
+
+    
+
+    
 }
 
-
-
-extension AutoAdjustments: Equatable, Hashable {
-    public static func ==(lhs: AutoAdjustments, rhs: AutoAdjustments) -> Bool {
-        if lhs.exposure != rhs.exposure {
-            return false
-        }
-        if lhs.contrast != rhs.contrast {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(exposure)
-        hasher.combine(contrast)
-    }
-}
-
+#if compiler(>=6)
+extension AutoAdjustments: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1053,7 +1142,7 @@ public func FfiConverterTypeAutoAdjustments_lower(_ value: AutoAdjustments) -> R
 }
 
 
-public struct BatchExportItemRecord {
+public struct BatchExportItemRecord: Equatable, Hashable {
     public var inputPath: String
     public var outputPath: String
     public var edits: EditSettings
@@ -1081,63 +1170,15 @@ public struct BatchExportItemRecord {
         self.demosaicQuality = demosaicQuality
         self.renderTier = renderTier
     }
+
+    
+
+    
 }
 
-
-
-extension BatchExportItemRecord: Equatable, Hashable {
-    public static func ==(lhs: BatchExportItemRecord, rhs: BatchExportItemRecord) -> Bool {
-        if lhs.inputPath != rhs.inputPath {
-            return false
-        }
-        if lhs.outputPath != rhs.outputPath {
-            return false
-        }
-        if lhs.edits != rhs.edits {
-            return false
-        }
-        if lhs.lensCoeffs != rhs.lensCoeffs {
-            return false
-        }
-        if lhs.quality != rhs.quality {
-            return false
-        }
-        if lhs.maxDimension != rhs.maxDimension {
-            return false
-        }
-        if lhs.colorSpace != rhs.colorSpace {
-            return false
-        }
-        if lhs.renderingIntent != rhs.renderingIntent {
-            return false
-        }
-        if lhs.ultraHdr != rhs.ultraHdr {
-            return false
-        }
-        if lhs.demosaicQuality != rhs.demosaicQuality {
-            return false
-        }
-        if lhs.renderTier != rhs.renderTier {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(inputPath)
-        hasher.combine(outputPath)
-        hasher.combine(edits)
-        hasher.combine(lensCoeffs)
-        hasher.combine(quality)
-        hasher.combine(maxDimension)
-        hasher.combine(colorSpace)
-        hasher.combine(renderingIntent)
-        hasher.combine(ultraHdr)
-        hasher.combine(demosaicQuality)
-        hasher.combine(renderTier)
-    }
-}
-
+#if compiler(>=6)
+extension BatchExportItemRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1191,7 +1232,7 @@ public func FfiConverterTypeBatchExportItemRecord_lower(_ value: BatchExportItem
 }
 
 
-public struct BatchExportResultRecord {
+public struct BatchExportResultRecord: Equatable, Hashable {
     public var inputPath: String
     public var outputPath: String
     public var success: Bool
@@ -1205,35 +1246,15 @@ public struct BatchExportResultRecord {
         self.success = success
         self.errorMessage = errorMessage
     }
+
+    
+
+    
 }
 
-
-
-extension BatchExportResultRecord: Equatable, Hashable {
-    public static func ==(lhs: BatchExportResultRecord, rhs: BatchExportResultRecord) -> Bool {
-        if lhs.inputPath != rhs.inputPath {
-            return false
-        }
-        if lhs.outputPath != rhs.outputPath {
-            return false
-        }
-        if lhs.success != rhs.success {
-            return false
-        }
-        if lhs.errorMessage != rhs.errorMessage {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(inputPath)
-        hasher.combine(outputPath)
-        hasher.combine(success)
-        hasher.combine(errorMessage)
-    }
-}
-
+#if compiler(>=6)
+extension BatchExportResultRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1273,7 +1294,7 @@ public func FfiConverterTypeBatchExportResultRecord_lower(_ value: BatchExportRe
 }
 
 
-public struct CubeLutRecord {
+public struct CubeLutRecord: Equatable, Hashable {
     public var title: String
     public var size: UInt32
     public var dataRgba32f: Data
@@ -1285,31 +1306,15 @@ public struct CubeLutRecord {
         self.size = size
         self.dataRgba32f = dataRgba32f
     }
+
+    
+
+    
 }
 
-
-
-extension CubeLutRecord: Equatable, Hashable {
-    public static func ==(lhs: CubeLutRecord, rhs: CubeLutRecord) -> Bool {
-        if lhs.title != rhs.title {
-            return false
-        }
-        if lhs.size != rhs.size {
-            return false
-        }
-        if lhs.dataRgba32f != rhs.dataRgba32f {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(title)
-        hasher.combine(size)
-        hasher.combine(dataRgba32f)
-    }
-}
-
+#if compiler(>=6)
+extension CubeLutRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1347,7 +1352,7 @@ public func FfiConverterTypeCubeLutRecord_lower(_ value: CubeLutRecord) -> RustB
 }
 
 
-public struct DngBatchReportRecord {
+public struct DngBatchReportRecord: Equatable, Hashable {
     public var totalRequested: UInt32
     public var convertedCount: UInt32
     public var reconciledExistingCount: UInt32
@@ -1373,59 +1378,15 @@ public struct DngBatchReportRecord {
         self.reports = reports
         self.errorMessages = errorMessages
     }
+
+    
+
+    
 }
 
-
-
-extension DngBatchReportRecord: Equatable, Hashable {
-    public static func ==(lhs: DngBatchReportRecord, rhs: DngBatchReportRecord) -> Bool {
-        if lhs.totalRequested != rhs.totalRequested {
-            return false
-        }
-        if lhs.convertedCount != rhs.convertedCount {
-            return false
-        }
-        if lhs.reconciledExistingCount != rhs.reconciledExistingCount {
-            return false
-        }
-        if lhs.skippedCount != rhs.skippedCount {
-            return false
-        }
-        if lhs.failedCount != rhs.failedCount {
-            return false
-        }
-        if lhs.totalSourceBytes != rhs.totalSourceBytes {
-            return false
-        }
-        if lhs.totalDngBytes != rhs.totalDngBytes {
-            return false
-        }
-        if lhs.spaceReclaimedBytes != rhs.spaceReclaimedBytes {
-            return false
-        }
-        if lhs.reports != rhs.reports {
-            return false
-        }
-        if lhs.errorMessages != rhs.errorMessages {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(totalRequested)
-        hasher.combine(convertedCount)
-        hasher.combine(reconciledExistingCount)
-        hasher.combine(skippedCount)
-        hasher.combine(failedCount)
-        hasher.combine(totalSourceBytes)
-        hasher.combine(totalDngBytes)
-        hasher.combine(spaceReclaimedBytes)
-        hasher.combine(reports)
-        hasher.combine(errorMessages)
-    }
-}
-
+#if compiler(>=6)
+extension DngBatchReportRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1477,7 +1438,7 @@ public func FfiConverterTypeDngBatchReportRecord_lower(_ value: DngBatchReportRe
 }
 
 
-public struct DngConvertOptionsRecord {
+public struct DngConvertOptionsRecord: Equatable, Hashable {
     public var outputPath: String?
     public var deleteOriginal: Bool
     public var verify: Bool
@@ -1489,31 +1450,15 @@ public struct DngConvertOptionsRecord {
         self.deleteOriginal = deleteOriginal
         self.verify = verify
     }
+
+    
+
+    
 }
 
-
-
-extension DngConvertOptionsRecord: Equatable, Hashable {
-    public static func ==(lhs: DngConvertOptionsRecord, rhs: DngConvertOptionsRecord) -> Bool {
-        if lhs.outputPath != rhs.outputPath {
-            return false
-        }
-        if lhs.deleteOriginal != rhs.deleteOriginal {
-            return false
-        }
-        if lhs.verify != rhs.verify {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(outputPath)
-        hasher.combine(deleteOriginal)
-        hasher.combine(verify)
-    }
-}
-
+#if compiler(>=6)
+extension DngConvertOptionsRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1551,7 +1496,7 @@ public func FfiConverterTypeDngConvertOptionsRecord_lower(_ value: DngConvertOpt
 }
 
 
-public struct DngConvertReportRecord {
+public struct DngConvertReportRecord: Equatable, Hashable {
     public var sourcePath: String
     public var dngPath: String
     public var sourceSizeBytes: UInt64
@@ -1575,55 +1520,15 @@ public struct DngConvertReportRecord {
         self.alreadyExisted = alreadyExisted
         self.elapsedMs = elapsedMs
     }
+
+    
+
+    
 }
 
-
-
-extension DngConvertReportRecord: Equatable, Hashable {
-    public static func ==(lhs: DngConvertReportRecord, rhs: DngConvertReportRecord) -> Bool {
-        if lhs.sourcePath != rhs.sourcePath {
-            return false
-        }
-        if lhs.dngPath != rhs.dngPath {
-            return false
-        }
-        if lhs.sourceSizeBytes != rhs.sourceSizeBytes {
-            return false
-        }
-        if lhs.dngSizeBytes != rhs.dngSizeBytes {
-            return false
-        }
-        if lhs.compressionRatio != rhs.compressionRatio {
-            return false
-        }
-        if lhs.verificationPassed != rhs.verificationPassed {
-            return false
-        }
-        if lhs.deletedOriginal != rhs.deletedOriginal {
-            return false
-        }
-        if lhs.alreadyExisted != rhs.alreadyExisted {
-            return false
-        }
-        if lhs.elapsedMs != rhs.elapsedMs {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(sourcePath)
-        hasher.combine(dngPath)
-        hasher.combine(sourceSizeBytes)
-        hasher.combine(dngSizeBytes)
-        hasher.combine(compressionRatio)
-        hasher.combine(verificationPassed)
-        hasher.combine(deletedOriginal)
-        hasher.combine(alreadyExisted)
-        hasher.combine(elapsedMs)
-    }
-}
-
+#if compiler(>=6)
+extension DngConvertReportRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1673,7 +1578,7 @@ public func FfiConverterTypeDngConvertReportRecord_lower(_ value: DngConvertRepo
 }
 
 
-public struct DuplicateClusterRecord {
+public struct DuplicateClusterRecord: Equatable, Hashable {
     public var original: PhotoRecord
     public var duplicates: [PhotoRecord]
 
@@ -1683,27 +1588,15 @@ public struct DuplicateClusterRecord {
         self.original = original
         self.duplicates = duplicates
     }
+
+    
+
+    
 }
 
-
-
-extension DuplicateClusterRecord: Equatable, Hashable {
-    public static func ==(lhs: DuplicateClusterRecord, rhs: DuplicateClusterRecord) -> Bool {
-        if lhs.original != rhs.original {
-            return false
-        }
-        if lhs.duplicates != rhs.duplicates {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(original)
-        hasher.combine(duplicates)
-    }
-}
-
+#if compiler(>=6)
+extension DuplicateClusterRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1739,7 +1632,7 @@ public func FfiConverterTypeDuplicateClusterRecord_lower(_ value: DuplicateClust
 }
 
 
-public struct ExportPackageReport {
+public struct ExportPackageReport: Equatable, Hashable {
     public var totalRequested: UInt32
     public var exportedCount: UInt32
     public var errorCount: UInt32
@@ -1755,39 +1648,15 @@ public struct ExportPackageReport {
         self.destinationCatalogPath = destinationCatalogPath
         self.errorMessages = errorMessages
     }
+
+    
+
+    
 }
 
-
-
-extension ExportPackageReport: Equatable, Hashable {
-    public static func ==(lhs: ExportPackageReport, rhs: ExportPackageReport) -> Bool {
-        if lhs.totalRequested != rhs.totalRequested {
-            return false
-        }
-        if lhs.exportedCount != rhs.exportedCount {
-            return false
-        }
-        if lhs.errorCount != rhs.errorCount {
-            return false
-        }
-        if lhs.destinationCatalogPath != rhs.destinationCatalogPath {
-            return false
-        }
-        if lhs.errorMessages != rhs.errorMessages {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(totalRequested)
-        hasher.combine(exportedCount)
-        hasher.combine(errorCount)
-        hasher.combine(destinationCatalogPath)
-        hasher.combine(errorMessages)
-    }
-}
-
+#if compiler(>=6)
+extension ExportPackageReport: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1829,7 +1698,7 @@ public func FfiConverterTypeExportPackageReport_lower(_ value: ExportPackageRepo
 }
 
 
-public struct GainMapMetadataRecord {
+public struct GainMapMetadataRecord: Equatable, Hashable {
     public var minGain: Float
     public var maxGain: Float
     public var gamma: Float
@@ -1849,47 +1718,15 @@ public struct GainMapMetadataRecord {
         self.hdrCapacityMin = hdrCapacityMin
         self.hdrCapacityMax = hdrCapacityMax
     }
+
+    
+
+    
 }
 
-
-
-extension GainMapMetadataRecord: Equatable, Hashable {
-    public static func ==(lhs: GainMapMetadataRecord, rhs: GainMapMetadataRecord) -> Bool {
-        if lhs.minGain != rhs.minGain {
-            return false
-        }
-        if lhs.maxGain != rhs.maxGain {
-            return false
-        }
-        if lhs.gamma != rhs.gamma {
-            return false
-        }
-        if lhs.offsetSdr != rhs.offsetSdr {
-            return false
-        }
-        if lhs.offsetHdr != rhs.offsetHdr {
-            return false
-        }
-        if lhs.hdrCapacityMin != rhs.hdrCapacityMin {
-            return false
-        }
-        if lhs.hdrCapacityMax != rhs.hdrCapacityMax {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(minGain)
-        hasher.combine(maxGain)
-        hasher.combine(gamma)
-        hasher.combine(offsetSdr)
-        hasher.combine(offsetHdr)
-        hasher.combine(hdrCapacityMin)
-        hasher.combine(hdrCapacityMax)
-    }
-}
-
+#if compiler(>=6)
+extension GainMapMetadataRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1935,7 +1772,7 @@ public func FfiConverterTypeGainMapMetadataRecord_lower(_ value: GainMapMetadata
 }
 
 
-public struct GainMapRecord {
+public struct GainMapRecord: Equatable, Hashable {
     public var metadata: GainMapMetadataRecord
     public var jpegBytes: Data
     public var width: UInt32
@@ -1949,35 +1786,15 @@ public struct GainMapRecord {
         self.width = width
         self.height = height
     }
+
+    
+
+    
 }
 
-
-
-extension GainMapRecord: Equatable, Hashable {
-    public static func ==(lhs: GainMapRecord, rhs: GainMapRecord) -> Bool {
-        if lhs.metadata != rhs.metadata {
-            return false
-        }
-        if lhs.jpegBytes != rhs.jpegBytes {
-            return false
-        }
-        if lhs.width != rhs.width {
-            return false
-        }
-        if lhs.height != rhs.height {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(metadata)
-        hasher.combine(jpegBytes)
-        hasher.combine(width)
-        hasher.combine(height)
-    }
-}
-
+#if compiler(>=6)
+extension GainMapRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2017,7 +1834,7 @@ public func FfiConverterTypeGainMapRecord_lower(_ value: GainMapRecord) -> RustB
 }
 
 
-public struct ImageMetadata {
+public struct ImageMetadata: Equatable, Hashable {
     public var filePath: String
     public var cameraMake: String?
     public var cameraModel: String?
@@ -2053,79 +1870,15 @@ public struct ImageMetadata {
         self.copyright = copyright
         self.orientation = orientation
     }
+
+    
+
+    
 }
 
-
-
-extension ImageMetadata: Equatable, Hashable {
-    public static func ==(lhs: ImageMetadata, rhs: ImageMetadata) -> Bool {
-        if lhs.filePath != rhs.filePath {
-            return false
-        }
-        if lhs.cameraMake != rhs.cameraMake {
-            return false
-        }
-        if lhs.cameraModel != rhs.cameraModel {
-            return false
-        }
-        if lhs.lensModel != rhs.lensModel {
-            return false
-        }
-        if lhs.iso != rhs.iso {
-            return false
-        }
-        if lhs.aperture != rhs.aperture {
-            return false
-        }
-        if lhs.shutterSpeed != rhs.shutterSpeed {
-            return false
-        }
-        if lhs.focalLength != rhs.focalLength {
-            return false
-        }
-        if lhs.takenTime != rhs.takenTime {
-            return false
-        }
-        if lhs.latitude != rhs.latitude {
-            return false
-        }
-        if lhs.longitude != rhs.longitude {
-            return false
-        }
-        if lhs.description != rhs.description {
-            return false
-        }
-        if lhs.creator != rhs.creator {
-            return false
-        }
-        if lhs.copyright != rhs.copyright {
-            return false
-        }
-        if lhs.orientation != rhs.orientation {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(filePath)
-        hasher.combine(cameraMake)
-        hasher.combine(cameraModel)
-        hasher.combine(lensModel)
-        hasher.combine(iso)
-        hasher.combine(aperture)
-        hasher.combine(shutterSpeed)
-        hasher.combine(focalLength)
-        hasher.combine(takenTime)
-        hasher.combine(latitude)
-        hasher.combine(longitude)
-        hasher.combine(description)
-        hasher.combine(creator)
-        hasher.combine(copyright)
-        hasher.combine(orientation)
-    }
-}
-
+#if compiler(>=6)
+extension ImageMetadata: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2187,7 +1940,7 @@ public func FfiConverterTypeImageMetadata_lower(_ value: ImageMetadata) -> RustB
 }
 
 
-public struct ImportOptionsRecord {
+public struct ImportOptionsRecord: Equatable, Hashable {
     public var moveFiles: Bool
     public var consolidateSidecars: Bool
     public var deduplicateRawOverJpeg: Bool
@@ -2207,47 +1960,15 @@ public struct ImportOptionsRecord {
         self.subfolderName = subfolderName
         self.convertToDng = convertToDng
     }
+
+    
+
+    
 }
 
-
-
-extension ImportOptionsRecord: Equatable, Hashable {
-    public static func ==(lhs: ImportOptionsRecord, rhs: ImportOptionsRecord) -> Bool {
-        if lhs.moveFiles != rhs.moveFiles {
-            return false
-        }
-        if lhs.consolidateSidecars != rhs.consolidateSidecars {
-            return false
-        }
-        if lhs.deduplicateRawOverJpeg != rhs.deduplicateRawOverJpeg {
-            return false
-        }
-        if lhs.skipDuplicates != rhs.skipDuplicates {
-            return false
-        }
-        if lhs.verifyChecksum != rhs.verifyChecksum {
-            return false
-        }
-        if lhs.subfolderName != rhs.subfolderName {
-            return false
-        }
-        if lhs.convertToDng != rhs.convertToDng {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(moveFiles)
-        hasher.combine(consolidateSidecars)
-        hasher.combine(deduplicateRawOverJpeg)
-        hasher.combine(skipDuplicates)
-        hasher.combine(verifyChecksum)
-        hasher.combine(subfolderName)
-        hasher.combine(convertToDng)
-    }
-}
-
+#if compiler(>=6)
+extension ImportOptionsRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2293,7 +2014,7 @@ public func FfiConverterTypeImportOptionsRecord_lower(_ value: ImportOptionsReco
 }
 
 
-public struct ImportReportRecord {
+public struct ImportReportRecord: Equatable, Hashable {
     public var totalFound: UInt32
     public var importedCount: UInt32
     public var skippedDuplicates: UInt32
@@ -2319,59 +2040,15 @@ public struct ImportReportRecord {
         self.errorMessages = errorMessages
         self.dngConvertedCount = dngConvertedCount
     }
+
+    
+
+    
 }
 
-
-
-extension ImportReportRecord: Equatable, Hashable {
-    public static func ==(lhs: ImportReportRecord, rhs: ImportReportRecord) -> Bool {
-        if lhs.totalFound != rhs.totalFound {
-            return false
-        }
-        if lhs.importedCount != rhs.importedCount {
-            return false
-        }
-        if lhs.skippedDuplicates != rhs.skippedDuplicates {
-            return false
-        }
-        if lhs.rawOverJpegSuppressed != rhs.rawOverJpegSuppressed {
-            return false
-        }
-        if lhs.duplicateClonesSuppressed != rhs.duplicateClonesSuppressed {
-            return false
-        }
-        if lhs.consolidatedSidecars != rhs.consolidatedSidecars {
-            return false
-        }
-        if lhs.errorCount != rhs.errorCount {
-            return false
-        }
-        if lhs.destinationCatalogPath != rhs.destinationCatalogPath {
-            return false
-        }
-        if lhs.errorMessages != rhs.errorMessages {
-            return false
-        }
-        if lhs.dngConvertedCount != rhs.dngConvertedCount {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(totalFound)
-        hasher.combine(importedCount)
-        hasher.combine(skippedDuplicates)
-        hasher.combine(rawOverJpegSuppressed)
-        hasher.combine(duplicateClonesSuppressed)
-        hasher.combine(consolidatedSidecars)
-        hasher.combine(errorCount)
-        hasher.combine(destinationCatalogPath)
-        hasher.combine(errorMessages)
-        hasher.combine(dngConvertedCount)
-    }
-}
-
+#if compiler(>=6)
+extension ImportReportRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2423,7 +2100,7 @@ public func FfiConverterTypeImportReportRecord_lower(_ value: ImportReportRecord
 }
 
 
-public struct LensCorrectionCoefficients {
+public struct LensCorrectionCoefficientsRecord: Equatable, Hashable {
     public var distortion: [Float]
     public var tca: [Float]
     public var vignetting: [Float]
@@ -2443,153 +2120,15 @@ public struct LensCorrectionCoefficients {
         self.hasTca = hasTca
         self.hasVignetting = hasVignetting
     }
+
+    
+
+    
 }
 
-
-
-extension LensCorrectionCoefficients: Equatable, Hashable {
-    public static func ==(lhs: LensCorrectionCoefficients, rhs: LensCorrectionCoefficients) -> Bool {
-        if lhs.distortion != rhs.distortion {
-            return false
-        }
-        if lhs.tca != rhs.tca {
-            return false
-        }
-        if lhs.vignetting != rhs.vignetting {
-            return false
-        }
-        if lhs.distortionModel != rhs.distortionModel {
-            return false
-        }
-        if lhs.hasDistortion != rhs.hasDistortion {
-            return false
-        }
-        if lhs.hasTca != rhs.hasTca {
-            return false
-        }
-        if lhs.hasVignetting != rhs.hasVignetting {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(distortion)
-        hasher.combine(tca)
-        hasher.combine(vignetting)
-        hasher.combine(distortionModel)
-        hasher.combine(hasDistortion)
-        hasher.combine(hasTca)
-        hasher.combine(hasVignetting)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
+#if compiler(>=6)
+extension LensCorrectionCoefficientsRecord: Sendable {}
 #endif
-public struct FfiConverterTypeLensCorrectionCoefficients: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LensCorrectionCoefficients {
-        return
-            try LensCorrectionCoefficients(
-                distortion: FfiConverterSequenceFloat.read(from: &buf), 
-                tca: FfiConverterSequenceFloat.read(from: &buf), 
-                vignetting: FfiConverterSequenceFloat.read(from: &buf), 
-                distortionModel: FfiConverterString.read(from: &buf), 
-                hasDistortion: FfiConverterBool.read(from: &buf), 
-                hasTca: FfiConverterBool.read(from: &buf), 
-                hasVignetting: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: LensCorrectionCoefficients, into buf: inout [UInt8]) {
-        FfiConverterSequenceFloat.write(value.distortion, into: &buf)
-        FfiConverterSequenceFloat.write(value.tca, into: &buf)
-        FfiConverterSequenceFloat.write(value.vignetting, into: &buf)
-        FfiConverterString.write(value.distortionModel, into: &buf)
-        FfiConverterBool.write(value.hasDistortion, into: &buf)
-        FfiConverterBool.write(value.hasTca, into: &buf)
-        FfiConverterBool.write(value.hasVignetting, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeLensCorrectionCoefficients_lift(_ buf: RustBuffer) throws -> LensCorrectionCoefficients {
-    return try FfiConverterTypeLensCorrectionCoefficients.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeLensCorrectionCoefficients_lower(_ value: LensCorrectionCoefficients) -> RustBuffer {
-    return FfiConverterTypeLensCorrectionCoefficients.lower(value)
-}
-
-
-public struct LensCorrectionCoefficientsRecord {
-    public var distortion: [Float]
-    public var tca: [Float]
-    public var vignetting: [Float]
-    public var distortionModel: String
-    public var hasDistortion: Bool
-    public var hasTca: Bool
-    public var hasVignetting: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(distortion: [Float], tca: [Float], vignetting: [Float], distortionModel: String, hasDistortion: Bool, hasTca: Bool, hasVignetting: Bool) {
-        self.distortion = distortion
-        self.tca = tca
-        self.vignetting = vignetting
-        self.distortionModel = distortionModel
-        self.hasDistortion = hasDistortion
-        self.hasTca = hasTca
-        self.hasVignetting = hasVignetting
-    }
-}
-
-
-
-extension LensCorrectionCoefficientsRecord: Equatable, Hashable {
-    public static func ==(lhs: LensCorrectionCoefficientsRecord, rhs: LensCorrectionCoefficientsRecord) -> Bool {
-        if lhs.distortion != rhs.distortion {
-            return false
-        }
-        if lhs.tca != rhs.tca {
-            return false
-        }
-        if lhs.vignetting != rhs.vignetting {
-            return false
-        }
-        if lhs.distortionModel != rhs.distortionModel {
-            return false
-        }
-        if lhs.hasDistortion != rhs.hasDistortion {
-            return false
-        }
-        if lhs.hasTca != rhs.hasTca {
-            return false
-        }
-        if lhs.hasVignetting != rhs.hasVignetting {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(distortion)
-        hasher.combine(tca)
-        hasher.combine(vignetting)
-        hasher.combine(distortionModel)
-        hasher.combine(hasDistortion)
-        hasher.combine(hasTca)
-        hasher.combine(hasVignetting)
-    }
-}
-
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2635,7 +2174,7 @@ public func FfiConverterTypeLensCorrectionCoefficientsRecord_lower(_ value: Lens
 }
 
 
-public struct PhotoRecord {
+public struct PhotoRecord: Equatable, Hashable {
     public var id: Int64
     public var filePath: String
     public var fileName: String
@@ -2693,123 +2232,15 @@ public struct PhotoRecord {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
+
+    
+
+    
 }
 
-
-
-extension PhotoRecord: Equatable, Hashable {
-    public static func ==(lhs: PhotoRecord, rhs: PhotoRecord) -> Bool {
-        if lhs.id != rhs.id {
-            return false
-        }
-        if lhs.filePath != rhs.filePath {
-            return false
-        }
-        if lhs.fileName != rhs.fileName {
-            return false
-        }
-        if lhs.fileSize != rhs.fileSize {
-            return false
-        }
-        if lhs.modifiedTime != rhs.modifiedTime {
-            return false
-        }
-        if lhs.cameraMake != rhs.cameraMake {
-            return false
-        }
-        if lhs.cameraModel != rhs.cameraModel {
-            return false
-        }
-        if lhs.lensModel != rhs.lensModel {
-            return false
-        }
-        if lhs.iso != rhs.iso {
-            return false
-        }
-        if lhs.aperture != rhs.aperture {
-            return false
-        }
-        if lhs.shutterSpeed != rhs.shutterSpeed {
-            return false
-        }
-        if lhs.focalLength != rhs.focalLength {
-            return false
-        }
-        if lhs.takenTime != rhs.takenTime {
-            return false
-        }
-        if lhs.latitude != rhs.latitude {
-            return false
-        }
-        if lhs.longitude != rhs.longitude {
-            return false
-        }
-        if lhs.title != rhs.title {
-            return false
-        }
-        if lhs.description != rhs.description {
-            return false
-        }
-        if lhs.creator != rhs.creator {
-            return false
-        }
-        if lhs.copyright != rhs.copyright {
-            return false
-        }
-        if lhs.keywords != rhs.keywords {
-            return false
-        }
-        if lhs.rating != rhs.rating {
-            return false
-        }
-        if lhs.status != rhs.status {
-            return false
-        }
-        if lhs.hasXmp != rhs.hasXmp {
-            return false
-        }
-        if lhs.hasTakeout != rhs.hasTakeout {
-            return false
-        }
-        if lhs.createdAt != rhs.createdAt {
-            return false
-        }
-        if lhs.updatedAt != rhs.updatedAt {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-        hasher.combine(filePath)
-        hasher.combine(fileName)
-        hasher.combine(fileSize)
-        hasher.combine(modifiedTime)
-        hasher.combine(cameraMake)
-        hasher.combine(cameraModel)
-        hasher.combine(lensModel)
-        hasher.combine(iso)
-        hasher.combine(aperture)
-        hasher.combine(shutterSpeed)
-        hasher.combine(focalLength)
-        hasher.combine(takenTime)
-        hasher.combine(latitude)
-        hasher.combine(longitude)
-        hasher.combine(title)
-        hasher.combine(description)
-        hasher.combine(creator)
-        hasher.combine(copyright)
-        hasher.combine(keywords)
-        hasher.combine(rating)
-        hasher.combine(status)
-        hasher.combine(hasXmp)
-        hasher.combine(hasTakeout)
-        hasher.combine(createdAt)
-        hasher.combine(updatedAt)
-    }
-}
-
+#if compiler(>=6)
+extension PhotoRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2893,7 +2324,7 @@ public func FfiConverterTypePhotoRecord_lower(_ value: PhotoRecord) -> RustBuffe
 }
 
 
-public struct RawPreviewRecord {
+public struct RawPreviewRecord: Equatable, Hashable {
     public var width: UInt32
     public var height: UInt32
     public var data: Data
@@ -2907,35 +2338,15 @@ public struct RawPreviewRecord {
         self.data = data
         self.isLinearFloat = isLinearFloat
     }
+
+    
+
+    
 }
 
-
-
-extension RawPreviewRecord: Equatable, Hashable {
-    public static func ==(lhs: RawPreviewRecord, rhs: RawPreviewRecord) -> Bool {
-        if lhs.width != rhs.width {
-            return false
-        }
-        if lhs.height != rhs.height {
-            return false
-        }
-        if lhs.data != rhs.data {
-            return false
-        }
-        if lhs.isLinearFloat != rhs.isLinearFloat {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(width)
-        hasher.combine(height)
-        hasher.combine(data)
-        hasher.combine(isLinearFloat)
-    }
-}
-
+#if compiler(>=6)
+extension RawPreviewRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2975,7 +2386,7 @@ public func FfiConverterTypeRawPreviewRecord_lower(_ value: RawPreviewRecord) ->
 }
 
 
-public struct TakeoutMatchRecord {
+public struct TakeoutMatchRecord: Equatable, Hashable {
     public var imagePath: String
     public var jsonPath: String
 
@@ -2985,27 +2396,15 @@ public struct TakeoutMatchRecord {
         self.imagePath = imagePath
         self.jsonPath = jsonPath
     }
+
+    
+
+    
 }
 
-
-
-extension TakeoutMatchRecord: Equatable, Hashable {
-    public static func ==(lhs: TakeoutMatchRecord, rhs: TakeoutMatchRecord) -> Bool {
-        if lhs.imagePath != rhs.imagePath {
-            return false
-        }
-        if lhs.jsonPath != rhs.jsonPath {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(imagePath)
-        hasher.combine(jsonPath)
-    }
-}
-
+#if compiler(>=6)
+extension TakeoutMatchRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3041,7 +2440,7 @@ public func FfiConverterTypeTakeoutMatchRecord_lower(_ value: TakeoutMatchRecord
 }
 
 
-public struct TakeoutMetadataRecord {
+public struct TakeoutMetadataRecord: Equatable, Hashable {
     public var title: String
     public var description: String?
     public var latitude: Double?
@@ -3059,43 +2458,15 @@ public struct TakeoutMetadataRecord {
         self.altitude = altitude
         self.takenTime = takenTime
     }
+
+    
+
+    
 }
 
-
-
-extension TakeoutMetadataRecord: Equatable, Hashable {
-    public static func ==(lhs: TakeoutMetadataRecord, rhs: TakeoutMetadataRecord) -> Bool {
-        if lhs.title != rhs.title {
-            return false
-        }
-        if lhs.description != rhs.description {
-            return false
-        }
-        if lhs.latitude != rhs.latitude {
-            return false
-        }
-        if lhs.longitude != rhs.longitude {
-            return false
-        }
-        if lhs.altitude != rhs.altitude {
-            return false
-        }
-        if lhs.takenTime != rhs.takenTime {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(title)
-        hasher.combine(description)
-        hasher.combine(latitude)
-        hasher.combine(longitude)
-        hasher.combine(altitude)
-        hasher.combine(takenTime)
-    }
-}
-
+#if compiler(>=6)
+extension TakeoutMetadataRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3139,7 +2510,7 @@ public func FfiConverterTypeTakeoutMetadataRecord_lower(_ value: TakeoutMetadata
 }
 
 
-public struct WhiteBalancePresetValuesRecord {
+public struct WhiteBalancePresetValuesRecord: Equatable, Hashable {
     public var temperature: Double
     public var tint: Double
 
@@ -3149,27 +2520,15 @@ public struct WhiteBalancePresetValuesRecord {
         self.temperature = temperature
         self.tint = tint
     }
+
+    
+
+    
 }
 
-
-
-extension WhiteBalancePresetValuesRecord: Equatable, Hashable {
-    public static func ==(lhs: WhiteBalancePresetValuesRecord, rhs: WhiteBalancePresetValuesRecord) -> Bool {
-        if lhs.temperature != rhs.temperature {
-            return false
-        }
-        if lhs.tint != rhs.tint {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(temperature)
-        hasher.combine(tint)
-    }
-}
-
+#if compiler(>=6)
+extension WhiteBalancePresetValuesRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3205,7 +2564,7 @@ public func FfiConverterTypeWhiteBalancePresetValuesRecord_lower(_ value: WhiteB
 }
 
 
-public struct XmpDataRecord {
+public struct XmpDataRecord: Equatable, Hashable {
     public var rating: Int32?
     public var status: String
     public var title: String?
@@ -3231,59 +2590,15 @@ public struct XmpDataRecord {
         self.longitude = longitude
         self.edits = edits
     }
+
+    
+
+    
 }
 
-
-
-extension XmpDataRecord: Equatable, Hashable {
-    public static func ==(lhs: XmpDataRecord, rhs: XmpDataRecord) -> Bool {
-        if lhs.rating != rhs.rating {
-            return false
-        }
-        if lhs.status != rhs.status {
-            return false
-        }
-        if lhs.title != rhs.title {
-            return false
-        }
-        if lhs.description != rhs.description {
-            return false
-        }
-        if lhs.creator != rhs.creator {
-            return false
-        }
-        if lhs.copyright != rhs.copyright {
-            return false
-        }
-        if lhs.keywords != rhs.keywords {
-            return false
-        }
-        if lhs.latitude != rhs.latitude {
-            return false
-        }
-        if lhs.longitude != rhs.longitude {
-            return false
-        }
-        if lhs.edits != rhs.edits {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(rating)
-        hasher.combine(status)
-        hasher.combine(title)
-        hasher.combine(description)
-        hasher.combine(creator)
-        hasher.combine(copyright)
-        hasher.combine(keywords)
-        hasher.combine(latitude)
-        hasher.combine(longitude)
-        hasher.combine(edits)
-    }
-}
-
+#if compiler(>=6)
+extension XmpDataRecord: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3335,7 +2650,8 @@ public func FfiConverterTypeXmpDataRecord_lower(_ value: XmpDataRecord) -> RustB
 }
 
 
-public enum FirstProofError {
+public 
+enum FirstProofError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -3343,8 +2659,21 @@ public enum FirstProofError {
     )
     case DngError(reason: String
     )
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension FirstProofError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3391,37 +2720,52 @@ public struct FfiConverterTypeFirstProofError: FfiConverterRustBuffer {
 }
 
 
-extension FirstProofError: Equatable, Hashable {}
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFirstProofError_lift(_ buf: RustBuffer) throws -> FirstProofError {
+    return try FfiConverterTypeFirstProofError.lift(buf)
+}
 
-extension FirstProofError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFirstProofError_lower(_ value: FirstProofError) -> RustBuffer {
+    return FfiConverterTypeFirstProofError.lower(value)
 }
 
 
 
 
-public protocol DngProgressCallback : AnyObject {
+public protocol DngProgressCallback: AnyObject, Sendable {
     
     func onProgress(current: UInt32, total: UInt32, currentFile: String) 
     
 }
 
-// Magic number for the Rust proxy to call using the same mechanism as every other method,
-// to free the callback once it's dropped by Rust.
-private let IDX_CALLBACK_FREE: Int32 = 0
-// Callback return codes
-private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
-private let UNIFFI_CALLBACK_ERROR: Int32 = 1
-private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
 fileprivate struct UniffiCallbackInterfaceDngProgressCallback {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    static var vtable: UniffiVTableCallbackInterfaceDngProgressCallback = UniffiVTableCallbackInterfaceDngProgressCallback(
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceDngProgressCallback = UniffiVTableCallbackInterfaceDngProgressCallback(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceDngProgressCallback.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface DngProgressCallback: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceDngProgressCallback.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface DngProgressCallback: handle missing in uniffiClone")
+            }
+        },
         onProgress: { (
             uniffiHandle: UInt64,
             current: UInt32,
@@ -3449,18 +2793,24 @@ fileprivate struct UniffiCallbackInterfaceDngProgressCallback {
                 makeCall: makeCall,
                 writeReturn: writeReturn
             )
-        },
-        uniffiFree: { (uniffiHandle: UInt64) -> () in
-            let result = try? FfiConverterCallbackInterfaceDngProgressCallback.handleMap.remove(handle: uniffiHandle)
-            if result == nil {
-                print("Uniffi callback interface DngProgressCallback: handle missing in uniffiFree")
-            }
         }
     )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceDngProgressCallback> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceDngProgressCallback>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitDngProgressCallback() {
-    uniffi_firstproof_core_fn_init_callback_vtable_dngprogresscallback(&UniffiCallbackInterfaceDngProgressCallback.vtable)
+    uniffi_firstproof_core_fn_init_callback_vtable_dngprogresscallback(UniffiCallbackInterfaceDngProgressCallback.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -3468,7 +2818,7 @@ private func uniffiCallbackInitDngProgressCallback() {
 @_documentation(visibility: private)
 #endif
 fileprivate struct FfiConverterCallbackInterfaceDngProgressCallback {
-    fileprivate static var handleMap = UniffiHandleMap<DngProgressCallback>()
+    fileprivate static let handleMap = UniffiHandleMap<DngProgressCallback>()
 }
 
 #if swift(>=5.8)
@@ -3509,14 +2859,28 @@ extension FfiConverterCallbackInterfaceDngProgressCallback : FfiConverter {
 }
 
 
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceDngProgressCallback_lift(_ handle: UInt64) throws -> DngProgressCallback {
+    return try FfiConverterCallbackInterfaceDngProgressCallback.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceDngProgressCallback_lower(_ v: DngProgressCallback) -> UInt64 {
+    return FfiConverterCallbackInterfaceDngProgressCallback.lower(v)
+}
 
 
-public protocol ImportProgressCallback : AnyObject {
+
+
+public protocol ImportProgressCallback: AnyObject, Sendable {
     
     func onProgress(current: UInt32, total: UInt32, currentFile: String) 
     
 }
-
 
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
@@ -3524,7 +2888,23 @@ fileprivate struct UniffiCallbackInterfaceImportProgressCallback {
 
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    static var vtable: UniffiVTableCallbackInterfaceImportProgressCallback = UniffiVTableCallbackInterfaceImportProgressCallback(
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceImportProgressCallback = UniffiVTableCallbackInterfaceImportProgressCallback(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceImportProgressCallback.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface ImportProgressCallback: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceImportProgressCallback.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface ImportProgressCallback: handle missing in uniffiClone")
+            }
+        },
         onProgress: { (
             uniffiHandle: UInt64,
             current: UInt32,
@@ -3552,18 +2932,24 @@ fileprivate struct UniffiCallbackInterfaceImportProgressCallback {
                 makeCall: makeCall,
                 writeReturn: writeReturn
             )
-        },
-        uniffiFree: { (uniffiHandle: UInt64) -> () in
-            let result = try? FfiConverterCallbackInterfaceImportProgressCallback.handleMap.remove(handle: uniffiHandle)
-            if result == nil {
-                print("Uniffi callback interface ImportProgressCallback: handle missing in uniffiFree")
-            }
         }
     )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceImportProgressCallback> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceImportProgressCallback>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitImportProgressCallback() {
-    uniffi_firstproof_core_fn_init_callback_vtable_importprogresscallback(&UniffiCallbackInterfaceImportProgressCallback.vtable)
+    uniffi_firstproof_core_fn_init_callback_vtable_importprogresscallback(UniffiCallbackInterfaceImportProgressCallback.vtablePtr)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -3571,7 +2957,7 @@ private func uniffiCallbackInitImportProgressCallback() {
 @_documentation(visibility: private)
 #endif
 fileprivate struct FfiConverterCallbackInterfaceImportProgressCallback {
-    fileprivate static var handleMap = UniffiHandleMap<ImportProgressCallback>()
+    fileprivate static let handleMap = UniffiHandleMap<ImportProgressCallback>()
 }
 
 #if swift(>=5.8)
@@ -3609,6 +2995,21 @@ extension FfiConverterCallbackInterfaceImportProgressCallback : FfiConverter {
     public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
         writeInt(&buf, lower(v))
     }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceImportProgressCallback_lift(_ handle: UInt64) throws -> ImportProgressCallback {
+    return try FfiConverterCallbackInterfaceImportProgressCallback.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceImportProgressCallback_lower(_ v: ImportProgressCallback) -> UInt64 {
+    return FfiConverterCallbackInterfaceImportProgressCallback.lower(v)
 }
 
 #if swift(>=5.8)
@@ -4046,54 +3447,6 @@ fileprivate struct FfiConverterOptionTypeXmpDataRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionCallbackInterfaceDngProgressCallback: FfiConverterRustBuffer {
-    typealias SwiftType = DngProgressCallback?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterCallbackInterfaceDngProgressCallback.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterCallbackInterfaceDngProgressCallback.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionCallbackInterfaceImportProgressCallback: FfiConverterRustBuffer {
-    typealias SwiftType = ImportProgressCallback?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterCallbackInterfaceImportProgressCallback.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterCallbackInterfaceImportProgressCallback.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeAdjustmentDescriptor: FfiConverterRustBuffer {
     typealias SwiftType = AdjustmentDescriptor?
 
@@ -4118,30 +3471,6 @@ fileprivate struct FfiConverterOptionTypeAdjustmentDescriptor: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeDemosaicQuality: FfiConverterRustBuffer {
-    typealias SwiftType = DemosaicQuality?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeDemosaicQuality.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeDemosaicQuality.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeEvHistogramRecord: FfiConverterRustBuffer {
     typealias SwiftType = EvHistogramRecord?
 
@@ -4158,6 +3487,54 @@ fileprivate struct FfiConverterOptionTypeEvHistogramRecord: FfiConverterRustBuff
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeEvHistogramRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeWhiteBalanceResult: FfiConverterRustBuffer {
+    typealias SwiftType = WhiteBalanceResult?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeWhiteBalanceResult.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeWhiteBalanceResult.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeDemosaicQuality: FfiConverterRustBuffer {
+    typealias SwiftType = DemosaicQuality?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeDemosaicQuality.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeDemosaicQuality.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -4238,8 +3615,8 @@ fileprivate struct FfiConverterOptionTypeRenderTier: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeWhiteBalanceResult: FfiConverterRustBuffer {
-    typealias SwiftType = WhiteBalanceResult?
+fileprivate struct FfiConverterOptionCallbackInterfaceDngProgressCallback: FfiConverterRustBuffer {
+    typealias SwiftType = DngProgressCallback?
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
         guard let value = value else {
@@ -4247,13 +3624,37 @@ fileprivate struct FfiConverterOptionTypeWhiteBalanceResult: FfiConverterRustBuf
             return
         }
         writeInt(&buf, Int8(1))
-        FfiConverterTypeWhiteBalanceResult.write(value, into: &buf)
+        FfiConverterCallbackInterfaceDngProgressCallback.write(value, into: &buf)
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
-        case 1: return try FfiConverterTypeWhiteBalanceResult.read(from: &buf)
+        case 1: return try FfiConverterCallbackInterfaceDngProgressCallback.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionCallbackInterfaceImportProgressCallback: FfiConverterRustBuffer {
+    typealias SwiftType = ImportProgressCallback?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterCallbackInterfaceImportProgressCallback.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterCallbackInterfaceImportProgressCallback.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -4508,105 +3909,86 @@ fileprivate struct FfiConverterSequenceTypeCurvePointRecord: FfiConverterRustBuf
         return seq
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-public func batchConvertCatalogToDng(catalogFolder: String, photoPaths: [String], deleteOriginal: Bool, progress: DngProgressCallback?)throws  -> DngBatchReportRecord {
-    return try  FfiConverterTypeDngBatchReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
+public func batchConvertCatalogToDng(catalogFolder: String, photoPaths: [String], deleteOriginal: Bool, progress: DngProgressCallback?)throws  -> DngBatchReportRecord  {
+    return try  FfiConverterTypeDngBatchReportRecord_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_batch_convert_catalog_to_dng(
         FfiConverterString.lower(catalogFolder),
         FfiConverterSequenceString.lower(photoPaths),
         FfiConverterBool.lower(deleteOriginal),
-        FfiConverterOptionCallbackInterfaceDngProgressCallback.lower(progress),$0
+        FfiConverterOptionCallbackInterfaceDngProgressCallback.lower(progress),uniffiCallStatus
     )
 })
 }
-public func calculateTargetCropRatio(preset: CropAspectRatioPreset, imageAspect: Float, isPortrait: Bool) -> Float? {
+public func calculateTargetCropRatio(preset: CropAspectRatioPreset, imageAspect: Float, isPortrait: Bool) -> Float?  {
     return try!  FfiConverterOptionFloat.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_calculate_target_crop_ratio(
         FfiConverterTypeCropAspectRatioPreset_lower(preset),
         FfiConverterFloat.lower(imageAspect),
-        FfiConverterBool.lower(isPortrait),$0
+        FfiConverterBool.lower(isPortrait),uniffiCallStatus
     )
 })
 }
 /**
  * Calculates photographic Kelvin temperature and tint from an unadjusted neutral pixel sample.
  */
-public func calculateWhiteBalanceFromSample(r: Float, g: Float, b: Float) -> WhiteBalanceResult {
+public func calculateWhiteBalanceFromSample(r: Float, g: Float, b: Float) -> WhiteBalanceResult  {
     return try!  FfiConverterTypeWhiteBalanceResult_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_calculate_white_balance_from_sample(
         FfiConverterFloat.lower(r),
         FfiConverterFloat.lower(g),
-        FfiConverterFloat.lower(b),$0
+        FfiConverterFloat.lower(b),uniffiCallStatus
     )
 })
 }
-public func checkConnection() -> String {
+public func checkConnection() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_func_check_connection($0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_check_connection(uniffiCallStatus
     )
 })
 }
-public func computeAutoAdjustments(path: String) -> AutoAdjustments? {
+public func computeAutoAdjustments(path: String) -> AutoAdjustments?  {
     return try!  FfiConverterOptionTypeAutoAdjustments.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_compute_auto_adjustments(
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 })
 }
-public func computeAutoAdjustmentsFromBuffer(width: UInt32, height: UInt32, data: Data) -> AutoAdjustments? {
+public func computeAutoAdjustmentsFromBuffer(width: UInt32, height: UInt32, data: Data) -> AutoAdjustments?  {
     return try!  FfiConverterOptionTypeAutoAdjustments.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_compute_auto_adjustments_from_buffer(
         FfiConverterUInt32.lower(width),
         FfiConverterUInt32.lower(height),
-        FfiConverterData.lower(data),$0
+        FfiConverterData.lower(data),uniffiCallStatus
     )
 })
 }
-public func computeAutoWhiteBalance(path: String) -> WhiteBalanceResult? {
+public func computeAutoWhiteBalance(path: String) -> WhiteBalanceResult?  {
     return try!  FfiConverterOptionTypeWhiteBalanceResult.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_compute_auto_white_balance(
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 })
 }
-public func computeAutoWhiteBalanceFromBuffer(width: UInt32, height: UInt32, data: Data) -> WhiteBalanceResult? {
+public func computeAutoWhiteBalanceFromBuffer(width: UInt32, height: UInt32, data: Data) -> WhiteBalanceResult?  {
     return try!  FfiConverterOptionTypeWhiteBalanceResult.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_compute_auto_white_balance_from_buffer(
         FfiConverterUInt32.lower(width),
         FfiConverterUInt32.lower(height),
-        FfiConverterData.lower(data),$0
+        FfiConverterData.lower(data),uniffiCallStatus
     )
 })
 }
-public func computeEvHistogram(width: UInt32, height: UInt32, data: Data, exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool, vignettingCorrectionEnabled: Bool, vignettingK1: Float, vignettingK2: Float, vignettingK3: Float) -> EvHistogramRecord? {
+public func computeEvHistogram(width: UInt32, height: UInt32, data: Data, exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool, vignettingCorrectionEnabled: Bool, vignettingK1: Float, vignettingK2: Float, vignettingK3: Float) -> EvHistogramRecord?  {
     return try!  FfiConverterOptionTypeEvHistogramRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_compute_ev_histogram(
         FfiConverterUInt32.lower(width),
         FfiConverterUInt32.lower(height),
@@ -4626,12 +4008,13 @@ public func computeEvHistogram(width: UInt32, height: UInt32, data: Data, exposu
         FfiConverterBool.lower(vignettingCorrectionEnabled),
         FfiConverterFloat.lower(vignettingK1),
         FfiConverterFloat.lower(vignettingK2),
-        FfiConverterFloat.lower(vignettingK3),$0
+        FfiConverterFloat.lower(vignettingK3),uniffiCallStatus
     )
 })
 }
-public func computeEvHistogramFromPath(path: String, exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool, vignettingCorrectionEnabled: Bool, vignettingK1: Float, vignettingK2: Float, vignettingK3: Float) -> EvHistogramRecord? {
+public func computeEvHistogramFromPath(path: String, exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool, vignettingCorrectionEnabled: Bool, vignettingK1: Float, vignettingK2: Float, vignettingK3: Float) -> EvHistogramRecord?  {
     return try!  FfiConverterOptionTypeEvHistogramRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_compute_ev_histogram_from_path(
         FfiConverterString.lower(path),
         FfiConverterFloat.lower(exposure),
@@ -4649,61 +4032,68 @@ public func computeEvHistogramFromPath(path: String, exposure: Float, contrast: 
         FfiConverterBool.lower(vignettingCorrectionEnabled),
         FfiConverterFloat.lower(vignettingK1),
         FfiConverterFloat.lower(vignettingK2),
-        FfiConverterFloat.lower(vignettingK3),$0
+        FfiConverterFloat.lower(vignettingK3),uniffiCallStatus
     )
 })
 }
-public func convertKelvinToMiredNorm(kelvin: Double) -> Double {
+public func convertKelvinToMiredNorm(kelvin: Double) -> Double  {
     return try!  FfiConverterDouble.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_convert_kelvin_to_mired_norm(
-        FfiConverterDouble.lower(kelvin),$0
+        FfiConverterDouble.lower(kelvin),uniffiCallStatus
     )
 })
 }
-public func convertMiredNormToKelvin(norm: Double) -> Double {
+public func convertMiredNormToKelvin(norm: Double) -> Double  {
     return try!  FfiConverterDouble.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_convert_mired_norm_to_kelvin(
-        FfiConverterDouble.lower(norm),$0
+        FfiConverterDouble.lower(norm),uniffiCallStatus
     )
 })
 }
-public func convertRawToDng(inputPath: String, options: DngConvertOptionsRecord)throws  -> DngConvertReportRecord {
-    return try  FfiConverterTypeDngConvertReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
+public func convertRawToDng(inputPath: String, options: DngConvertOptionsRecord)throws  -> DngConvertReportRecord  {
+    return try  FfiConverterTypeDngConvertReportRecord_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_convert_raw_to_dng(
         FfiConverterString.lower(inputPath),
-        FfiConverterTypeDngConvertOptionsRecord.lower(options),$0
+        FfiConverterTypeDngConvertOptionsRecord_lower(options),uniffiCallStatus
     )
 })
 }
-public func decodeExifOrientation(orientation: UInt32) -> ExifOrientationRecord {
+public func decodeExifOrientation(orientation: UInt32) -> ExifOrientationRecord  {
     return try!  FfiConverterTypeExifOrientationRecord_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_decode_exif_orientation(
-        FfiConverterUInt32.lower(orientation),$0
+        FfiConverterUInt32.lower(orientation),uniffiCallStatus
     )
 })
 }
-public func decodeRawPreview(path: String, maxDimension: UInt32?) -> RawPreviewRecord? {
+public func decodeRawPreview(path: String, maxDimension: UInt32?) -> RawPreviewRecord?  {
     return try!  FfiConverterOptionTypeRawPreviewRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_decode_raw_preview(
         FfiConverterString.lower(path),
-        FfiConverterOptionUInt32.lower(maxDimension),$0
+        FfiConverterOptionUInt32.lower(maxDimension),uniffiCallStatus
     )
 })
 }
-public func decodeRawPreviewBinned(path: String) -> RawPreviewRecord? {
+public func decodeRawPreviewBinned(path: String) -> RawPreviewRecord?  {
     return try!  FfiConverterOptionTypeRawPreviewRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_decode_raw_preview_binned(
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 })
 }
-public func detectWhiteBalancePreset(temperature: Double, tint: Double, asShotTemp: Double, asShotTint: Double) -> WhiteBalancePreset {
+public func detectWhiteBalancePreset(temperature: Double, tint: Double, asShotTemp: Double, asShotTint: Double) -> WhiteBalancePreset  {
     return try!  FfiConverterTypeWhiteBalancePreset_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_detect_white_balance_preset(
         FfiConverterDouble.lower(temperature),
         FfiConverterDouble.lower(tint),
         FfiConverterDouble.lower(asShotTemp),
-        FfiConverterDouble.lower(asShotTint),$0
+        FfiConverterDouble.lower(asShotTint),uniffiCallStatus
     )
 })
 }
@@ -4711,65 +4101,49 @@ public func detectWhiteBalancePreset(temperature: Double, tint: Double, asShotTe
  * Returns a deterministic signature of all edit settings for cache keying and invalidation.
  * Automatically serializes all current and future fields without manual tracking.
  */
-public func editsCacheSignature(edits: EditSettings) -> String {
+public func editsCacheSignature(edits: EditSettings) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_edits_cache_signature(
-        FfiConverterTypeEditSettings_lower(edits),$0
+        FfiConverterTypeEditSettings_lower(edits),uniffiCallStatus
     )
 })
 }
 /**
  * Checks whether an EditSettings instance differs from default/as-shot settings.
  */
-public func editsHasModifications(edits: EditSettings, asShotTemp: Float?, asShotTint: Float?) -> Bool {
+public func editsHasModifications(edits: EditSettings, asShotTemp: Float?, asShotTint: Float?) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_edits_has_modifications(
         FfiConverterTypeEditSettings_lower(edits),
         FfiConverterOptionFloat.lower(asShotTemp),
-        FfiConverterOptionFloat.lower(asShotTint),$0
-    )
-})
-}
-/**
- * Evaluates the 4 channels of ToneCurvesRecord into four 256-sample LUTs (Master, Red, Green, Blue).
- */
-public func evaluateAllCurvesLut(curves: ToneCurvesRecord) -> AllCurvesLutRecord {
-    return try!  FfiConverterTypeAllCurvesLutRecord_lift(try! rustCall() {
-    uniffi_firstproof_core_fn_func_evaluate_all_curves_lut(
-        FfiConverterTypeToneCurvesRecord_lower(curves),$0
-    )
-})
-}
-/**
- * Evaluates an arbitrary set of curve control points into a 256-sample lookup table (LUT)
- * using the Fritsch-Carlson monotone cubic hermite spline algorithm.
- */
-public func evaluateCurveLut(points: [CurvePointRecord]) -> [Float] {
-    return try!  FfiConverterSequenceFloat.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_func_evaluate_curve_lut(
-        FfiConverterSequenceTypeCurvePointRecord.lower(points),$0
+        FfiConverterOptionFloat.lower(asShotTint),uniffiCallStatus
     )
 })
 }
 /**
  * Executes a canonical [`DarkroomCommand`] in headless mode and returns a structured JSON response.
  */
-public func executeDarkroomCommandHeadless(jsonStr: String) -> String {
+public func executeDarkroomCommandHeadless(jsonStr: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_execute_darkroom_command_headless(
-        FfiConverterString.lower(jsonStr),$0
+        FfiConverterString.lower(jsonStr),uniffiCallStatus
     )
 })
 }
-public func exportBatchPhotos(items: [BatchExportItemRecord]) -> [BatchExportResultRecord] {
+public func exportBatchPhotos(items: [BatchExportItemRecord]) -> [BatchExportResultRecord]  {
     return try!  FfiConverterSequenceTypeBatchExportResultRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_export_batch_photos(
-        FfiConverterSequenceTypeBatchExportItemRecord.lower(items),$0
+        FfiConverterSequenceTypeBatchExportItemRecord.lower(items),uniffiCallStatus
     )
 })
 }
-public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace?, renderingIntent: ExportRenderingIntent?, ultraHdr: Bool?, demosaicQuality: DemosaicQuality?, renderTier: RenderTier?) -> Bool {
+public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettings, lensCoeffs: LensCorrectionCoefficientsRecord?, quality: UInt32, maxDimension: UInt32?, colorSpace: ExportColorSpace?, renderingIntent: ExportRenderingIntent?, ultraHdr: Bool?, demosaicQuality: DemosaicQuality?, renderTier: RenderTier?) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_export_photo(
         FfiConverterString.lower(inputPath),
         FfiConverterString.lower(outputPath),
@@ -4781,167 +4155,212 @@ public func exportPhoto(inputPath: String, outputPath: String, edits: EditSettin
         FfiConverterOptionTypeExportRenderingIntent.lower(renderingIntent),
         FfiConverterOptionBool.lower(ultraHdr),
         FfiConverterOptionTypeDemosaicQuality.lower(demosaicQuality),
-        FfiConverterOptionTypeRenderTier.lower(renderTier),$0
+        FfiConverterOptionTypeRenderTier.lower(renderTier),uniffiCallStatus
     )
 })
 }
-public func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool)throws  -> ExportPackageReport {
-    return try  FfiConverterTypeExportPackageReport.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
+public func exportPortablePackage(sourcePhotoPaths: [String], destinationFolder: String, moveFiles: Bool)throws  -> ExportPackageReport  {
+    return try  FfiConverterTypeExportPackageReport_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_export_portable_package(
         FfiConverterSequenceString.lower(sourcePhotoPaths),
         FfiConverterString.lower(destinationFolder),
-        FfiConverterBool.lower(moveFiles),$0
+        FfiConverterBool.lower(moveFiles),uniffiCallStatus
     )
 })
 }
-public func extractMetadata(path: String) -> ImageMetadata? {
+public func extractMetadata(path: String) -> ImageMetadata?  {
     return try!  FfiConverterOptionTypeImageMetadata.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_extract_metadata(
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 })
 }
-public func extractPreview(path: String) -> Data? {
+public func extractPreview(path: String) -> Data?  {
     return try!  FfiConverterOptionData.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_extract_preview(
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 })
 }
-public func extractUltraHdrGainMap(filePath: String) -> GainMapRecord? {
+public func extractUltraHdrGainMap(filePath: String) -> GainMapRecord?  {
     return try!  FfiConverterOptionTypeGainMapRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_extract_ultra_hdr_gain_map(
-        FfiConverterString.lower(filePath),$0
+        FfiConverterString.lower(filePath),uniffiCallStatus
     )
 })
 }
-public func filterDerivativeClones(photos: [PhotoRecord]) -> [PhotoRecord] {
+public func filterDerivativeClones(photos: [PhotoRecord]) -> [PhotoRecord]  {
     return try!  FfiConverterSequenceTypePhotoRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_filter_derivative_clones(
-        FfiConverterSequenceTypePhotoRecord.lower(photos),$0
+        FfiConverterSequenceTypePhotoRecord.lower(photos),uniffiCallStatus
     )
 })
 }
-public func findDuplicateClusters(photos: [PhotoRecord]) -> [DuplicateClusterRecord] {
+public func findDuplicateClusters(photos: [PhotoRecord]) -> [DuplicateClusterRecord]  {
     return try!  FfiConverterSequenceTypeDuplicateClusterRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_find_duplicate_clusters(
-        FfiConverterSequenceTypePhotoRecord.lower(photos),$0
+        FfiConverterSequenceTypePhotoRecord.lower(photos),uniffiCallStatus
     )
 })
 }
-public func getAdjustmentDescriptor(id: String) -> AdjustmentDescriptor? {
+public func getAdjustmentDescriptor(id: String) -> AdjustmentDescriptor?  {
     return try!  FfiConverterOptionTypeAdjustmentDescriptor.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_get_adjustment_descriptor(
-        FfiConverterString.lower(id),$0
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
-public func getAllAdjustments() -> [AdjustmentDescriptor] {
+public func getAllAdjustments() -> [AdjustmentDescriptor]  {
     return try!  FfiConverterSequenceTypeAdjustmentDescriptor.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_func_get_all_adjustments($0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_get_all_adjustments(uniffiCallStatus
     )
 })
 }
-public func getAsShotWhiteBalance(path: String) -> WhiteBalanceResult? {
+public func getAsShotWhiteBalance(path: String) -> WhiteBalanceResult?  {
     return try!  FfiConverterOptionTypeWhiteBalanceResult.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_get_as_shot_white_balance(
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 })
 }
-public func getBuiltinCubeLut(title: String, size: UInt32) -> CubeLutRecord? {
+public func getBuiltinCubeLut(title: String, size: UInt32) -> CubeLutRecord?  {
     return try!  FfiConverterOptionTypeCubeLutRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_get_builtin_cube_lut(
         FfiConverterString.lower(title),
-        FfiConverterUInt32.lower(size),$0
+        FfiConverterUInt32.lower(size),uniffiCallStatus
     )
 })
 }
-public func getBuiltinCubeLutTitles() -> [String] {
+public func getBuiltinCubeLutTitles() -> [String]  {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
-    uniffi_firstproof_core_fn_func_get_builtin_cube_lut_titles($0
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_get_builtin_cube_lut_titles(uniffiCallStatus
     )
 })
 }
-public func getWhiteBalancePresetValues(preset: WhiteBalancePreset) -> WhiteBalancePresetValuesRecord? {
+public func getWhiteBalancePresetValues(preset: WhiteBalancePreset) -> WhiteBalancePresetValuesRecord?  {
     return try!  FfiConverterOptionTypeWhiteBalancePresetValuesRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_get_white_balance_preset_values(
-        FfiConverterTypeWhiteBalancePreset_lower(preset),$0
+        FfiConverterTypeWhiteBalancePreset_lower(preset),uniffiCallStatus
     )
 })
 }
-public func hasUltraHdrGainMap(filePath: String) -> Bool {
+public func hasUltraHdrGainMap(filePath: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_has_ultra_hdr_gain_map(
-        FfiConverterString.lower(filePath),$0
+        FfiConverterString.lower(filePath),uniffiCallStatus
     )
 })
 }
-public func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord, progress: ImportProgressCallback?)throws  -> ImportReportRecord {
-    return try  FfiConverterTypeImportReportRecord.lift(try rustCallWithError(FfiConverterTypeFirstProofError.lift) {
+public func importToLibrary(sourcePathsOrFolders: [String], destinationFolder: String, options: ImportOptionsRecord, progress: ImportProgressCallback?)throws  -> ImportReportRecord  {
+    return try  FfiConverterTypeImportReportRecord_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_import_to_library(
         FfiConverterSequenceString.lower(sourcePathsOrFolders),
         FfiConverterString.lower(destinationFolder),
-        FfiConverterTypeImportOptionsRecord.lower(options),
-        FfiConverterOptionCallbackInterfaceImportProgressCallback.lower(progress),$0
+        FfiConverterTypeImportOptionsRecord_lower(options),
+        FfiConverterOptionCallbackInterfaceImportProgressCallback.lower(progress),uniffiCallStatus
     )
 })
 }
-public func loadCubeLut(path: String) -> CubeLutRecord? {
+public func loadCubeLut(path: String) -> CubeLutRecord?  {
     return try!  FfiConverterOptionTypeCubeLutRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_load_cube_lut(
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 })
 }
-public func matchTakeoutJson(imagePath: String) -> String? {
+public func matchTakeoutJson(imagePath: String) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_match_takeout_json(
-        FfiConverterString.lower(imagePath),$0
+        FfiConverterString.lower(imagePath),uniffiCallStatus
     )
 })
 }
-public func normalizeStem(stem: String) -> String {
+public func normalizeStem(stem: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_normalize_stem(
-        FfiConverterString.lower(stem),$0
+        FfiConverterString.lower(stem),uniffiCallStatus
     )
 })
 }
-public func parseTakeoutJson(jsonPath: String) -> TakeoutMetadataRecord? {
+public func parseTakeoutJson(jsonPath: String) -> TakeoutMetadataRecord?  {
     return try!  FfiConverterOptionTypeTakeoutMetadataRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_parse_takeout_json(
-        FfiConverterString.lower(jsonPath),$0
+        FfiConverterString.lower(jsonPath),uniffiCallStatus
     )
 })
 }
-public func readXmp(path: String) -> XmpDataRecord? {
+public func readXmp(path: String) -> XmpDataRecord?  {
     return try!  FfiConverterOptionTypeXmpDataRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_read_xmp(
-        FfiConverterString.lower(path),$0
+        FfiConverterString.lower(path),uniffiCallStatus
     )
 })
 }
-public func resolveCatalogPath(folderPath: String, portable: Bool) -> String {
+public func resolveCatalogPath(folderPath: String, portable: Bool) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_resolve_catalog_path(
         FfiConverterString.lower(folderPath),
-        FfiConverterBool.lower(portable),$0
+        FfiConverterBool.lower(portable),uniffiCallStatus
     )
 })
 }
-public func scanDirectoryForTakeout(dirPath: String) -> [TakeoutMatchRecord] {
+public func scanDirectoryForTakeout(dirPath: String) -> [TakeoutMatchRecord]  {
     return try!  FfiConverterSequenceTypeTakeoutMatchRecord.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_scan_directory_for_takeout(
-        FfiConverterString.lower(dirPath),$0
+        FfiConverterString.lower(dirPath),uniffiCallStatus
     )
 })
 }
-public func writeXmp(path: String, record: XmpDataRecord) -> Bool {
+public func writeXmp(path: String, record: XmpDataRecord) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_firstproof_core_fn_func_write_xmp(
         FfiConverterString.lower(path),
-        FfiConverterTypeXmpDataRecord.lower(record),$0
+        FfiConverterTypeXmpDataRecord_lower(record),uniffiCallStatus
+    )
+})
+}
+/**
+ * Evaluates the 4 channels of ToneCurvesRecord into four 256-sample LUTs (Master, Red, Green, Blue).
+ */
+public func evaluateAllCurvesLut(curves: ToneCurvesRecord) -> AllCurvesLutRecord  {
+    return try!  FfiConverterTypeAllCurvesLutRecord_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_evaluate_all_curves_lut(
+        FfiConverterTypeToneCurvesRecord_lower(curves),uniffiCallStatus
+    )
+})
+}
+/**
+ * Evaluates an arbitrary set of curve control points into a 256-sample lookup table (LUT)
+ * using the Fritsch-Carlson monotone cubic hermite spline algorithm.
+ */
+public func evaluateCurveLut(points: [CurvePointRecord]) -> [Float]  {
+    return try!  FfiConverterSequenceFloat.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_evaluate_curve_lut(
+        FfiConverterSequenceTypeCurvePointRecord.lower(points),uniffiCallStatus
     )
 })
 }
@@ -4953,219 +4372,222 @@ private enum InitializationResult {
 }
 // Use a global variable to perform the versioning checks. Swift ensures that
 // the code inside is only computed once.
-private var initializationResult: InitializationResult = {
+private let initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
-    let bindings_contract_version = 26
+    let bindings_contract_version = 30
     // Get the scaffolding contract version by calling the into the dylib
     let scaffolding_contract_version = ffi_firstproof_core_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_batch_convert_catalog_to_dng() != 44329) {
+    if (uniffi_firstproof_core_checksum_func_batch_convert_catalog_to_dng() != 56569) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_calculate_target_crop_ratio() != 7171) {
+    if (uniffi_firstproof_core_checksum_func_calculate_target_crop_ratio() != 46837) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_calculate_white_balance_from_sample() != 12127) {
+    if (uniffi_firstproof_core_checksum_func_calculate_white_balance_from_sample() != 1233) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_check_connection() != 26981) {
+    if (uniffi_firstproof_core_checksum_func_check_connection() != 3182) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_compute_auto_adjustments() != 2257) {
+    if (uniffi_firstproof_core_checksum_func_compute_auto_adjustments() != 32376) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_compute_auto_adjustments_from_buffer() != 43322) {
+    if (uniffi_firstproof_core_checksum_func_compute_auto_adjustments_from_buffer() != 56170) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance() != 26234) {
+    if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance() != 2615) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance_from_buffer() != 16899) {
+    if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance_from_buffer() != 31814) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram() != 57473) {
+    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram() != 27206) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram_from_path() != 13911) {
+    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram_from_path() != 19873) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_convert_kelvin_to_mired_norm() != 11770) {
+    if (uniffi_firstproof_core_checksum_func_convert_kelvin_to_mired_norm() != 57093) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_convert_mired_norm_to_kelvin() != 43230) {
+    if (uniffi_firstproof_core_checksum_func_convert_mired_norm_to_kelvin() != 23358) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_convert_raw_to_dng() != 1473) {
+    if (uniffi_firstproof_core_checksum_func_convert_raw_to_dng() != 56350) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_decode_exif_orientation() != 3086) {
+    if (uniffi_firstproof_core_checksum_func_decode_exif_orientation() != 32137) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_decode_raw_preview() != 25928) {
+    if (uniffi_firstproof_core_checksum_func_decode_raw_preview() != 53278) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_decode_raw_preview_binned() != 554) {
+    if (uniffi_firstproof_core_checksum_func_decode_raw_preview_binned() != 57219) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_detect_white_balance_preset() != 44784) {
+    if (uniffi_firstproof_core_checksum_func_detect_white_balance_preset() != 51679) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_edits_cache_signature() != 39649) {
+    if (uniffi_firstproof_core_checksum_func_edits_cache_signature() != 36067) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_edits_has_modifications() != 5428) {
+    if (uniffi_firstproof_core_checksum_func_edits_has_modifications() != 12493) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_evaluate_all_curves_lut() != 16051) {
+    if (uniffi_firstproof_core_checksum_func_execute_darkroom_command_headless() != 9550) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_evaluate_curve_lut() != 25736) {
+    if (uniffi_firstproof_core_checksum_func_export_batch_photos() != 61639) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_execute_darkroom_command_headless() != 37880) {
+    if (uniffi_firstproof_core_checksum_func_export_photo() != 38044) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_export_batch_photos() != 38182) {
+    if (uniffi_firstproof_core_checksum_func_export_portable_package() != 56439) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_export_photo() != 62031) {
+    if (uniffi_firstproof_core_checksum_func_extract_metadata() != 46946) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_export_portable_package() != 7427) {
+    if (uniffi_firstproof_core_checksum_func_extract_preview() != 11540) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_extract_metadata() != 64747) {
+    if (uniffi_firstproof_core_checksum_func_extract_ultra_hdr_gain_map() != 2543) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_extract_preview() != 10294) {
+    if (uniffi_firstproof_core_checksum_func_filter_derivative_clones() != 40323) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_extract_ultra_hdr_gain_map() != 4456) {
+    if (uniffi_firstproof_core_checksum_func_find_duplicate_clusters() != 38012) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_filter_derivative_clones() != 11404) {
+    if (uniffi_firstproof_core_checksum_func_get_adjustment_descriptor() != 30244) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_find_duplicate_clusters() != 29564) {
+    if (uniffi_firstproof_core_checksum_func_get_all_adjustments() != 39976) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_get_adjustment_descriptor() != 5221) {
+    if (uniffi_firstproof_core_checksum_func_get_as_shot_white_balance() != 52826) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_get_all_adjustments() != 61677) {
+    if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut() != 6600) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_get_as_shot_white_balance() != 29959) {
+    if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut_titles() != 12257) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut() != 34257) {
+    if (uniffi_firstproof_core_checksum_func_get_white_balance_preset_values() != 35914) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut_titles() != 727) {
+    if (uniffi_firstproof_core_checksum_func_has_ultra_hdr_gain_map() != 3822) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_get_white_balance_preset_values() != 46047) {
+    if (uniffi_firstproof_core_checksum_func_import_to_library() != 37991) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_has_ultra_hdr_gain_map() != 37776) {
+    if (uniffi_firstproof_core_checksum_func_load_cube_lut() != 20872) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_import_to_library() != 18394) {
+    if (uniffi_firstproof_core_checksum_func_match_takeout_json() != 1518) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_load_cube_lut() != 34905) {
+    if (uniffi_firstproof_core_checksum_func_normalize_stem() != 11777) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_match_takeout_json() != 22513) {
+    if (uniffi_firstproof_core_checksum_func_parse_takeout_json() != 31282) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_normalize_stem() != 51966) {
+    if (uniffi_firstproof_core_checksum_func_read_xmp() != 41255) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_parse_takeout_json() != 9154) {
+    if (uniffi_firstproof_core_checksum_func_resolve_catalog_path() != 28769) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_read_xmp() != 62990) {
+    if (uniffi_firstproof_core_checksum_func_scan_directory_for_takeout() != 13542) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_resolve_catalog_path() != 58256) {
+    if (uniffi_firstproof_core_checksum_func_write_xmp() != 9051) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_scan_directory_for_takeout() != 18063) {
+    if (uniffi_firstproof_core_checksum_func_evaluate_all_curves_lut() != 5317) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_write_xmp() != 11511) {
+    if (uniffi_firstproof_core_checksum_func_evaluate_curve_lut() != 29254) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_close() != 33348) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_close() != 28916) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_delete_photos() != 33915) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_delete_photos() != 40984) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_export_portable_package() != 10662) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_export_portable_package() != 56348) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_find_duplicate_clusters() != 26378) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_find_duplicate_clusters() != 21224) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_get_all_photos() != 63137) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_get_all_photos() != 62926) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_get_master_photos() != 7622) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_get_master_photos() != 61251) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_get_photo() != 43637) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_get_photo() != 965) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_import_to_library() != 11482) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_import_to_library() != 27949) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_index_folder() != 21580) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_index_folder() != 62499) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_update_photo_metadata() != 57195) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_update_photo_metadata() != 6185) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_update_rating_status() != 4182) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_update_rating_status() != 35108) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_update_rating_status_batch() != 21495) {
+    if (uniffi_firstproof_core_checksum_method_firstproofdatabase_update_rating_status_batch() != 8609) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstprooflensfun_load_directory() != 64715) {
+    if (uniffi_firstproof_core_checksum_method_firstprooflensfun_load_directory() != 29099) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstprooflensfun_load_json_file() != 64211) {
+    if (uniffi_firstproof_core_checksum_method_firstprooflensfun_load_json_file() != 52319) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstprooflensfun_load_xml_string() != 32455) {
+    if (uniffi_firstproof_core_checksum_method_firstprooflensfun_load_xml_string() != 31609) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_firstprooflensfun_resolve_coefficients() != 19538) {
+    if (uniffi_firstproof_core_checksum_method_firstprooflensfun_resolve_coefficients() != 54989) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_constructor_firstproofdatabase_open() != 59527) {
+    if (uniffi_firstproof_core_checksum_constructor_firstproofdatabase_open() != 33852) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_constructor_firstprooflensfun_new() != 43384) {
+    if (uniffi_firstproof_core_checksum_constructor_firstprooflensfun_new() != 16088) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_dngprogresscallback_on_progress() != 55621) {
+    if (uniffi_firstproof_core_checksum_method_dngprogresscallback_on_progress() != 33198) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_method_importprogresscallback_on_progress() != 41040) {
+    if (uniffi_firstproof_core_checksum_method_importprogresscallback_on_progress() != 13419) {
         return InitializationResult.apiChecksumMismatch
     }
 
     uniffiCallbackInitDngProgressCallback()
     uniffiCallbackInitImportProgressCallback()
+    uniffiEnsureFirstproofEngineInitialized()
     return InitializationResult.ok
 }()
 
-private func uniffiEnsureInitialized() {
+// Make the ensure init function public so that other modules which have external type references to
+// our types can call it.
+public func uniffiEnsureFirstproofCoreInitialized() {
     switch initializationResult {
     case .ok:
         break

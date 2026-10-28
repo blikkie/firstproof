@@ -50,9 +50,9 @@ typedef void (*UniffiRustFutureContinuationCallback)(uint64_t, int8_t
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_FREE
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_FREE
-typedef void (*UniffiForeignFutureFree)(uint64_t
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK
+typedef void (*UniffiForeignFutureDroppedCallback)(uint64_t
     );
 
 #endif
@@ -62,192 +62,184 @@ typedef void (*UniffiCallbackInterfaceFree)(uint64_t
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE
-typedef struct UniffiForeignFuture {
-    uint64_t handle;
-    UniffiForeignFutureFree _Nonnull free;
-} UniffiForeignFuture;
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CLONE
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CLONE
+typedef uint64_t (*UniffiCallbackInterfaceClone)(uint64_t
+    );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U8
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U8
-typedef struct UniffiForeignFutureStructU8 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK_STRUCT
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK_STRUCT
+typedef struct UniffiForeignFutureDroppedCallbackStruct {
+    uint64_t handle;
+    UniffiForeignFutureDroppedCallback _Nonnull free;
+} UniffiForeignFutureDroppedCallbackStruct;
+
+#endif
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U8
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U8
+typedef struct UniffiForeignFutureResultU8 {
     uint8_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU8;
+} UniffiForeignFutureResultU8;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U8
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U8
-typedef void (*UniffiForeignFutureCompleteU8)(uint64_t, UniffiForeignFutureStructU8
+typedef void (*UniffiForeignFutureCompleteU8)(uint64_t, UniffiForeignFutureResultU8
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I8
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I8
-typedef struct UniffiForeignFutureStructI8 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I8
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I8
+typedef struct UniffiForeignFutureResultI8 {
     int8_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI8;
+} UniffiForeignFutureResultI8;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I8
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I8
-typedef void (*UniffiForeignFutureCompleteI8)(uint64_t, UniffiForeignFutureStructI8
+typedef void (*UniffiForeignFutureCompleteI8)(uint64_t, UniffiForeignFutureResultI8
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U16
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U16
-typedef struct UniffiForeignFutureStructU16 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U16
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U16
+typedef struct UniffiForeignFutureResultU16 {
     uint16_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU16;
+} UniffiForeignFutureResultU16;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U16
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U16
-typedef void (*UniffiForeignFutureCompleteU16)(uint64_t, UniffiForeignFutureStructU16
+typedef void (*UniffiForeignFutureCompleteU16)(uint64_t, UniffiForeignFutureResultU16
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I16
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I16
-typedef struct UniffiForeignFutureStructI16 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I16
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I16
+typedef struct UniffiForeignFutureResultI16 {
     int16_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI16;
+} UniffiForeignFutureResultI16;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I16
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I16
-typedef void (*UniffiForeignFutureCompleteI16)(uint64_t, UniffiForeignFutureStructI16
+typedef void (*UniffiForeignFutureCompleteI16)(uint64_t, UniffiForeignFutureResultI16
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U32
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U32
-typedef struct UniffiForeignFutureStructU32 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U32
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U32
+typedef struct UniffiForeignFutureResultU32 {
     uint32_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU32;
+} UniffiForeignFutureResultU32;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U32
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U32
-typedef void (*UniffiForeignFutureCompleteU32)(uint64_t, UniffiForeignFutureStructU32
+typedef void (*UniffiForeignFutureCompleteU32)(uint64_t, UniffiForeignFutureResultU32
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I32
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I32
-typedef struct UniffiForeignFutureStructI32 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I32
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I32
+typedef struct UniffiForeignFutureResultI32 {
     int32_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI32;
+} UniffiForeignFutureResultI32;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I32
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I32
-typedef void (*UniffiForeignFutureCompleteI32)(uint64_t, UniffiForeignFutureStructI32
+typedef void (*UniffiForeignFutureCompleteI32)(uint64_t, UniffiForeignFutureResultI32
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U64
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U64
-typedef struct UniffiForeignFutureStructU64 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U64
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U64
+typedef struct UniffiForeignFutureResultU64 {
     uint64_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU64;
+} UniffiForeignFutureResultU64;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U64
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U64
-typedef void (*UniffiForeignFutureCompleteU64)(uint64_t, UniffiForeignFutureStructU64
+typedef void (*UniffiForeignFutureCompleteU64)(uint64_t, UniffiForeignFutureResultU64
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I64
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I64
-typedef struct UniffiForeignFutureStructI64 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I64
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I64
+typedef struct UniffiForeignFutureResultI64 {
     int64_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI64;
+} UniffiForeignFutureResultI64;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I64
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I64
-typedef void (*UniffiForeignFutureCompleteI64)(uint64_t, UniffiForeignFutureStructI64
+typedef void (*UniffiForeignFutureCompleteI64)(uint64_t, UniffiForeignFutureResultI64
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F32
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F32
-typedef struct UniffiForeignFutureStructF32 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F32
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F32
+typedef struct UniffiForeignFutureResultF32 {
     float returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructF32;
+} UniffiForeignFutureResultF32;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F32
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F32
-typedef void (*UniffiForeignFutureCompleteF32)(uint64_t, UniffiForeignFutureStructF32
+typedef void (*UniffiForeignFutureCompleteF32)(uint64_t, UniffiForeignFutureResultF32
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F64
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F64
-typedef struct UniffiForeignFutureStructF64 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F64
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F64
+typedef struct UniffiForeignFutureResultF64 {
     double returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructF64;
+} UniffiForeignFutureResultF64;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F64
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F64
-typedef void (*UniffiForeignFutureCompleteF64)(uint64_t, UniffiForeignFutureStructF64
+typedef void (*UniffiForeignFutureCompleteF64)(uint64_t, UniffiForeignFutureResultF64
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_POINTER
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_POINTER
-typedef struct UniffiForeignFutureStructPointer {
-    void*_Nonnull returnValue;
-    RustCallStatus callStatus;
-} UniffiForeignFutureStructPointer;
-
-#endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_POINTER
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_POINTER
-typedef void (*UniffiForeignFutureCompletePointer)(uint64_t, UniffiForeignFutureStructPointer
-    );
-
-#endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_RUST_BUFFER
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_RUST_BUFFER
-typedef struct UniffiForeignFutureStructRustBuffer {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_RUST_BUFFER
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_RUST_BUFFER
+typedef struct UniffiForeignFutureResultRustBuffer {
     RustBuffer returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructRustBuffer;
+} UniffiForeignFutureResultRustBuffer;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_RUST_BUFFER
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_RUST_BUFFER
-typedef void (*UniffiForeignFutureCompleteRustBuffer)(uint64_t, UniffiForeignFutureStructRustBuffer
+typedef void (*UniffiForeignFutureCompleteRustBuffer)(uint64_t, UniffiForeignFutureResultRustBuffer
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_VOID
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_VOID
-typedef struct UniffiForeignFutureStructVoid {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_VOID
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_VOID
+typedef struct UniffiForeignFutureResultVoid {
     RustCallStatus callStatus;
-} UniffiForeignFutureStructVoid;
+} UniffiForeignFutureResultVoid;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_VOID
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_VOID
-typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStructVoid
+typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureResultVoid
     );
 
 #endif
@@ -268,138 +260,140 @@ typedef void (*UniffiCallbackInterfaceImportProgressCallbackMethod0)(uint64_t, u
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_DNG_PROGRESS_CALLBACK
 #define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_DNG_PROGRESS_CALLBACK
 typedef struct UniffiVTableCallbackInterfaceDngProgressCallback {
-    UniffiCallbackInterfaceDngProgressCallbackMethod0 _Nonnull onProgress;
     UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
+    UniffiCallbackInterfaceDngProgressCallbackMethod0 _Nonnull onProgress;
 } UniffiVTableCallbackInterfaceDngProgressCallback;
 
 #endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_IMPORT_PROGRESS_CALLBACK
 #define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_IMPORT_PROGRESS_CALLBACK
 typedef struct UniffiVTableCallbackInterfaceImportProgressCallback {
-    UniffiCallbackInterfaceImportProgressCallbackMethod0 _Nonnull onProgress;
     UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
+    UniffiCallbackInterfaceImportProgressCallbackMethod0 _Nonnull onProgress;
 } UniffiVTableCallbackInterfaceImportProgressCallback;
 
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_CLONE_FIRSTPROOFDATABASE
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_CLONE_FIRSTPROOFDATABASE
-void*_Nonnull uniffi_firstproof_core_fn_clone_firstproofdatabase(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_firstproof_core_fn_clone_firstproofdatabase(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FREE_FIRSTPROOFDATABASE
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FREE_FIRSTPROOFDATABASE
-void uniffi_firstproof_core_fn_free_firstproofdatabase(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_firstproof_core_fn_free_firstproofdatabase(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_CONSTRUCTOR_FIRSTPROOFDATABASE_OPEN
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_CONSTRUCTOR_FIRSTPROOFDATABASE_OPEN
-void*_Nonnull uniffi_firstproof_core_fn_constructor_firstproofdatabase_open(RustBuffer db_path, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_firstproof_core_fn_constructor_firstproofdatabase_open(RustBuffer db_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_CLOSE
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_CLOSE
-void uniffi_firstproof_core_fn_method_firstproofdatabase_close(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_firstproof_core_fn_method_firstproofdatabase_close(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_DELETE_PHOTOS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_DELETE_PHOTOS
-uint32_t uniffi_firstproof_core_fn_method_firstproofdatabase_delete_photos(void*_Nonnull ptr, RustBuffer file_paths, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_firstproof_core_fn_method_firstproofdatabase_delete_photos(uint64_t ptr, RustBuffer file_paths, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_EXPORT_PORTABLE_PACKAGE
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_EXPORT_PORTABLE_PACKAGE
-RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_export_portable_package(void*_Nonnull ptr, RustBuffer source_photo_paths, RustBuffer destination_folder, int8_t move_files, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_export_portable_package(uint64_t ptr, RustBuffer source_photo_paths, RustBuffer destination_folder, int8_t move_files, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_FIND_DUPLICATE_CLUSTERS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_FIND_DUPLICATE_CLUSTERS
-RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_find_duplicate_clusters(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_find_duplicate_clusters(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_GET_ALL_PHOTOS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_GET_ALL_PHOTOS
-RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_get_all_photos(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_get_all_photos(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_GET_MASTER_PHOTOS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_GET_MASTER_PHOTOS
-RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_get_master_photos(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_get_master_photos(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_GET_PHOTO
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_GET_PHOTO
-RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_get_photo(void*_Nonnull ptr, RustBuffer file_path, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_get_photo(uint64_t ptr, RustBuffer file_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_IMPORT_TO_LIBRARY
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_IMPORT_TO_LIBRARY
-RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_import_to_library(void*_Nonnull ptr, RustBuffer source_paths_or_folders, RustBuffer destination_folder, RustBuffer options, RustBuffer progress, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_firstproof_core_fn_method_firstproofdatabase_import_to_library(uint64_t ptr, RustBuffer source_paths_or_folders, RustBuffer destination_folder, RustBuffer options, RustBuffer progress, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_INDEX_FOLDER
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_INDEX_FOLDER
-uint32_t uniffi_firstproof_core_fn_method_firstproofdatabase_index_folder(void*_Nonnull ptr, RustBuffer folder_path, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_firstproof_core_fn_method_firstproofdatabase_index_folder(uint64_t ptr, RustBuffer folder_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_UPDATE_PHOTO_METADATA
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_UPDATE_PHOTO_METADATA
-int8_t uniffi_firstproof_core_fn_method_firstproofdatabase_update_photo_metadata(void*_Nonnull ptr, RustBuffer file_path, RustBuffer title, RustBuffer description, RustBuffer creator, RustBuffer copyright, RustBuffer keywords, RustCallStatus *_Nonnull out_status
+int8_t uniffi_firstproof_core_fn_method_firstproofdatabase_update_photo_metadata(uint64_t ptr, RustBuffer file_path, RustBuffer title, RustBuffer description, RustBuffer creator, RustBuffer copyright, RustBuffer keywords, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_UPDATE_RATING_STATUS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_UPDATE_RATING_STATUS
-int8_t uniffi_firstproof_core_fn_method_firstproofdatabase_update_rating_status(void*_Nonnull ptr, RustBuffer file_path, RustBuffer rating, RustBuffer status, RustCallStatus *_Nonnull out_status
+int8_t uniffi_firstproof_core_fn_method_firstproofdatabase_update_rating_status(uint64_t ptr, RustBuffer file_path, RustBuffer rating, RustBuffer status, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_UPDATE_RATING_STATUS_BATCH
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFDATABASE_UPDATE_RATING_STATUS_BATCH
-uint32_t uniffi_firstproof_core_fn_method_firstproofdatabase_update_rating_status_batch(void*_Nonnull ptr, RustBuffer file_paths, RustBuffer rating, int8_t update_rating, RustBuffer status, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_firstproof_core_fn_method_firstproofdatabase_update_rating_status_batch(uint64_t ptr, RustBuffer file_paths, RustBuffer rating, int8_t update_rating, RustBuffer status, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_CLONE_FIRSTPROOFLENSFUN
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_CLONE_FIRSTPROOFLENSFUN
-void*_Nonnull uniffi_firstproof_core_fn_clone_firstprooflensfun(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_firstproof_core_fn_clone_firstprooflensfun(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FREE_FIRSTPROOFLENSFUN
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FREE_FIRSTPROOFLENSFUN
-void uniffi_firstproof_core_fn_free_firstprooflensfun(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_firstproof_core_fn_free_firstprooflensfun(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_CONSTRUCTOR_FIRSTPROOFLENSFUN_NEW
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_CONSTRUCTOR_FIRSTPROOFLENSFUN_NEW
-void*_Nonnull uniffi_firstproof_core_fn_constructor_firstprooflensfun_new(RustCallStatus *_Nonnull out_status
+uint64_t uniffi_firstproof_core_fn_constructor_firstprooflensfun_new(RustCallStatus *_Nonnull out_status
     
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFLENSFUN_LOAD_DIRECTORY
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFLENSFUN_LOAD_DIRECTORY
-uint32_t uniffi_firstproof_core_fn_method_firstprooflensfun_load_directory(void*_Nonnull ptr, RustBuffer dir_path, RustCallStatus *_Nonnull out_status
+uint32_t uniffi_firstproof_core_fn_method_firstprooflensfun_load_directory(uint64_t ptr, RustBuffer dir_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFLENSFUN_LOAD_JSON_FILE
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFLENSFUN_LOAD_JSON_FILE
-int8_t uniffi_firstproof_core_fn_method_firstprooflensfun_load_json_file(void*_Nonnull ptr, RustBuffer path, RustCallStatus *_Nonnull out_status
+int8_t uniffi_firstproof_core_fn_method_firstprooflensfun_load_json_file(uint64_t ptr, RustBuffer path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFLENSFUN_LOAD_XML_STRING
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFLENSFUN_LOAD_XML_STRING
-int8_t uniffi_firstproof_core_fn_method_firstprooflensfun_load_xml_string(void*_Nonnull ptr, RustBuffer xml_content, RustCallStatus *_Nonnull out_status
+int8_t uniffi_firstproof_core_fn_method_firstprooflensfun_load_xml_string(uint64_t ptr, RustBuffer xml_content, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFLENSFUN_RESOLVE_COEFFICIENTS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_METHOD_FIRSTPROOFLENSFUN_RESOLVE_COEFFICIENTS
-RustBuffer uniffi_firstproof_core_fn_method_firstprooflensfun_resolve_coefficients(void*_Nonnull ptr, RustBuffer camera_make, RustBuffer camera_model, RustBuffer lens_model, float focal_length, RustBuffer aperture, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_firstproof_core_fn_method_firstprooflensfun_resolve_coefficients(uint64_t ptr, RustBuffer camera_make, RustBuffer camera_model, RustBuffer lens_model, float focal_length, RustBuffer aperture, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_INIT_CALLBACK_VTABLE_DNGPROGRESSCALLBACK
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_INIT_CALLBACK_VTABLE_DNGPROGRESSCALLBACK
-void uniffi_firstproof_core_fn_init_callback_vtable_dngprogresscallback(UniffiVTableCallbackInterfaceDngProgressCallback* _Nonnull vtable
+void uniffi_firstproof_core_fn_init_callback_vtable_dngprogresscallback(const UniffiVTableCallbackInterfaceDngProgressCallback* _Nonnull vtable
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_INIT_CALLBACK_VTABLE_IMPORTPROGRESSCALLBACK
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_INIT_CALLBACK_VTABLE_IMPORTPROGRESSCALLBACK
-void uniffi_firstproof_core_fn_init_callback_vtable_importprogresscallback(UniffiVTableCallbackInterfaceImportProgressCallback* _Nonnull vtable
+void uniffi_firstproof_core_fn_init_callback_vtable_importprogresscallback(const UniffiVTableCallbackInterfaceImportProgressCallback* _Nonnull vtable
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_BATCH_CONVERT_CATALOG_TO_DNG
@@ -496,16 +490,6 @@ RustBuffer uniffi_firstproof_core_fn_func_edits_cache_signature(RustBuffer edits
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EDITS_HAS_MODIFICATIONS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EDITS_HAS_MODIFICATIONS
 int8_t uniffi_firstproof_core_fn_func_edits_has_modifications(RustBuffer edits, RustBuffer as_shot_temp, RustBuffer as_shot_tint, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EVALUATE_ALL_CURVES_LUT
-#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EVALUATE_ALL_CURVES_LUT
-RustBuffer uniffi_firstproof_core_fn_func_evaluate_all_curves_lut(RustBuffer curves, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EVALUATE_CURVE_LUT
-#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EVALUATE_CURVE_LUT
-RustBuffer uniffi_firstproof_core_fn_func_evaluate_curve_lut(RustBuffer points, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EXECUTE_DARKROOM_COMMAND_HEADLESS
@@ -633,6 +617,16 @@ RustBuffer uniffi_firstproof_core_fn_func_scan_directory_for_takeout(RustBuffer 
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_WRITE_XMP
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_WRITE_XMP
 int8_t uniffi_firstproof_core_fn_func_write_xmp(RustBuffer path, RustBuffer record, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EVALUATE_ALL_CURVES_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EVALUATE_ALL_CURVES_LUT
+RustBuffer uniffi_firstproof_core_fn_func_evaluate_all_curves_lut(RustBuffer curves, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EVALUATE_CURVE_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_EVALUATE_CURVE_LUT
+RustBuffer uniffi_firstproof_core_fn_func_evaluate_curve_lut(RustBuffer points, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUSTBUFFER_ALLOC
@@ -855,26 +849,6 @@ void ffi_firstproof_core_rust_future_free_f64(uint64_t handle
 double ffi_firstproof_core_rust_future_complete_f64(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
-#ifndef UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUST_FUTURE_POLL_POINTER
-#define UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUST_FUTURE_POLL_POINTER
-void ffi_firstproof_core_rust_future_poll_pointer(uint64_t handle, UniffiRustFutureContinuationCallback _Nonnull callback, uint64_t callback_data
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUST_FUTURE_CANCEL_POINTER
-#define UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUST_FUTURE_CANCEL_POINTER
-void ffi_firstproof_core_rust_future_cancel_pointer(uint64_t handle
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUST_FUTURE_FREE_POINTER
-#define UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUST_FUTURE_FREE_POINTER
-void ffi_firstproof_core_rust_future_free_pointer(uint64_t handle
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUST_FUTURE_COMPLETE_POINTER
-#define UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUST_FUTURE_COMPLETE_POINTER
-void*_Nonnull ffi_firstproof_core_rust_future_complete_pointer(uint64_t handle, RustCallStatus *_Nonnull out_status
-);
-#endif
 #ifndef UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUST_FUTURE_POLL_RUST_BUFFER
 #define UNIFFI_FFIDEF_FFI_FIRSTPROOF_CORE_RUST_FUTURE_POLL_RUST_BUFFER
 void ffi_firstproof_core_rust_future_poll_rust_buffer(uint64_t handle, UniffiRustFutureContinuationCallback _Nonnull callback, uint64_t callback_data
@@ -1029,18 +1003,6 @@ uint16_t uniffi_firstproof_core_checksum_func_edits_has_modifications(void
     
 );
 #endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EVALUATE_ALL_CURVES_LUT
-#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EVALUATE_ALL_CURVES_LUT
-uint16_t uniffi_firstproof_core_checksum_func_evaluate_all_curves_lut(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EVALUATE_CURVE_LUT
-#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EVALUATE_CURVE_LUT
-uint16_t uniffi_firstproof_core_checksum_func_evaluate_curve_lut(void
-    
-);
-#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EXECUTE_DARKROOM_COMMAND_HEADLESS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EXECUTE_DARKROOM_COMMAND_HEADLESS
 uint16_t uniffi_firstproof_core_checksum_func_execute_darkroom_command_headless(void
@@ -1188,6 +1150,18 @@ uint16_t uniffi_firstproof_core_checksum_func_scan_directory_for_takeout(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_WRITE_XMP
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_WRITE_XMP
 uint16_t uniffi_firstproof_core_checksum_func_write_xmp(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EVALUATE_ALL_CURVES_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EVALUATE_ALL_CURVES_LUT
+uint16_t uniffi_firstproof_core_checksum_func_evaluate_all_curves_lut(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EVALUATE_CURVE_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_EVALUATE_CURVE_LUT
+uint16_t uniffi_firstproof_core_checksum_func_evaluate_curve_lut(void
     
 );
 #endif

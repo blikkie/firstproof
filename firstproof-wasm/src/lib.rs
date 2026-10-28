@@ -403,7 +403,7 @@ pub fn export_raw_from_scratchpad(
             let mut out = Vec::new();
             let encoder = image::codecs::tiff::TiffEncoder::new(std::io::Cursor::new(&mut out));
             encoder
-                .write_image(&bytes, target_w as u32, target_h as u32, image::ColorType::Rgb16)
+                .write_image(&bytes, target_w as u32, target_h as u32, image::ColorType::Rgb16.into())
                 .map_err(|e| JsValue::from_str(&format!("Failed to encode TIFF: {}", e)))?;
             out
         } else {
@@ -414,7 +414,7 @@ pub fn export_raw_from_scratchpad(
             let mut out = Vec::new();
             let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, quality.clamp(1, 100) as u8);
             encoder
-                .encode(&rgb8, target_w as u32, target_h as u32, image::ColorType::Rgb8)
+                .encode(&rgb8, target_w as u32, target_h as u32, image::ColorType::Rgb8.into())
                 .map_err(|e| JsValue::from_str(&format!("Failed to encode JPEG: {}", e)))?;
             out
         };
@@ -496,7 +496,7 @@ pub fn decode_preview_from_scratchpad(input_len: usize) -> Result<JsValue, JsVal
                 }
                 let mut jpeg_buf = Vec::new();
                 let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buf, 90);
-                if encoder.encode(&rgb_bytes, bin_w, bin_h, image::ColorType::Rgb8).is_ok() {
+                if encoder.encode(&rgb_bytes, bin_w, bin_h, image::ColorType::Rgb8.into()).is_ok() {
                     let raw_len = jpeg_buf.len();
                     let scratch_len = buf.len();
                     if input_len + raw_len > scratch_len {
@@ -551,7 +551,7 @@ pub fn decode_preview_from_scratchpad(input_len: usize) -> Result<JsValue, JsVal
 
                         let mut jpeg_buf = Vec::new();
                         let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buf, 90);
-                        if encoder.encode(&prev_rgb, prev_w, prev_h, image::ColorType::Rgb8).is_ok() {
+                        if encoder.encode(&prev_rgb, prev_w, prev_h, image::ColorType::Rgb8.into()).is_ok() {
                             let raw_len = jpeg_buf.len();
                             let scratch_len = buf.len();
                             let aligned_offset = (input_len + 15) & !15;
@@ -1425,7 +1425,7 @@ mod tests {
         img.put_pixel(0, 1, image::Rgb([0, 0, 255]));
         img.put_pixel(1, 1, image::Rgb([255, 255, 255]));
         let mut png_bytes = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut png_bytes), image::ImageOutputFormat::Png).unwrap();
+        img.write_to(&mut std::io::Cursor::new(&mut png_bytes), image::ImageFormat::Png).unwrap();
 
         let dyn_img = image::load_from_memory(&png_bytes).expect("load_from_memory png failed");
         assert_eq!(dyn_img.width(), 2);
@@ -1434,7 +1434,7 @@ mod tests {
         let rgb = dyn_img.to_rgb8();
         let mut jpeg_buf = Vec::new();
         let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buf, 90);
-        let enc_res = encoder.encode(rgb.as_raw(), 2, 2, image::ColorType::Rgb8);
+        let enc_res = encoder.encode(rgb.as_raw(), 2, 2, image::ColorType::Rgb8.into());
         assert!(enc_res.is_ok(), "encoder.encode failed: {:?}", enc_res.err());
     }
 

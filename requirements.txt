@@ -10,8 +10,6 @@ matplotlib>=3.8.0
 
 # RAW, DNG, & Image Metadata Inspection
 tifffile>=2024.1.1
-piexif>=1.1.3
-exifread>=3.0.0
 
 # MCP (Model Context Protocol) & Agent Harness
 mcp>=1.0.0

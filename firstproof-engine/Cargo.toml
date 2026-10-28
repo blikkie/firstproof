@@ -1,6 +1,6 @@
 [package]
 name = "firstproof-engine"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 license.workspace = true
 
@@ -15,7 +15,7 @@ xmp-writer = "0.3"
 kamadak-exif = "0.5.5"
 glam = "0.27"
 rawler = "0.8"
-uniffi = { version = "0.28", optional = true }
+uniffi = { version = "0.32", optional = true }
 naga = { version = "30.0.1", features = ["wgsl-in", "msl-out", "glsl-out", "wgsl-out"] }
 
 [features]
