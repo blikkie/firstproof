@@ -281,6 +281,8 @@ public struct ExportSheetView: View {
             let lensCoeffs = resolvedLensCoefficients(for: photo)
             
             let dq: DemosaicQuality = (demosaicQualityChoice == "Archival") ? .archival : .standard
+            let exportQuality = UInt32(quality)
+            let isUltraHdr = (exportFormat == "JPEG") && isUltraHdrEnabled
             
             DispatchQueue.global(qos: .userInitiated).async {
                 let success = exportPhoto(
@@ -288,11 +290,11 @@ public struct ExportSheetView: View {
                     outputPath: outputPath,
                     edits: edits,
                     lensCoeffs: lensCoeffs,
-                    quality: UInt32(quality),
+                    quality: exportQuality,
                     maxDimension: maxDim,
                     colorSpace: cs,
                     renderingIntent: ri,
-                    ultraHdr: (exportFormat == "JPEG") && isUltraHdrEnabled,
+                    ultraHdr: isUltraHdr,
                     demosaicQuality: dq,
                     renderTier: .archivalExport
                 )

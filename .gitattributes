@@ -1,0 +1,6 @@
+# First Proof Git Attributes
+# Suppress massive generated UniFFI diffs from flooding AI agent context windows
+FirstProofBridge/Sources/FirstProofBridge/*.swift linguist-generated=true -diff
+FirstProofBridge/Sources/FirstProofCoreFFI/include/*.h linguist-generated=true -diff
+Cargo.lock -diff
+

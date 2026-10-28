@@ -17,16 +17,16 @@ def main():
 
     tool_call = input_data.get("toolCall", {})
     args = tool_call.get("args", {})
-    abs_path = args.get("AbsolutePath", "")
+    abs_path = args.get("AbsolutePath", "") or args.get("Path", "")
 
     # Rule: Token Defense for massive generated UniFFI bindings
-    if abs_path.endswith("firstproof_core.swift") or "firstproof_core.swift" in abs_path:
+    if any(abs_path.endswith(f) or f in abs_path for f in ["firstproof_core.swift", "firstproof_engine.swift"]):
         response = {
             "decision": "deny",
             "reason": (
-                "Token Defense Guardrail: 'firstproof_core.swift' is a 4,400+ line generated UniFFI "
+                f"Token Defense Guardrail: '{abs_path}' is a generated UniFFI "
                 "bridge file that will exhaust context tokens. To inspect exported FFI signatures or models, "
-                "inspect 'firstproof-core/src/lib.rs' or specific Rust sub-modules directly."
+                "inspect 'firstproof-core/src/lib.rs', 'firstproof-engine/src/lib.rs', or specific Rust sub-modules directly."
             )
         }
         print(json.dumps(response))
