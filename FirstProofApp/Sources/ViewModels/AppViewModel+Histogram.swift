@@ -36,6 +36,10 @@ extension AppViewModel {
             let cropBottom = self.cropBottom
             let lensCorrectionEnabled = self.lensCorrectionEnabled
             let tcaCorrectionEnabled = self.tcaCorrectionEnabled
+            let vignettingCorrectionEnabled = self.vignettingCorrectionEnabled
+            let vigK1 = self.lensCoefficients?.vignetting.indices.contains(0) == true ? self.lensCoefficients!.vignetting[0] : 0.0
+            let vigK2 = self.lensCoefficients?.vignetting.indices.contains(1) == true ? self.lensCoefficients!.vignetting[1] : 0.0
+            let vigK3 = self.lensCoefficients?.vignetting.indices.contains(2) == true ? self.lensCoefficients!.vignetting[2] : 0.0
             let rawRecord = self.rawPreviewRecord
             let path = self.selectedPhoto?.filePath
             
@@ -49,7 +53,11 @@ extension AppViewModel {
                         cropLeft: cropLeft, cropTop: cropTop,
                         cropRight: cropRight, cropBottom: cropBottom,
                         lensCorrectionEnabled: lensCorrectionEnabled,
-                        tcaCorrectionEnabled: tcaCorrectionEnabled
+                        tcaCorrectionEnabled: tcaCorrectionEnabled,
+                        vignettingCorrectionEnabled: vignettingCorrectionEnabled,
+                        vignettingK1: vigK1,
+                        vignettingK2: vigK2,
+                        vignettingK3: vigK3
                     )
                 } else if let filePath = path {
                     return computeEvHistogramFromPath(
@@ -58,7 +66,11 @@ extension AppViewModel {
                         cropLeft: cropLeft, cropTop: cropTop,
                         cropRight: cropRight, cropBottom: cropBottom,
                         lensCorrectionEnabled: lensCorrectionEnabled,
-                        tcaCorrectionEnabled: tcaCorrectionEnabled
+                        tcaCorrectionEnabled: tcaCorrectionEnabled,
+                        vignettingCorrectionEnabled: vignettingCorrectionEnabled,
+                        vignettingK1: vigK1,
+                        vignettingK2: vigK2,
+                        vignettingK3: vigK3
                     )
                 }
                 return nil

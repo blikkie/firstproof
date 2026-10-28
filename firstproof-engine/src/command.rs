@@ -45,6 +45,7 @@ pub struct EditDelta {
     pub defringe_amount: Option<f32>,
     pub lens_correction_enabled: Option<bool>,
     pub tca_correction_enabled: Option<bool>,
+    pub vignetting_correction_enabled: Option<bool>,
 }
 
 impl EditDelta {
@@ -86,6 +87,7 @@ impl EditDelta {
         if let Some(v) = self.defringe_amount { settings.defringe_amount = v; }
         if let Some(v) = self.lens_correction_enabled { settings.lens_correction_enabled = v; }
         if let Some(v) = self.tca_correction_enabled { settings.tca_correction_enabled = v; }
+        if let Some(v) = self.vignetting_correction_enabled { settings.vignetting_correction_enabled = v; }
     }
 }
 

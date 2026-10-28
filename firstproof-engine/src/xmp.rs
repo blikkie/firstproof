@@ -389,6 +389,9 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
     writer
         .element("tcaCorrectionEnabled", pm_ns.clone())
         .value(if data.edits.tca_correction_enabled { "True" } else { "False" });
+    writer
+        .element("vignettingCorrectionEnabled", pm_ns.clone())
+        .value(if data.edits.vignetting_correction_enabled { "True" } else { "False" });
 
     writer
         .element("curveMaster", pm_ns.clone())
@@ -782,6 +785,9 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
     }
     if let Some(tca_str) = get(pm, "tcaCorrectionEnabled") {
         data.edits.tca_correction_enabled = tca_str.eq_ignore_ascii_case("true") || tca_str == "1";
+    }
+    if let Some(vig_str) = get(pm, "vignettingCorrectionEnabled") {
+        data.edits.vignetting_correction_enabled = vig_str.eq_ignore_ascii_case("true") || vig_str == "1";
     }
     if let Some(lut_name_str) = get(pm, "lutName") {
         if !lut_name_str.trim().is_empty() {

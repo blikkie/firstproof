@@ -889,10 +889,11 @@ public struct EditSettings {
     public var defringeAmount: Float
     public var lensCorrectionEnabled: Bool
     public var tcaCorrectionEnabled: Bool
+    public var vignettingCorrectionEnabled: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, emulsionGrainMode: EmulsionGrainMode, grainScale: Float, grainSize: Float, grainAmount: Float, emulsionArchetype: EmulsionArchetype, emulsionFormat: EmulsionFormat, emulsionExposure: Float, remjetBacking: RemjetBackingMode, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float, printMedia: PrintMediaMode, enlargerFilter: EnlargerFilterMode, printPaperGrade: Float, printBaseWarmth: Float, printProcessDepth: Float, defringeAmount: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, emulsionGrainMode: EmulsionGrainMode, grainScale: Float, grainSize: Float, grainAmount: Float, emulsionArchetype: EmulsionArchetype, emulsionFormat: EmulsionFormat, emulsionExposure: Float, remjetBacking: RemjetBackingMode, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float, printMedia: PrintMediaMode, enlargerFilter: EnlargerFilterMode, printPaperGrade: Float, printBaseWarmth: Float, printProcessDepth: Float, defringeAmount: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool, vignettingCorrectionEnabled: Bool) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -945,6 +946,7 @@ public struct EditSettings {
         self.defringeAmount = defringeAmount
         self.lensCorrectionEnabled = lensCorrectionEnabled
         self.tcaCorrectionEnabled = tcaCorrectionEnabled
+        self.vignettingCorrectionEnabled = vignettingCorrectionEnabled
     }
 }
 
@@ -1108,6 +1110,9 @@ extension EditSettings: Equatable, Hashable {
         if lhs.tcaCorrectionEnabled != rhs.tcaCorrectionEnabled {
             return false
         }
+        if lhs.vignettingCorrectionEnabled != rhs.vignettingCorrectionEnabled {
+            return false
+        }
         return true
     }
 
@@ -1164,6 +1169,7 @@ extension EditSettings: Equatable, Hashable {
         hasher.combine(defringeAmount)
         hasher.combine(lensCorrectionEnabled)
         hasher.combine(tcaCorrectionEnabled)
+        hasher.combine(vignettingCorrectionEnabled)
     }
 }
 
@@ -1226,7 +1232,8 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 printProcessDepth: FfiConverterFloat.read(from: &buf), 
                 defringeAmount: FfiConverterFloat.read(from: &buf), 
                 lensCorrectionEnabled: FfiConverterBool.read(from: &buf), 
-                tcaCorrectionEnabled: FfiConverterBool.read(from: &buf)
+                tcaCorrectionEnabled: FfiConverterBool.read(from: &buf), 
+                vignettingCorrectionEnabled: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -1283,6 +1290,7 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterFloat.write(value.defringeAmount, into: &buf)
         FfiConverterBool.write(value.lensCorrectionEnabled, into: &buf)
         FfiConverterBool.write(value.tcaCorrectionEnabled, into: &buf)
+        FfiConverterBool.write(value.vignettingCorrectionEnabled, into: &buf)
     }
 }
 

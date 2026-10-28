@@ -68,6 +68,7 @@ pub struct EditSettings {
     pub defringe_amount: f32,
     pub lens_correction_enabled: bool,
     pub tca_correction_enabled: bool,
+    pub vignetting_correction_enabled: bool,
 }
 
 impl Default for EditSettings {
@@ -125,6 +126,7 @@ impl Default for EditSettings {
             defringe_amount: 0.0,
             lens_correction_enabled: false,
             tca_correction_enabled: true,
+            vignetting_correction_enabled: false,
         }
     }
 }

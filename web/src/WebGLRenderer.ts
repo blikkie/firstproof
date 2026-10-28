@@ -5,7 +5,11 @@ import {
   SHADER_UNIFORM_SIZE_BYTES,
 } from './shaders/GeneratedGLSL';
 import { isCurveActive } from './utils/edits';
-import type { EditSettingsPayload, EvaluatedLut } from './WasmBridge';
+import type {
+  EditSettingsPayload,
+  EvaluatedLut,
+  LensCorrectionCoefficients,
+} from './WasmBridge';
 
 const VERTEX_SHADER_SRC = `#version 300 es
 in vec2 a_position;
@@ -67,9 +71,14 @@ export class WebGLRenderer {
   private isLinearRec2020: boolean = false;
   private baselineSharpness: number = 1.0;
   public clippingOverlayActive: boolean = false;
+  public lensCoefficients: LensCorrectionCoefficients | null = null;
   private vbo: WebGLBuffer | null = null;
   private texWidth: number = 1920;
   private texHeight: number = 1080;
+
+  public setLensCoefficients(coeffs: LensCorrectionCoefficients | null): void {
+    this.lensCoefficients = coeffs;
+  }
 
   public setBaselineSharpness(val: number): void {
     this.baselineSharpness = val;
@@ -668,12 +677,16 @@ export class WebGLRenderer {
     f[11] = edits.foliage;
     f[12] = ((effectiveEdits.crop_angle ?? 0.0) * Math.PI) / 180.0;
     f[13] = this.texWidth / Math.max(this.texHeight, 1);
-    i[14] = 0; // lensCorrectionEnabled
-    i[15] = 0; // distortionModel
-    f[16] = 0.0; // k1
-    f[17] = 0.0; // k2
-    f[18] = 0.0; // k3
-    f[19] = 0.0; // k4
+    const lc = this.lensCoefficients;
+    const lensCorrectionEnabled =
+      (effectiveEdits.lens_correction_enabled ?? false) &&
+      (lc?.has_distortion ?? false);
+    i[14] = lensCorrectionEnabled ? 1 : 0;
+    i[15] = lc?.has_distortion && lc.distortion_model === 'ptlens' ? 1 : 0;
+    f[16] = lc?.has_distortion ? (lc.distortion[0] ?? 0.0) : 0.0;
+    f[17] = lc?.has_distortion ? (lc.distortion[1] ?? 0.0) : 0.0;
+    f[18] = lc?.has_distortion ? (lc.distortion[2] ?? 0.0) : 0.0;
+    f[19] = lc?.has_distortion ? (lc.distortion[3] ?? 0.0) : 0.0;
     f[20] = isOriginal ? 1.0 : 0.0;
     i[21] = this.isLinearRec2020 ? 1 : 0;
     i[22] = modeMap[edits.tone_profile] ?? 0;
@@ -725,19 +738,24 @@ export class WebGLRenderer {
     i[68] = (((effectiveEdits.rotation ?? 0) % 360) + 360) % 360;
     f[69] = 5500.0; // asShotTemperature
     f[70] = 0.0; // asShotTint
-    i[71] = 0; // hasTca
-    f[72] = 1.0; // tcaVr
-    f[73] = 1.0; // tcaVb
-    f[74] = 0.0; // tcaBr
-    f[75] = 0.0; // tcaBb
-    f[76] = 0.0; // tcaCr
-    f[77] = 0.0; // tcaCb
+    const hasTca = lc?.has_tca ?? false;
+    i[71] = hasTca ? 1 : 0;
+    f[72] = hasTca ? (lc?.tca[0] ?? 1.0) : 1.0; // tcaVr
+    f[73] = hasTca ? (lc?.tca[1] ?? 1.0) : 1.0; // tcaVb
+    f[74] = hasTca ? (lc?.tca[2] ?? 0.0) : 0.0; // tcaBr
+    f[75] = hasTca ? (lc?.tca[3] ?? 0.0) : 0.0; // tcaBb
+    f[76] = hasTca ? (lc?.tca[4] ?? 0.0) : 0.0; // tcaCr
+    f[77] = hasTca ? (lc?.tca[5] ?? 0.0) : 0.0; // tcaCb
     f[78] = edits.defringe_amount ?? 0.0;
-    i[79] = 1; // tcaCorrectionEnabled
+    i[79] = (effectiveEdits.tca_correction_enabled ?? true) ? 1 : 0;
     i[80] = this.clippingOverlayActive ? 1 : 0;
-    f[81] = 0.0; // pad0
-    f[82] = 0.0; // pad1
-    f[83] = 0.0; // pad2
+    i[81] = (effectiveEdits.vignetting_correction_enabled ?? false) ? 1 : 0;
+    i[82] = (lc?.has_vignetting ?? false) ? 1 : 0;
+    f[83] = lc?.has_vignetting ? (lc.vignetting[0] ?? 0.0) : 0.0; // vignettingK1
+    f[84] = lc?.has_vignetting ? (lc.vignetting[1] ?? 0.0) : 0.0; // vignettingK2
+    f[85] = lc?.has_vignetting ? (lc.vignetting[2] ?? 0.0) : 0.0; // vignettingK3
+    f[86] = 0.0; // vignettingK4
+    f[87] = 0.0; // pad0
 
     if (this.uboBuffer) {
       gl.bindBuffer(gl.UNIFORM_BUFFER, this.uboBuffer);

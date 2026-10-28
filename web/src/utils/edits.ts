@@ -71,6 +71,7 @@ export function getDefaultEdits(_isRaw: boolean = false): EditSettingsPayload {
     defringe_amount: 0.0,
     lens_correction_enabled: false,
     tca_correction_enabled: true,
+    vignetting_correction_enabled: false,
   };
 }
 

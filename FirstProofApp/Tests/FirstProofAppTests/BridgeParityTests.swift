@@ -34,6 +34,11 @@ struct BridgeParityTests {
         
         // Tone profile default
         #expect(edits.toneProfile == ColorProfileMode.agxVivid)
+        
+        // Optics defaults
+        #expect(!edits.lensCorrectionEnabled)
+        #expect(edits.tcaCorrectionEnabled)
+        #expect(!edits.vignettingCorrectionEnabled)
     }
     
     @Test("PhotoRecord distinguishes RAW vs raster and proprietary vs open DNG")

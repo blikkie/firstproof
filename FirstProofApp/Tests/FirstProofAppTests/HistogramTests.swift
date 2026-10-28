@@ -30,7 +30,8 @@ struct HistogramTests {
             width: 100, height: 10, data: buffer,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         
         #expect(hist != nil)
@@ -57,7 +58,8 @@ struct HistogramTests {
             width: 100, height: 10, data: buffer,
             exposure: 1.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(plus1 != nil)
         if let plus1 = plus1 {
@@ -70,7 +72,8 @@ struct HistogramTests {
             width: 100, height: 10, data: buffer,
             exposure: -2.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(minus2 != nil)
         if let minus2 = minus2 {
@@ -87,7 +90,8 @@ struct HistogramTests {
             width: 100, height: 10, data: buffer,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(baseline != nil)
         
@@ -96,7 +100,8 @@ struct HistogramTests {
             width: 100, height: 10, data: buffer,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 100.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(boostedWhites != nil)
         if let baseline = baseline, let boostedWhites = boostedWhites {
@@ -109,13 +114,15 @@ struct HistogramTests {
             width: 100, height: 10, data: shadowBuffer,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         let crushedBlacks = computeEvHistogram(
             width: 100, height: 10, data: shadowBuffer,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: -100.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         if let baselineShadow = baselineShadow, let crushedBlacks = crushedBlacks {
             #expect(crushedBlacks.binsLuminance != baselineShadow.binsLuminance)
@@ -147,7 +154,8 @@ struct HistogramTests {
             width: UInt32(width), height: UInt32(height), data: data,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(full != nil)
         if let full = full {
@@ -160,7 +168,8 @@ struct HistogramTests {
             width: UInt32(width), height: UInt32(height), data: data,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 0.5, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(leftCrop != nil)
         if let leftCrop = leftCrop {
@@ -173,7 +182,8 @@ struct HistogramTests {
             width: UInt32(width), height: UInt32(height), data: data,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.5, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(rightCrop != nil)
         if let rightCrop = rightCrop {
@@ -206,7 +216,8 @@ struct HistogramTests {
             width: UInt32(width), height: UInt32(height), data: data,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(uncorrected != nil)
         if let uncorrected = uncorrected {
@@ -217,7 +228,8 @@ struct HistogramTests {
             width: UInt32(width), height: UInt32(height), data: data,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: true, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: true, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(corrected != nil)
         if let corrected = corrected {
@@ -233,7 +245,8 @@ struct HistogramTests {
             width: 50, height: 10, data: blackBuffer,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(histBlack != nil)
         if let histBlack = histBlack {
@@ -248,7 +261,8 @@ struct HistogramTests {
             width: 50, height: 10, data: blownBuffer,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(histBlown != nil)
         if let histBlown = histBlown {
@@ -262,12 +276,58 @@ struct HistogramTests {
             width: 50, height: 10, data: shoulderBuffer,
             exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
             cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
-            lensCorrectionEnabled: false, tcaCorrectionEnabled: true
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: 0.0, vignettingK2: 0.0, vignettingK3: 0.0
         )
         #expect(histShoulder != nil)
         if let histShoulder = histShoulder {
             #expect(histShoulder.sensorClipPercent == 0.0)
             #expect(histShoulder.displayRolloffPercent == 100.0)
+        }
+    }
+
+    @Test("Vignetting correction lifts peripheral shadow floor and updates histogram reactively")
+    func testVignettingCorrectionLiftsShadowFloor() {
+        let width = 100
+        let height = 100
+        var data = Data(capacity: width * height * 8)
+        let centerVal = Float16(0.18).bitPattern
+        let cornerVal = Float16(0.04).bitPattern
+        let alpha = Float16(1.0).bitPattern
+        
+        for y in 0..<height {
+            for x in 0..<width {
+                let dx = Double(x) / Double(width) - 0.5
+                let dy = Double(y) / Double(height) - 0.5
+                let dist = sqrt(dx * dx + dy * dy)
+                let val = dist > 0.4 ? cornerVal : centerVal
+                withUnsafeBytes(of: val) { data.append(contentsOf: $0) }
+                withUnsafeBytes(of: val) { data.append(contentsOf: $0) }
+                withUnsafeBytes(of: val) { data.append(contentsOf: $0) }
+                withUnsafeBytes(of: alpha) { data.append(contentsOf: $0) }
+            }
+        }
+        
+        let uncorrected = computeEvHistogram(
+            width: UInt32(width), height: UInt32(height), data: data,
+            exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
+            cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false, vignettingK1: -0.8, vignettingK2: 0.0, vignettingK3: 0.0
+        )
+        
+        let corrected = computeEvHistogram(
+            width: UInt32(width), height: UInt32(height), data: data,
+            exposure: 0.0, contrast: 0.0, highlights: 0.0, shadows: 0.0, whites: 0.0, blacks: 0.0,
+            cropLeft: 0.0, cropTop: 0.0, cropRight: 1.0, cropBottom: 1.0,
+            lensCorrectionEnabled: false, tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: true, vignettingK1: -0.8, vignettingK2: 0.0, vignettingK3: 0.0
+        )
+        
+        #expect(uncorrected != nil)
+        #expect(corrected != nil)
+        if let uncorrected = uncorrected, let corrected = corrected {
+            #expect(corrected.binsLuminance != uncorrected.binsLuminance, "Vignetting correction must modify EV histogram distribution")
         }
     }
 

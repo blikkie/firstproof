@@ -134,6 +134,7 @@ export function createDefaultEdits(): EditSettingsPayload {
     defringe_amount: 0.0,
     lens_correction_enabled: false,
     tca_correction_enabled: true,
+    vignetting_correction_enabled: false,
     split_toning_shadow_hue: 215.0,
     split_toning_shadow_sat: 0.0,
     split_toning_highlight_hue: 45.0,

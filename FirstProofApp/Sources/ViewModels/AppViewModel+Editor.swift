@@ -59,7 +59,8 @@ extension AppViewModel {
             printProcessDepth: self.printProcessDepth,
             defringeAmount: self.defringeAmount,
             lensCorrectionEnabled: self.lensCorrectionEnabled,
-            tcaCorrectionEnabled: self.tcaCorrectionEnabled
+            tcaCorrectionEnabled: self.tcaCorrectionEnabled,
+            vignettingCorrectionEnabled: self.vignettingCorrectionEnabled
         )
     }
 }
@@ -131,7 +132,8 @@ extension EditSettings {
             printProcessDepth: 100.0,
             defringeAmount: 0.0,
             lensCorrectionEnabled: false,
-            tcaCorrectionEnabled: true
+            tcaCorrectionEnabled: true,
+            vignettingCorrectionEnabled: false
         )
     }
 }
@@ -195,6 +197,7 @@ extension AppViewModel {
         self.defringeAmount = edits.defringeAmount
         self.lensCorrectionEnabled = edits.lensCorrectionEnabled
         self.tcaCorrectionEnabled = edits.tcaCorrectionEnabled
+        self.vignettingCorrectionEnabled = edits.vignettingCorrectionEnabled
     }
     
     public func saveCurrentEdits() {
@@ -901,6 +904,7 @@ extension AppViewModel {
         defringeAmount = 0.0
         lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
         tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+        vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
         registerDiscreteEdit(title: "Reset All Edits", before: before)
         notifyThumbnailChanged()
     }
@@ -1050,6 +1054,13 @@ extension AppViewModel {
         let before = currentEdits
         tcaCorrectionEnabled.toggle()
         registerDiscreteEdit(title: tcaCorrectionEnabled ? "Enable CA Correction" : "Disable CA Correction", before: before)
+        notifyThumbnailChanged()
+    }
+    
+    public func toggleVignettingCorrection() {
+        let before = currentEdits
+        vignettingCorrectionEnabled.toggle()
+        registerDiscreteEdit(title: vignettingCorrectionEnabled ? "Enable Vignetting Correction" : "Disable Vignetting Correction", before: before)
         notifyThumbnailChanged()
     }
     

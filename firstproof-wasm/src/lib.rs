@@ -10,9 +10,10 @@ pub use firstproof_engine::{
     AllCurvesLutRecord, AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode,
     CropAspectRatioPreset, CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype,
     EmulsionFormat, EnlargerFilterMode, EvHistogramRecord, ExifOrientationRecord, ExportColorSpace,
-    ExportRenderingIntent, f16_to_f32, f32_to_f16, ImageMetadataRecord, PreviewResultRecord, PrintMediaMode,
-    RawLinearResultRecord, RawSensorFrame, RemjetBackingMode, RenderTier, ScaleMode,
-    ToneCurvesRecord, WhiteBalancePreset, WorkspaceCategory, XmpData,
+    ExportRenderingIntent, f16_to_f32, f32_to_f16, ImageMetadataRecord, LensCorrectionCoefficients,
+    LensfunDatabase, PreviewResultRecord, PrintMediaMode, RawLinearResultRecord, RawSensorFrame,
+    RemjetBackingMode, RenderTier, ScaleMode, ToneCurvesRecord, WhiteBalancePreset,
+    WorkspaceCategory, XmpData,
 };
 use scratchpad::with_scratchpad;
 
@@ -762,6 +763,44 @@ pub fn get_adjustment_descriptor(id: &str) -> JsValue {
     serde_wasm_bindgen::to_value(&get_adjustment(id)).unwrap_or(JsValue::NULL)
 }
 
+static LENSFUN_DB: std::sync::RwLock<Option<LensfunDatabase>> = std::sync::RwLock::new(None);
+
+#[wasm_bindgen]
+pub fn load_lensfun_database(json_str: &str) -> bool {
+    match LensfunDatabase::from_json_str(json_str) {
+        Ok(db) => {
+            if let Ok(mut guard) = LENSFUN_DB.write() {
+                *guard = Some(db);
+                true
+            } else {
+                false
+            }
+        }
+        Err(e) => {
+            web_sys::console::warn_1(&format!("[firstproof-wasm] Failed to parse lensfun JSON: {}", e).into());
+            false
+        }
+    }
+}
+
+#[wasm_bindgen]
+pub fn resolve_lens_coefficients(
+    camera_make: &str,
+    camera_model: &str,
+    lens_model: &str,
+    focal_length: f32,
+    aperture: Option<f32>,
+) -> JsValue {
+    if let Ok(guard) = LENSFUN_DB.read() {
+        if let Some(db) = guard.as_ref() {
+            let coeffs = db.resolve_coefficients(camera_make, camera_model, lens_model, focal_length, aperture);
+            return serde_wasm_bindgen::to_value(&coeffs).unwrap_or(JsValue::NULL);
+        }
+    }
+    let default_coeffs = LensCorrectionCoefficients::default();
+    serde_wasm_bindgen::to_value(&default_coeffs).unwrap_or(JsValue::NULL)
+}
+
 #[wasm_bindgen]
 pub fn convert_kelvin_to_mired_norm(kelvin: f64) -> f64 {
     kelvin_to_mired_norm(kelvin)
@@ -1032,6 +1071,7 @@ export interface EditSettings {
     defringe_amount?: number;
     lens_correction_enabled?: boolean;
     tca_correction_enabled?: boolean;
+    vignetting_correction_enabled?: boolean;
 }
 
 export interface XmpData {
@@ -1166,6 +1206,10 @@ pub fn compute_ev_histogram_from_bytes(
     crop_bottom: f32,
     lens_correction_enabled: bool,
     tca_correction_enabled: bool,
+    vignetting_correction_enabled: bool,
+    vignetting_k1: f32,
+    vignetting_k2: f32,
+    vignetting_k3: f32,
 ) -> Result<JsValue, JsValue> {
     let record = firstproof_engine::histogram::compute_ev_histogram_from_f16_buffer(
         width,
@@ -1183,6 +1227,10 @@ pub fn compute_ev_histogram_from_bytes(
         crop_bottom,
         lens_correction_enabled,
         tca_correction_enabled,
+        vignetting_correction_enabled,
+        vignetting_k1,
+        vignetting_k2,
+        vignetting_k3,
     )
     .ok_or_else(|| JsValue::from_str("Failed to compute EV histogram from buffer"))?;
 
@@ -1206,7 +1254,7 @@ mod tests {
             buf[offset + 6..offset + 8].copy_from_slice(&f32_to_f16(1.0).to_le_bytes());
         }
         let record = firstproof_engine::histogram::compute_ev_histogram_from_f16_buffer(
-            10, 10, &buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, false,
+            10, 10, &buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, false, false, 0.0, 0.0, 0.0,
         ).unwrap();
         assert_eq!(record.num_bins, 120);
         assert!(record.bins_luminance.iter().sum::<f32>() > 0.0);
@@ -1388,5 +1436,47 @@ mod tests {
         let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buf, 90);
         let enc_res = encoder.encode(rgb.as_raw(), 2, 2, image::ColorType::Rgb8);
         assert!(enc_res.is_ok(), "encoder.encode failed: {:?}", enc_res.err());
+    }
+
+    #[test]
+    fn test_lensfun_resolution() {
+        let minimal_json = r#"{
+            "cameras": [
+                { "maker": "Canon", "model": "EOS 5D Mark IV", "mount": "Canon EF", "crop_factor": 1.0 }
+            ],
+            "lenses": [
+                {
+                    "maker": "Canon",
+                    "model": "EF 24-70mm f/2.8L II USM",
+                    "mounts": ["Canon EF"],
+                    "crop_factor": 1.0,
+                    "min_focal": 24.0,
+                    "max_focal": 70.0,
+                    "min_aperture": 2.8,
+                    "max_aperture": 22.0,
+                    "distortion_calib": [
+                        { "model": "ptlens", "focal_length": 24.0, "coefficients": [0.02964, 0.0, 0.0, 0.0] }
+                    ],
+                    "tca_calib": [
+                        { "focal_length": 24.0, "coefficients": [1.0002104, 1.0000529, -0.0000220, 0.0, 0.0, 0.0] }
+                    ],
+                    "vignetting_calib": [
+                        { "focal_length": 24.0, "aperture": 2.8, "distance": 1000.0, "coefficients": [-0.8, 0.2, 0.0] }
+                    ]
+                }
+            ]
+        }"#;
+
+        assert!(load_lensfun_database(minimal_json));
+        if let Ok(guard) = LENSFUN_DB.read() {
+            let db = guard.as_ref().expect("LENSFUN_DB should be populated");
+            let coeffs = db.resolve_coefficients("Canon", "5D Mark IV", "EF 24-70mm f/2.8L II USM", 24.0, Some(2.8));
+            assert!(coeffs.has_distortion);
+            assert_eq!(coeffs.distortion_model, "ptlens");
+            assert_eq!(coeffs.distortion[0], 0.02964);
+            assert!(coeffs.has_tca);
+            assert!(coeffs.has_vignetting);
+            assert_eq!(coeffs.vignetting[0], -0.8);
+        }
     }
 }

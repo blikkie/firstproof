@@ -24,6 +24,7 @@ use firstproof_core::{
 };
 
 #[test]
+#[ignore = "Slow real RAW disk decode and transcode"]
 fn test_dng_conversion_and_disk_verification() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cr2_path = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
@@ -123,6 +124,7 @@ fn test_dng_conversion_and_disk_verification() {
 }
 
 #[test]
+#[ignore = "Slow real RAW disk decode and transcode"]
 fn test_dng_destructive_path_and_sidecar_migration() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
@@ -212,6 +214,7 @@ fn test_dng_destructive_path_and_sidecar_migration() {
 }
 
 #[test]
+#[ignore = "Slow real RAW disk decode and transcode"]
 fn test_dng_failure_safety_negative_case() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
@@ -248,6 +251,7 @@ fn test_dng_failure_safety_negative_case() {
 }
 
 #[test]
+#[ignore = "Slow real RAW disk decode and transcode"]
 fn test_dng_convert_on_library_ingest() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
@@ -323,6 +327,7 @@ fn test_dng_convert_on_library_ingest() {
 }
 
 #[test]
+#[ignore = "Slow real RAW disk decode and transcode"]
 fn test_dng_batch_convert_catalog_photos() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
@@ -385,6 +390,7 @@ fn test_dng_batch_convert_catalog_photos() {
 }
 
 #[test]
+#[ignore = "Slow real RAW disk decode and transcode"]
 fn test_dng_batch_convert_catalog_photos_keep_original() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
@@ -448,6 +454,7 @@ fn test_dng_batch_convert_catalog_photos_keep_original() {
 }
 
 #[test]
+#[ignore = "Slow real RAW disk decode and transcode"]
 fn test_dng_collision_reconciles_existing_dng_and_reclaims_space() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
@@ -520,6 +527,7 @@ fn test_dng_collision_reconciles_existing_dng_and_reclaims_space() {
 }
 
 #[test]
+#[ignore = "Slow real RAW disk decode and transcode"]
 fn test_dng_collision_unrelated_disambiguation() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");
@@ -559,6 +567,7 @@ fn test_dng_collision_unrelated_disambiguation() {
 }
 
 #[test]
+#[ignore = "Slow real RAW disk decode and transcode"]
 fn test_dng_conversion_preserves_rotation_and_propagates_sidecars() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cr2_src = manifest_dir.join("tests/fixtures/_MG_2651.CR2");

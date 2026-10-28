@@ -4605,7 +4605,7 @@ public func computeAutoWhiteBalanceFromBuffer(width: UInt32, height: UInt32, dat
     )
 })
 }
-public func computeEvHistogram(width: UInt32, height: UInt32, data: Data, exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool) -> EvHistogramRecord? {
+public func computeEvHistogram(width: UInt32, height: UInt32, data: Data, exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool, vignettingCorrectionEnabled: Bool, vignettingK1: Float, vignettingK2: Float, vignettingK3: Float) -> EvHistogramRecord? {
     return try!  FfiConverterOptionTypeEvHistogramRecord.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_compute_ev_histogram(
         FfiConverterUInt32.lower(width),
@@ -4622,11 +4622,15 @@ public func computeEvHistogram(width: UInt32, height: UInt32, data: Data, exposu
         FfiConverterFloat.lower(cropRight),
         FfiConverterFloat.lower(cropBottom),
         FfiConverterBool.lower(lensCorrectionEnabled),
-        FfiConverterBool.lower(tcaCorrectionEnabled),$0
+        FfiConverterBool.lower(tcaCorrectionEnabled),
+        FfiConverterBool.lower(vignettingCorrectionEnabled),
+        FfiConverterFloat.lower(vignettingK1),
+        FfiConverterFloat.lower(vignettingK2),
+        FfiConverterFloat.lower(vignettingK3),$0
     )
 })
 }
-public func computeEvHistogramFromPath(path: String, exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool) -> EvHistogramRecord? {
+public func computeEvHistogramFromPath(path: String, exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool, vignettingCorrectionEnabled: Bool, vignettingK1: Float, vignettingK2: Float, vignettingK3: Float) -> EvHistogramRecord? {
     return try!  FfiConverterOptionTypeEvHistogramRecord.lift(try! rustCall() {
     uniffi_firstproof_core_fn_func_compute_ev_histogram_from_path(
         FfiConverterString.lower(path),
@@ -4641,7 +4645,11 @@ public func computeEvHistogramFromPath(path: String, exposure: Float, contrast: 
         FfiConverterFloat.lower(cropRight),
         FfiConverterFloat.lower(cropBottom),
         FfiConverterBool.lower(lensCorrectionEnabled),
-        FfiConverterBool.lower(tcaCorrectionEnabled),$0
+        FfiConverterBool.lower(tcaCorrectionEnabled),
+        FfiConverterBool.lower(vignettingCorrectionEnabled),
+        FfiConverterFloat.lower(vignettingK1),
+        FfiConverterFloat.lower(vignettingK2),
+        FfiConverterFloat.lower(vignettingK3),$0
     )
 })
 }
@@ -4977,10 +4985,10 @@ private var initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_compute_auto_white_balance_from_buffer() != 16899) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram() != 22251) {
+    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram() != 57473) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram_from_path() != 26480) {
+    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram_from_path() != 13911) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_convert_kelvin_to_mired_norm() != 11770) {

@@ -643,4 +643,193 @@ describe('Controller & First-Responder Architecture', () => {
       expect(controller.getSplitPosition()).toBe(40);
     });
   });
+
+  describe('Optics Workspace & Lens Corrections (Distortion, TCA, Vignetting)', () => {
+    it('switches to the optics workspace tab and updates panel visibility', () => {
+      document.body.innerHTML = `
+        <button class="seg-btn" data-tab="develop"></button>
+        <button class="seg-btn" data-tab="optics"></button>
+        <div class="workspace-panel" id="tab-develop"></div>
+        <div class="workspace-panel hidden" id="tab-optics"></div>
+      `;
+      const edits = getDefaultEdits(true);
+      const controller = new InspectorSyncController({
+        getEdits: () => edits,
+        renderCanvas: vi.fn(),
+        autoSaveSidecar: vi.fn(),
+        isCurrentPhotoRaw: () => true,
+        getDefaultEdits: () => edits,
+        getCurveWidget: () => null as unknown as ToneCurveWidget,
+        getRating: () => 0,
+        getStatus: () => '',
+        getActiveIndex: () => 0,
+      });
+
+      controller.selectInspectorTab('optics');
+
+      const opticsBtn = document.querySelector('.seg-btn[data-tab="optics"]');
+      const opticsPanel = document.getElementById('tab-optics');
+      const developPanel = document.getElementById('tab-develop');
+
+      expect(opticsBtn?.classList.contains('active')).toBe(true);
+      expect(opticsPanel?.classList.contains('hidden')).toBe(false);
+      expect(developPanel?.classList.contains('hidden')).toBe(true);
+    });
+
+    it('toggles vignetting correction, mutates edits, and renders canvas', () => {
+      document.body.innerHTML = `
+        <input type="checkbox" id="toggle-distortion" />
+        <input type="checkbox" id="toggle-tca" checked />
+        <input type="checkbox" id="toggle-vignetting" />
+      `;
+      const edits = getDefaultEdits(true);
+      const renderCanvas = vi.fn();
+      const autoSaveSidecar = vi.fn();
+      const controller = new InspectorSyncController({
+        getEdits: () => edits,
+        renderCanvas,
+        autoSaveSidecar,
+        isCurrentPhotoRaw: () => true,
+        getDefaultEdits: () => edits,
+        getCurveWidget: () => null as unknown as ToneCurveWidget,
+        getRating: () => 0,
+        getStatus: () => '',
+        getActiveIndex: () => 0,
+      });
+
+      controller.bind();
+
+      const toggleVig = document.getElementById(
+        'toggle-vignetting',
+      ) as HTMLInputElement;
+      expect(toggleVig.checked).toBe(false);
+
+      toggleVig.checked = true;
+      toggleVig.dispatchEvent(new Event('change'));
+
+      expect(edits.vignetting_correction_enabled).toBe(true);
+      expect(renderCanvas).toHaveBeenCalledTimes(1);
+      expect(autoSaveSidecar).toHaveBeenCalledTimes(1);
+    });
+
+    it('synchronizes optics toggles and defringe slider from edits in syncSliderUI', () => {
+      document.body.innerHTML = `
+        <input type="checkbox" id="toggle-distortion" />
+        <input type="checkbox" id="toggle-tca" />
+        <input type="checkbox" id="toggle-vignetting" />
+        <input type="range" id="slider-defringe-amount" />
+        <span id="val-defringe-amount"></span>
+      `;
+      const edits = getDefaultEdits(true);
+      edits.lens_correction_enabled = true;
+      edits.tca_correction_enabled = false;
+      edits.vignetting_correction_enabled = true;
+      edits.defringe_amount = 45.0;
+
+      const controller = new InspectorSyncController({
+        getEdits: () => edits,
+        renderCanvas: vi.fn(),
+        autoSaveSidecar: vi.fn(),
+        isCurrentPhotoRaw: () => true,
+        getDefaultEdits: () => edits,
+        getCurveWidget: () => null as unknown as ToneCurveWidget,
+        getRating: () => 0,
+        getStatus: () => '',
+        getActiveIndex: () => 0,
+      });
+
+      controller.syncSliderUI();
+
+      const toggleDist = document.getElementById(
+        'toggle-distortion',
+      ) as HTMLInputElement;
+      const toggleTca = document.getElementById(
+        'toggle-tca',
+      ) as HTMLInputElement;
+      const toggleVig = document.getElementById(
+        'toggle-vignetting',
+      ) as HTMLInputElement;
+      const defringeVal = document.getElementById('val-defringe-amount');
+
+      expect(toggleDist.checked).toBe(true);
+      expect(toggleTca.checked).toBe(false);
+      expect(toggleVig.checked).toBe(true);
+      expect(defringeVal?.innerText).toBe('45');
+    });
+
+    it('updates lens correction toggles disabled state and telemetry card in updateLensCorrectionUI', () => {
+      document.body.innerHTML = `
+        <input type="checkbox" id="toggle-distortion" />
+        <input type="checkbox" id="toggle-tca" />
+        <input type="checkbox" id="toggle-vignetting" />
+        <div id="lens-calibration-telemetry" style="display: none;">
+          <div id="lens-telemetry-model"></div>
+          <div id="lens-telemetry-distortion"></div>
+          <div id="lens-telemetry-tca"></div>
+          <div id="lens-telemetry-vignetting"></div>
+        </div>
+      `;
+      const edits = getDefaultEdits(true);
+      const controller = new InspectorSyncController({
+        getEdits: () => edits,
+        renderCanvas: vi.fn(),
+        autoSaveSidecar: vi.fn(),
+        isCurrentPhotoRaw: () => true,
+        getDefaultEdits: () => edits,
+        getCurveWidget: () => null as unknown as ToneCurveWidget,
+        getRating: () => 0,
+        getStatus: () => '',
+        getActiveIndex: () => 0,
+      });
+
+      // 1. Uncalibrated / null
+      controller.updateLensCorrectionUI(null);
+      const toggleDist = document.getElementById(
+        'toggle-distortion',
+      ) as HTMLInputElement;
+      const toggleTca = document.getElementById(
+        'toggle-tca',
+      ) as HTMLInputElement;
+      const toggleVig = document.getElementById(
+        'toggle-vignetting',
+      ) as HTMLInputElement;
+      const card = document.getElementById(
+        'lens-calibration-telemetry',
+      ) as HTMLElement;
+      expect(toggleDist.disabled).toBe(true);
+      expect(toggleTca.disabled).toBe(true);
+      expect(toggleVig.disabled).toBe(true);
+      expect(card.style.display).toBe('none');
+
+      // 2. Calibrated Lensfun record
+      controller.updateLensCorrectionUI(
+        {
+          distortion: [0.02964, 0, 0, 0],
+          tca: [1.0002, 1.00005, 0, 0, 0, 0],
+          vignetting: [-0.8, 0.2, 0],
+          distortion_model: 'ptlens',
+          has_distortion: true,
+          has_tca: true,
+          has_vignetting: true,
+        },
+        'Canon EF 24-70mm f/2.8L II USM',
+      );
+      expect(toggleDist.disabled).toBe(false);
+      expect(toggleTca.disabled).toBe(false);
+      expect(toggleVig.disabled).toBe(false);
+      expect(card.style.display).toBe('block');
+      expect(document.getElementById('lens-telemetry-model')?.textContent).toBe(
+        'Canon EF 24-70mm f/2.8L II USM',
+      );
+      expect(
+        document.getElementById('lens-telemetry-distortion')?.textContent,
+      ).toBe('Distortion: PTLENS');
+      expect(document.getElementById('lens-telemetry-tca')?.textContent).toBe(
+        'Lateral CA: Calibrated',
+      );
+      expect(
+        document.getElementById('lens-telemetry-vignetting')?.textContent,
+      ).toBe('Vignetting: Calibrated');
+    });
+  });
 });

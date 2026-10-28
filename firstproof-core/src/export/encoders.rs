@@ -140,6 +140,20 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
         (false, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0)
     };
 
+    let (has_vignetting, vig_k1, vig_k2, vig_k3, vig_k4) = if let Some(c) = lens_coeffs {
+        if edits.vignetting_correction_enabled && c.has_vignetting {
+            let k1 = c.vignetting.first().copied().unwrap_or(0.0);
+            let k2 = c.vignetting.get(1).copied().unwrap_or(0.0);
+            let k3 = c.vignetting.get(2).copied().unwrap_or(0.0);
+            let k4 = c.vignetting.get(3).copied().unwrap_or(0.0);
+            (true, k1, k2, k3, k4)
+        } else {
+            (false, 0.0, 0.0, 0.0, 0.0)
+        }
+    } else {
+        (false, 0.0, 0.0, 0.0, 0.0)
+    };
+
     let mut auto_crop_scale = 1.0f32;
     if edits.crop_constrain || has_dist {
         let test_points = [
@@ -268,6 +282,23 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
             } else {
                 sample_bilinear(&image, sx, sy)
             };
+
+            // 2b. Lens Vignetting Radial Illumination Gain
+            if has_vignetting {
+                let u_orig = sx / (orig_width as f32).max(1.0);
+                let v_orig = sy / (orig_height as f32).max(1.0);
+                let xc = (u_orig - 0.5) * 2.0 * aspect_ratio;
+                let yc = (v_orig - 0.5) * 2.0;
+                let r2 = (xc * xc + yc * yc) / (aspect_ratio * aspect_ratio + 1.0);
+                let r4 = r2 * r2;
+                let r6 = r4 * r2;
+                let r8 = r4 * r4;
+                let poly = 1.0 + vig_k1 * r2 + vig_k2 * r4 + vig_k3 * r6 + vig_k4 * r8;
+                let vig_gain = if poly < 1.0 { 1.0 / poly.max(0.05) } else { poly };
+                r_lin *= vig_gain;
+                g_lin *= vig_gain;
+                b_lin *= vig_gain;
+            }
 
             // 3. 3D Look-Up Table (display-referred linear stage post-tone-mapping)
             if let Some(ref lut) = active_lut {

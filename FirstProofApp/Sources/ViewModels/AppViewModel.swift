@@ -567,6 +567,11 @@ public final class AppViewModel {
             scheduleHistogramUpdate()
         }
     }
+    public var vignettingCorrectionEnabled: Bool = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false {
+        didSet {
+            scheduleHistogramUpdate()
+        }
+    }
     public var toneProfile: ColorProfileMode = .agxVivid
     public var selectedLutName: String? = nil
     public var lutIntensity: Float = 1.0
@@ -939,6 +944,7 @@ public final class AppViewModel {
                 }
                 baseline.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
                 baseline.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+                baseline.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
                 finalEdits = baseline
             }
 

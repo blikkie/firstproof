@@ -14,6 +14,7 @@ extension MetalRenderer {
         isCropToolActive: Bool = false,
         lensCorrectionEnabled: Bool = true,
         tcaCorrectionEnabled: Bool = true,
+        vignettingCorrectionEnabled: Bool = true,
         lensCoefficients: LensCorrectionCoefficientsRecord? = nil,
         edrHeadroom: Float = 1.0,
         edrEnabled: Bool = true,
@@ -29,8 +30,6 @@ extension MetalRenderer {
         uniforms.asShotTint = asShotTint
         uniforms.clippingOverlayActive = clippingOverlayActive ? 1 : 0
         uniforms.pad0 = 0.0
-        uniforms.pad1 = 0.0
-        uniforms.pad2 = 0.0
         uniforms.exposure = edits.exposure
         uniforms.temperature = edits.temperature
         uniforms.tint = edits.tint
@@ -214,6 +213,21 @@ extension MetalRenderer {
             uniforms.tcaBb = 0.0
             uniforms.tcaCr = 0.0
             uniforms.tcaCb = 0.0
+        }
+
+        uniforms.vignettingCorrectionEnabled = vignettingCorrectionEnabled ? 1 : 0
+        if let coeff = lensCoefficients, coeff.hasVignetting {
+            uniforms.hasVignetting = 1
+            uniforms.vignettingK1 = coeff.vignetting.indices.contains(0) ? coeff.vignetting[0] : 0.0
+            uniforms.vignettingK2 = coeff.vignetting.indices.contains(1) ? coeff.vignetting[1] : 0.0
+            uniforms.vignettingK3 = coeff.vignetting.indices.contains(2) ? coeff.vignetting[2] : 0.0
+            uniforms.vignettingK4 = coeff.vignetting.indices.contains(3) ? coeff.vignetting[3] : 0.0
+        } else {
+            uniforms.hasVignetting = 0
+            uniforms.vignettingK1 = 0.0
+            uniforms.vignettingK2 = 0.0
+            uniforms.vignettingK3 = 0.0
+            uniforms.vignettingK4 = 0.0
         }
 
         uniforms.defringeAmount = edits.defringeAmount

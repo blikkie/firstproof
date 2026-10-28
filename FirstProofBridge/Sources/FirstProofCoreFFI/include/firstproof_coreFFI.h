@@ -445,12 +445,12 @@ RustBuffer uniffi_firstproof_core_fn_func_compute_auto_white_balance_from_buffer
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM
-RustBuffer uniffi_firstproof_core_fn_func_compute_ev_histogram(uint32_t width, uint32_t height, RustBuffer data, float exposure, float contrast, float highlights, float shadows, float whites, float blacks, float crop_left, float crop_top, float crop_right, float crop_bottom, int8_t lens_correction_enabled, int8_t tca_correction_enabled, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_firstproof_core_fn_func_compute_ev_histogram(uint32_t width, uint32_t height, RustBuffer data, float exposure, float contrast, float highlights, float shadows, float whites, float blacks, float crop_left, float crop_top, float crop_right, float crop_bottom, int8_t lens_correction_enabled, int8_t tca_correction_enabled, int8_t vignetting_correction_enabled, float vignetting_k1, float vignetting_k2, float vignetting_k3, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM_FROM_PATH
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM_FROM_PATH
-RustBuffer uniffi_firstproof_core_fn_func_compute_ev_histogram_from_path(RustBuffer path, float exposure, float contrast, float highlights, float shadows, float whites, float blacks, float crop_left, float crop_top, float crop_right, float crop_bottom, int8_t lens_correction_enabled, int8_t tca_correction_enabled, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_firstproof_core_fn_func_compute_ev_histogram_from_path(RustBuffer path, float exposure, float contrast, float highlights, float shadows, float whites, float blacks, float crop_left, float crop_top, float crop_right, float crop_bottom, int8_t lens_correction_enabled, int8_t tca_correction_enabled, int8_t vignetting_correction_enabled, float vignetting_k1, float vignetting_k2, float vignetting_k3, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CONVERT_KELVIN_TO_MIRED_NORM

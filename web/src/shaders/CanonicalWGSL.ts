@@ -86,9 +86,13 @@ struct ShaderUniforms {
     defringeAmount: f32,
     tcaCorrectionEnabled: i32,
     clippingOverlayActive: i32,
-    pad0: f32,
-    pad1: f32,
-    pad2: f32, // 16-byte std140/WebGPU alignment (84 fields * 4 bytes = 336 bytes = 21 * 16)
+    vignettingCorrectionEnabled: i32,
+    hasVignetting: i32,
+    vignettingK1: f32,
+    vignettingK2: f32,
+    vignettingK3: f32,
+    vignettingK4: f32,
+    pad0: f32, // 16-byte std140/WebGPU alignment (88 fields * 4 bytes = 352 bytes = 22 * 16)
 };
 
 struct VertexOutput {
@@ -1521,7 +1525,8 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
                           (uniforms.emulsionArchetype == 0) &&
                           (uniforms.halationMode == 0) &&
                           (uniforms.emulsionGrainMode == 0) &&
-                          (uniforms.printMediaMode == 0);
+                          (uniforms.printMediaMode == 0) &&
+                          (uniforms.vignettingCorrectionEnabled == 0 || uniforms.hasVignetting == 0);
     
     if (uniforms.isLinearRaw == 0 && isNeutralEdits && uniforms.hasGainMap == 0 && (uniforms.edrEnabled == 0 || uniforms.edrHeadroom <= 1.001)) {
         return sampledColor;
@@ -1594,6 +1599,25 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
         rec2020Color.r = rec2020Color.r * rScale;
         rec2020Color.g = rec2020Color.g * gScale;
         rec2020Color.b = rec2020Color.b * bScale;
+    }
+
+    // 3b. Lens Vignetting Radial Illumination Gain in Linear Rec.2020 Space
+    if (uniforms.vignettingCorrectionEnabled != 0 && uniforms.hasVignetting != 0) {
+        let A = max(uniforms.aspectRatio, 0.01);
+        let xc = (uv.x - 0.5) * 2.0 * A;
+        let yc = (uv.y - 0.5) * 2.0;
+        let r2 = (xc * xc + yc * yc) / (A * A + 1.0);
+        let r4 = r2 * r2;
+        let r6 = r4 * r2;
+        let r8 = r4 * r4;
+        let poly = 1.0 + uniforms.vignettingK1 * r2 + uniforms.vignettingK2 * r4 + uniforms.vignettingK3 * r6 + uniforms.vignettingK4 * r8;
+        var vigGain: f32 = 1.0;
+        if (poly < 1.0) {
+            vigGain = 1.0 / max(poly, 0.05);
+        } else {
+            vigGain = poly;
+        }
+        rec2020Color = rec2020Color * vigGain;
     }
     
     // 4. Linear Exposure Multiplication (2^EV) in Wide-Gamut Space

@@ -8,6 +8,7 @@ pub mod command;
 pub mod container;
 pub mod curve;
 pub mod histogram;
+pub mod lensfun;
 pub mod modes;
 pub mod preview;
 pub mod raw;
@@ -20,6 +21,10 @@ pub mod xmp;
 pub use command::{CommandResponse, DarkroomCommand, EditDelta};
 
 pub use calibration::{CameraCalibration, CameraCalibrationRegistry};
+pub use lensfun::{
+    Camera, DistortionCalib, Lens, LensCorrectionCoefficients, LensfunDatabase, TcaCalib,
+    VignettingCalib,
+};
 pub use container::{
     apply_opcode_list_1_to_raw, apply_opcode_list_2_to_raw, apply_opcode_list_2_to_rgb, is_bayer_green, DngAreaSpec,
     DngBadPoint, DngBadRect, DngGainMap, DngOpcode, DngOpcodeList, OpcodeError,
@@ -380,9 +385,7 @@ mod tests {
         use crate::raw::read_dng_baseline_exposure;
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let fixture_path = manifest_dir.join("../firstproof-core/tests/fixtures/_MG_2651.dng");
-        let test_path = std::env::var("FIRSTPROOF_TEST_RAW_DIR")
-            .map(|d| std::path::Path::new(&d).join("_MG_2332.dng"))
-            .unwrap_or(fixture_path);
+        let test_path = fixture_path;
         if test_path.exists() {
             let bytes = std::fs::read(&test_path).expect("Read DNG file");
             let exp = read_dng_baseline_exposure(&bytes).expect("BaselineExposure tag 50730 not found");

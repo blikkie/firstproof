@@ -248,10 +248,10 @@ export class ToneCurveWidget {
     if (
       this.channel !== 'master' &&
       lut &&
-      lut['master'] &&
-      lut['master'].length === 256
+      lut.master &&
+      lut.master.length === 256
     ) {
-      const masterSamples = lut['master'];
+      const masterSamples = lut.master;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();

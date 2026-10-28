@@ -184,8 +184,8 @@ describe('KeyboardShortcutController', () => {
   });
 
   describe('Modifier-Based Shortcuts', () => {
-    it('switches tabs with Cmd/Ctrl + 1..3', () => {
-      const tabs = ['develop', 'emulsion', 'detail'];
+    it('switches tabs with Cmd/Ctrl + 1..4', () => {
+      const tabs = ['develop', 'emulsion', 'detail', 'optics'];
       tabs.forEach((tab, idx) => {
         window.dispatchEvent(
           new KeyboardEvent('keydown', {

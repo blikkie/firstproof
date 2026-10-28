@@ -21,6 +21,7 @@ import { updateMetadataHeaderElements } from './utils/metadataHeader';
 import {
   type EditSettingsPayload,
   type ImageMetadata,
+  type LensCorrectionCoefficients,
   WasmBridge,
   type XmpPayload,
 } from './WasmBridge';
@@ -49,6 +50,7 @@ class DarkroomApp {
   private isOriginalPeek: boolean = false;
   private isCropActive: boolean = false;
   private currentMetadata: Partial<ImageMetadata> = {};
+  public currentLensCoefficients: LensCorrectionCoefficients | null = null;
   private currentRating: number = 0;
   private currentStatus: string = 'Unflagged';
 
@@ -72,6 +74,20 @@ class DarkroomApp {
     try {
       this.bridge = await WasmBridge.init(256);
       this.loaderService = new PhotoLoaderService(this.bridge);
+      // Load bundled Lensfun database asynchronously (CC-BY-SA 3.0)
+      fetch('/lensfun.json')
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.text();
+        })
+        .then((jsonStr) => {
+          const ok = this.bridge.loadLensfunDatabase(jsonStr);
+          console.log('[App] Lensfun database loaded:', ok);
+          this.recomputeCurrentLensCoefficients();
+        })
+        .catch((err) => {
+          console.warn('[App] Could not load lensfun.json database:', err);
+        });
     } catch (err) {
       console.error('[App] Failed to initialize WASM scratchpad:', err);
       alert(
@@ -307,6 +323,7 @@ class DarkroomApp {
       getStatus: () => this.currentStatus,
       getActiveIndex: () => this.filmstripController.getActiveIndex(),
       onResetAllEdits: () => this.resetAllEdits(),
+      scheduleHistogramUpdate: () => this.scheduleHistogramUpdate(),
     });
     this.inspectorController.bind();
 
@@ -811,6 +828,7 @@ class DarkroomApp {
           frame.preview.metadata?.baseline_sharpness ?? 1.0;
         this.renderer.setBaselineSharpness(baselineSharpness);
         updateMetadataHeaderElements(this.elements, frame.preview, entry.name);
+        this.recomputeCurrentLensCoefficients();
 
         const orientation = frame.preview.metadata?.orientation ?? 1;
         const exifOri = decodeExifOrientation(orientation);
@@ -870,6 +888,35 @@ class DarkroomApp {
         }
       }
     }, delay);
+  }
+
+  public recomputeCurrentLensCoefficients(): void {
+    const meta = this.currentMetadata;
+    const make = meta?.camera_make ?? '';
+    const model = meta?.camera_model ?? '';
+    const lens = meta?.lens_model ?? '';
+    const focal = meta?.focal_length ?? 0;
+    const aperture = meta?.aperture;
+
+    if (!make && !model && !lens) {
+      this.currentLensCoefficients = null;
+      this.renderer.setLensCoefficients(null);
+      this.inspectorController.updateLensCorrectionUI(null);
+      return;
+    }
+
+    const coeffs = this.bridge.resolveLensCoefficients(
+      make,
+      model,
+      lens,
+      focal,
+      aperture,
+    );
+    this.currentLensCoefficients = coeffs;
+    this.renderer.setLensCoefficients(coeffs);
+    this.inspectorController.updateLensCorrectionUI(coeffs, lens);
+    this.renderCanvas();
+    this.scheduleHistogramUpdate();
   }
 
   private setMetadataFormFields(xmp: Partial<XmpPayload>) {
@@ -1084,13 +1131,23 @@ class DarkroomApp {
         this.activeLinearW > 0 &&
         this.activeLinearH > 0
       ) {
+        const lc = this.currentLensCoefficients;
+        const vigK1 = lc?.has_vignetting ? (lc.vignetting[0] ?? 0.0) : 0.0;
+        const vigK2 = lc?.has_vignetting ? (lc.vignetting[1] ?? 0.0) : 0.0;
+        const vigK3 = lc?.has_vignetting ? (lc.vignetting[2] ?? 0.0) : 0.0;
         const hist = this.bridge.computeEvHistogram(
           this.activeLinearData,
           this.activeLinearW,
           this.activeLinearH,
           this.edits,
-          false,
-          false,
+          (this.edits.lens_correction_enabled ?? false) &&
+            (lc?.has_distortion ?? false),
+          (this.edits.tca_correction_enabled ?? true) && (lc?.has_tca ?? false),
+          (this.edits.vignetting_correction_enabled ?? false) &&
+            (lc?.has_vignetting ?? false),
+          vigK1,
+          vigK2,
+          vigK3,
         );
         this.histogramWidget.setRecord(hist);
       } else {

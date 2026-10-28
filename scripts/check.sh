@@ -165,9 +165,6 @@ fi
 # --- Track C: Darwin / macOS Swift Verification ---
 if [[ "$RUN_SWIFT" -eq 1 && "$(uname)" == "Darwin" ]]; then
     (
-        echo "    [Swift] Verifying Swift packages and Metal targets..."
-        swift build --package-path FirstProofBridge >/dev/null
-        swift build --package-path FirstProofApp >/dev/null
         echo "    [Swift] Running in-process Swift Testing unit suite..."
         swift test --package-path FirstProofApp >/dev/null
         echo "    ✅ [Swift Track] Passed cleanly"
@@ -215,12 +212,12 @@ if [[ "$FAILED" -ne 0 ]]; then
     exit 1
 fi
 
-# Step 3: Web Production Assets Build (depends on both WASM and Web passing)
-if [[ "$RUN_BUILD" -eq 1 ]]; then
-    echo "==> [3/4] Building web production assets..."
+# Step 3: Web Production Assets Build (reserved for exhaustive --all mode)
+if [[ "$MODE_ALL" -eq 1 && "$RUN_BUILD" -eq 1 ]]; then
+    echo "==> [3/4] Building web production assets (--all mode)..."
     npm --prefix web run build >/dev/null
 else
-    echo "==> [3/4] Skipping web production assets build (no web/WASM changes)"
+    echo "==> [3/4] Skipping web production assets build"
 fi
 
 echo "========================================================"

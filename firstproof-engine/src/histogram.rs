@@ -58,6 +58,10 @@ pub fn compute_ev_histogram_from_f16_buffer(
     crop_bottom: f32,
     lens_correction_enabled: bool,
     tca_correction_enabled: bool,
+    vignetting_correction_enabled: bool,
+    vignetting_k1: f32,
+    vignetting_k2: f32,
+    vignetting_k3: f32,
 ) -> Option<EvHistogramRecord> {
     let pixel_count = (width * height) as usize;
     if pixel_count == 0 || data.len() < pixel_count * 8 {
@@ -147,7 +151,7 @@ pub fn compute_ev_histogram_from_f16_buffer(
         let b_u16 = u16::from_le_bytes([data[offset + 4], data[offset + 5]]);
 
         let mut raw_r = crate::raw::f16_to_f32(r_u16);
-        let raw_g = crate::raw::f16_to_f32(g_u16);
+        let mut raw_g = crate::raw::f16_to_f32(g_u16);
         let mut raw_b = crate::raw::f16_to_f32(b_u16);
 
         let is_sensor_saturated = raw_r >= 1.0 || raw_g >= 1.0 || raw_b >= 1.0;
@@ -162,6 +166,26 @@ pub fn compute_ev_histogram_from_f16_buffer(
             if b_diff.abs() > 0.4 {
                 raw_b = raw_g + b_diff * 0.5;
             }
+        }
+
+        // Lens Vignetting Radial Illumination Gain:
+        // Lifts peripheral shadow floor attenuated by natural cos^4 and mechanical barrel falloff
+        if vignetting_correction_enabled
+            && (vignetting_k1 != 0.0 || vignetting_k2 != 0.0 || vignetting_k3 != 0.0)
+        {
+            let u = (x as f32 + 0.5) / (width as f32);
+            let v = (y as f32 + 0.5) / (height as f32);
+            let aspect_ratio = (width as f32) / (height as f32).max(1.0);
+            let xc = (u - 0.5) * 2.0 * aspect_ratio;
+            let yc = (v - 0.5) * 2.0;
+            let r2 = (xc * xc + yc * yc) / (aspect_ratio * aspect_ratio + 1.0);
+            let r4 = r2 * r2;
+            let r6 = r4 * r2;
+            let poly = 1.0 + vignetting_k1 * r2 + vignetting_k2 * r4 + vignetting_k3 * r6;
+            let vig_gain = if poly < 1.0 { 1.0 / poly.max(0.05) } else { poly };
+            raw_r = (raw_r * vig_gain).max(0.0);
+            raw_g = (raw_g * vig_gain).max(0.0);
+            raw_b = (raw_b * vig_gain).max(0.0);
         }
 
         let mut r = (raw_r * exposure_gain).max(0.0);
@@ -293,8 +317,10 @@ mod tests {
         // Bin formula: frac = (0.0 - (-8.0)) / 12.0 = 8.0 / 12.0 = 2/3.
         // 2/3 * 120 = 80.
         let buf = make_test_buffer(0.18, 0.18, 0.18, 1000);
-        let hist = compute_ev_histogram_from_f16_buffer(100, 10, &buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true)
-            .expect("histogram generated");
+        let hist = compute_ev_histogram_from_f16_buffer(
+            100, 10, &buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true, false, 0.0, 0.0, 0.0,
+        )
+        .expect("histogram generated");
 
         assert_eq!(hist.num_bins, 120);
         assert_eq!(hist.shadow_clip_percent, 0.0);
@@ -313,13 +339,17 @@ mod tests {
         let buf = make_test_buffer(0.18, 0.18, 0.18, 1000);
 
         // +1.0 EV exposure gain shifts exactly 10 bins (1 full stop = 10 bins)
-        let hist_plus_1 = compute_ev_histogram_from_f16_buffer(100, 10, &buf, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true)
-            .expect("histogram generated");
+        let hist_plus_1 = compute_ev_histogram_from_f16_buffer(
+            100, 10, &buf, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true, false, 0.0, 0.0, 0.0,
+        )
+        .expect("histogram generated");
         assert!(hist_plus_1.bins_luminance[89] == 1.0 || hist_plus_1.bins_luminance[90] == 1.0);
 
         // -2.0 EV exposure cut shifts exactly 20 bins (2 full stops = 20 bins)
-        let hist_minus_2 = compute_ev_histogram_from_f16_buffer(100, 10, &buf, -2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true)
-            .expect("histogram generated");
+        let hist_minus_2 = compute_ev_histogram_from_f16_buffer(
+            100, 10, &buf, -2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true, false, 0.0, 0.0, 0.0,
+        )
+        .expect("histogram generated");
         assert!(hist_minus_2.bins_luminance[59] == 1.0 || hist_minus_2.bins_luminance[60] == 1.0);
     }
 
@@ -327,20 +357,29 @@ mod tests {
     fn test_shadow_and_sensor_clipping_telemetry() {
         // 1. Crushed black pixels
         let black_buf = make_test_buffer(0.0, 0.0, 0.0, 500);
-        let hist_black = compute_ev_histogram_from_f16_buffer(50, 10, &black_buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true).unwrap();
+        let hist_black = compute_ev_histogram_from_f16_buffer(
+            50, 10, &black_buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true, false, 0.0, 0.0, 0.0,
+        )
+        .unwrap();
         assert_eq!(hist_black.shadow_clip_percent, 100.0);
         assert_eq!(hist_black.sensor_clip_percent, 0.0);
         assert_eq!(hist_black.bins_luminance[0], 1.0);
 
         // 2. Hardware photosite sensor clip (raw >= 1.0)
         let clip_buf = make_test_buffer(1.2, 0.5, 0.5, 500);
-        let hist_clip = compute_ev_histogram_from_f16_buffer(50, 10, &clip_buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true).unwrap();
+        let hist_clip = compute_ev_histogram_from_f16_buffer(
+            50, 10, &clip_buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true, false, 0.0, 0.0, 0.0,
+        )
+        .unwrap();
         assert_eq!(hist_clip.sensor_clip_percent, 100.0);
         assert_eq!(hist_clip.shadow_clip_percent, 0.0);
 
         // 3. AgX filmic shoulder roll-off (> +2.0 EV, e.g. 0.85 linear radiance without sensor clip)
         let rolloff_buf = make_test_buffer(0.85, 0.85, 0.85, 500);
-        let hist_rolloff = compute_ev_histogram_from_f16_buffer(50, 10, &rolloff_buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true).unwrap();
+        let hist_rolloff = compute_ev_histogram_from_f16_buffer(
+            50, 10, &rolloff_buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true, false, 0.0, 0.0, 0.0,
+        )
+        .unwrap();
         assert_eq!(hist_rolloff.sensor_clip_percent, 0.0);
         assert_eq!(hist_rolloff.display_rolloff_percent, 100.0);
     }
@@ -349,8 +388,14 @@ mod tests {
     fn test_tone_recovery_histogram_reactivity() {
         // 1. Highlight recovery: pulling highlights (-100) on Zone VII/VIII patch (0.72) compresses peak leftward
         let high_buf = make_test_buffer(0.72, 0.72, 0.72, 1000);
-        let hist_base = compute_ev_histogram_from_f16_buffer(100, 10, &high_buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true).unwrap();
-        let hist_hl_pull = compute_ev_histogram_from_f16_buffer(100, 10, &high_buf, 0.0, 0.0, -100.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true).unwrap();
+        let hist_base = compute_ev_histogram_from_f16_buffer(
+            100, 10, &high_buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true, false, 0.0, 0.0, 0.0,
+        )
+        .unwrap();
+        let hist_hl_pull = compute_ev_histogram_from_f16_buffer(
+            100, 10, &high_buf, 0.0, 0.0, -100.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true, false, 0.0, 0.0, 0.0,
+        )
+        .unwrap();
 
         let peak_base = hist_base.bins_luminance.iter().position(|&v| v == 1.0).unwrap();
         let peak_pulled = hist_hl_pull.bins_luminance.iter().position(|&v| v == 1.0).unwrap();
@@ -358,8 +403,14 @@ mod tests {
 
         // 2. Shadow lift: lifting shadows (+100) on Zone II shadow patch (0.022) lifts peak rightward
         let shadow_buf = make_test_buffer(0.022, 0.022, 0.022, 1000);
-        let hist_s_base = compute_ev_histogram_from_f16_buffer(100, 10, &shadow_buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true).unwrap();
-        let hist_s_lift = compute_ev_histogram_from_f16_buffer(100, 10, &shadow_buf, 0.0, 0.0, 0.0, 100.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true).unwrap();
+        let hist_s_base = compute_ev_histogram_from_f16_buffer(
+            100, 10, &shadow_buf, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true, false, 0.0, 0.0, 0.0,
+        )
+        .unwrap();
+        let hist_s_lift = compute_ev_histogram_from_f16_buffer(
+            100, 10, &shadow_buf, 0.0, 0.0, 0.0, 100.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, false, true, false, 0.0, 0.0, 0.0,
+        )
+        .unwrap();
 
         let peak_s_base = hist_s_base.bins_luminance.iter().position(|&v| v == 1.0).unwrap();
         let peak_s_lift = hist_s_lift.bins_luminance.iter().position(|&v| v == 1.0).unwrap();
@@ -397,7 +448,7 @@ mod tests {
         let full = compute_ev_histogram_from_f16_buffer(
             width as u32, height as u32, &split_buf,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,
-            false, true,
+            false, true, false, 0.0, 0.0, 0.0,
         ).unwrap();
         assert!((full.shadow_clip_percent - 50.0).abs() < 2.0);
         assert!((full.sensor_clip_percent - 50.0).abs() < 2.0);
@@ -406,7 +457,7 @@ mod tests {
         let crop_left = compute_ev_histogram_from_f16_buffer(
             width as u32, height as u32, &split_buf,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0,
-            false, true,
+            false, true, false, 0.0, 0.0, 0.0,
         ).unwrap();
         assert_eq!(crop_left.shadow_clip_percent, 100.0);
         assert_eq!(crop_left.sensor_clip_percent, 0.0);
@@ -415,7 +466,7 @@ mod tests {
         let crop_right = compute_ev_histogram_from_f16_buffer(
             width as u32, height as u32, &split_buf,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 1.0, 1.0,
-            false, true,
+            false, true, false, 0.0, 0.0, 0.0,
         ).unwrap();
         assert_eq!(crop_right.shadow_clip_percent, 0.0);
         assert_eq!(crop_right.sensor_clip_percent, 100.0);
@@ -447,7 +498,7 @@ mod tests {
         let uncorrected = compute_ev_histogram_from_f16_buffer(
             width as u32, height as u32, &border_buf,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,
-            false, true,
+            false, true, false, 0.0, 0.0, 0.0,
         ).unwrap();
         assert!(uncorrected.sensor_clip_percent > 0.0);
 
@@ -455,8 +506,58 @@ mod tests {
         let corrected = compute_ev_histogram_from_f16_buffer(
             width as u32, height as u32, &border_buf,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,
-            true, true,
+            true, true, false, 0.0, 0.0, 0.0,
         ).unwrap();
         assert_eq!(corrected.sensor_clip_percent, 0.0);
+    }
+
+    #[test]
+    fn test_vignetting_correction_lifts_peripheral_shadows_and_alleviates_clipping() {
+        // Build a simulated vignetted frame:
+        // Center has deep shadow (0.003, Zone -1.5), corners have natural falloff pushing into shadow floor (0.0003, clipped below -8 EV)
+        let width = 100usize;
+        let height = 100usize;
+        let mut vig_buf = Vec::with_capacity(width * height * 8);
+        let aspect = (width as f32) / (height as f32);
+
+        let one_a = f32_to_f16(1.0).to_le_bytes();
+        for y in 0..height {
+            for x in 0..width {
+                let u = (x as f32 + 0.5) / (width as f32);
+                let v = (y as f32 + 0.5) / (height as f32);
+                let xc = (u - 0.5) * 2.0 * aspect;
+                let yc = (v - 0.5) * 2.0;
+                let r2 = (xc * xc + yc * yc) / (aspect * aspect + 1.0);
+                // Optical falloff: 0.003 at center down to 0.0005 at corner
+                let falloff = (1.0 - 0.83 * r2).max(0.1);
+                let val_f16 = f32_to_f16(0.003 * falloff).to_le_bytes();
+                vig_buf.extend_from_slice(&val_f16);
+                vig_buf.extend_from_slice(&val_f16);
+                vig_buf.extend_from_slice(&val_f16);
+                vig_buf.extend_from_slice(&one_a);
+            }
+        }
+
+        // 1. Without vignetting correction: corner pixels drop below -8 EV shadow floor (shadow clipping)
+        let uncorrected = compute_ev_histogram_from_f16_buffer(
+            width as u32, height as u32, &vig_buf,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,
+            false, true, false, 0.0, 0.0, 0.0,
+        ).unwrap();
+
+        // 2. With vignetting correction enabled: Lensfun polynomial gain restores corner brightness
+        let (k1, k2, k3) = (-1.1454, 1.0122, -0.4352); // Typical wide-angle lens profile
+        let corrected = compute_ev_histogram_from_f16_buffer(
+            width as u32, height as u32, &vig_buf,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,
+            false, true, true, k1, k2, k3,
+        ).unwrap();
+
+        assert!(
+            corrected.shadow_clip_percent < uncorrected.shadow_clip_percent,
+            "Vignetting correction must reduce shadow clipping caused by barrel falloff: uncorrected={}, corrected={}",
+            uncorrected.shadow_clip_percent,
+            corrected.shadow_clip_percent,
+        );
     }
 }

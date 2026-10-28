@@ -26,6 +26,7 @@ import type {
   EmulsionFormat,
   EmulsionGrainMode,
   EnlargerFilterMode,
+  LensCorrectionCoefficients,
   PrintMediaMode,
   RemjetBackingMode,
 } from '../WasmBridge';
@@ -72,6 +73,7 @@ export interface InspectorDelegate {
   getStatus: () => string;
   getActiveIndex: () => number;
   onResetAllEdits?: () => void;
+  scheduleHistogramUpdate?: () => void;
 }
 
 export class InspectorSyncController {
@@ -170,6 +172,9 @@ export class InspectorSyncController {
 
     // 5. Workspace Tab Buttons
     this.bindTabButtons();
+
+    // 5b. Lens Correction Toggles (Optics Workspace)
+    this.bindLensCorrectionToggles();
 
     // 6. Metadata Inputs
     this.bindMetadataInputs();
@@ -364,6 +369,23 @@ export class InspectorSyncController {
     setVal('sharpen-radius', edits.sharpening_radius);
     setVal('sharpen-masking', edits.sharpening_masking);
     setVal('noise-reduction', edits.noise_reduction);
+    setVal('defringe-amount', edits.defringe_amount);
+
+    const toggleDist = document.getElementById(
+      'toggle-distortion',
+    ) as HTMLInputElement | null;
+    if (toggleDist) toggleDist.checked = edits.lens_correction_enabled ?? false;
+
+    const toggleTca = document.getElementById(
+      'toggle-tca',
+    ) as HTMLInputElement | null;
+    if (toggleTca) toggleTca.checked = edits.tca_correction_enabled ?? true;
+
+    const toggleVig = document.getElementById(
+      'toggle-vignetting',
+    ) as HTMLInputElement | null;
+    if (toggleVig)
+      toggleVig.checked = edits.vignetting_correction_enabled ?? false;
 
     setVal('shadow-hue', edits.split_toning_shadow_hue);
     setVal('shadow-sat', edits.split_toning_shadow_sat);
@@ -638,6 +660,13 @@ export class InspectorSyncController {
     bindSlider('sharpen-radius', 'sharpening_radius', 'sharpen_radius');
     bindSlider('sharpen-masking', 'sharpening_masking', 'sharpen_masking');
     bindSlider('noise-reduction', 'noise_reduction', 'noise_reduction');
+    bindSlider(
+      'defringe-amount',
+      'defringe_amount',
+      undefined,
+      (v) => `${Math.round(v)}`,
+      0.0,
+    );
 
     // Secondary controls without primary schema descriptors:
     bindSlider(
@@ -1022,6 +1051,96 @@ export class InspectorSyncController {
         el.addEventListener('change', () => this.delegate.autoSaveSidecar());
       }
     }
+  }
+
+  public updateLensCorrectionUI(
+    coeffs: LensCorrectionCoefficients | null,
+    lensModel?: string,
+  ): void {
+    const toggleDist = document.getElementById(
+      'toggle-distortion',
+    ) as HTMLInputElement | null;
+    const toggleTca = document.getElementById(
+      'toggle-tca',
+    ) as HTMLInputElement | null;
+    const toggleVig = document.getElementById(
+      'toggle-vignetting',
+    ) as HTMLInputElement | null;
+
+    if (toggleDist) {
+      toggleDist.disabled = !coeffs?.has_distortion;
+    }
+    if (toggleTca) {
+      toggleTca.disabled = !coeffs?.has_tca;
+    }
+    if (toggleVig) {
+      toggleVig.disabled = !coeffs?.has_vignetting;
+    }
+
+    const card = document.getElementById('lens-calibration-telemetry');
+    const modelEl = document.getElementById('lens-telemetry-model');
+    const distEl = document.getElementById('lens-telemetry-distortion');
+    const tcaEl = document.getElementById('lens-telemetry-tca');
+    const vigEl = document.getElementById('lens-telemetry-vignetting');
+
+    if (card && modelEl && distEl && tcaEl && vigEl) {
+      if (
+        coeffs &&
+        (coeffs.has_distortion ||
+          coeffs.has_tca ||
+          coeffs.has_vignetting ||
+          lensModel)
+      ) {
+        card.style.display = 'block';
+        modelEl.textContent = lensModel ? lensModel : 'Calibrated Lens';
+        distEl.textContent = coeffs.has_distortion
+          ? `Distortion: ${coeffs.distortion_model.toUpperCase()}`
+          : 'Distortion: None';
+        tcaEl.textContent = coeffs.has_tca
+          ? 'Lateral CA: Calibrated'
+          : 'Lateral CA: Uncalibrated (Use Defringe)';
+        vigEl.textContent = coeffs.has_vignetting
+          ? 'Vignetting: Calibrated'
+          : 'Vignetting: Uncalibrated';
+      } else {
+        card.style.display = 'none';
+      }
+    }
+  }
+
+  private bindLensCorrectionToggles(): void {
+    const toggleDist = document.getElementById(
+      'toggle-distortion',
+    ) as HTMLInputElement | null;
+    toggleDist?.addEventListener('change', () => {
+      const edits = this.delegate.getEdits();
+      edits.lens_correction_enabled = toggleDist.checked;
+      this.delegate.renderCanvas();
+      this.delegate.scheduleHistogramUpdate?.();
+      this.delegate.autoSaveSidecar();
+    });
+
+    const toggleTca = document.getElementById(
+      'toggle-tca',
+    ) as HTMLInputElement | null;
+    toggleTca?.addEventListener('change', () => {
+      const edits = this.delegate.getEdits();
+      edits.tca_correction_enabled = toggleTca.checked;
+      this.delegate.renderCanvas();
+      this.delegate.scheduleHistogramUpdate?.();
+      this.delegate.autoSaveSidecar();
+    });
+
+    const toggleVig = document.getElementById(
+      'toggle-vignetting',
+    ) as HTMLInputElement | null;
+    toggleVig?.addEventListener('change', () => {
+      const edits = this.delegate.getEdits();
+      edits.vignetting_correction_enabled = toggleVig.checked;
+      this.delegate.renderCanvas();
+      this.delegate.scheduleHistogramUpdate?.();
+      this.delegate.autoSaveSidecar();
+    });
   }
 
   private handleGlobalPointerUp(): void {

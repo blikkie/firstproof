@@ -167,6 +167,14 @@ public struct OpticsGeometryWorkspaceView: View {
                 .toggleStyle(.switch)
                 .disabled(viewModel.lensCoefficients?.hasTca != true)
                 
+                Toggle("Vignetting (Peripheral Falloff)", isOn: viewModel.editToggleBinding(
+                    titleOn: "Enable Vignetting Correction",
+                    titleOff: "Disable Vignetting Correction",
+                    keyPath: \.vignettingCorrectionEnabled
+                ))
+                .toggleStyle(.switch)
+                .disabled(viewModel.lensCoefficients?.hasVignetting != true)
+                
                 if let coeff = viewModel.lensCoefficients {
                     VStack(alignment: .leading, spacing: 2) {
                         if let lens = viewModel.selectedPhoto?.lensModel, !lens.isEmpty {
@@ -190,6 +198,15 @@ public struct OpticsGeometryWorkspaceView: View {
                                 .foregroundColor(.secondary.opacity(0.8))
                         } else {
                             Text("Lateral CA: Uncalibrated (Use Defringe)")
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary.opacity(0.8))
+                        }
+                        if coeff.hasVignetting {
+                            Text("Vignetting: Calibrated")
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary.opacity(0.8))
+                        } else {
+                            Text("Vignetting: Uncalibrated")
                                 .font(.system(size: 9))
                                 .foregroundColor(.secondary.opacity(0.8))
                         }

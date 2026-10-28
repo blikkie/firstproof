@@ -64,6 +64,16 @@ export type ToneCurvesPayload = ToneCurvesRecord;
 export type CurvePoint = CurvePointRecord;
 export type EvaluatedLut = AllCurvesLutRecord;
 
+export interface LensCorrectionCoefficients {
+  distortion: number[];
+  tca: number[];
+  vignetting: number[];
+  distortion_model: string;
+  has_distortion: boolean;
+  has_tca: boolean;
+  has_vignetting: boolean;
+}
+
 export interface EvHistogramRecord {
   bins_luminance: number[];
   bins_r: number[];
@@ -332,6 +342,10 @@ export class WasmBridge {
     edits: EditSettingsPayload,
     lensCorrectionEnabled: boolean = false,
     tcaCorrectionEnabled: boolean = false,
+    vignettingCorrectionEnabled: boolean = false,
+    vignettingK1: number = 0.0,
+    vignettingK2: number = 0.0,
+    vignettingK3: number = 0.0,
   ): EvHistogramRecord | null {
     try {
       const byteView =
@@ -358,6 +372,10 @@ export class WasmBridge {
         edits.crop_bottom,
         lensCorrectionEnabled,
         tcaCorrectionEnabled,
+        vignettingCorrectionEnabled,
+        vignettingK1,
+        vignettingK2,
+        vignettingK3,
       );
       return (res as EvHistogramRecord) ?? null;
     } catch (err) {
@@ -485,5 +503,25 @@ export class WasmBridge {
 
   public getAdjustmentDescriptor(id: string): AdjustmentDescriptor | null {
     return (wasm.get_adjustment_descriptor(id) as AdjustmentDescriptor) || null;
+  }
+
+  public loadLensfunDatabase(jsonStr: string): boolean {
+    return wasm.load_lensfun_database(jsonStr);
+  }
+
+  public resolveLensCoefficients(
+    cameraMake: string,
+    cameraModel: string,
+    lensModel: string,
+    focalLength: number,
+    aperture?: number,
+  ): LensCorrectionCoefficients {
+    return wasm.resolve_lens_coefficients(
+      cameraMake,
+      cameraModel,
+      lensModel,
+      focalLength,
+      aperture,
+    ) as LensCorrectionCoefficients;
   }
 }

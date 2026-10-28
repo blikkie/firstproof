@@ -18,10 +18,7 @@ use firstproof_core::export::decode::f16_to_f32;
 fn test_high_iso_viewport_chroma_parity_real_file() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let fixture_dng = manifest_dir.join("tests/fixtures/_MG_2651.dng");
-    let dng_path_buf = std::env::var("FIRSTPROOF_TEST_RAW_DIR")
-        .map(|d| Path::new(&d).join("_MG_2565.dng"))
-        .unwrap_or(fixture_dng);
-    let dng_path = dng_path_buf.as_path();
+    let dng_path = fixture_dng.as_path();
     if !dng_path.exists() {
         eprintln!("Test file {:?} not found, skipping real file test", dng_path);
         return;

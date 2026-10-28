@@ -11,6 +11,7 @@ public struct SettingsView: View {
     @AppStorage("defaultConsolidateSidecars") private var defaultConsolidateSidecars: Bool = true
     @AppStorage("defaultAutoTca") private var defaultAutoTca: Bool = true
     @AppStorage("defaultAutoDistortion") private var defaultAutoDistortion: Bool = false
+    @AppStorage("defaultAutoVignetting") private var defaultAutoVignetting: Bool = false
     @AppStorage("customMainLibraryPath") private var customMainLibraryPath: String = ""
     
     @State private var pendingNewLibraryPath: String? = nil
@@ -77,6 +78,7 @@ public struct SettingsView: View {
                 
                 Toggle("Auto-correct chromatic aberration when lens profile is available", isOn: $defaultAutoTca)
                 Toggle("Auto-correct geometric distortion when lens profile is available", isOn: $defaultAutoDistortion)
+                Toggle("Auto-correct vignetting (peripheral falloff) when lens profile is available", isOn: $defaultAutoVignetting)
                 
                 Text("Default states applied to newly opened photos without existing edits. Individual photos can toggle corrections at any time in the Optics panel.")
                     .font(.caption)

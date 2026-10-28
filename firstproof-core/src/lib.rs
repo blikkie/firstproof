@@ -555,11 +555,16 @@ pub fn compute_ev_histogram(
     crop_bottom: f32,
     lens_correction_enabled: bool,
     tca_correction_enabled: bool,
+    vignetting_correction_enabled: bool,
+    vignetting_k1: f32,
+    vignetting_k2: f32,
+    vignetting_k3: f32,
 ) -> Option<EvHistogramRecord> {
     firstproof_engine::histogram::compute_ev_histogram_from_f16_buffer(
         width, height, &data, exposure, contrast, highlights, shadows, whites, blacks,
         crop_left, crop_top, crop_right, crop_bottom,
         lens_correction_enabled, tca_correction_enabled,
+        vignetting_correction_enabled, vignetting_k1, vignetting_k2, vignetting_k3,
     )
 }
 
@@ -578,12 +583,17 @@ pub fn compute_ev_histogram_from_path(
     crop_bottom: f32,
     lens_correction_enabled: bool,
     tca_correction_enabled: bool,
+    vignetting_correction_enabled: bool,
+    vignetting_k1: f32,
+    vignetting_k2: f32,
+    vignetting_k3: f32,
 ) -> Option<EvHistogramRecord> {
     if let Ok((width, height, data)) = export::decode_raw_preview_binned_buffer(&path) {
         firstproof_engine::histogram::compute_ev_histogram_from_f16_buffer(
             width, height, &data, exposure, contrast, highlights, shadows, whites, blacks,
             crop_left, crop_top, crop_right, crop_bottom,
             lens_correction_enabled, tca_correction_enabled,
+            vignetting_correction_enabled, vignetting_k1, vignetting_k2, vignetting_k3,
         )
     } else {
         None

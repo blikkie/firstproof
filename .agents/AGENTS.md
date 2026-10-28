@@ -37,15 +37,22 @@
     - **Strict Boundary Anchoring Invariant ($f(0.0) \equiv 0.0, f(1.0) \equiv 1.0$)**: Never introduce additive digital floor lifts (`+ 0.016` or `+ 0.035`) into develop adjustments. Additive floor lifts starve physical printers of carbon black ink ($D_{\max}$), double-flatten physical prints, and cast artificial milky veils on calibrated HDR/EDR screens. Noble metals (Platinum/Palladium) achieve open luminous shadows through analytical cubic toe cushioning and colloidal harmonic toning, never floor lifting.
     - **Substrate Decoupling**: Paper substrates (unbleached cotton rag, alpha cellulose, baryta base reflection, OBA white points, ink saturation limits) belong exclusively in **Soft Proofing via ICC profiles (Story 3.4)**, never develop adjustments.
 
-- **Adversarial Code Reviews & Anti-Magic Number Audit**: Before every commit and check-in, perform an adversarial review:
-  - Probe diffs for race conditions, memory leaks/retain cycles, WebGL/Metal texture clobbering, error boundary misses, out-of-order async responses, and main-thread bottlenecks.
-  - **Audit for Arbitrary Constants & Heuristics**: Rigorously inspect every camera processing, color science, and exposure adjustment in the diff for arbitrary magic numbers, localized scalar multipliers, or piecewise if/else heuristics. Any new numerical parameter must trace directly to published sensitometric standards (e.g. DNG specification, Troy Sobotka's AgX specification, CIE photopic luminance) rather than trial-and-error curve fitting.
+- **Pre-Commit Subagent Review & Harness Gatekeeping (`firstproof-code-review`)**:
+  - Before presenting an educational commit tour or requesting sign-off to commit, **always invoke the `firstproof-code-review` skill via an independent subagent** to prevent confirmation bias and conversational sunk-cost rationalizations.
+  - The review subagent evaluates the clean working tree diff against 6 core pillars:
+    1. **Mechanical Verification**: Executes `./scripts/check.sh` (Rust tests, Clippy, shader parity, Naga transpilation, MCP sensor, Biome lint, Swift tests).
+    2. **AI Slop & Anti-Hedge**: Enforces zero defensive shims (`typeof x === 'function'`, `fn?: ...`), zero semantic fallbacks, zero swallowed errors (`try? FirstProof...`), zero plastic AI filters, and strict boundary anchoring ($f(0.0) \equiv 0.0, f(1.0) \equiv 1.0$).
+    3. **Adversarial Diff Audit**: Probes for concurrency races, un-cancelled async requests, retain cycles, WebGL/Metal texture clobbering, main-thread blocking, and arbitrary magic numbers.
+    4. **Cross-Platform Parity Invariant**: Enforces that any feature, adjustment, toggle, metadata field, or workflow touched is fully implemented on all targets (macOS native SwiftUI/Metal, Web darkroom WebGL/TypeScript, CLI, Rust engine/WASM) unless explicitly justified as platform-exclusive.
+    5. **Feedback Loop Health**: Tracks check suite duration and flags any test regressions (magic files, un-isolated slow disk batch jobs) that degrade the developer steering loop (>45s).
+    6. **Tone & Copy Restraint**: Ensures UI copy, dialogs, docstrings, and commit messages remain quiet, factual, warm, and understated, with zero breathless marketing buzzwords (*"revolutionary"*, *"blazing-fast"*, *"game-changing"*), conversion hype, or patronizing emojis.
+  - The subagent must issue a verdict of `PASSED` before any commit tour can proceed. All blocking findings must be resolved.
 
 - **Verification Gatekeeping & Harness Delegation Framework**:
   - **Always Tour Before Committing**: Never execute `git commit` before presenting the educational tour and review of changes to the user. The tour must always be delivered first so the user knows exactly what was built, why each change was made, and what to verify before committing.
   - **Mandatory Manual Testing Instructions for Perceptual & Visual Changes**:
     - Automated sensors in `./scripts/check.sh` (`make check`, Rust unit tests, architectural fitness functions, Vitest behavioral tests, parity assertions) catch computational and mathematical regressions in the fast inner loop.
-    - However, whenever changes introduce or modify **color rendering formulations, visual shader aesthetics, tone curves, emulsion/print media curves, film grain look, or interactive pointer gestures/windowing**, ALWAYS provide explicit, actionable manual testing instructions in the tour:
+    - However, whenever changes introduce or modify **color rendering formulations, visual shader aesthetics, tone curves, emulsion/print media curves, film grain look, or interactive pointer gestures/windowing**, ALWAYS include explicit, actionable manual testing instructions in the tour:
       1. Which test fixtures, camera profiles, or real RAW captures to load.
       2. Which specific sliders, workspace tabs, or emulsion/print archetypes to toggle or scrub.
       3. What concrete perceptual rendering behaviors, tonal roll-offs, or optical artifacts to inspect in the viewport.
@@ -54,7 +61,7 @@
 - **Educational Commit Tours (No Quizzes)**: Always present the tour of changes BEFORE requesting or creating any commit:
   - Focus strictly on what was built and explain the concrete rationale behind each change made.
   - Whenever a new concept, system primitive, or pattern is introduced into the codebase, provide an educational deep-dive explaining how that concept works under the hood.
-  - Pair the tour with the concrete manual verification instructions whenever rendering or interactivity was touched.
+  - Pair the tour with the subagent review verdict summary and concrete manual verification instructions whenever rendering or interactivity was touched.
   - Do not include quizzes or external language comparisons unless directly relevant to understanding the architecture.
   - Await user review and confirmation before executing the commit.
 

@@ -106,6 +106,11 @@ export class KeyboardShortcutController {
         this.actions.onSelectTab('detail');
         return;
       }
+      if (e.key === '4') {
+        e.preventDefault();
+        this.actions.onSelectTab('optics');
+        return;
+      }
       if (e.key === 'e' || e.key === 'E') {
         e.preventDefault();
         this.actions.onOpenExportModal();

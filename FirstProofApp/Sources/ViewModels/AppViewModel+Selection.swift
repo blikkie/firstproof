@@ -267,6 +267,7 @@ extension AppViewModel {
                 edits.flipVertical = exifFlipV
                 edits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
                 edits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+                edits.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
             }
             targetEdits = edits
         } else {
@@ -278,6 +279,7 @@ extension AppViewModel {
             defaultEdits.tint = asShotTint
             defaultEdits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
             defaultEdits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+            defaultEdits.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
             targetEdits = defaultEdits
         }
         
@@ -576,6 +578,7 @@ extension AppViewModel {
                 }
                 baseline.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
                 baseline.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+                baseline.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
                 finalEdits = baseline
             }
 

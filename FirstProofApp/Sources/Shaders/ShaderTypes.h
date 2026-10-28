@@ -99,9 +99,13 @@ struct ShaderUniforms {
     float defringeAmount;          // 0.0 .. 100.0 (default 0.0)
     int32_t tcaCorrectionEnabled;  // 1 = Lateral CA enabled, 0 = disabled
     int32_t clippingOverlayActive; // 1 = Highlight (red) and shadow (blue) clipping mask overlay active, 0 = normal
-    float pad0;
-    float pad1;
-    float pad2;                    // 16-byte std140/WebGPU alignment (84 fields * 4 bytes = 336 bytes = 21 * 16)
+    int32_t vignettingCorrectionEnabled; // 1 = Vignetting correction active, 0 = disabled
+    int32_t hasVignetting;         // 1 = Lens profile contains vignetting calibration, 0 = none
+    float vignettingK1;            // r^2 radial illumination gain coefficient
+    float vignettingK2;            // r^4 radial illumination gain coefficient
+    float vignettingK3;            // r^6 radial illumination gain coefficient
+    float vignettingK4;            // r^8 radial illumination gain coefficient
+    float pad0;                    // 16-byte std140/WebGPU alignment (88 fields * 4 bytes = 352 bytes = 22 * 16)
 };
 
 #endif /* ShaderTypes_h */
