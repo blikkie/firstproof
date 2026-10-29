@@ -7,27 +7,13 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up (v0.1 Release Gate)
-1. **Story 3.27: Independent Lens Vignetting Correction Toggle & Sensitometric Histogram Reactivity** (P2)
-2. **Story 3.4: ColorSync Soft Proofing & Lab ICC Profile Management** (P2)
-3. **Story 4.7: Native macOS Desktop Archival DNG Ingest & Batch Action** (P2)
+1. **Story 3.4: ColorSync Soft Proofing & Lab ICC Profile Management** (P2)
+2. **Story 3.26: Global 3D LUT Library Management & Default Look Preset in Settings** (P2)
+3. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
 
 ---
 
 ## Phase 3: Fine-Art Darkroom Chemistry, Archival Formats & Web Playground (P1 / P2)
-
-### 3.27 Independent Lens Vignetting Correction Toggle & Sensitometric Histogram Reactivity (P2)
-- **Decoupled Three-Toggle Lens Corrections Card (`OpticsGeometryWorkspaceView.swift`)**:
-  - Expose a dedicated third switch toggle: *"Vignetting (Peripheral Falloff)"* in the Optics & Geometry workspace alongside *"Geometric Distortion"* and *"Chromatic Aberration"*.
-  - Decouple peripheral illumination correction from geometric distortion, honoring photographers who embrace organic lens character / optical falloff while demanding straight lines (or vice versa).
-  - Bind to `viewModel.vignettingCorrectionEnabled` with disabled state when `viewModel.lensCoefficients?.hasVignetting != true`.
-  - Wire to `EditSettings`, XMP sidecars, and Undo/Redo history.
-- **Continuous Physical Radial Illumination Gain**:
-  - Implement radial illumination gain $g(r) = 1 + k_1 r^2 + k_2 r^4 + k_3 r^6 + k_4 r^8$ based on Lensfun polynomial calibration and DNG Opcode 3 (`OPCODE_FIX_VIGNETTE_RADIAL`).
-  - Maintain 1:1 multi-engine parity across Metal (`Shaders.metal`), WebGL 2 / WebGPU WGSL (`geometry.wgsl`), and Rust CPU export (`encoders.rs`).
-- **Sensitometric EV Zone Histogram Reactivity (Mandatory Acceptance Criterion)**:
-  - **AC Invariant**: Toggling or adjusting Vignetting Correction MUST immediately schedule and update the Sensitometric EV Zone Histogram (`scheduleHistogramUpdate()`).
-  - The histogram solver must apply the radial illumination gain $g(r)$ across subsampled coordinates $(x, y)$, lifting the peripheral shadow floor (Zone I/II into Zone III/IV) and updating clipping badges and tonal distribution in real time.
-  - Automated tests asserting that toggling vignetting correction modifies the histogram EV distribution and eliminates spurious shadow clipping caused by mechanical lens barrel falloff.
 
 
 > **Product Invariant: The Primary Engine vs. The Fine-Art "Treat"**  
@@ -74,22 +60,7 @@ This document strictly tracks pending and deferred features calibrated against o
 
 
 
-## Phase 4: Archival Formats, Optics & Core Workflows (P1 / P2)
 
-### 4.7 Native macOS Desktop Archival DNG Ingest & Batch Action (P2)
-- **Ingest Flow Integration (`ImportSheetView.swift`, `AppViewModel.swift`)**:
-  - Add "Convert to Archival DNG on Ingest" toggle in the intake dialog.
-  - Streams copied photos through `firstproof_core::dng::convert_raw_to_dng` with post-write disk read-back verification before adding to catalog SQLite.
-- **Multi-Selection Batch Action**:
-  - Context menu and `Photo -> Convert to Archival DNG` menu action on selected filmstrip thumbnails.
-  - Smart filtering: Silently ignores JPEGs, PNGs, TIFFs, and already-DNG files; processes strictly proprietary camera RAWs (`.cr2`, `.nef`, `.arw`, etc.).
-  - Non-blocking background worker with progress sheet and cancel safety.
-- **Sidecar & Catalog Sync**:
-  - Automatically updates catalog database records (`catalog.db`) pointing photo paths to the new `.dng` file without dropping user ratings, flags, or undo history.
-
-
-
----
 
 ## Phase 5: Post-v1 & Long-Term Vision
 

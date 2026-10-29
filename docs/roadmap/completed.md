@@ -606,3 +606,9 @@ This archive tracks completed stories and features moved from the active backlog
   - *Automated Parity & Invariant Verification*:
     - 6 Rust unit tests in `firstproof-engine/src/histogram.rs` verifying Zone V centering, EV stop linearity, tone recovery reactivity, crop isolation, clipping disentanglement, and lens distortion auto-crop.
     - 6 Swift Testing invariants in `HistogramTests.swift`. All 34 Swift tests pass in <0.13s with 100% green sensors across `./scripts/check.sh`.
+
+- **Story 3.27: Independent Lens Vignetting Correction Toggle & Sensitometric Histogram Reactivity (`OpticsGeometryWorkspaceView.swift`, `AppViewModel+Editor.swift`, `Shaders.metal`, `firstproof-engine::lensfun`, `encoders.rs`, `InspectorSyncController.ts`)**:
+  - *Decoupled Three-Toggle Lens Corrections Card*: Added dedicated third switch toggle: "Vignetting (Peripheral Falloff)" in the Optics & Geometry workspace alongside Distortion and Chromatic Aberration, decoupling peripheral illumination correction from geometry. Bound to `viewModel.vignettingCorrectionEnabled`, disabling cleanly when lens calibration lacks vignetting data. Wired to `EditSettings`, XMP sidecars, and Undo/Redo history.
+  - *Continuous Physical Radial Illumination Gain*: Implemented radial illumination gain $g(r) = 1 + k_1 r^2 + k_2 r^4 + k_3 r^6 + k_4 r^8$ based on Lensfun polynomial calibration and DNG Opcode 3 across Metal (`Shaders.metal`), WebGL 2 / WebGPU WGSL (`geometry.wgsl`), and Rust CPU export (`encoders.rs`).
+  - *Sensitometric EV Zone Histogram Reactivity*: Toggling or adjusting Vignetting Correction immediately updates the Sensitometric EV Zone Histogram (`scheduleHistogramUpdate()`), applying radial gain across coordinates to lift the peripheral shadow floor and update clipping badges in real time.
+  - *Web Darkroom Parity*: Exported lens telemetry and toggles to WebAssembly and TypeScript (`InspectorSyncController.ts`, `controllers.test.ts`).
