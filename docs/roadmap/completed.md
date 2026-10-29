@@ -52,6 +52,14 @@ This archive tracks completed stories and features moved from the active backlog
   - Added dedicated "Color & Soft Proofing" section in Settings with 1-click ICC profile importer and Finder folder reveal.
   - Detail canvas toolbar Soft Proof capsule pill with popup menu for fast profile and rendering intent switching (*Relative Colorimetric*, *Perceptual*, *Absolute Colorimetric / Simulate Paper & Ink*), plus global View menu keyboard shortcuts `Cmd+Y` (toggle proofing) and `Shift+Cmd+Y` (toggle cyan zebra gamut warning).
   - Cross-platform parity: WGSL darkroom shader Stage 10.1 transpiled to Metal, GLSL, and WebGPU via Naga; WebGL 2 binds texture unit 5 with an identity 3D texture, isolating samplers from unit 0.
+- **Story 3.26: Global 3D LUT Library Management & Default Look Preset in Settings (P2)**:
+  - Elevated `.cube` 3D LUTs from transient, per-photo imports into a persistent global LUT library honoring native OS filesystem conventions: macOS `~/Library/Application Support/FirstProof/LUTs/` and Linux `$XDG_DATA_HOME/firstproof/luts/` (`firstproof-core/src/lut.rs`).
+  - Implemented fast header-only inspection (`inspect_cube_file`) extracting `TITLE` and `LUT_3D_SIZE` without reading multi-megabyte 3D data into memory.
+  - Added safe lifecycle management: `import_global_lut`, `delete_global_lut`, and `rename_global_lut` with canonical path traversal containment checks rejecting deletion or modification outside the library folder.
+  - Universal LUT resolution in the export pipeline (`load_global_or_cube_lut` in `encoders.rs`): resolves LUTs whether specified by absolute path, filename, or title from the global library.
+  - Dedicated "Look & 3D LUTs" management pane in Settings (`SettingsView.swift`) allowing photographers to import, rename, preview on the active photo in viewport, and delete custom 3D LUTs, plus "Show in Finder".
+  - Configurable "Default Signature Look" setting in Settings (LUT picker + default intensity slider): applied automatically to newly ingested photos without saved edits and when clicking "Reset All".
+  - Develop inspector integration: LUT picker dropdown aggregates built-in looks and all globally managed user LUTs, with an inline "+ Import..." button registering new LUTs into the persistent global library.
 
 ---
 

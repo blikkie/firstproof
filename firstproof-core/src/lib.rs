@@ -20,6 +20,7 @@ pub mod dng;
 pub mod proof;
 
 pub use proof::{IccProfileRecord, ProofIntent};
+pub use lut::LutRecord;
 
 pub use firstproof_engine::{
     all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,
@@ -655,6 +656,7 @@ pub enum FirstProofError {
     DatabaseError { reason: String },
     DngError { reason: String },
     ColorSyncError { reason: String },
+    LutError { reason: String },
 }
 
 impl std::fmt::Display for FirstProofError {
@@ -663,6 +665,7 @@ impl std::fmt::Display for FirstProofError {
             FirstProofError::DatabaseError { reason } => write!(f, "Database error: {}", reason),
             FirstProofError::DngError { reason } => write!(f, "DNG conversion error: {}", reason),
             FirstProofError::ColorSyncError { reason } => write!(f, "ColorSync error: {}", reason),
+            FirstProofError::LutError { reason } => write!(f, "LUT error: {}", reason),
         }
     }
 }
@@ -1171,8 +1174,33 @@ pub fn get_builtin_cube_lut(_title: String, _size: u32) -> Option<CubeLutRecord>
 }
 
 #[uniffi::export]
-pub fn load_cube_lut(path: String) -> Option<CubeLutRecord> {
-    lut::load_cube_lut_file(&path).ok().map(|l| {
+pub fn get_global_lut_dir_path() -> String {
+    lut::get_global_lut_dir().to_string_lossy().to_string()
+}
+
+#[uniffi::export]
+pub fn discover_global_luts() -> Vec<LutRecord> {
+    lut::discover_global_luts()
+}
+
+#[uniffi::export]
+pub fn import_global_lut(source_path: String) -> Result<LutRecord, FirstProofError> {
+    lut::import_global_lut(&source_path).map_err(|reason| FirstProofError::LutError { reason })
+}
+
+#[uniffi::export]
+pub fn delete_global_lut(id_or_path: String) -> Result<bool, FirstProofError> {
+    lut::delete_global_lut(&id_or_path).map_err(|reason| FirstProofError::LutError { reason })
+}
+
+#[uniffi::export]
+pub fn rename_global_lut(id_or_path: String, new_title: String) -> Result<LutRecord, FirstProofError> {
+    lut::rename_global_lut(&id_or_path, &new_title).map_err(|reason| FirstProofError::LutError { reason })
+}
+
+#[uniffi::export]
+pub fn resolve_cube_lut(name_or_path: String) -> Option<CubeLutRecord> {
+    lut::load_global_or_cube_lut(&name_or_path).ok().map(|l| {
         let data_rgba32f = l.to_rgba32f_bytes();
         CubeLutRecord {
             title: l.title,
@@ -1180,6 +1208,11 @@ pub fn load_cube_lut(path: String) -> Option<CubeLutRecord> {
             data_rgba32f,
         }
     })
+}
+
+#[uniffi::export]
+pub fn load_cube_lut(path: String) -> Option<CubeLutRecord> {
+    resolve_cube_lut(path)
 }
 
 #[uniffi::export]

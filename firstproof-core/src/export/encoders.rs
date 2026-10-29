@@ -202,7 +202,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     
     let active_lut: Option<crate::lut::CubeLut> = if let Some(ref lut_name) = edits.lut_name {
         if edits.lut_intensity > 0.0 {
-            crate::lut::load_cube_lut_file(lut_name).ok()
+            crate::lut::load_global_or_cube_lut(lut_name).ok()
         } else {
             None
         }

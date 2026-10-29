@@ -2252,6 +2252,72 @@ public func FfiConverterTypeLensCorrectionCoefficientsRecord_lower(_ value: Lens
 }
 
 
+public struct LutRecord: Equatable, Hashable {
+    public var id: String
+    public var title: String
+    public var filePath: String
+    public var size: UInt32
+    public var isBuiltin: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, title: String, filePath: String, size: UInt32, isBuiltin: Bool) {
+        self.id = id
+        self.title = title
+        self.filePath = filePath
+        self.size = size
+        self.isBuiltin = isBuiltin
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LutRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLutRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LutRecord {
+        return
+            try LutRecord(
+                id: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf), 
+                filePath: FfiConverterString.read(from: &buf), 
+                size: FfiConverterUInt32.read(from: &buf), 
+                isBuiltin: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LutRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.filePath, into: &buf)
+        FfiConverterUInt32.write(value.size, into: &buf)
+        FfiConverterBool.write(value.isBuiltin, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLutRecord_lift(_ buf: RustBuffer) throws -> LutRecord {
+    return try FfiConverterTypeLutRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLutRecord_lower(_ value: LutRecord) -> RustBuffer {
+    return FfiConverterTypeLutRecord.lower(value)
+}
+
+
 public struct PhotoRecord: Equatable, Hashable {
     public var id: Int64
     public var filePath: String
@@ -2739,6 +2805,8 @@ enum FirstProofError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
     )
     case ColorSyncError(reason: String
     )
+    case LutError(reason: String
+    )
 
     
 
@@ -2777,6 +2845,9 @@ public struct FfiConverterTypeFirstProofError: FfiConverterRustBuffer {
         case 3: return .ColorSyncError(
             reason: try FfiConverterString.read(from: &buf)
             )
+        case 4: return .LutError(
+            reason: try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2801,6 +2872,11 @@ public struct FfiConverterTypeFirstProofError: FfiConverterRustBuffer {
         
         case let .ColorSyncError(reason):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .LutError(reason):
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(reason, into: &buf)
             
         }
@@ -3999,6 +4075,31 @@ fileprivate struct FfiConverterSequenceTypeIccProfileRecord: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeLutRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [LutRecord]
+
+    public static func write(_ value: [LutRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLutRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LutRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LutRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLutRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypePhotoRecord: FfiConverterRustBuffer {
     typealias SwiftType = [PhotoRecord]
 
@@ -4272,6 +4373,14 @@ public func decodeRawPreviewBinned(path: String) -> RawPreviewRecord?  {
     )
 })
 }
+public func deleteGlobalLut(idOrPath: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_delete_global_lut(
+        FfiConverterString.lower(idOrPath),uniffiCallStatus
+    )
+})
+}
 public func detectWhiteBalancePreset(temperature: Double, tint: Double, asShotTemp: Double, asShotTint: Double) -> WhiteBalancePreset  {
     return try!  FfiConverterTypeWhiteBalancePreset_lift(try! rustCall() {
         uniffiCallStatus in
@@ -4287,6 +4396,13 @@ public func discoverColorSyncProfiles() -> [IccProfileRecord]  {
     return try!  FfiConverterSequenceTypeIccProfileRecord.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_firstproof_core_fn_func_discover_color_sync_profiles(uniffiCallStatus
+    )
+})
+}
+public func discoverGlobalLuts() -> [LutRecord]  {
+    return try!  FfiConverterSequenceTypeLutRecord.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_discover_global_luts(uniffiCallStatus
     )
 })
 }
@@ -4453,6 +4569,13 @@ public func getBuiltinCubeLutTitles() -> [String]  {
     )
 })
 }
+public func getGlobalLutDirPath() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_get_global_lut_dir_path(uniffiCallStatus
+    )
+})
+}
 public func getWhiteBalancePresetValues(preset: WhiteBalancePreset) -> WhiteBalancePresetValuesRecord?  {
     return try!  FfiConverterOptionTypeWhiteBalancePresetValuesRecord.lift(try! rustCall() {
         uniffiCallStatus in
@@ -4473,6 +4596,14 @@ public func importColorSyncProfile(sourcePath: String)throws  -> IccProfileRecor
     return try  FfiConverterTypeIccProfileRecord_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
         uniffiCallStatus in
     uniffi_firstproof_core_fn_func_import_color_sync_profile(
+        FfiConverterString.lower(sourcePath),uniffiCallStatus
+    )
+})
+}
+public func importGlobalLut(sourcePath: String)throws  -> LutRecord  {
+    return try  FfiConverterTypeLutRecord_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_import_global_lut(
         FfiConverterString.lower(sourcePath),uniffiCallStatus
     )
 })
@@ -4528,12 +4659,29 @@ public func readXmp(path: String) -> XmpDataRecord?  {
     )
 })
 }
+public func renameGlobalLut(idOrPath: String, newTitle: String)throws  -> LutRecord  {
+    return try  FfiConverterTypeLutRecord_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_rename_global_lut(
+        FfiConverterString.lower(idOrPath),
+        FfiConverterString.lower(newTitle),uniffiCallStatus
+    )
+})
+}
 public func resolveCatalogPath(folderPath: String, portable: Bool) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_firstproof_core_fn_func_resolve_catalog_path(
         FfiConverterString.lower(folderPath),
         FfiConverterBool.lower(portable),uniffiCallStatus
+    )
+})
+}
+public func resolveCubeLut(nameOrPath: String) -> CubeLutRecord?  {
+    return try!  FfiConverterOptionTypeCubeLutRecord.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_resolve_cube_lut(
+        FfiConverterString.lower(nameOrPath),uniffiCallStatus
     )
 })
 }
@@ -4641,10 +4789,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_decode_raw_preview_binned() != 57219) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_func_delete_global_lut() != 15450) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_func_detect_white_balance_preset() != 51679) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_discover_color_sync_profiles() != 31458) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_discover_global_luts() != 6604) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_edits_cache_signature() != 36067) {
@@ -4698,6 +4852,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_get_builtin_cube_lut_titles() != 12257) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_func_get_global_lut_dir_path() != 27070) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_func_get_white_balance_preset_values() != 35914) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4705,6 +4862,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_import_color_sync_profile() != 51205) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_import_global_lut() != 52163) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_import_to_library() != 37991) {
@@ -4725,7 +4885,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_read_xmp() != 41255) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_func_rename_global_lut() != 43728) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_func_resolve_catalog_path() != 28769) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_resolve_cube_lut() != 32992) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_scan_directory_for_takeout() != 13542) {

@@ -7,8 +7,7 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.26: Global 3D LUT Library Management & Default Look Preset in Settings** (P2)
-2. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
+1. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
 
 ---
 
@@ -27,21 +26,6 @@ This document strictly tracks pending and deferred features calibrated against o
   - Pair with Printique's downloadable ICC printer/paper profiles in Soft Proofing (Story 3.4) to benchmark on-screen soft-proof simulation against the physical delivered prints.
   - Benchmark shadow floor formulations across physical prints: verify that carbon black ink ($D_{\max}$) remains deep and rich without milky digital floor lifts or premature shadow crushing.
   - Tune paper grade and process depth default presets to guarantee 1:1 perceptual fidelity between darkroom viewport and physical framed gallery print.
-
-
-### 3.26 Global 3D LUT Library Management & Default Look Preset in Settings (P2)
-- **Account / App-Level 3D LUT Library (Native OS Conventions)**:
-  - Elevate `.cube` LUTs from transient, per-photo imports into a persistent global LUT library honoring native OS filesystem conventions:
-    - **macOS**: `~/Library/Application Support/FirstProof/LUTs/` with a native "Show in Finder" button.
-    - **Linux / CLI**: `$XDG_DATA_HOME/firstproof/luts/` (or `~/.config/firstproof/luts/`).
-  - All imported LUTs are permanently available across all photos, sessions, and catalog folders without needing to re-browse the filesystem.
-- **LUT Management in Settings (`SettingsView.swift`)**:
-  - Dedicated "Look & 3D LUTs" management pane in Settings allowing users to add, rename, preview, and remove custom 3D LUTs.
-- **Default Signature Look Setting**:
-  - Allow users to set a "Default Look LUT" (with customizable default intensity, e.g. 100% or subtle 40%) in Settings.
-  - When enabled, newly imported photos or photos reset to default automatically inherit the photographer's signature LUT look, eliminating repetitive manual application across photo shoots.
-- **Inspector UI Integration**:
-  - Develop inspector's LUT dropdown automatically aggregates both First Proof built-in looks and all globally managed user LUTs, with an inline "+ Import..." button that automatically registers new LUTs into the persistent global library.
 ---
 
 

@@ -268,6 +268,10 @@ extension AppViewModel {
                 edits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
                 edits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
                 edits.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
+                if let defaultLut = UserDefaults.standard.string(forKey: "defaultLookLutName"), !defaultLut.isEmpty {
+                    edits.lutName = defaultLut
+                    edits.lutIntensity = UserDefaults.standard.object(forKey: "defaultLookLutIntensity") as? Float ?? 1.0
+                }
             }
             targetEdits = edits
         } else {
@@ -280,6 +284,10 @@ extension AppViewModel {
             defaultEdits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
             defaultEdits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
             defaultEdits.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
+            if let defaultLut = UserDefaults.standard.string(forKey: "defaultLookLutName"), !defaultLut.isEmpty {
+                defaultEdits.lutName = defaultLut
+                defaultEdits.lutIntensity = UserDefaults.standard.object(forKey: "defaultLookLutIntensity") as? Float ?? 1.0
+            }
             targetEdits = defaultEdits
         }
         

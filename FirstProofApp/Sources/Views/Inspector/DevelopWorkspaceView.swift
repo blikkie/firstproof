@@ -46,14 +46,14 @@ public struct DevelopWorkspaceView: View {
                     .padding(.vertical, 2)
                 }
                 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Picker("", selection: Binding<String>(
                         get: { viewModel.selectedLutName ?? "" },
                         set: { newValue in
                             viewModel.setSelectedLutName(newValue.isEmpty ? nil : newValue)
                         }
                     )) {
-                        Text("LUT: None (Bypass)").tag("")
+                        Text("None (Bypass)").tag("")
                         Divider()
                         ForEach(viewModel.allLutTitles, id: \.self) { title in
                             Text(title).tag(title)
@@ -62,26 +62,33 @@ public struct DevelopWorkspaceView: View {
                     .labelsHidden()
                     .pickerStyle(.menu)
                     
+                    if viewModel.selectedLutName != nil {
+                        Slider(
+                            value: $viewModel.lutIntensity,
+                            in: 0.0...1.0,
+                            onEditingChanged: { editing in
+                                viewModel.handleSliderEditing(editing, slider: .lutIntensity)
+                            }
+                        )
+                        .frame(width: 65)
+                        
+                        Text("\(Int(round(viewModel.lutIntensity * 100)))%")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .frame(width: 34, alignment: .trailing)
+                            .help("Double-click to reset strength to 100%")
+                            .onTapGesture(count: 2) {
+                                viewModel.resetSlider(.lutIntensity)
+                            }
+                    }
+                    
                     Button(action: {
                         viewModel.importCustomLut()
                     }) {
                         Image(systemName: "plus.circle")
-                            .help("Import .cube LUT file...")
+                            .help("Import .cube LUT into library...")
                     }
                     .buttonStyle(.borderless)
-                }
-                
-                if viewModel.selectedLutName != nil {
-                    SliderRow(
-                        label: "Intensity",
-                        value: $viewModel.lutIntensity,
-                        range: 0.0...1.0,
-                        format: "%.0f%%",
-                        onReset: { viewModel.resetSlider(.lutIntensity) },
-                        onEditingChanged: { viewModel.handleSliderEditing($0, slider: .lutIntensity) },
-                        onCancel: { viewModel.cancelSliderScrub() },
-                        multiplier: 100.0
-                    )
                 }
             }
             

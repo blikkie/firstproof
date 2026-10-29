@@ -1,6 +1,15 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+#[derive(uniffi::Record, Clone, Debug, PartialEq)]
+pub struct LutRecord {
+    pub id: String,
+    pub title: String,
+    pub file_path: String,
+    pub size: u32,
+    pub is_builtin: bool,
+}
 
 /// A 3D Look-Up Table (LUT) parsed from an Adobe / DaVinci `.cube` file or procedurally generated.
 #[derive(Clone, Debug, PartialEq)]
@@ -326,6 +335,305 @@ pub fn load_cube_lut_file<P: AsRef<Path>>(path: P) -> Result<CubeLut, String> {
         }
     }
     Ok(lut)
+}
+
+fn dirs_home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
+}
+
+/// Returns the platform-native global 3D LUT directory:
+/// - macOS: `~/Library/Application Support/FirstProof/LUTs/`
+/// - Linux/CLI: `$XDG_DATA_HOME/firstproof/luts/` or `~/.local/share/firstproof/luts/`
+pub fn get_global_lut_dir() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = dirs_home_dir() {
+            return home.join("Library/Application Support/FirstProof/LUTs");
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(data_home) = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from) {
+            return data_home.join("firstproof/luts");
+        } else if let Some(home) = dirs_home_dir() {
+            return home.join(".local/share/firstproof/luts");
+        }
+    }
+    PathBuf::from("luts")
+}
+
+pub fn ensure_global_lut_dir() -> Result<PathBuf, String> {
+    let dir = get_global_lut_dir();
+    fs::create_dir_all(&dir).map_err(|e| {
+        format!("Failed to create global LUT directory '{}': {}", dir.display(), e)
+    })?;
+    Ok(dir)
+}
+
+/// Quickly inspects a `.cube` file header (reading at most 100 lines)
+/// returning its (title, size) without allocating or reading large 3D data.
+pub fn inspect_cube_file(path: &Path) -> Option<(String, usize)> {
+    let file = File::open(path).ok()?;
+    let buf_reader = BufReader::new(file);
+    let mut title: Option<String> = None;
+    let mut size: Option<usize> = None;
+
+    for line_res in buf_reader.lines().take(100) {
+        let line = match line_res {
+            Ok(l) => l,
+            Err(_) => break,
+        };
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.is_empty() {
+            continue;
+        }
+        match parts[0].to_uppercase().as_str() {
+            "TITLE" if parts.len() > 1 => {
+                title = Some(parts[1..].join(" ").trim_matches('"').to_string());
+            }
+            "LUT_3D_SIZE" if parts.len() > 1 => {
+                if let Ok(s) = parts[1].parse::<usize>() {
+                    size = Some(s);
+                }
+            }
+            _ => {}
+        }
+        if size.is_some() && title.is_some() {
+            break;
+        }
+    }
+
+    let final_size = size.unwrap_or(33);
+    let final_title = title.unwrap_or_else(|| {
+        path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Custom LUT")
+            .to_string()
+    });
+
+    Some((final_title, final_size))
+}
+
+/// Discovers all `.cube` LUTs installed in the global library directory.
+pub fn discover_global_luts() -> Vec<LutRecord> {
+    let dir = match ensure_global_lut_dir() {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+
+    let entries = match fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut luts = Vec::new();
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            let is_cube = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("cube"))
+                .unwrap_or(false);
+
+            if is_cube {
+                if let Some((title, size)) = inspect_cube_file(&path) {
+                    let file_name = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown.cube")
+                        .to_string();
+                    luts.push(LutRecord {
+                        id: format!("global:{}", file_name),
+                        title,
+                        file_path: path.to_string_lossy().to_string(),
+                        size: size as u32,
+                        is_builtin: false,
+                    });
+                }
+            }
+        }
+    }
+
+    luts.sort_by_key(|a| a.title.to_lowercase());
+    luts
+}
+
+/// Copies an external `.cube` file into the persistent global LUT directory,
+/// verifying its format and making it permanently accessible across sessions.
+pub fn import_global_lut(source_path: &str) -> Result<LutRecord, String> {
+    let src = Path::new(source_path);
+    if !src.exists() {
+        return Err(format!("Source LUT file does not exist: {}", source_path));
+    }
+
+    let (title, size) = inspect_cube_file(src).ok_or_else(|| {
+        format!("File is not a valid Adobe/DaVinci .cube LUT: {}", source_path)
+    })?;
+
+    let dest_dir = ensure_global_lut_dir()?;
+    let original_name = src
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "Invalid file name".to_string())?;
+
+    // Sanitize file name
+    let safe_name: String = original_name
+        .chars()
+        .map(|c| if c == '/' || c == '\\' || c == ':' { '_' } else { c })
+        .collect();
+
+    let dest_path = dest_dir.join(&safe_name);
+    fs::copy(src, &dest_path).map_err(|e| {
+        format!("Failed to copy LUT to '{}': {}", dest_path.display(), e)
+    })?;
+
+    Ok(LutRecord {
+        id: format!("global:{}", safe_name),
+        title,
+        file_path: dest_path.to_string_lossy().to_string(),
+        size: size as u32,
+        is_builtin: false,
+    })
+}
+
+/// Deletes a custom LUT from the global LUT directory.
+pub fn delete_global_lut(id_or_path: &str) -> Result<bool, String> {
+    let dest_dir = ensure_global_lut_dir()?;
+    let target_path = if let Some(file_name) = id_or_path.strip_prefix("global:") {
+        dest_dir.join(file_name)
+    } else {
+        let p = Path::new(id_or_path);
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            dest_dir.join(id_or_path)
+        }
+    };
+
+    if !target_path.exists() {
+        return Err(format!("LUT file does not exist: {}", target_path.display()));
+    }
+
+    // Security check: verify destination path containment
+    let canonical_dest = dest_dir.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_target = target_path.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical_target.starts_with(&canonical_dest) {
+        return Err("Cannot delete LUT outside the global LUT library".to_string());
+    }
+
+    fs::remove_file(&canonical_target).map_err(|e| {
+        format!("Failed to remove LUT file '{}': {}", canonical_target.display(), e)
+    })?;
+
+    Ok(true)
+}
+
+/// Renames a custom LUT in the global directory, updating both the filename and internal TITLE header.
+pub fn rename_global_lut(id_or_path: &str, new_title: &str) -> Result<LutRecord, String> {
+    let dest_dir = ensure_global_lut_dir()?;
+    let current_path = if let Some(file_name) = id_or_path.strip_prefix("global:") {
+        dest_dir.join(file_name)
+    } else {
+        let p = Path::new(id_or_path);
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            dest_dir.join(id_or_path)
+        }
+    };
+
+    if !current_path.exists() {
+        return Err(format!("LUT file does not exist: {}", current_path.display()));
+    }
+
+    let canonical_dest = dest_dir.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_target = current_path.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical_target.starts_with(&canonical_dest) {
+        return Err("Cannot rename LUT outside the global LUT library".to_string());
+    }
+
+    let content = fs::read_to_string(&canonical_target)
+        .map_err(|e| format!("Cannot read LUT: {}", e))?;
+
+    let mut lines: Vec<String> = Vec::new();
+    let mut title_found = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.to_uppercase().starts_with("TITLE") {
+            lines.push(format!("TITLE \"{}\"", new_title));
+            title_found = true;
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+
+    if !title_found {
+        lines.insert(0, format!("TITLE \"{}\"", new_title));
+    }
+
+    let sanitized_title: String = new_title
+        .chars()
+        .map(|c| if c == '/' || c == '\\' || c == ':' { '_' } else { c })
+        .collect();
+    let new_file_name = format!("{}.cube", sanitized_title);
+    let new_path = dest_dir.join(&new_file_name);
+
+    let updated_content = lines.join("\n");
+    fs::write(&new_path, updated_content)
+        .map_err(|e| format!("Failed to write updated LUT: {}", e))?;
+
+    if new_path != canonical_target {
+        let _ = fs::remove_file(&canonical_target);
+    }
+
+    let (_, size) = inspect_cube_file(&new_path).unwrap_or((new_title.to_string(), 33));
+
+    Ok(LutRecord {
+        id: format!("global:{}", new_file_name),
+        title: new_title.to_string(),
+        file_path: new_path.to_string_lossy().to_string(),
+        size: size as u32,
+        is_builtin: false,
+    })
+}
+
+/// Resolves and loads a 3D LUT by file path, file name, or title from the global LUT library.
+pub fn load_global_or_cube_lut(name_or_path: &str) -> Result<CubeLut, String> {
+    // 1. Direct path check
+    let p = Path::new(name_or_path);
+    if p.exists() && p.is_file() {
+        return load_cube_lut_file(p);
+    }
+
+    // 2. Direct name in global LUT directory
+    let dir = get_global_lut_dir();
+    let in_dir = dir.join(name_or_path);
+    if in_dir.exists() && in_dir.is_file() {
+        return load_cube_lut_file(&in_dir);
+    }
+
+    // 3. Name with .cube in global LUT directory
+    let in_dir_cube = dir.join(format!("{}.cube", name_or_path));
+    if in_dir_cube.exists() && in_dir_cube.is_file() {
+        return load_cube_lut_file(&in_dir_cube);
+    }
+
+    // 4. By TITLE or id in global directory
+    let discovered = discover_global_luts();
+    for lut in discovered {
+        if lut.title == name_or_path || lut.id == name_or_path {
+            return load_cube_lut_file(&lut.file_path);
+        }
+    }
+
+    Err(format!("Could not resolve 3D LUT '{}'", name_or_path))
 }
 
 #[cfg(test)]

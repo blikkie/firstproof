@@ -477,6 +477,11 @@ RustBuffer uniffi_firstproof_core_fn_func_decode_raw_preview(RustBuffer path, Ru
 RustBuffer uniffi_firstproof_core_fn_func_decode_raw_preview_binned(RustBuffer path, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DELETE_GLOBAL_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DELETE_GLOBAL_LUT
+int8_t uniffi_firstproof_core_fn_func_delete_global_lut(RustBuffer id_or_path, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DETECT_WHITE_BALANCE_PRESET
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DETECT_WHITE_BALANCE_PRESET
 RustBuffer uniffi_firstproof_core_fn_func_detect_white_balance_preset(double temperature, double tint, double as_shot_temp, double as_shot_tint, RustCallStatus *_Nonnull out_status
@@ -485,6 +490,12 @@ RustBuffer uniffi_firstproof_core_fn_func_detect_white_balance_preset(double tem
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DISCOVER_COLOR_SYNC_PROFILES
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DISCOVER_COLOR_SYNC_PROFILES
 RustBuffer uniffi_firstproof_core_fn_func_discover_color_sync_profiles(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DISCOVER_GLOBAL_LUTS
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_DISCOVER_GLOBAL_LUTS
+RustBuffer uniffi_firstproof_core_fn_func_discover_global_luts(RustCallStatus *_Nonnull out_status
     
 );
 #endif
@@ -575,6 +586,12 @@ RustBuffer uniffi_firstproof_core_fn_func_get_builtin_cube_lut_titles(RustCallSt
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_GLOBAL_LUT_DIR_PATH
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_GLOBAL_LUT_DIR_PATH
+RustBuffer uniffi_firstproof_core_fn_func_get_global_lut_dir_path(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_WHITE_BALANCE_PRESET_VALUES
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_GET_WHITE_BALANCE_PRESET_VALUES
 RustBuffer uniffi_firstproof_core_fn_func_get_white_balance_preset_values(RustBuffer preset, RustCallStatus *_Nonnull out_status
@@ -588,6 +605,11 @@ int8_t uniffi_firstproof_core_fn_func_has_ultra_hdr_gain_map(RustBuffer file_pat
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_IMPORT_COLOR_SYNC_PROFILE
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_IMPORT_COLOR_SYNC_PROFILE
 RustBuffer uniffi_firstproof_core_fn_func_import_color_sync_profile(RustBuffer source_path, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_IMPORT_GLOBAL_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_IMPORT_GLOBAL_LUT
+RustBuffer uniffi_firstproof_core_fn_func_import_global_lut(RustBuffer source_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_IMPORT_TO_LIBRARY
@@ -620,9 +642,19 @@ RustBuffer uniffi_firstproof_core_fn_func_parse_takeout_json(RustBuffer json_pat
 RustBuffer uniffi_firstproof_core_fn_func_read_xmp(RustBuffer path, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_RENAME_GLOBAL_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_RENAME_GLOBAL_LUT
+RustBuffer uniffi_firstproof_core_fn_func_rename_global_lut(RustBuffer id_or_path, RustBuffer new_title, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_RESOLVE_CATALOG_PATH
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_RESOLVE_CATALOG_PATH
 RustBuffer uniffi_firstproof_core_fn_func_resolve_catalog_path(RustBuffer folder_path, int8_t portable, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_RESOLVE_CUBE_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_RESOLVE_CUBE_LUT
+RustBuffer uniffi_firstproof_core_fn_func_resolve_cube_lut(RustBuffer name_or_path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_SCAN_DIRECTORY_FOR_TAKEOUT
@@ -1001,6 +1033,12 @@ uint16_t uniffi_firstproof_core_checksum_func_decode_raw_preview_binned(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DELETE_GLOBAL_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DELETE_GLOBAL_LUT
+uint16_t uniffi_firstproof_core_checksum_func_delete_global_lut(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DETECT_WHITE_BALANCE_PRESET
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DETECT_WHITE_BALANCE_PRESET
 uint16_t uniffi_firstproof_core_checksum_func_detect_white_balance_preset(void
@@ -1010,6 +1048,12 @@ uint16_t uniffi_firstproof_core_checksum_func_detect_white_balance_preset(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DISCOVER_COLOR_SYNC_PROFILES
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DISCOVER_COLOR_SYNC_PROFILES
 uint16_t uniffi_firstproof_core_checksum_func_discover_color_sync_profiles(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DISCOVER_GLOBAL_LUTS
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_DISCOVER_GLOBAL_LUTS
+uint16_t uniffi_firstproof_core_checksum_func_discover_global_luts(void
     
 );
 #endif
@@ -1115,6 +1159,12 @@ uint16_t uniffi_firstproof_core_checksum_func_get_builtin_cube_lut_titles(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_GLOBAL_LUT_DIR_PATH
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_GLOBAL_LUT_DIR_PATH
+uint16_t uniffi_firstproof_core_checksum_func_get_global_lut_dir_path(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_WHITE_BALANCE_PRESET_VALUES
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_GET_WHITE_BALANCE_PRESET_VALUES
 uint16_t uniffi_firstproof_core_checksum_func_get_white_balance_preset_values(void
@@ -1130,6 +1180,12 @@ uint16_t uniffi_firstproof_core_checksum_func_has_ultra_hdr_gain_map(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_IMPORT_COLOR_SYNC_PROFILE
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_IMPORT_COLOR_SYNC_PROFILE
 uint16_t uniffi_firstproof_core_checksum_func_import_color_sync_profile(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_IMPORT_GLOBAL_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_IMPORT_GLOBAL_LUT
+uint16_t uniffi_firstproof_core_checksum_func_import_global_lut(void
     
 );
 #endif
@@ -1169,9 +1225,21 @@ uint16_t uniffi_firstproof_core_checksum_func_read_xmp(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_RENAME_GLOBAL_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_RENAME_GLOBAL_LUT
+uint16_t uniffi_firstproof_core_checksum_func_rename_global_lut(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_RESOLVE_CATALOG_PATH
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_RESOLVE_CATALOG_PATH
 uint16_t uniffi_firstproof_core_checksum_func_resolve_catalog_path(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_RESOLVE_CUBE_LUT
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_RESOLVE_CUBE_LUT
+uint16_t uniffi_firstproof_core_checksum_func_resolve_cube_lut(void
     
 );
 #endif

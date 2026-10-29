@@ -82,7 +82,7 @@ public enum EditSliderType {
         case .straighten: return "Straighten"
         case .perspectiveVertical: return "Perspective Vertical"
         case .perspectiveHorizontal: return "Perspective Horizontal"
-        case .lutIntensity: return "LUT Intensity"
+        case .lutIntensity: return "LUT Strength"
         case .grainScale: return "Grain Scale"
         case .grainSize: return "Grain Size"
         case .grainAmount: return "Grain Amount"
@@ -587,6 +587,24 @@ public final class AppViewModel {
     public var lutIntensity: Float = 1.0
     public var availableLutTitles: [String] = []
     public var customLuts: [CubeLutRecord] = []
+    public var availableGlobalLuts: [LutRecord] = []
+    
+    public var defaultLookLutName: String? = nil {
+        didSet {
+            if let val = defaultLookLutName, !val.isEmpty {
+                UserDefaults.standard.set(val, forKey: "defaultLookLutName")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "defaultLookLutName")
+            }
+        }
+    }
+    
+    public var defaultLookLutIntensity: Float = 1.0 {
+        didSet {
+            UserDefaults.standard.set(defaultLookLutIntensity, forKey: "defaultLookLutIntensity")
+        }
+    }
+    
     public var curves: ToneCurvesRecord = .defaultIdentity
     
     // MARK: - Workspace Navigation & Tabs
@@ -665,6 +683,9 @@ public final class AppViewModel {
             _ = self.lensfun?.loadJsonFile(path: bundlePath)
         }
         self.availableLutTitles = getBuiltinCubeLutTitles()
+        self.refreshGlobalLuts()
+        self.defaultLookLutName = UserDefaults.standard.string(forKey: "defaultLookLutName")
+        self.defaultLookLutIntensity = UserDefaults.standard.object(forKey: "defaultLookLutIntensity") as? Float ?? 1.0
         
         // Restore multi-project opened folder list (preserves disconnected external drive sessions)
         self.openedFolders = UserDefaults.standard.stringArray(forKey: "openedFolders") ?? []

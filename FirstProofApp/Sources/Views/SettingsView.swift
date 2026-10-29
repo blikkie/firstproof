@@ -20,120 +20,266 @@ public struct SettingsView: View {
     @State private var showingChangeConfirmation: Bool = false
     @State private var showingResetConfirmation: Bool = false
     
+    @State private var lutToRename: LutRecord? = nil
+    @State private var renameText: String = ""
+    @State private var showingRenameAlert: Bool = false
+    @State private var lutToDelete: LutRecord? = nil
+    @State private var showingDeleteConfirmation: Bool = false
+    
     public init() {}
     
     public var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            // MARK: - Library Location
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Library Location")
-                    .font(.headline)
-                
-                HStack {
-                    Text(currentLibraryDisplay)
-                        .font(.system(.body, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .padding(6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(NSColor.controlBackgroundColor))
-                        .cornerRadius(4)
+        @Bindable var viewModel = viewModel
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 18) {
+                // MARK: - Library Location
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Library Location")
+                        .font(.headline)
                     
-                    Button("Choose...") {
-                        chooseCustomLibraryFolder()
-                    }
-                    
-                    if !customMainLibraryPath.isEmpty {
-                        Button("Reset") {
-                            showingResetConfirmation = true
+                    HStack {
+                        Text(currentLibraryDisplay)
+                            .font(.system(.body, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .padding(6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .cornerRadius(4)
+                        
+                        Button("Choose...") {
+                            chooseCustomLibraryFolder()
                         }
-                        .help("Reset to ~/Pictures/First Proof Library")
-                    }
-                }
-                
-                Text("New imports will be saved here. Photos in previous locations remain intact on disk and can be opened anytime via File > Open Session.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            Divider()
-            
-            // MARK: - Importing Options
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Importing")
-                    .font(.headline)
-                
-                Toggle("Prompt to import when a camera card is connected", isOn: $autoDetectMemoryCards)
-                Toggle("Prefer RAW over JPEG when both exist for a photo", isOn: $defaultDeduplicateRawOverJpeg)
-                Toggle("Skip duplicate photos already present in library", isOn: $defaultSkipDuplicates)
-                Toggle("Consolidate third-party sidecars into First Proof XMP", isOn: $defaultConsolidateSidecars)
-            }
-            
-            Divider()
-            
-            // MARK: - Optical Corrections
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Optical Corrections")
-                    .font(.headline)
-                
-                Toggle("Auto-correct chromatic aberration when lens profile is available", isOn: $defaultAutoTca)
-                Toggle("Auto-correct geometric distortion when lens profile is available", isOn: $defaultAutoDistortion)
-                Toggle("Auto-correct vignetting (peripheral falloff) when lens profile is available", isOn: $defaultAutoVignetting)
-                
-                Text("Default states applied to newly opened photos without existing edits. Individual photos can toggle corrections at any time in the Optics panel.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            Divider()
-            
-            // MARK: - Color & Soft Proofing (Story 3.4)
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Color & Soft Proofing")
-                    .font(.headline)
-                
-                Picker("Default Proof Profile", selection: Binding(
-                    get: { viewModel.selectedProofProfileId },
-                    set: { viewModel.selectProofProfile(id: $0) }
-                )) {
-                    ForEach(viewModel.availableIccProfiles, id: \.id) { profile in
-                        Text(profile.description).tag(profile.id)
-                    }
-                }
-                
-                Picker("Rendering Intent", selection: Binding(
-                    get: { viewModel.proofRenderingIntent },
-                    set: { viewModel.setProofRenderingIntent($0) }
-                )) {
-                    Text("Relative Colorimetric").tag(ProofIntent.relativeColorimetric)
-                    Text("Perceptual").tag(ProofIntent.perceptual)
-                    Text("Simulate Paper & Ink (Absolute)").tag(ProofIntent.absoluteColorimetric)
-                }
-                
-                HStack(spacing: 8) {
-                    Button("Import ICC Profile...") {
-                        chooseIccProfileToImport()
+                        
+                        if !customMainLibraryPath.isEmpty {
+                            Button("Reset") {
+                                showingResetConfirmation = true
+                            }
+                            .help("Reset to ~/Pictures/First Proof Library")
+                        }
                     }
                     
-                    Button("Show in Finder") {
-                        openColorSyncFolderInFinder()
-                    }
+                    Text("New imports will be saved here. Photos in previous locations remain intact on disk and can be opened anytime via File > Open Session.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 
-                Text("Installed printer and lab ICC profiles are loaded from ~/Library/ColorSync/Profiles. Press Cmd+Y in Detail view to toggle soft proofing.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
+                Divider()
+                
+                // MARK: - Importing Options
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Importing")
+                        .font(.headline)
+                    
+                    Toggle("Prompt to import when a camera card is connected", isOn: $autoDetectMemoryCards)
+                    Toggle("Prefer RAW over JPEG when both exist for a photo", isOn: $defaultDeduplicateRawOverJpeg)
+                    Toggle("Skip duplicate photos already present in library", isOn: $defaultSkipDuplicates)
+                    Toggle("Consolidate third-party sidecars into First Proof XMP", isOn: $defaultConsolidateSidecars)
+                }
+                
+                Divider()
+                
+                // MARK: - Optical Corrections
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Optical Corrections")
+                        .font(.headline)
+                    
+                    Toggle("Auto-correct chromatic aberration when lens profile is available", isOn: $defaultAutoTca)
+                    Toggle("Auto-correct geometric distortion when lens profile is available", isOn: $defaultAutoDistortion)
+                    Toggle("Auto-correct vignetting (peripheral falloff) when lens profile is available", isOn: $defaultAutoVignetting)
+                    
+                    Text("Default states applied to newly opened photos without existing edits. Individual photos can toggle corrections at any time in the Optics panel.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                
+                Divider()
+                
+                // MARK: - Look & 3D LUTs (Story 3.26)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Look & 3D LUTs")
+                        .font(.headline)
+                    
+                    Picker("Default Signature Look", selection: Binding(
+                        get: { viewModel.defaultLookLutName ?? "" },
+                        set: { viewModel.defaultLookLutName = $0.isEmpty ? nil : $0 }
+                    )) {
+                        Text("None (Bypass)").tag("")
+                        Divider()
+                        ForEach(viewModel.allLutTitles, id: \.self) { title in
+                            Text(title).tag(title)
+                        }
+                    }
+                    
+                    if viewModel.defaultLookLutName != nil {
+                        HStack {
+                            Text("Default Strength:")
+                            Slider(value: Binding(
+                                get: { viewModel.defaultLookLutIntensity },
+                                set: { viewModel.defaultLookLutIntensity = $0 }
+                            ), in: 0.0...1.0)
+                            Text("\(Int(round(viewModel.defaultLookLutIntensity * 100)))%")
+                                .frame(width: 45, alignment: .trailing)
+                                .font(.system(.body, design: .monospaced))
+                        }
+                    }
+                    
+                    Text("Default signature look is applied automatically to newly opened photos without existing edits and when clicking Reset All.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                    
+                    Text("Installed 3D LUTs")
+                        .font(.subheadline)
+                        .padding(.top, 4)
+                    
+                    if viewModel.availableGlobalLuts.isEmpty {
+                        Text("No custom LUTs installed. Import .cube files to make them permanently available across all photos.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.vertical, 4)
+                    } else {
+                        VStack(spacing: 4) {
+                            ForEach(viewModel.availableGlobalLuts, id: \.id) { lut in
+                                HStack(spacing: 8) {
+                                    Text(lut.title)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                    
+                                    Spacer()
+                                    
+                                    Text("\(lut.size)³")
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(Color(NSColor.separatorColor).opacity(0.3))
+                                        .cornerRadius(3)
+                                    
+                                    Button(action: {
+                                        lutToRename = lut
+                                        renameText = lut.title
+                                        showingRenameAlert = true
+                                    }) {
+                                        Image(systemName: "pencil")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Rename LUT")
+                                    
+                                    Button(action: {
+                                        lutToDelete = lut
+                                        showingDeleteConfirmation = true
+                                    }) {
+                                        Image(systemName: "trash")
+                                            .foregroundColor(.red.opacity(0.8))
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Delete LUT from library")
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color(NSColor.controlBackgroundColor))
+                                .cornerRadius(4)
+                            }
+                        }
+                    }
+                    
+                    HStack(spacing: 8) {
+                        Button("Import 3D LUT...") {
+                            chooseLutToImport()
+                        }
+                        
+                        Button("Show in Finder") {
+                            openLutFolderInFinder()
+                        }
+                    }
+                    
+                    Text("Custom .cube LUTs are stored in ~/Library/Application Support/FirstProof/LUTs and are permanently available across all photos and sessions.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                
+                Divider()
+                
+                // MARK: - Color & Soft Proofing (Story 3.4)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Color & Soft Proofing")
+                        .font(.headline)
+                    
+                    Picker("Default Proof Profile", selection: Binding(
+                        get: { viewModel.selectedProofProfileId },
+                        set: { viewModel.selectProofProfile(id: $0) }
+                    )) {
+                        ForEach(viewModel.availableIccProfiles, id: \.id) { profile in
+                            Text(profile.description).tag(profile.id)
+                        }
+                    }
+                    
+                    Picker("Rendering Intent", selection: Binding(
+                        get: { viewModel.proofRenderingIntent },
+                        set: { viewModel.setProofRenderingIntent($0) }
+                    )) {
+                        Text("Relative Colorimetric").tag(ProofIntent.relativeColorimetric)
+                        Text("Perceptual").tag(ProofIntent.perceptual)
+                        Text("Simulate Paper & Ink (Absolute)").tag(ProofIntent.absoluteColorimetric)
+                    }
+                    
+                    HStack(spacing: 8) {
+                        Button("Import ICC Profile...") {
+                            chooseIccProfileToImport()
+                        }
+                        
+                        Button("Show in Finder") {
+                            openColorSyncFolderInFinder()
+                        }
+                    }
+                    
+                    Text("Installed printer and lab ICC profiles are loaded from ~/Library/ColorSync/Profiles. Press Cmd+Y in Detail view to toggle soft proofing.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(20)
+        }
+        .frame(width: 520, height: 580)
+        .alert("Rename 3D LUT", isPresented: $showingRenameAlert) {
+            TextField("LUT Title", text: $renameText)
+            Button("Rename") {
+                if let lut = lutToRename {
+                    viewModel.renameLutInLibrary(lut, newTitle: renameText)
+                }
+                lutToRename = nil
+            }
+            Button("Cancel", role: .cancel) {
+                lutToRename = nil
+            }
+        } message: {
+            Text("Enter a new title for this 3D LUT.")
+        }
+        .alert("Delete 3D LUT?", isPresented: $showingDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                if let lut = lutToDelete {
+                    viewModel.deleteLutFromLibrary(lut)
+                }
+                lutToDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                lutToDelete = nil
+            }
+        } message: {
+            if let lut = lutToDelete {
+                Text("Are you sure you want to remove \"\(lut.title)\" from your global LUT library? The file will be removed from ~/Library/Application Support/FirstProof/LUTs.")
             }
         }
-        .padding(20)
-        .frame(width: 500)
-        .fixedSize(horizontal: true, vertical: true)
         .alert("Change Library Location?", isPresented: $showingChangeConfirmation) {
             Button("Change Location") {
                 if let path = pendingNewLibraryPath {
@@ -164,6 +310,29 @@ public struct SettingsView: View {
             .opacity(0)
             .frame(width: 0, height: 0)
         )
+    }
+    
+    private func chooseLutToImport() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.init(filenameExtension: "cube")].compactMap { $0 }
+        panel.prompt = "Import LUT"
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                _ = try viewModel.importLutToLibrary(from: url)
+            } catch {
+                print("Failed to import 3D LUT to library: \(error)")
+            }
+        }
+    }
+    
+    private func openLutFolderInFinder() {
+        let path = getGlobalLutDirPath()
+        let url = URL(fileURLWithPath: path)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
     }
     
     private func closeSettingsWindow() {

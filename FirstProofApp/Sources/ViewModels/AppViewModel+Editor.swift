@@ -657,13 +657,28 @@ extension AppViewModel {
     }
     
     public var allLutTitles: [String] {
-        availableLutTitles + customLuts.map(\.title)
+        var titles = availableLutTitles
+        for lut in availableGlobalLuts {
+            if !titles.contains(lut.title) {
+                titles.append(lut.title)
+            }
+        }
+        for custom in customLuts {
+            if !titles.contains(custom.title) {
+                titles.append(custom.title)
+            }
+        }
+        return titles
     }
     
     public func resolveLutRecord(for title: String?) -> CubeLutRecord? {
         guard let title = title, !title.isEmpty else { return nil }
         if let custom = customLuts.first(where: { $0.title == title }) {
             return custom
+        }
+        if let resolved = resolveCubeLut(nameOrPath: title) {
+            self.customLuts.append(resolved)
+            return resolved
         }
         return getBuiltinCubeLut(title: title, size: 33)
     }
@@ -800,7 +815,7 @@ extension AppViewModel {
         case .perspectiveHorizontal:
             perspectiveHorizontal = 0.0
         case .lutIntensity:
-            lutIntensity = 1.0
+            lutIntensity = defaultLookLutIntensity
         case .splitToningShadowHue:
             splitToningShadowHue = 215.0
             selectedSplitToningPresetId = nil
@@ -888,8 +903,13 @@ extension AppViewModel {
         flipHorizontal = defaultExifFlipH
         flipVertical = defaultExifFlipV
         toneProfile = .agxVivid
-        selectedLutName = nil
-        lutIntensity = 1.0
+        if let defaultLut = defaultLookLutName, !defaultLut.isEmpty {
+            selectedLutName = defaultLut
+            lutIntensity = defaultLookLutIntensity
+        } else {
+            selectedLutName = nil
+            lutIntensity = defaultLookLutIntensity
+        }
         curves = .defaultIdentity
         splitToningShadowHue = 215.0
         splitToningShadowSat = 0.0
@@ -989,24 +1009,37 @@ extension AppViewModel {
     }
     
     // MARK: - Custom 3D LUT Import
-    public func importCustomLut() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "cube")].compactMap { $0 }
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.title = "Import 3D LUT (.cube)"
+    public func importCustomLut(from sourceUrl: URL? = nil) {
+        let url: URL
+        if let sourceUrl = sourceUrl {
+            url = sourceUrl
+        } else {
+            let panel = NSOpenPanel()
+            panel.allowedContentTypes = [.init(filenameExtension: "cube")].compactMap { $0 }
+            panel.allowsMultipleSelection = false
+            panel.canChooseDirectories = false
+            panel.canChooseFiles = true
+            panel.title = "Import 3D LUT (.cube)"
+            
+            guard panel.runModal() == .OK, let selectedUrl = panel.url else { return }
+            url = selectedUrl
+        }
         
-        if panel.runModal() == .OK, let url = panel.url {
-            let before = currentEdits
-            if let customLut = loadCubeLut(path: url.path) {
+        do {
+            let record = try importGlobalLut(sourcePath: url.path)
+            refreshGlobalLuts()
+            if let customLut = resolveCubeLut(nameOrPath: record.filePath) {
                 if !self.customLuts.contains(where: { $0.title == customLut.title }) {
                     self.customLuts.append(customLut)
                 }
+                let before = currentEdits
                 self.selectedLutName = customLut.title
-                self.lutIntensity = 1.0
+                self.lutIntensity = defaultLookLutIntensity
                 registerDiscreteEdit(title: "3D LUT: \(customLut.title)", before: before)
+                notifyThumbnailChanged()
             }
+        } catch {
+            print("Failed to import 3D LUT: \(error)")
         }
     }
     
@@ -1031,7 +1064,13 @@ extension AppViewModel {
     public func setSelectedLutName(_ name: String?) {
         guard self.selectedLutName != name else { return }
         let before = currentEdits
+        let wasBypassed = self.selectedLutName == nil
         self.selectedLutName = name
+        if wasBypassed && name != nil {
+            if self.lutIntensity == 1.0 || self.lutIntensity == 0.0 {
+                self.lutIntensity = defaultLookLutIntensity
+            }
+        }
         let title = name != nil ? "LUT: \(name!)" : "LUT: None"
         registerDiscreteEdit(title: title, before: before)
         notifyThumbnailChanged()
