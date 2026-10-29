@@ -6,7 +6,7 @@ This document strictly tracks pending and deferred features calibrated against o
 
 ---
 
-## 🚀 Immediate Next Up (v0.1 Release Gate)
+## 🚀 Immediate Next Up
 1. **Story 3.26: Global 3D LUT Library Management & Default Look Preset in Settings** (P2)
 2. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
 
