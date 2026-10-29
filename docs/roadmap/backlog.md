@@ -7,9 +7,9 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up (v0.1 Release Gate)
-1. **Story 3.4: ColorSync Soft Proofing & Lab ICC Profile Management** (P2)
-2. **Story 3.26: Global 3D LUT Library Management & Default Look Preset in Settings** (P2)
-3. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
+1. **Story 3.26: Global 3D LUT Library Management & Default Look Preset in Settings** (P2)
+2. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
+3. **Story 3.1: Medium-Format Monochrome Tonal Distribution & Spectral Response** (P2)
 
 ---
 
@@ -20,19 +20,6 @@ This document strictly tracks pending and deferred features calibrated against o
 > First Proof's primary workhorse default is **pure optical RAW capture via AgX filmic tone mapping**. The core workspaces (**Light**, **Color**, **Detail**, **Optics**) are dedicated strictly to sensor reality: standard White Balance (Temperature & Tint), exposure, tone recovery, and sensor sharpness. Photos look 90% finished immediately without any analog styling.  
 > 
 > Film stock and print media emulation are **not** the main workflow and **not** a complex simulator. They are an exquisite, 100% opt-in **fine-art treat and differentiator** housed in a dedicated **Emulsion** workspace tab (`InspectorTab.emulsion`). Default state is always `None / Bypass`. When activated, the engine does all the heavy lifting under the hood so the photographer simply selects a curated stock or print medium without fiddling with chemical dials.
-
-### 3.4 ColorSync Soft Proofing & Lab ICC Profile Management (P2)
-- **Canvas Soft Proofing Mode**:
-  - Canvas toolbar mode simulating sRGB and standard print gamut clipping (e.g., ISO Coated v2 / US Web Coated SWOP, Printique / WhiteWall paper profiles) on wide-gamut displays.
-  - Gamut warning overlay highlighting out-of-gamut pixels in high-contrast overlay color.
-- **Paper Substrate & Media Proofing (Decoupled from Develop Adjustments)**:
-  - Substrate white-point reflectance and ink absorption limits (e.g. unbleached cotton rag matte, Hahnemühle Photo Rag, baryta surface sheen, commercial Lustre / Deep Matte) simulate the physical print media viewing environment via LittleCMS2 ICC proofing transforms.
-  - Enforces the architectural invariant that develop adjustments never apply additive digital floor lifts to simulate paper—true carbon black ($D_{\max}$) is always preserved at $f(0.0) \equiv 0.0$ for output print fidelity.
-- **Lab & Output ICC Profile Management in Settings (`SettingsView.swift`)**:
-  - Dedicated "Color & Proofing" section in Settings to manage installed printer and paper ICC profiles adhering strictly to native OS conventions.
-  - On macOS, scans standard user and system ColorSync directories (`~/Library/ColorSync/Profiles/`, `/Library/ColorSync/Profiles/`).
-  - Import custom print lab profiles (e.g. Printique, WhiteWall, or custom lab-calibrated sRGB/printer profiles) with 1-click import into `~/Library/ColorSync/Profiles/` (or platform equivalent, e.g. `/usr/share/color/icc/` on Linux).
-  - Set a default proofing profile for rapid single-key toggle (`Cmd+Y` / toolbar button) during culling and editing.
 
 ### 3.23 Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification (P2)
 - **Practical Commercial Lab Print Batch (Printique / Standard Lab Offerings)**:

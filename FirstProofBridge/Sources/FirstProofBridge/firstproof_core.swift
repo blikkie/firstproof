@@ -1834,6 +1834,84 @@ public func FfiConverterTypeGainMapRecord_lower(_ value: GainMapRecord) -> RustB
 }
 
 
+public struct IccProfileRecord: Equatable, Hashable {
+    public var id: String
+    public var name: String
+    public var description: String
+    public var filePath: String
+    public var colorSpace: String
+    public var deviceClass: String
+    public var isCmyk: Bool
+    public var isBuiltIn: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, name: String, description: String, filePath: String, colorSpace: String, deviceClass: String, isCmyk: Bool, isBuiltIn: Bool) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.filePath = filePath
+        self.colorSpace = colorSpace
+        self.deviceClass = deviceClass
+        self.isCmyk = isCmyk
+        self.isBuiltIn = isBuiltIn
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension IccProfileRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIccProfileRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IccProfileRecord {
+        return
+            try IccProfileRecord(
+                id: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                description: FfiConverterString.read(from: &buf), 
+                filePath: FfiConverterString.read(from: &buf), 
+                colorSpace: FfiConverterString.read(from: &buf), 
+                deviceClass: FfiConverterString.read(from: &buf), 
+                isCmyk: FfiConverterBool.read(from: &buf), 
+                isBuiltIn: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IccProfileRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.description, into: &buf)
+        FfiConverterString.write(value.filePath, into: &buf)
+        FfiConverterString.write(value.colorSpace, into: &buf)
+        FfiConverterString.write(value.deviceClass, into: &buf)
+        FfiConverterBool.write(value.isCmyk, into: &buf)
+        FfiConverterBool.write(value.isBuiltIn, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIccProfileRecord_lift(_ buf: RustBuffer) throws -> IccProfileRecord {
+    return try FfiConverterTypeIccProfileRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIccProfileRecord_lower(_ value: IccProfileRecord) -> RustBuffer {
+    return FfiConverterTypeIccProfileRecord.lower(value)
+}
+
+
 public struct ImageMetadata: Equatable, Hashable {
     public var filePath: String
     public var cameraMake: String?
@@ -2659,6 +2737,8 @@ enum FirstProofError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
     )
     case DngError(reason: String
     )
+    case ColorSyncError(reason: String
+    )
 
     
 
@@ -2694,6 +2774,9 @@ public struct FfiConverterTypeFirstProofError: FfiConverterRustBuffer {
         case 2: return .DngError(
             reason: try FfiConverterString.read(from: &buf)
             )
+        case 3: return .ColorSyncError(
+            reason: try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2715,6 +2798,11 @@ public struct FfiConverterTypeFirstProofError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterString.write(reason, into: &buf)
             
+        
+        case let .ColorSyncError(reason):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(reason, into: &buf)
+            
         }
     }
 }
@@ -2733,6 +2821,79 @@ public func FfiConverterTypeFirstProofError_lift(_ buf: RustBuffer) throws -> Fi
 public func FfiConverterTypeFirstProofError_lower(_ value: FirstProofError) -> RustBuffer {
     return FfiConverterTypeFirstProofError.lower(value)
 }
+
+
+
+public enum ProofIntent: Equatable, Hashable {
+    
+    case relativeColorimetric
+    case perceptual
+    case absoluteColorimetric
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ProofIntent: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProofIntent: FfiConverterRustBuffer {
+    typealias SwiftType = ProofIntent
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProofIntent {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .relativeColorimetric
+        
+        case 2: return .perceptual
+        
+        case 3: return .absoluteColorimetric
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ProofIntent, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .relativeColorimetric:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .perceptual:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .absoluteColorimetric:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProofIntent_lift(_ buf: RustBuffer) throws -> ProofIntent {
+    return try FfiConverterTypeProofIntent.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProofIntent_lower(_ value: ProofIntent) -> RustBuffer {
+    return FfiConverterTypeProofIntent.lower(value)
+}
+
 
 
 
@@ -3813,6 +3974,31 @@ fileprivate struct FfiConverterSequenceTypeDuplicateClusterRecord: FfiConverterR
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeIccProfileRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [IccProfileRecord]
+
+    public static func write(_ value: [IccProfileRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeIccProfileRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [IccProfileRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [IccProfileRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeIccProfileRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypePhotoRecord: FfiConverterRustBuffer {
     typealias SwiftType = [PhotoRecord]
 
@@ -4097,6 +4283,13 @@ public func detectWhiteBalancePreset(temperature: Double, tint: Double, asShotTe
     )
 })
 }
+public func discoverColorSyncProfiles() -> [IccProfileRecord]  {
+    return try!  FfiConverterSequenceTypeIccProfileRecord.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_discover_color_sync_profiles(uniffiCallStatus
+    )
+})
+}
 /**
  * Returns a deterministic signature of all edit settings for cache keying and invalidation.
  * Automatically serializes all current and future fields without manual tracking.
@@ -4209,6 +4402,18 @@ public func findDuplicateClusters(photos: [PhotoRecord]) -> [DuplicateClusterRec
     )
 })
 }
+public func generateSoftProof3dLut(profileIdOrPath: String, intent: ProofIntent, sourceIsP3: Bool, displayIsP3: Bool, size: UInt32)throws  -> CubeLutRecord  {
+    return try  FfiConverterTypeCubeLutRecord_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_generate_soft_proof_3d_lut(
+        FfiConverterString.lower(profileIdOrPath),
+        FfiConverterTypeProofIntent_lower(intent),
+        FfiConverterBool.lower(sourceIsP3),
+        FfiConverterBool.lower(displayIsP3),
+        FfiConverterUInt32.lower(size),uniffiCallStatus
+    )
+})
+}
 public func getAdjustmentDescriptor(id: String) -> AdjustmentDescriptor?  {
     return try!  FfiConverterOptionTypeAdjustmentDescriptor.lift(try! rustCall() {
         uniffiCallStatus in
@@ -4261,6 +4466,14 @@ public func hasUltraHdrGainMap(filePath: String) -> Bool  {
         uniffiCallStatus in
     uniffi_firstproof_core_fn_func_has_ultra_hdr_gain_map(
         FfiConverterString.lower(filePath),uniffiCallStatus
+    )
+})
+}
+public func importColorSyncProfile(sourcePath: String)throws  -> IccProfileRecord  {
+    return try  FfiConverterTypeIccProfileRecord_lift(try rustCallWithError(FfiConverterTypeFirstProofError_lift) {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_import_color_sync_profile(
+        FfiConverterString.lower(sourcePath),uniffiCallStatus
     )
 })
 }
@@ -4431,6 +4644,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_detect_white_balance_preset() != 51679) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_func_discover_color_sync_profiles() != 31458) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_func_edits_cache_signature() != 36067) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4464,6 +4680,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_find_duplicate_clusters() != 38012) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_func_generate_soft_proof_3d_lut() != 35783) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_func_get_adjustment_descriptor() != 30244) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4483,6 +4702,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_has_ultra_hdr_gain_map() != 3822) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_import_color_sync_profile() != 51205) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_import_to_library() != 37991) {

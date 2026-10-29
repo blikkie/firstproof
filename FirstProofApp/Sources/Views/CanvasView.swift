@@ -176,6 +176,82 @@ struct CanvasView: View {
                         .padding(14)
                         .frame(width: 320)
                     }
+                    
+                    // MARK: - ColorSync Soft Proofing Pill (Story 3.4)
+                    Menu {
+                        Section("Soft Proofing") {
+                            Toggle("Enable Soft Proofing (Cmd+Y)", isOn: Binding(
+                                get: { viewModel.isSoftProofActive },
+                                set: { _ in viewModel.toggleSoftProof() }
+                            ))
+                            Toggle("Gamut Warning (Shift+Cmd+Y)", isOn: Binding(
+                                get: { viewModel.isGamutWarningActive },
+                                set: { _ in viewModel.toggleGamutWarning() }
+                            ))
+                        }
+                        
+                        Section("Proofing Profile") {
+                            ForEach(viewModel.availableIccProfiles, id: \.id) { profile in
+                                Button {
+                                    viewModel.selectProofProfile(id: profile.id)
+                                    if !viewModel.isSoftProofActive {
+                                        viewModel.isSoftProofActive = true
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(profile.description)
+                                        if viewModel.selectedProofProfileId == profile.id {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Section("Rendering Intent") {
+                            Button("Relative Colorimetric") {
+                                viewModel.setProofRenderingIntent(.relativeColorimetric)
+                            }
+                            Button("Perceptual") {
+                                viewModel.setProofRenderingIntent(.perceptual)
+                            }
+                            Button("Simulate Paper & Ink (Absolute)") {
+                                viewModel.setProofRenderingIntent(.absoluteColorimetric)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: viewModel.isSoftProofActive ? "printer.fill" : "printer")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(viewModel.isSoftProofActive ? .accentColor : .secondary)
+                            
+                            Text(viewModel.isSoftProofActive ? "Proof: \(viewModel.selectedProofProfileTitle)" : "Proof: Off")
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .foregroundColor(viewModel.isSoftProofActive ? .primary : .secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            
+                            if viewModel.isGamutWarningActive {
+                                Circle()
+                                    .fill(Color.cyan)
+                                    .frame(width: 6, height: 6)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(viewModel.isSoftProofActive ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.12))
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(viewModel.isSoftProofActive ? Color.accentColor.opacity(0.4) : Color.clear, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help(viewModel.isSoftProofActive 
+                        ? "Soft proofing active with '\(viewModel.selectedProofProfileTitle)'. Click to configure or toggle with Cmd+Y." 
+                        : "Click to enable soft proofing (Cmd+Y) to simulate print or web output.")
                 }
             }
             .padding(.horizontal, 16)

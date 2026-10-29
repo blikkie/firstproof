@@ -12,6 +12,8 @@
 @group(0) @binding(8) var u_gain_map: texture_2d<f32>;
 @group(0) @binding(9) var u_gain_map_sampler: sampler;
 @group(0) @binding(10) var<uniform> quad: VertexQuad;
+@group(0) @binding(11) var u_proof_lut: texture_3d<f32>;
+@group(0) @binding(12) var u_proof_sampler: sampler;
 
 @vertex
 fn vertexShader(@builtin(vertex_index) vertex_id: u32) -> VertexOutput {
@@ -525,6 +527,23 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
         let lutCoord = (finalColor * (size - 1.0) + vec3<f32>(0.5)) / size;
         let lutSample = textureSample(u_lut_3d, u_lut_sampler, lutCoord).rgb;
         finalColor = mix(finalColor, lutSample, clamp(uniforms.lutIntensity, 0.0, 1.0));
+    }
+
+    // 10.1 ColorSync & LittleCMS2 Soft Proofing & Gamut Alarm (Post-LUT / Pre-Display)
+    if (uniforms.softProofEnabled != 0 && uniforms.isOriginal < 0.5) {
+        let proofSize = 33.0;
+        let proofCoord = (clamp(finalColor, vec3<f32>(0.0), vec3<f32>(1.0)) * (proofSize - 1.0) + vec3<f32>(0.5)) / proofSize;
+        let proofSample = textureSample(u_proof_lut, u_proof_sampler, proofCoord);
+        if (uniforms.gamutWarningEnabled != 0 && proofSample.a < 0.5) {
+            let zebra = fract((in.position.x + in.position.y) / 12.0);
+            if (zebra < 0.5) {
+                finalColor = vec3<f32>(0.0, 0.90, 1.0);
+            } else {
+                finalColor = vec3<f32>(0.0, 0.35, 0.50);
+            }
+        } else {
+            finalColor = proofSample.rgb;
+        }
     }
     
     // 9. Apple EDR Radiance & Dynamic Range Expansion

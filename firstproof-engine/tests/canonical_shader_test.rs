@@ -22,6 +22,8 @@ fn test_canonical_wgsl_cross_compilation() {
     assert!(msl.contains("sampler(2)"), "MSL must bind u_curve_sampler to sampler(2)");
     assert!(msl.contains("texture(4)"), "MSL must bind u_gain_map to texture(4)");
     assert!(msl.contains("sampler(3)"), "MSL must bind u_gain_map_sampler to sampler(3)");
+    assert!(msl.contains("texture(5)"), "MSL must bind u_proof_lut to texture(5)");
+    assert!(msl.contains("sampler(4)"), "MSL must bind u_proof_sampler to sampler(4)");
 
     // 2. Cross-compile to WebGL 2 GLSL ES 300
     let glsl = compile_to_glsl().expect("Failed to compile canonical WGSL to GLSL");

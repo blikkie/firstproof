@@ -89,7 +89,11 @@ struct ShaderUniforms {
     vignettingK2: f32,
     vignettingK3: f32,
     vignettingK4: f32,
-    pad0: f32, // 16-byte std140/WebGPU alignment (88 fields * 4 bytes = 352 bytes = 22 * 16)
+    softProofEnabled: i32,
+    gamutWarningEnabled: i32,
+    proofIntent: i32,
+    pad0: f32,
+    pad1: f32, // 16-byte std140/WebGPU alignment (92 fields * 4 bytes = 368 bytes = 23 * 16)
 };
 
 struct VertexOutput {

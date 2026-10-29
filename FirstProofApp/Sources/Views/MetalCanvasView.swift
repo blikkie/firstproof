@@ -94,6 +94,11 @@ public struct MetalCanvasView: NSViewRepresentable {
                 context.coordinator.lastGainMapRecord = gainMap
             }
             
+            if let proofLut = viewModel.currentProofLutRecord {
+                renderer.updateProofLutTexture(with: proofLut)
+                context.coordinator.lastProofLutRecord = proofLut
+            }
+            
             MetalCanvasView.setupCaptureClosure(for: viewModel, renderer: renderer)
         }
         
@@ -172,7 +177,10 @@ public struct MetalCanvasView: NSViewRepresentable {
             isIntermediate: viewModel.isIntermediatePreviewActive,
             asShotTemperature: viewModel.asShotTemperature,
             asShotTint: viewModel.asShotTint,
-            clippingOverlayActive: viewModel.isClippingOverlayActive
+            clippingOverlayActive: viewModel.isClippingOverlayActive,
+            softProofEnabled: viewModel.isSoftProofActive,
+            gamutWarningEnabled: viewModel.isGamutWarningActive,
+            proofIntent: viewModel.proofRenderingIntent
         )
         
         // 3. Update 3D LUT texture if LUT selection changed
@@ -192,6 +200,13 @@ public struct MetalCanvasView: NSViewRepresentable {
         if gainMapChanged {
             renderer.updateGainMap(record: viewModel.currentGainMapRecord)
             context.coordinator.lastGainMapRecord = viewModel.currentGainMapRecord
+        }
+        
+        // 4b. Update Soft Proofing 3D LUT if changed
+        let proofLutChanged = context.coordinator.lastProofLutRecord != viewModel.currentProofLutRecord
+        if proofLutChanged {
+            context.coordinator.lastProofLutRecord = viewModel.currentProofLutRecord
+            renderer.updateProofLutTexture(with: viewModel.currentProofLutRecord)
         }
         
         // 5. Viewport Zoom & Pan
@@ -304,6 +319,7 @@ public struct MetalCanvasView: NSViewRepresentable {
         var lastRawKey: String?
         var lastLutName: String?
         var lastGainMapRecord: GainMapRecord?
+        var lastProofLutRecord: CubeLutRecord?
         
         func handleDoubleTap(at pointInNDC: CGPoint) {
             guard let vm = viewModel, let renderer = renderer, let view = nsView else { return }

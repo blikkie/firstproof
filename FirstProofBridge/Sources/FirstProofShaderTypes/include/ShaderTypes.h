@@ -105,7 +105,11 @@ struct ShaderUniforms {
     float vignettingK2;            // r^4 radial illumination gain coefficient
     float vignettingK3;            // r^6 radial illumination gain coefficient
     float vignettingK4;            // r^8 radial illumination gain coefficient
-    float pad0;                    // 16-byte std140/WebGPU alignment (88 fields * 4 bytes = 352 bytes = 22 * 16)
+    int32_t softProofEnabled;      // 1 = ColorSync soft proofing active, 0 = disabled
+    int32_t gamutWarningEnabled;   // 1 = Highlight out-of-gamut colors in high contrast, 0 = disabled
+    int32_t proofIntent;           // 0 = RelativeColorimetric, 1 = Perceptual, 2 = Absolute
+    float pad0;                    // 16-byte std140/WebGPU alignment (92 fields * 4 bytes = 368 bytes = 23 * 16)
+    float pad1;
 };
 
 #endif /* ShaderTypes_h */

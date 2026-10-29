@@ -169,6 +169,28 @@ pub fn compile_to_msl() -> Result<String, ShaderError> {
             mutable: false,
         },
     );
+    // texture(5): u_proof_lut
+    fs_res.resources.insert(
+        naga::ResourceBinding { group: 0, binding: 11 },
+        msl::BindTarget {
+            buffer: None,
+            texture: Some(5),
+            sampler: None,
+            external_texture: None,
+            mutable: false,
+        },
+    );
+    // sampler(4): u_proof_sampler
+    fs_res.resources.insert(
+        naga::ResourceBinding { group: 0, binding: 12 },
+        msl::BindTarget {
+            buffer: None,
+            texture: None,
+            sampler: Some(msl::BindSamplerTarget::Resource(4)),
+            external_texture: None,
+            mutable: false,
+        },
+    );
     
     msl_options.per_entry_point_map.insert("fragmentShader".to_string(), fs_res);
     

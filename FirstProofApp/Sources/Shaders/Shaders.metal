@@ -95,7 +95,11 @@ struct ShaderUniforms {
     float vignettingK2_;
     float vignettingK3_;
     float vignettingK4_;
+    int softProofEnabled;
+    int gamutWarningEnabled;
+    int proofIntent;
     float pad0_;
+    float pad1_;
 };
 struct VertexOutput {
     metal::float4 position;
@@ -168,10 +172,10 @@ GeometryCoordinates transformGeometryChannels(
     ShaderUniforms uniforms
 ) {
     GeometryCoordinates coords = {};
-    bool local_68 = {};
+    bool local_70 = {};
     metal::float2 uvc = {};
     float autoCropScale = 1.0;
-    bool local_69 = {};
+    bool local_71 = {};
     int i_2 = 0;
     metal::float2 g = {};
     float r_corr = {};
@@ -180,13 +184,13 @@ GeometryCoordinates transformGeometryChannels(
     float r_corr_1 = {};
     metal::float2 geom_r = {};
     metal::float2 geom_b = {};
-    bool local_70 = {};
+    bool local_72 = {};
     if (!((uniforms.isOriginal >= 0.5))) {
-        local_68 = uniforms.isIntermediate == 1;
+        local_70 = uniforms.isIntermediate == 1;
     } else {
-        local_68 = true;
+        local_70 = true;
     }
-    bool _e13 = local_68;
+    bool _e13 = local_70;
     if (_e13) {
         coords.uv = uv;
         coords.uvRed = uv;
@@ -210,11 +214,11 @@ GeometryCoordinates transformGeometryChannels(
     float cV = uniforms.perspectiveVertical * 0.005;
     float cH = uniforms.perspectiveHorizontal * 0.005;
     if (!((uniforms.cropConstrain != 0))) {
-        local_69 = uniforms.lensCorrectionEnabled != 0;
+        local_71 = uniforms.lensCorrectionEnabled != 0;
     } else {
-        local_69 = true;
+        local_71 = true;
     }
-    bool _e74 = local_69;
+    bool _e74 = local_71;
     if (_e74) {
         type_13 testPoints = type_13 {{metal::float2(A, 1.0), metal::float2(-(A), 1.0), metal::float2(A, -1.0), metal::float2(-(A), -1.0), metal::float2(A, 0.0), metal::float2(-(A), 0.0), metal::float2(0.0, 1.0), metal::float2(0.0, -1.0), metal::float2(A, 0.5), metal::float2(-(A), 0.5), metal::float2(A, -0.5), metal::float2(-(A), -0.5)}};
         uint2 loop_bound = uint2(4294967295u);
@@ -313,11 +317,11 @@ GeometryCoordinates transformGeometryChannels(
     metal::float2 _e285 = geom;
     geom_b = _e285;
     if (uniforms.tcaCorrectionEnabled != 0) {
-        local_70 = uniforms.hasTca != 0;
+        local_72 = uniforms.hasTca != 0;
     } else {
-        local_70 = false;
+        local_72 = false;
     }
-    bool _e296 = local_70;
+    bool _e296 = local_72;
     if (_e296) {
         metal::float2 _e297 = geom;
         metal::float2 _e298 = geom;
@@ -367,14 +371,14 @@ metal::float3 applyDetailAndSharpening(
     float masking,
     float noiseReduction
 ) {
-    bool local_71 = {};
+    bool local_73 = {};
     float w_edge = 1.0;
     if (amount <= 0.0) {
-        local_71 = noiseReduction <= 0.0;
+        local_73 = noiseReduction <= 0.0;
     } else {
-        local_71 = false;
+        local_73 = false;
     }
-    bool _e20 = local_71;
+    bool _e20 = local_73;
     if (_e20) {
         return color;
     }
@@ -403,7 +407,7 @@ metal::float3 applyDefringe(
     float y_max_neighbor,
     float defringeAmount
 ) {
-    bool local_72 = {};
+    bool local_74 = {};
     float hue = {};
     if (defringeAmount <= 0.0) {
         return color_1;
@@ -411,11 +415,11 @@ metal::float3 applyDefringe(
     float excess_b = color_1.z - color_1.y;
     float excess_r = color_1.x - color_1.y;
     if (!((excess_b <= 0.0))) {
-        local_72 = excess_r <= 0.0;
+        local_74 = excess_r <= 0.0;
     } else {
-        local_72 = true;
+        local_74 = true;
     }
-    bool _e20 = local_72;
+    bool _e20 = local_74;
     if (_e20) {
         return color_1;
     }
@@ -530,8 +534,8 @@ metal::float3 applyStochasticEmulsionGrain(
     float grain_amount,
     int archetype
 ) {
-    bool local_73 = {};
-    bool local_74 = {};
+    bool local_75 = {};
+    bool local_76 = {};
     if (grain_mode_1 == 0) {
         return color_2;
     }
@@ -556,17 +560,17 @@ metal::float3 applyStochasticEmulsionGrain(
     float nutting = (4.0 * y_clamped) * (1.0 - y_clamped);
     float y_pixel = metal::dot(color_2, metal::float3(0.2627, 0.678, 0.0593));
     if (!((archetype == 6))) {
-        local_73 = archetype == 10;
+        local_75 = archetype == 10;
     } else {
-        local_73 = true;
+        local_75 = true;
     }
-    bool _e105 = local_73;
+    bool _e105 = local_75;
     if (!(_e105)) {
-        local_74 = archetype == 11;
+        local_76 = archetype == 11;
     } else {
-        local_74 = true;
+        local_76 = true;
     }
-    bool is_monochrome = local_74;
+    bool is_monochrome = local_76;
     if (is_monochrome) {
         float delta_2 = ((_e83 * nutting) * 0.28) * amount_1;
         float y_res = metal::max(y_pixel * (1.0 + delta_2), 0.0);
@@ -968,9 +972,9 @@ metal::float3 applyBilateralToneRecovery(
     float whites,
     float blacks
 ) {
-    bool local_75 = {};
-    bool local_76 = {};
     bool local_77 = {};
+    bool local_78 = {};
+    bool local_79 = {};
     float total_weight = 1.0;
     float weighted_ev_sum = {};
     int i_3 = 0;
@@ -979,23 +983,23 @@ metal::float3 applyBilateralToneRecovery(
     int i_6 = 12;
     float delta_ev = 0.0;
     if (highlights == 0.0) {
-        local_75 = shadows == 0.0;
-    } else {
-        local_75 = false;
-    }
-    bool _e14 = local_75;
-    if (_e14) {
-        local_76 = whites == 0.0;
-    } else {
-        local_76 = false;
-    }
-    bool _e20 = local_76;
-    if (_e20) {
-        local_77 = blacks == 0.0;
+        local_77 = shadows == 0.0;
     } else {
         local_77 = false;
     }
-    bool _e26 = local_77;
+    bool _e14 = local_77;
+    if (_e14) {
+        local_78 = whites == 0.0;
+    } else {
+        local_78 = false;
+    }
+    bool _e20 = local_78;
+    if (_e20) {
+        local_79 = blacks == 0.0;
+    } else {
+        local_79 = false;
+    }
+    bool _e26 = local_79;
     if (_e26) {
         return color_3;
     }
@@ -1158,30 +1162,30 @@ metal::float3 applyColorAdjustments(
     float deepBlue,
     float foliage
 ) {
-    bool local_78 = {};
-    bool local_79 = {};
     bool local_80 = {};
+    bool local_81 = {};
+    bool local_82 = {};
     metal::float3 c_8 = {};
     float skinProtect = 1.0;
     float vibGain = {};
     if (vibrance == 0.0) {
-        local_78 = saturation == 0.0;
-    } else {
-        local_78 = false;
-    }
-    bool _e12 = local_78;
-    if (_e12) {
-        local_79 = deepBlue == 0.0;
-    } else {
-        local_79 = false;
-    }
-    bool _e18 = local_79;
-    if (_e18) {
-        local_80 = foliage == 0.0;
+        local_80 = saturation == 0.0;
     } else {
         local_80 = false;
     }
-    bool _e24 = local_80;
+    bool _e12 = local_80;
+    if (_e12) {
+        local_81 = deepBlue == 0.0;
+    } else {
+        local_81 = false;
+    }
+    bool _e18 = local_81;
+    if (_e18) {
+        local_82 = foliage == 0.0;
+    } else {
+        local_82 = false;
+    }
+    bool _e24 = local_82;
     if (_e24) {
         return rgb_1;
     }
@@ -1288,16 +1292,16 @@ metal::float3 applySplitToning(
     float highlightSat,
     float balance
 ) {
-    bool local_81 = {};
-    metal::float3 delta_1 = metal::float3(0.0);
-    bool local_82 = {};
     bool local_83 = {};
+    metal::float3 delta_1 = metal::float3(0.0);
+    bool local_84 = {};
+    bool local_85 = {};
     if (shadowSat <= 0.0) {
-        local_81 = highlightSat <= 0.0;
+        local_83 = highlightSat <= 0.0;
     } else {
-        local_81 = false;
+        local_83 = false;
     }
-    bool _e13 = local_81;
+    bool _e13 = local_83;
     if (_e13) {
         return rgb_2;
     }
@@ -1305,11 +1309,11 @@ metal::float3 applySplitToning(
     float yClamp = metal::clamp(lum_2, 0.0, 1.0);
     float t_3 = metal::clamp(0.5 - ((balance / 100.0) * 0.25), 0.1, 0.9);
     if (shadowSat > 0.0) {
-        local_82 = yClamp < t_3;
+        local_84 = yClamp < t_3;
     } else {
-        local_82 = false;
+        local_84 = false;
     }
-    bool _e46 = local_82;
+    bool _e46 = local_84;
     if (_e46) {
         float u_s = (t_3 - yClamp) / t_3;
         float w_s = ((u_s * u_s) * (3.0 - (2.0 * u_s))) * (shadowSat / 100.0);
@@ -1319,11 +1323,11 @@ metal::float3 applySplitToning(
         delta_1 = _e73 + (metal::float3(w_s) * (_e61 - metal::float3(tLum)));
     }
     if (highlightSat > 0.0) {
-        local_83 = yClamp > t_3;
+        local_85 = yClamp > t_3;
     } else {
-        local_83 = false;
+        local_85 = false;
     }
-    bool _e85 = local_83;
+    bool _e85 = local_85;
     if (_e85) {
         float u_h = (yClamp - t_3) / (1.0 - t_3);
         float w_h = ((u_h * u_h) * (3.0 - (2.0 * u_h))) * (highlightSat / 100.0);
@@ -1717,6 +1721,8 @@ fragment fragmentShaderOutput fragmentShader(
 , metal::sampler u_curve_sampler [[sampler(2)]]
 , metal::texture2d<float, metal::access::sample> u_gain_map [[texture(4)]]
 , metal::sampler u_gain_map_sampler [[sampler(3)]]
+, metal::texture3d<float, metal::access::sample> u_proof_lut [[texture(5)]]
+, metal::sampler u_proof_sampler [[sampler(4)]]
 ) {
     const VertexOutput in = { position, varyings_1.texCoord };
     bool local = {};
@@ -1841,6 +1847,8 @@ fragment fragmentShaderOutput fragmentShader(
     bool local_65 = {};
     bool local_66 = {};
     bool local_67 = {};
+    bool local_68 = {};
+    bool local_69 = {};
     ShaderUniforms _e3 = uniforms_2;
     GeometryCoordinates _e4 = transformGeometryChannels(in.texCoord, _e3);
     metal::float2 uv_2 = _e4.uv;
@@ -2849,224 +2857,254 @@ fragment fragmentShaderOutput fragmentShader(
         float _e1987 = uniforms_2.lutIntensity;
         finalColor = metal::mix(_e1984, lutSample, metal::clamp(_e1987, 0.0, 1.0));
     }
-    int _e1994 = uniforms_2.edrEnabled;
+    int _e1994 = uniforms_2.softProofEnabled;
     if (_e1994 != 0) {
-        float _e2001 = uniforms_2.edrHeadroom;
-        local_53 = _e2001 > 1.001;
+        float _e2001 = uniforms_2.isOriginal;
+        local_53 = _e2001 < 0.5;
     } else {
         local_53 = false;
     }
     bool _e2005 = local_53;
     if (_e2005) {
-        float _e2008 = uniforms_2.edrHeadroom;
-        float headroom = metal::clamp(_e2008, 1.0, 4.0);
-        int _e2014 = uniforms_2.hasGainMap;
-        if (_e2014 != 0) {
-            metal::float4 _e2019 = u_gain_map.sample(u_gain_map_sampler, uv_2);
-            float g_1 = _e2019.x;
-            float _e2023 = uniforms_2.gainMapMin;
-            float _e2026 = uniforms_2.gainMapMax;
-            float _e2029 = uniforms_2.gainMapMin;
-            float gainLog2_ = _e2023 + (g_1 * (_e2026 - _e2029));
-            float _e2035 = uniforms_2.gainMapGamma;
-            float gamma_1 = metal::max(_e2035, 0.01);
+        metal::float3 _e2007 = finalColor;
+        metal::float3 proofCoord = ((metal::clamp(_e2007, metal::float3(0.0), metal::float3(1.0)) * (33.0 - 1.0)) + metal::float3(0.5)) / metal::float3(33.0);
+        metal::float4 proofSample = u_proof_lut.sample(u_proof_sampler, proofCoord);
+        int _e2026 = uniforms_2.gamutWarningEnabled;
+        if (_e2026 != 0) {
+            local_54 = proofSample.w < 0.5;
+        } else {
+            local_54 = false;
+        }
+        bool _e2035 = local_54;
+        if (_e2035) {
+            float zebra = metal::fract((in.position.x + in.position.y) / 12.0);
+            if (zebra < 0.5) {
+                finalColor = metal::float3(0.0, 0.9, 1.0);
+            } else {
+                finalColor = metal::float3(0.0, 0.35, 0.5);
+            }
+        } else {
+            finalColor = proofSample.xyz;
+        }
+    }
+    int _e2057 = uniforms_2.edrEnabled;
+    if (_e2057 != 0) {
+        float _e2064 = uniforms_2.edrHeadroom;
+        local_55 = _e2064 > 1.001;
+    } else {
+        local_55 = false;
+    }
+    bool _e2068 = local_55;
+    if (_e2068) {
+        float _e2071 = uniforms_2.edrHeadroom;
+        float headroom = metal::clamp(_e2071, 1.0, 4.0);
+        int _e2077 = uniforms_2.hasGainMap;
+        if (_e2077 != 0) {
+            metal::float4 _e2082 = u_gain_map.sample(u_gain_map_sampler, uv_2);
+            float g_1 = _e2082.x;
+            float _e2086 = uniforms_2.gainMapMin;
+            float _e2089 = uniforms_2.gainMapMax;
+            float _e2092 = uniforms_2.gainMapMin;
+            float gainLog2_ = _e2086 + (g_1 * (_e2089 - _e2092));
+            float _e2098 = uniforms_2.gainMapGamma;
+            float gamma_1 = metal::max(_e2098, 0.01);
             float gainFactor = metal::pow(2.0, gainLog2_ / gamma_1);
-            float _e2043 = uniforms_2.gainMapCapacityMax;
-            float maxCap = metal::max(_e2043, 1.01);
+            float _e2106 = uniforms_2.gainMapCapacityMax;
+            float maxCap = metal::max(_e2106, 1.01);
             float weight = metal::clamp((headroom - 1.0) / (maxCap - 1.0), 0.0, 1.0);
             float effectiveGain = 1.0 + ((gainFactor - 1.0) * weight);
-            metal::float3 _e2059 = finalColor;
-            finalColor = _e2059 * effectiveGain;
+            metal::float3 _e2122 = finalColor;
+            finalColor = _e2122 * effectiveGain;
         } else {
-            int _e2063 = uniforms_2.isLinearRaw;
-            if (_e2063 == 1) {
-                metal::float3 _e2066 = rec2020Color;
-                float sceneLum = metal::dot(_e2066, metal::float3(0.2627, 0.678, 0.0593));
-                metal::float3 _e2072 = finalColor;
-                float outLum = metal::dot(_e2072, metal::float3(0.2126, 0.7152, 0.0722));
+            int _e2126 = uniforms_2.isLinearRaw;
+            if (_e2126 == 1) {
+                metal::float3 _e2129 = rec2020Color;
+                float sceneLum = metal::dot(_e2129, metal::float3(0.2627, 0.678, 0.0593));
+                metal::float3 _e2135 = finalColor;
+                float outLum = metal::dot(_e2135, metal::float3(0.2126, 0.7152, 0.0722));
                 float highlightFactor = metal::smoothstep(0.85, 1.0, metal::max(outLum, metal::clamp(sceneLum - 0.15, 0.0, 1.0)));
                 if (highlightFactor > 0.0) {
                     float edrBoost = 1.0 + ((headroom - 1.0) * metal::pow(highlightFactor, 1.5));
-                    metal::float3 _e2096 = finalColor;
-                    finalColor = _e2096 * edrBoost;
+                    metal::float3 _e2159 = finalColor;
+                    finalColor = _e2159 * edrBoost;
                 }
             }
         }
-        float _e2099 = finalColor.x;
-        float _e2101 = finalColor.y;
-        float _e2103 = finalColor.z;
-        float peakC = metal::max(_e2099, metal::max(_e2101, _e2103));
+        float _e2162 = finalColor.x;
+        float _e2164 = finalColor.y;
+        float _e2166 = finalColor.z;
+        float peakC = metal::max(_e2162, metal::max(_e2164, _e2166));
         if (peakC > headroom) {
             float excess_1 = (peakC - headroom) / peakC;
-            metal::float3 _e2109 = finalColor;
-            finalColor = metal::mix(_e2109 * (headroom / peakC), metal::float3(headroom), metal::clamp(excess_1 * 1.5, 0.0, 1.0));
+            metal::float3 _e2172 = finalColor;
+            finalColor = metal::mix(_e2172 * (headroom / peakC), metal::float3(headroom), metal::clamp(excess_1 * 1.5, 0.0, 1.0));
         } else {
             if (peakC > 1.0) {
                 float desatThreshold = 1.0 + ((headroom - 1.0) * 0.8);
                 if (peakC > desatThreshold) {
                     float t_4 = (peakC - desatThreshold) / metal::max(headroom - desatThreshold, 0.0001);
-                    metal::float3 _e2133 = finalColor;
-                    finalColor = metal::mix(_e2133, metal::float3(peakC), metal::clamp(t_4 * 0.4, 0.0, 0.4));
+                    metal::float3 _e2196 = finalColor;
+                    finalColor = metal::mix(_e2196, metal::float3(peakC), metal::clamp(t_4 * 0.4, 0.0, 0.4));
                 }
             }
         }
-        metal::float3 _e2142 = finalColor;
-        finalColor = metal::max(LINEAR_SRGB_TO_DISPLAY_P3_ * _e2142, metal::float3(0.0));
-        int _e2149 = uniforms_2.clippingOverlayActive;
-        if (_e2149 != 0) {
-            float _e2156 = uniforms_2.isOriginal;
-            local_54 = _e2156 < 0.5;
+        metal::float3 _e2205 = finalColor;
+        finalColor = metal::max(LINEAR_SRGB_TO_DISPLAY_P3_ * _e2205, metal::float3(0.0));
+        int _e2212 = uniforms_2.clippingOverlayActive;
+        if (_e2212 != 0) {
+            float _e2219 = uniforms_2.isOriginal;
+            local_56 = _e2219 < 0.5;
         } else {
-            local_54 = false;
+            local_56 = false;
         }
-        bool _e2160 = local_54;
-        if (_e2160) {
-            int _e2163 = uniforms_2.isLinearRaw;
-            if (_e2163 == 1) {
-                float _e2169 = sampledColor.x;
-                if (!((_e2169 >= 1.0))) {
-                    float _e2176 = sampledColor.y;
-                    local_56 = _e2176 >= 1.0;
+        bool _e2223 = local_56;
+        if (_e2223) {
+            int _e2226 = uniforms_2.isLinearRaw;
+            if (_e2226 == 1) {
+                float _e2232 = sampledColor.x;
+                if (!((_e2232 >= 1.0))) {
+                    float _e2239 = sampledColor.y;
+                    local_58 = _e2239 >= 1.0;
                 } else {
-                    local_56 = true;
+                    local_58 = true;
                 }
-                bool _e2180 = local_56;
-                if (!(_e2180)) {
-                    float _e2185 = sampledColor.z;
-                    local_57 = _e2185 >= 1.0;
+                bool _e2243 = local_58;
+                if (!(_e2243)) {
+                    float _e2248 = sampledColor.z;
+                    local_59 = _e2248 >= 1.0;
                 } else {
-                    local_57 = true;
+                    local_59 = true;
                 }
-                bool _e2189 = local_57;
-                local_55 = _e2189;
+                bool _e2252 = local_59;
+                local_57 = _e2252;
             } else {
-                local_55 = false;
+                local_57 = false;
             }
-            bool _e2191 = local_55;
-            if (!(_e2191)) {
-                float _e2196 = finalColor.x;
-                float _e2198 = finalColor.y;
-                float _e2200 = finalColor.z;
-                local_58 = metal::max(_e2196, metal::max(_e2198, _e2200)) >= (headroom * 0.99);
-            } else {
-                local_58 = true;
-            }
-            bool _e2207 = local_58;
-            if (!(_e2207)) {
-                float _e2212 = rec2020Color.x;
-                float _e2214 = rec2020Color.y;
-                float _e2216 = rec2020Color.z;
-                local_59 = metal::max(_e2212, metal::max(_e2214, _e2216)) >= 2.88;
-            } else {
-                local_59 = true;
-            }
-            bool isHighlightClip = local_59;
-            metal::float3 _e2223 = rec2020Color;
-            float sceneLum_1 = metal::dot(_e2223, metal::float3(0.2627, 0.678, 0.0593));
-            if (!((sceneLum_1 <= 0.0007))) {
-                float _e2235 = finalColor.x;
-                float _e2237 = finalColor.y;
-                float _e2239 = finalColor.z;
-                local_60 = metal::max(_e2235, metal::max(_e2237, _e2239)) <= 0.0005;
+            bool _e2254 = local_57;
+            if (!(_e2254)) {
+                float _e2259 = finalColor.x;
+                float _e2261 = finalColor.y;
+                float _e2263 = finalColor.z;
+                local_60 = metal::max(_e2259, metal::max(_e2261, _e2263)) >= (headroom * 0.99);
             } else {
                 local_60 = true;
             }
-            bool isShadowClip = local_60;
+            bool _e2270 = local_60;
+            if (!(_e2270)) {
+                float _e2275 = rec2020Color.x;
+                float _e2277 = rec2020Color.y;
+                float _e2279 = rec2020Color.z;
+                local_61 = metal::max(_e2275, metal::max(_e2277, _e2279)) >= 2.88;
+            } else {
+                local_61 = true;
+            }
+            bool isHighlightClip = local_61;
+            metal::float3 _e2286 = rec2020Color;
+            float sceneLum_1 = metal::dot(_e2286, metal::float3(0.2627, 0.678, 0.0593));
+            if (!((sceneLum_1 <= 0.0007))) {
+                float _e2298 = finalColor.x;
+                float _e2300 = finalColor.y;
+                float _e2302 = finalColor.z;
+                local_62 = metal::max(_e2298, metal::max(_e2300, _e2302)) <= 0.0005;
+            } else {
+                local_62 = true;
+            }
+            bool isShadowClip = local_62;
             if (isHighlightClip) {
                 float zebraHighlight = metal::fract((in.position.x + in.position.y) / 14.0);
                 if (zebraHighlight < 0.5) {
-                    float _e2257 = sampledColor.w;
-                    return fragmentShaderOutput { metal::float4(1.0, 0.12, 0.12, _e2257) };
+                    float _e2320 = sampledColor.w;
+                    return fragmentShaderOutput { metal::float4(1.0, 0.12, 0.12, _e2320) };
                 }
             } else {
                 if (isShadowClip) {
                     float zebraShadow = metal::fract((in.position.x - in.position.y) / 14.0);
                     if (zebraShadow < 0.5) {
-                        float _e2273 = sampledColor.w;
-                        return fragmentShaderOutput { metal::float4(0.05, 0.4, 1.0, _e2273) };
+                        float _e2336 = sampledColor.w;
+                        return fragmentShaderOutput { metal::float4(0.05, 0.4, 1.0, _e2336) };
                     }
                 }
             }
         }
-        metal::float3 _e2278 = finalColor;
-        float _e2280 = sampledColor.w;
-        return fragmentShaderOutput { metal::float4(_e2278, _e2280) };
+        metal::float3 _e2341 = finalColor;
+        float _e2343 = sampledColor.w;
+        return fragmentShaderOutput { metal::float4(_e2341, _e2343) };
     } else {
-        metal::float3 _e2282 = finalColor;
-        metal::float3 _e2288 = linearToSrgbGamma3_(metal::clamp(_e2282, metal::float3(0.0), metal::float3(1.0)));
-        int _e2291 = uniforms_2.clippingOverlayActive;
-        if (_e2291 != 0) {
-            float _e2298 = uniforms_2.isOriginal;
-            local_61 = _e2298 < 0.5;
+        metal::float3 _e2345 = finalColor;
+        metal::float3 _e2351 = linearToSrgbGamma3_(metal::clamp(_e2345, metal::float3(0.0), metal::float3(1.0)));
+        int _e2354 = uniforms_2.clippingOverlayActive;
+        if (_e2354 != 0) {
+            float _e2361 = uniforms_2.isOriginal;
+            local_63 = _e2361 < 0.5;
         } else {
-            local_61 = false;
+            local_63 = false;
         }
-        bool _e2302 = local_61;
-        if (_e2302) {
-            int _e2305 = uniforms_2.isLinearRaw;
-            if (_e2305 == 1) {
-                float _e2311 = sampledColor.x;
-                if (!((_e2311 >= 1.0))) {
-                    float _e2318 = sampledColor.y;
-                    local_63 = _e2318 >= 1.0;
+        bool _e2365 = local_63;
+        if (_e2365) {
+            int _e2368 = uniforms_2.isLinearRaw;
+            if (_e2368 == 1) {
+                float _e2374 = sampledColor.x;
+                if (!((_e2374 >= 1.0))) {
+                    float _e2381 = sampledColor.y;
+                    local_65 = _e2381 >= 1.0;
                 } else {
-                    local_63 = true;
+                    local_65 = true;
                 }
-                bool _e2322 = local_63;
-                if (!(_e2322)) {
-                    float _e2327 = sampledColor.z;
-                    local_64 = _e2327 >= 1.0;
+                bool _e2385 = local_65;
+                if (!(_e2385)) {
+                    float _e2390 = sampledColor.z;
+                    local_66 = _e2390 >= 1.0;
                 } else {
-                    local_64 = true;
+                    local_66 = true;
                 }
-                bool _e2331 = local_64;
-                local_62 = _e2331;
+                bool _e2394 = local_66;
+                local_64 = _e2394;
             } else {
-                local_62 = false;
+                local_64 = false;
             }
-            bool _e2333 = local_62;
-            if (!(_e2333)) {
-                local_65 = metal::max(_e2288.x, metal::max(_e2288.y, _e2288.z)) >= 0.992;
-            } else {
-                local_65 = true;
-            }
-            bool _e2345 = local_65;
-            if (!(_e2345)) {
-                float _e2350 = rec2020Color.x;
-                float _e2352 = rec2020Color.y;
-                float _e2354 = rec2020Color.z;
-                local_66 = metal::max(_e2350, metal::max(_e2352, _e2354)) >= 2.88;
-            } else {
-                local_66 = true;
-            }
-            bool isHighlightClip_1 = local_66;
-            metal::float3 _e2361 = rec2020Color;
-            float sceneLum_2 = metal::dot(_e2361, metal::float3(0.2627, 0.678, 0.0593));
-            if (!((sceneLum_2 <= 0.0007))) {
-                local_67 = metal::max(_e2288.x, metal::max(_e2288.y, _e2288.z)) <= 0.004;
+            bool _e2396 = local_64;
+            if (!(_e2396)) {
+                local_67 = metal::max(_e2351.x, metal::max(_e2351.y, _e2351.z)) >= 0.992;
             } else {
                 local_67 = true;
             }
-            bool isShadowClip_1 = local_67;
+            bool _e2408 = local_67;
+            if (!(_e2408)) {
+                float _e2413 = rec2020Color.x;
+                float _e2415 = rec2020Color.y;
+                float _e2417 = rec2020Color.z;
+                local_68 = metal::max(_e2413, metal::max(_e2415, _e2417)) >= 2.88;
+            } else {
+                local_68 = true;
+            }
+            bool isHighlightClip_1 = local_68;
+            metal::float3 _e2424 = rec2020Color;
+            float sceneLum_2 = metal::dot(_e2424, metal::float3(0.2627, 0.678, 0.0593));
+            if (!((sceneLum_2 <= 0.0007))) {
+                local_69 = metal::max(_e2351.x, metal::max(_e2351.y, _e2351.z)) <= 0.004;
+            } else {
+                local_69 = true;
+            }
+            bool isShadowClip_1 = local_69;
             if (isHighlightClip_1) {
                 float zebraHighlight_1 = metal::fract((in.position.x + in.position.y) / 14.0);
                 if (zebraHighlight_1 < 0.5) {
-                    float _e2392 = sampledColor.w;
-                    return fragmentShaderOutput { metal::float4(1.0, 0.12, 0.12, _e2392) };
+                    float _e2455 = sampledColor.w;
+                    return fragmentShaderOutput { metal::float4(1.0, 0.12, 0.12, _e2455) };
                 }
             } else {
                 if (isShadowClip_1) {
                     float zebraShadow_1 = metal::fract((in.position.x - in.position.y) / 14.0);
                     if (zebraShadow_1 < 0.5) {
-                        float _e2408 = sampledColor.w;
-                        return fragmentShaderOutput { metal::float4(0.05, 0.4, 1.0, _e2408) };
+                        float _e2471 = sampledColor.w;
+                        return fragmentShaderOutput { metal::float4(0.05, 0.4, 1.0, _e2471) };
                     }
                 }
             }
         }
-        float _e2415 = ign(in.position.xy);
-        float dither = (_e2415 - 0.5) / 255.0;
-        float _e2428 = sampledColor.w;
-        return fragmentShaderOutput { metal::float4(metal::clamp(_e2288 + metal::float3(dither), metal::float3(0.0), metal::float3(1.0)), _e2428) };
+        float _e2478 = ign(in.position.xy);
+        float dither = (_e2478 - 0.5) / 255.0;
+        float _e2491 = sampledColor.w;
+        return fragmentShaderOutput { metal::float4(metal::clamp(_e2351 + metal::float3(dither), metal::float3(0.0), metal::float3(1.0)), _e2491) };
     }
 }

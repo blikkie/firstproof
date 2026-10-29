@@ -22,7 +22,10 @@ extension MetalRenderer {
         baselineSharpness: Float = 1.0,
         asShotTemperature: Float = 5500.0,
         asShotTint: Float = 0.0,
-        clippingOverlayActive: Bool = false
+        clippingOverlayActive: Bool = false,
+        softProofEnabled: Bool = false,
+        gamutWarningEnabled: Bool = false,
+        proofIntent: ProofIntent = .relativeColorimetric
     ) {
         uniforms.isIntermediate = isIntermediate ? 1 : 0
         uniforms.baselineSharpness = baselineSharpness
@@ -231,6 +234,15 @@ extension MetalRenderer {
         }
 
         uniforms.defringeAmount = edits.defringeAmount
+        uniforms.softProofEnabled = softProofEnabled ? 1 : 0
+        uniforms.gamutWarningEnabled = gamutWarningEnabled ? 1 : 0
+        switch proofIntent {
+        case .relativeColorimetric: uniforms.proofIntent = 0
+        case .perceptual: uniforms.proofIntent = 1
+        case .absoluteColorimetric: uniforms.proofIntent = 2
+        }
+        uniforms.pad0 = 0.0
+        uniforms.pad1 = 0.0
         
         self.rotationDegrees = Int(edits.rotation)
         self.flipHorizontal = edits.flipHorizontal

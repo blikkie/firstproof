@@ -256,6 +256,20 @@ struct FirstProofApp: App {
                 
                 Divider()
                 
+                Button(viewModel.isSoftProofActive ? "Disable Soft Proofing" : "Enable Soft Proofing") {
+                    viewModel.toggleSoftProof()
+                }
+                .keyboardShortcut("y", modifiers: [.command])
+                .disabled(viewModel.canvasMode != .detail)
+                
+                Button(viewModel.isGamutWarningActive ? "Hide Gamut Warning" : "Show Gamut Warning") {
+                    viewModel.toggleGamutWarning()
+                }
+                .keyboardShortcut("y", modifiers: [.command, .shift])
+                .disabled(viewModel.canvasMode != .detail)
+                
+                Divider()
+                
                 Button(viewModel.isInspectorPresented ? "Hide Inspector" : "Show Inspector") {
                     viewModel.toggleInspector()
                 }

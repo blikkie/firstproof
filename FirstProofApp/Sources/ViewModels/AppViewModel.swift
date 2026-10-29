@@ -366,6 +366,16 @@ public final class AppViewModel {
     public var isClippingOverlayActive: Bool = false
     @ObservationIgnored public var histogramDebounceTask: Task<Void, Never>? = nil
     
+    // MARK: - ColorSync Soft Proofing & Lab ICC Management (Story 3.4)
+    public var isSoftProofActive: Bool = false
+    public var isGamutWarningActive: Bool = false
+    public var selectedProofProfileId: String = "builtin:srgb"
+    public var proofRenderingIntent: ProofIntent = .relativeColorimetric
+    public var availableIccProfiles: [IccProfileRecord] = []
+    public var currentProofLutRecord: CubeLutRecord? = nil
+    public var isProofLutGenerating: Bool = false
+    @ObservationIgnored public var proofLutTask: Task<Void, Never>? = nil
+    
     var currentlyLoadedPhotoPath: String? = nil
     @ObservationIgnored public var lastNavDirection: NavigationDirection = .neutral
     
@@ -676,6 +686,8 @@ public final class AppViewModel {
         setupScreenObservers()
         setupMediaDetection()
         setupTerminationObserver()
+        loadDefaultProofSettings()
+        refreshAvailableProofProfiles()
     }
     
     private func setupTerminationObserver() {

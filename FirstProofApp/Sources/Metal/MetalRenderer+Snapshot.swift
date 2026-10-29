@@ -134,6 +134,9 @@ extension MetalRenderer {
         let activeGainMap = gainMapTexture ?? defaultGainMapTexture
         encoder.setFragmentTexture(activeGainMap, index: 4)
         encoder.setFragmentSamplerState(gainMapSamplerState ?? samplerState, index: 3)
+        let activeProof = proofLutTexture ?? defaultProofLutTexture
+        encoder.setFragmentTexture(activeProof, index: 5)
+        encoder.setFragmentSamplerState(proofSamplerState ?? samplerState, index: 4)
         encoder.setFragmentBuffer(thumbUniformsBuffer, offset: 0, index: 1)
         
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)

@@ -17,6 +17,9 @@ pub mod gainmap;
 pub mod synthetic;
 pub mod checksum;
 pub mod dng;
+pub mod proof;
+
+pub use proof::{IccProfileRecord, ProofIntent};
 
 pub use firstproof_engine::{
     all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,
@@ -651,6 +654,7 @@ use std::sync::Arc;
 pub enum FirstProofError {
     DatabaseError { reason: String },
     DngError { reason: String },
+    ColorSyncError { reason: String },
 }
 
 impl std::fmt::Display for FirstProofError {
@@ -658,6 +662,7 @@ impl std::fmt::Display for FirstProofError {
         match self {
             FirstProofError::DatabaseError { reason } => write!(f, "Database error: {}", reason),
             FirstProofError::DngError { reason } => write!(f, "DNG conversion error: {}", reason),
+            FirstProofError::ColorSyncError { reason } => write!(f, "ColorSync error: {}", reason),
         }
     }
 }
@@ -1399,6 +1404,31 @@ pub fn execute_darkroom_command_headless(json_str: String) -> String {
             )).to_json()
         }
     }
+}
+
+// MARK: - ColorSync Soft Proofing UniFFI Exports
+
+#[uniffi::export]
+pub fn discover_color_sync_profiles() -> Vec<IccProfileRecord> {
+    proof::discover_icc_profiles()
+}
+
+#[uniffi::export]
+pub fn import_color_sync_profile(source_path: String) -> Result<IccProfileRecord, FirstProofError> {
+    proof::import_icc_profile(&source_path)
+        .map_err(|e| FirstProofError::ColorSyncError { reason: e })
+}
+
+#[uniffi::export]
+pub fn generate_soft_proof_3d_lut(
+    profile_id_or_path: String,
+    intent: ProofIntent,
+    source_is_p3: bool,
+    display_is_p3: bool,
+    size: u32,
+) -> Result<CubeLutRecord, FirstProofError> {
+    proof::generate_soft_proof_lut(&profile_id_or_path, intent, source_is_p3, display_is_p3, size)
+        .map_err(|e| FirstProofError::ColorSyncError { reason: e })
 }
 
 #[cfg(test)]

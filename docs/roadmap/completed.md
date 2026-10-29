@@ -45,6 +45,13 @@ This archive tracks completed stories and features moved from the active backlog
   - Executed 4-channel $30 \times 40$ 2D spatial `GainMap` meshes from `OpcodeList2` (Tag 51009) with `row_pitch: 2, col_pitch: 2` on the raw Bayer mosaic prior to demosaicing, completely eliminating peripheral $\cos^4 \theta$ optical falloff and chromatic vignetting.
   - Ingested `OpcodeList3` `WarpRectilinear` (Tag 51022) radial distortion coefficients into `RawSensorFrame::warp_rectilinear` and `DemosaicedImage::warp_rectilinear`.
   - Guarded against computational plastic by strictly rejecting synthetic depth maps and AI skin smoothing masks.
+- **Story 3.4: ColorSync Soft Proofing & Lab ICC Profile Management**:
+  - Integrated LittleCMS2 3-profile soft proofing engine in Rust core (`firstproof-core/src/proof.rs`), generating single-pass 3D LUTs ($33^3$ RGBA32F) baking simulated target proof colors in monitor space into RGB channels and out-of-gamut detection into the Alpha channel.
+  - Enforced the Linear Optical Domain Invariant: source and display profiles instantiate linear transfer curves ($\gamma = 1.0$), ensuring display gamma conversion in `darkroom.wgsl` (`linearToSrgbGamma3`) remains strictly the single terminal conversion step. Toggling sRGB proofing on an sRGB display operates as a bit-exact identity ($x \to x$) without midtone double-gamma washout.
+  - Native ColorSync discovery scanning macOS `~/Library/ColorSync/Profiles/`, `/Library/ColorSync/Profiles/`, `/System/Library/ColorSync/Profiles/`, plus Linux standard paths, always indexing built-in sRGB and Display P3.
+  - Added dedicated "Color & Soft Proofing" section in Settings with 1-click ICC profile importer and Finder folder reveal.
+  - Detail canvas toolbar Soft Proof capsule pill with popup menu for fast profile and rendering intent switching (*Relative Colorimetric*, *Perceptual*, *Absolute Colorimetric / Simulate Paper & Ink*), plus global View menu keyboard shortcuts `Cmd+Y` (toggle proofing) and `Shift+Cmd+Y` (toggle cyan zebra gamut warning).
+  - Cross-platform parity: WGSL darkroom shader Stage 10.1 transpiled to Metal, GLSL, and WebGPU via Naga; WebGL 2 binds texture unit 5 with an identity 3D texture, isolating samplers from unit 0.
 
 ---
 

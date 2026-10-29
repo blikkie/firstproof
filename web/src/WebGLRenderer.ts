@@ -67,6 +67,7 @@ export class WebGLRenderer {
   private texture: WebGLTexture | null = null;
   private masterLutTex: WebGLTexture | null = null;
   private rgbLutTex: WebGLTexture | null = null;
+  private proofLutTex: WebGLTexture | null = null;
   private isIntermediate: boolean = false;
   private isLinearRec2020: boolean = false;
   private baselineSharpness: number = 1.0;
@@ -195,12 +196,17 @@ export class WebGLRenderer {
       prog,
       SHADER_SAMPLER_NAMES.gainMap,
     );
+    const uProofLut = this.gl.getUniformLocation(
+      prog,
+      SHADER_SAMPLER_NAMES.proofLut,
+    );
 
     if (uTexture) this.gl.uniform1i(uTexture, 0);
     if (uLut3d) this.gl.uniform1i(uLut3d, 1);
     if (uMasterLut) this.gl.uniform1i(uMasterLut, 2);
     if (uRgbLut) this.gl.uniform1i(uRgbLut, 3);
     if (uGainMap) this.gl.uniform1i(uGainMap, 4);
+    if (uProofLut) this.gl.uniform1i(uProofLut, 5);
 
     // Vertex shader geometry uniforms
     this.uLocs.u_fitScale = this.gl.getUniformLocation(prog, 'u_fitScale');
@@ -283,6 +289,31 @@ export class WebGLRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    this.proofLutTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_3D, this.proofLutTex);
+    const defaultProofBytes = new Uint8Array([
+      0, 0, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 255, 255, 0, 255, 0, 0, 255,
+      255, 255, 0, 255, 255, 0, 255, 255, 255, 255, 255, 255, 255,
+    ]);
+    gl.texImage3D(
+      gl.TEXTURE_3D,
+      0,
+      gl.RGBA,
+      2,
+      2,
+      2,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      defaultProofBytes,
+    );
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
 
   public clearCanvas() {
@@ -620,6 +651,10 @@ export class WebGLRenderer {
       gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_2D, this.rgbLutTex);
     }
+    if (this.proofLutTex) {
+      gl.activeTexture(gl.TEXTURE5);
+      gl.bindTexture(gl.TEXTURE_3D, this.proofLutTex);
+    }
 
     const modeMap: Record<string, number> = {
       AgxVivid: 0,
@@ -800,6 +835,10 @@ export class WebGLRenderer {
     if (this.rgbLutTex) {
       this.gl.deleteTexture(this.rgbLutTex);
       this.rgbLutTex = null;
+    }
+    if (this.proofLutTex) {
+      this.gl.deleteTexture(this.proofLutTex);
+      this.proofLutTex = null;
     }
     if (this.uboBuffer) {
       this.gl.deleteBuffer(this.uboBuffer);

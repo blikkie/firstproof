@@ -1,5 +1,7 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
+import FirstProofBridge
 
 @MainActor
 public struct SettingsView: View {
@@ -86,6 +88,48 @@ public struct SettingsView: View {
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            
+            Divider()
+            
+            // MARK: - Color & Soft Proofing (Story 3.4)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Color & Soft Proofing")
+                    .font(.headline)
+                
+                Picker("Default Proof Profile", selection: Binding(
+                    get: { viewModel.selectedProofProfileId },
+                    set: { viewModel.selectProofProfile(id: $0) }
+                )) {
+                    ForEach(viewModel.availableIccProfiles, id: \.id) { profile in
+                        Text(profile.description).tag(profile.id)
+                    }
+                }
+                
+                Picker("Rendering Intent", selection: Binding(
+                    get: { viewModel.proofRenderingIntent },
+                    set: { viewModel.setProofRenderingIntent($0) }
+                )) {
+                    Text("Relative Colorimetric").tag(ProofIntent.relativeColorimetric)
+                    Text("Perceptual").tag(ProofIntent.perceptual)
+                    Text("Simulate Paper & Ink (Absolute)").tag(ProofIntent.absoluteColorimetric)
+                }
+                
+                HStack(spacing: 8) {
+                    Button("Import ICC Profile...") {
+                        chooseIccProfileToImport()
+                    }
+                    
+                    Button("Show in Finder") {
+                        openColorSyncFolderInFinder()
+                    }
+                }
+                
+                Text("Installed printer and lab ICC profiles are loaded from ~/Library/ColorSync/Profiles. Press Cmd+Y in Detail view to toggle soft proofing.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(20)
         .frame(width: 500)
@@ -161,5 +205,24 @@ public struct SettingsView: View {
         if case .mainLibrary = viewModel.currentScope {
             viewModel.openDirectory(at: viewModel.mainLibraryPath, isMain: true)
         }
+    }
+    
+    private func chooseIccProfileToImport() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.init(filenameExtension: "icc"), .init(filenameExtension: "icm")].compactMap { $0 }
+        panel.prompt = "Import Profile"
+        if panel.runModal() == .OK, let url = panel.url {
+            viewModel.importProfile(from: url)
+        }
+    }
+    
+    private func openColorSyncFolderInFinder() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let colorSyncDir = home.appendingPathComponent("Library/ColorSync/Profiles")
+        try? FileManager.default.createDirectory(at: colorSyncDir, withIntermediateDirectories: true)
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: colorSyncDir.path)
     }
 }

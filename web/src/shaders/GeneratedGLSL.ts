@@ -94,7 +94,11 @@ struct ShaderUniforms {
     float vignettingK2_;
     float vignettingK3_;
     float vignettingK4_;
+    int softProofEnabled;
+    int gamutWarningEnabled;
+    int proofIntent;
     float pad0_;
+    float pad1_;
 };
 struct VertexOutput {
     vec4 position;
@@ -149,15 +153,17 @@ uniform highp sampler2D _group_0_binding_6_fs;
 
 uniform highp sampler2D _group_0_binding_8_fs;
 
+uniform highp sampler3D _group_0_binding_11_fs;
+
 smooth in vec2 _vs2fs_location0;
 layout(location = 0) out vec4 _fs2p_location0;
 
 GeometryCoordinates transformGeometryChannels(vec2 uv, ShaderUniforms uniforms) {
     GeometryCoordinates coords = GeometryCoordinates(vec2(0.0), vec2(0.0), vec2(0.0));
-    bool local_68 = false;
+    bool local_70 = false;
     vec2 uvc = vec2(0.0);
     float autoCropScale = 1.0;
-    bool local_69 = false;
+    bool local_71 = false;
     int i_2 = 0;
     vec2 g = vec2(0.0);
     float r_corr = 0.0;
@@ -166,13 +172,13 @@ GeometryCoordinates transformGeometryChannels(vec2 uv, ShaderUniforms uniforms) 
     float r_corr_1 = 0.0;
     vec2 geom_r = vec2(0.0);
     vec2 geom_b = vec2(0.0);
-    bool local_70 = false;
+    bool local_72 = false;
     if (!((uniforms.isOriginal >= 0.5))) {
-        local_68 = (uniforms.isIntermediate == 1);
+        local_70 = (uniforms.isIntermediate == 1);
     } else {
-        local_68 = true;
+        local_70 = true;
     }
-    bool _e13 = local_68;
+    bool _e13 = local_70;
     if (_e13) {
         coords.uv = uv;
         coords.uvRed = uv;
@@ -196,11 +202,11 @@ GeometryCoordinates transformGeometryChannels(vec2 uv, ShaderUniforms uniforms) 
     float cV = (uniforms.perspectiveVertical * 0.005);
     float cH = (uniforms.perspectiveHorizontal * 0.005);
     if (!((uniforms.cropConstrain != 0))) {
-        local_69 = (uniforms.lensCorrectionEnabled != 0);
+        local_71 = (uniforms.lensCorrectionEnabled != 0);
     } else {
-        local_69 = true;
+        local_71 = true;
     }
-    bool _e74 = local_69;
+    bool _e74 = local_71;
     if (_e74) {
         vec2 testPoints[12] = vec2[12](vec2(A, 1.0), vec2(-(A), 1.0), vec2(A, -1.0), vec2(-(A), -1.0), vec2(A, 0.0), vec2(-(A), 0.0), vec2(0.0, 1.0), vec2(0.0, -1.0), vec2(A, 0.5), vec2(-(A), 0.5), vec2(A, -0.5), vec2(-(A), -0.5));
         bool loop_init = true;
@@ -296,11 +302,11 @@ GeometryCoordinates transformGeometryChannels(vec2 uv, ShaderUniforms uniforms) 
     vec2 _e285 = geom;
     geom_b = _e285;
     if ((uniforms.tcaCorrectionEnabled != 0)) {
-        local_70 = (uniforms.hasTca != 0);
+        local_72 = (uniforms.hasTca != 0);
     } else {
-        local_70 = false;
+        local_72 = false;
     }
-    bool _e296 = local_70;
+    bool _e296 = local_72;
     if (_e296) {
         vec2 _e297 = geom;
         vec2 _e298 = geom;
@@ -333,14 +339,14 @@ vec2 transformGeometry(vec2 uv_1, ShaderUniforms uniforms_1) {
 }
 
 vec3 applyDetailAndSharpening(vec3 color, float y_c, float y_l_1, float y_r_1, float y_t_1, float y_b_1, float y_tl_1, float y_tr_1, float y_bl_1, float y_br_1, float amount, float masking, float noiseReduction) {
-    bool local_71 = false;
+    bool local_73 = false;
     float w_edge = 1.0;
     if ((amount <= 0.0)) {
-        local_71 = (noiseReduction <= 0.0);
+        local_73 = (noiseReduction <= 0.0);
     } else {
-        local_71 = false;
+        local_73 = false;
     }
-    bool _e20 = local_71;
+    bool _e20 = local_73;
     if (_e20) {
         return color;
     }
@@ -364,7 +370,7 @@ vec3 applyDetailAndSharpening(vec3 color, float y_c, float y_l_1, float y_r_1, f
 }
 
 vec3 applyDefringe(vec3 color_1, float y_c_1, float y_max_neighbor, float defringeAmount) {
-    bool local_72 = false;
+    bool local_74 = false;
     float hue = 0.0;
     if ((defringeAmount <= 0.0)) {
         return color_1;
@@ -372,11 +378,11 @@ vec3 applyDefringe(vec3 color_1, float y_c_1, float y_max_neighbor, float defrin
     float excess_b = (color_1.z - color_1.y);
     float excess_r = (color_1.x - color_1.y);
     if (!((excess_b <= 0.0))) {
-        local_72 = (excess_r <= 0.0);
+        local_74 = (excess_r <= 0.0);
     } else {
-        local_72 = true;
+        local_74 = true;
     }
-    bool _e20 = local_72;
+    bool _e20 = local_74;
     if (_e20) {
         return color_1;
     }
@@ -461,8 +467,8 @@ float evalGrainEta(float proc_val, float sensor_seed, int grain_mode, bool is_in
 }
 
 vec3 applyStochasticEmulsionGrain(vec3 color_2, float y_c_2, float y_l_2, float y_r_2, float y_t_2, float y_b_2, float y_tl_2, float y_tr_2, float y_bl_2, float y_br_2, vec2 p_1, int grain_mode_1, float cluster_size, float grain_amount, int archetype) {
-    bool local_73 = false;
-    bool local_74 = false;
+    bool local_75 = false;
+    bool local_76 = false;
     if ((grain_mode_1 == 0)) {
         return color_2;
     }
@@ -487,17 +493,17 @@ vec3 applyStochasticEmulsionGrain(vec3 color_2, float y_c_2, float y_l_2, float 
     float nutting = ((4.0 * y_clamped) * (1.0 - y_clamped));
     float y_pixel = dot(color_2, vec3(0.2627, 0.678, 0.0593));
     if (!((archetype == 6))) {
-        local_73 = (archetype == 10);
+        local_75 = (archetype == 10);
     } else {
-        local_73 = true;
+        local_75 = true;
     }
-    bool _e105 = local_73;
+    bool _e105 = local_75;
     if (!(_e105)) {
-        local_74 = (archetype == 11);
+        local_76 = (archetype == 11);
     } else {
-        local_74 = true;
+        local_76 = true;
     }
-    bool is_monochrome = local_74;
+    bool is_monochrome = local_76;
     if (is_monochrome) {
         float delta_2 = (((_e83 * nutting) * 0.28) * amount_1);
         float y_res = max((y_pixel * (1.0 + delta_2)), 0.0);
@@ -839,9 +845,9 @@ vec3 agxToneMapPhotographic(vec3 rec2020_color_2, float contrast_gain_2) {
 }
 
 vec3 applyBilateralToneRecovery(vec3 color_3, float y_c_3, float y_neighbors_1[16], float highlights, float shadows, float whites, float blacks) {
-    bool local_75 = false;
-    bool local_76 = false;
     bool local_77 = false;
+    bool local_78 = false;
+    bool local_79 = false;
     float total_weight = 1.0;
     float weighted_ev_sum = 0.0;
     int i_3 = 0;
@@ -850,23 +856,23 @@ vec3 applyBilateralToneRecovery(vec3 color_3, float y_c_3, float y_neighbors_1[1
     int i_6 = 12;
     float delta_ev = 0.0;
     if ((highlights == 0.0)) {
-        local_75 = (shadows == 0.0);
-    } else {
-        local_75 = false;
-    }
-    bool _e14 = local_75;
-    if (_e14) {
-        local_76 = (whites == 0.0);
-    } else {
-        local_76 = false;
-    }
-    bool _e20 = local_76;
-    if (_e20) {
-        local_77 = (blacks == 0.0);
+        local_77 = (shadows == 0.0);
     } else {
         local_77 = false;
     }
-    bool _e26 = local_77;
+    bool _e14 = local_77;
+    if (_e14) {
+        local_78 = (whites == 0.0);
+    } else {
+        local_78 = false;
+    }
+    bool _e20 = local_78;
+    if (_e20) {
+        local_79 = (blacks == 0.0);
+    } else {
+        local_79 = false;
+    }
+    bool _e26 = local_79;
     if (_e26) {
         return color_3;
     }
@@ -1011,30 +1017,30 @@ vec3 applyBilateralToneRecovery(vec3 color_3, float y_c_3, float y_neighbors_1[1
 }
 
 vec3 applyColorAdjustments(vec3 rgb_1, float vibrance, float saturation, float deepBlue, float foliage) {
-    bool local_78 = false;
-    bool local_79 = false;
     bool local_80 = false;
+    bool local_81 = false;
+    bool local_82 = false;
     vec3 c_8 = vec3(0.0);
     float skinProtect = 1.0;
     float vibGain = 0.0;
     if ((vibrance == 0.0)) {
-        local_78 = (saturation == 0.0);
-    } else {
-        local_78 = false;
-    }
-    bool _e12 = local_78;
-    if (_e12) {
-        local_79 = (deepBlue == 0.0);
-    } else {
-        local_79 = false;
-    }
-    bool _e18 = local_79;
-    if (_e18) {
-        local_80 = (foliage == 0.0);
+        local_80 = (saturation == 0.0);
     } else {
         local_80 = false;
     }
-    bool _e24 = local_80;
+    bool _e12 = local_80;
+    if (_e12) {
+        local_81 = (deepBlue == 0.0);
+    } else {
+        local_81 = false;
+    }
+    bool _e18 = local_81;
+    if (_e18) {
+        local_82 = (foliage == 0.0);
+    } else {
+        local_82 = false;
+    }
+    bool _e24 = local_82;
     if (_e24) {
         return rgb_1;
     }
@@ -1134,16 +1140,16 @@ vec3 applyColorAdjustments(vec3 rgb_1, float vibrance, float saturation, float d
 }
 
 vec3 applySplitToning(vec3 rgb_2, float shadowHue, float shadowSat, float highlightHue, float highlightSat, float balance) {
-    bool local_81 = false;
-    vec3 delta_1 = vec3(0.0);
-    bool local_82 = false;
     bool local_83 = false;
+    vec3 delta_1 = vec3(0.0);
+    bool local_84 = false;
+    bool local_85 = false;
     if ((shadowSat <= 0.0)) {
-        local_81 = (highlightSat <= 0.0);
+        local_83 = (highlightSat <= 0.0);
     } else {
-        local_81 = false;
+        local_83 = false;
     }
-    bool _e13 = local_81;
+    bool _e13 = local_83;
     if (_e13) {
         return rgb_2;
     }
@@ -1151,11 +1157,11 @@ vec3 applySplitToning(vec3 rgb_2, float shadowHue, float shadowSat, float highli
     float yClamp = clamp(lum_2, 0.0, 1.0);
     float t_3 = clamp((0.5 - ((balance / 100.0) * 0.25)), 0.1, 0.9);
     if ((shadowSat > 0.0)) {
-        local_82 = (yClamp < t_3);
+        local_84 = (yClamp < t_3);
     } else {
-        local_82 = false;
+        local_84 = false;
     }
-    bool _e46 = local_82;
+    bool _e46 = local_84;
     if (_e46) {
         float u_s = ((t_3 - yClamp) / t_3);
         float w_s = (((u_s * u_s) * (3.0 - (2.0 * u_s))) * (shadowSat / 100.0));
@@ -1165,11 +1171,11 @@ vec3 applySplitToning(vec3 rgb_2, float shadowHue, float shadowSat, float highli
         delta_1 = (_e73 + (vec3(w_s) * (_e61 - vec3(tLum))));
     }
     if ((highlightSat > 0.0)) {
-        local_83 = (yClamp > t_3);
+        local_85 = (yClamp > t_3);
     } else {
-        local_83 = false;
+        local_85 = false;
     }
-    bool _e85 = local_83;
+    bool _e85 = local_85;
     if (_e85) {
         float u_h = ((yClamp - t_3) / (1.0 - t_3));
         float w_h = (((u_h * u_h) * (3.0 - (2.0 * u_h))) * (highlightSat / 100.0));
@@ -1609,6 +1615,8 @@ void main() {
     bool local_65 = false;
     bool local_66 = false;
     bool local_67 = false;
+    bool local_68 = false;
+    bool local_69 = false;
     ShaderUniforms _e3 = _group_0_binding_0_fs;
     GeometryCoordinates _e4 = transformGeometryChannels(in_.texCoord, _e3);
     vec2 uv_2 = _e4.uv;
@@ -2615,230 +2623,260 @@ void main() {
         float _e1987 = _group_0_binding_0_fs.lutIntensity;
         finalColor = mix(_e1984, lutSample, clamp(_e1987, 0.0, 1.0));
     }
-    int _e1994 = _group_0_binding_0_fs.edrEnabled;
+    int _e1994 = _group_0_binding_0_fs.softProofEnabled;
     if ((_e1994 != 0)) {
-        float _e2001 = _group_0_binding_0_fs.edrHeadroom;
-        local_53 = (_e2001 > 1.001);
+        float _e2001 = _group_0_binding_0_fs.isOriginal;
+        local_53 = (_e2001 < 0.5);
     } else {
         local_53 = false;
     }
     bool _e2005 = local_53;
     if (_e2005) {
-        float _e2008 = _group_0_binding_0_fs.edrHeadroom;
-        float headroom = clamp(_e2008, 1.0, 4.0);
-        int _e2014 = _group_0_binding_0_fs.hasGainMap;
-        if ((_e2014 != 0)) {
-            vec4 _e2019 = texture(_group_0_binding_8_fs, vec2(uv_2));
-            float g_1 = _e2019.x;
-            float _e2023 = _group_0_binding_0_fs.gainMapMin;
-            float _e2026 = _group_0_binding_0_fs.gainMapMax;
-            float _e2029 = _group_0_binding_0_fs.gainMapMin;
-            float gainLog2_ = (_e2023 + (g_1 * (_e2026 - _e2029)));
-            float _e2035 = _group_0_binding_0_fs.gainMapGamma;
-            float gamma_1 = max(_e2035, 0.01);
+        vec3 _e2007 = finalColor;
+        vec3 proofCoord = (((clamp(_e2007, vec3(0.0), vec3(1.0)) * (33.0 - 1.0)) + vec3(0.5)) / vec3(33.0));
+        vec4 proofSample = texture(_group_0_binding_11_fs, vec3(proofCoord));
+        int _e2026 = _group_0_binding_0_fs.gamutWarningEnabled;
+        if ((_e2026 != 0)) {
+            local_54 = (proofSample.w < 0.5);
+        } else {
+            local_54 = false;
+        }
+        bool _e2035 = local_54;
+        if (_e2035) {
+            float zebra = fract(((in_.position.x + in_.position.y) / 12.0));
+            if ((zebra < 0.5)) {
+                finalColor = vec3(0.0, 0.9, 1.0);
+            } else {
+                finalColor = vec3(0.0, 0.35, 0.5);
+            }
+        } else {
+            finalColor = proofSample.xyz;
+        }
+    }
+    int _e2057 = _group_0_binding_0_fs.edrEnabled;
+    if ((_e2057 != 0)) {
+        float _e2064 = _group_0_binding_0_fs.edrHeadroom;
+        local_55 = (_e2064 > 1.001);
+    } else {
+        local_55 = false;
+    }
+    bool _e2068 = local_55;
+    if (_e2068) {
+        float _e2071 = _group_0_binding_0_fs.edrHeadroom;
+        float headroom = clamp(_e2071, 1.0, 4.0);
+        int _e2077 = _group_0_binding_0_fs.hasGainMap;
+        if ((_e2077 != 0)) {
+            vec4 _e2082 = texture(_group_0_binding_8_fs, vec2(uv_2));
+            float g_1 = _e2082.x;
+            float _e2086 = _group_0_binding_0_fs.gainMapMin;
+            float _e2089 = _group_0_binding_0_fs.gainMapMax;
+            float _e2092 = _group_0_binding_0_fs.gainMapMin;
+            float gainLog2_ = (_e2086 + (g_1 * (_e2089 - _e2092)));
+            float _e2098 = _group_0_binding_0_fs.gainMapGamma;
+            float gamma_1 = max(_e2098, 0.01);
             float gainFactor = pow(2.0, (gainLog2_ / gamma_1));
-            float _e2043 = _group_0_binding_0_fs.gainMapCapacityMax;
-            float maxCap = max(_e2043, 1.01);
+            float _e2106 = _group_0_binding_0_fs.gainMapCapacityMax;
+            float maxCap = max(_e2106, 1.01);
             float weight = clamp(((headroom - 1.0) / (maxCap - 1.0)), 0.0, 1.0);
             float effectiveGain = (1.0 + ((gainFactor - 1.0) * weight));
-            vec3 _e2059 = finalColor;
-            finalColor = (_e2059 * effectiveGain);
+            vec3 _e2122 = finalColor;
+            finalColor = (_e2122 * effectiveGain);
         } else {
-            int _e2063 = _group_0_binding_0_fs.isLinearRaw;
-            if ((_e2063 == 1)) {
-                vec3 _e2066 = rec2020Color;
-                float sceneLum = dot(_e2066, vec3(0.2627, 0.678, 0.0593));
-                vec3 _e2072 = finalColor;
-                float outLum = dot(_e2072, vec3(0.2126, 0.7152, 0.0722));
+            int _e2126 = _group_0_binding_0_fs.isLinearRaw;
+            if ((_e2126 == 1)) {
+                vec3 _e2129 = rec2020Color;
+                float sceneLum = dot(_e2129, vec3(0.2627, 0.678, 0.0593));
+                vec3 _e2135 = finalColor;
+                float outLum = dot(_e2135, vec3(0.2126, 0.7152, 0.0722));
                 float highlightFactor = smoothstep(0.85, 1.0, max(outLum, clamp((sceneLum - 0.15), 0.0, 1.0)));
                 if ((highlightFactor > 0.0)) {
                     float edrBoost = (1.0 + ((headroom - 1.0) * pow(highlightFactor, 1.5)));
-                    vec3 _e2096 = finalColor;
-                    finalColor = (_e2096 * edrBoost);
+                    vec3 _e2159 = finalColor;
+                    finalColor = (_e2159 * edrBoost);
                 }
             }
         }
-        float _e2099 = finalColor.x;
-        float _e2101 = finalColor.y;
-        float _e2103 = finalColor.z;
-        float peakC = max(_e2099, max(_e2101, _e2103));
+        float _e2162 = finalColor.x;
+        float _e2164 = finalColor.y;
+        float _e2166 = finalColor.z;
+        float peakC = max(_e2162, max(_e2164, _e2166));
         if ((peakC > headroom)) {
             float excess_1 = ((peakC - headroom) / peakC);
-            vec3 _e2109 = finalColor;
-            finalColor = mix((_e2109 * (headroom / peakC)), vec3(headroom), clamp((excess_1 * 1.5), 0.0, 1.0));
+            vec3 _e2172 = finalColor;
+            finalColor = mix((_e2172 * (headroom / peakC)), vec3(headroom), clamp((excess_1 * 1.5), 0.0, 1.0));
         } else {
             if ((peakC > 1.0)) {
                 float desatThreshold = (1.0 + ((headroom - 1.0) * 0.8));
                 if ((peakC > desatThreshold)) {
                     float t_4 = ((peakC - desatThreshold) / max((headroom - desatThreshold), 0.0001));
-                    vec3 _e2133 = finalColor;
-                    finalColor = mix(_e2133, vec3(peakC), clamp((t_4 * 0.4), 0.0, 0.4));
+                    vec3 _e2196 = finalColor;
+                    finalColor = mix(_e2196, vec3(peakC), clamp((t_4 * 0.4), 0.0, 0.4));
                 }
             }
         }
-        vec3 _e2142 = finalColor;
-        finalColor = max((LINEAR_SRGB_TO_DISPLAY_P3_ * _e2142), vec3(0.0));
-        int _e2149 = _group_0_binding_0_fs.clippingOverlayActive;
-        if ((_e2149 != 0)) {
-            float _e2156 = _group_0_binding_0_fs.isOriginal;
-            local_54 = (_e2156 < 0.5);
+        vec3 _e2205 = finalColor;
+        finalColor = max((LINEAR_SRGB_TO_DISPLAY_P3_ * _e2205), vec3(0.0));
+        int _e2212 = _group_0_binding_0_fs.clippingOverlayActive;
+        if ((_e2212 != 0)) {
+            float _e2219 = _group_0_binding_0_fs.isOriginal;
+            local_56 = (_e2219 < 0.5);
         } else {
-            local_54 = false;
+            local_56 = false;
         }
-        bool _e2160 = local_54;
-        if (_e2160) {
-            int _e2163 = _group_0_binding_0_fs.isLinearRaw;
-            if ((_e2163 == 1)) {
-                float _e2169 = sampledColor.x;
-                if (!((_e2169 >= 1.0))) {
-                    float _e2176 = sampledColor.y;
-                    local_56 = (_e2176 >= 1.0);
+        bool _e2223 = local_56;
+        if (_e2223) {
+            int _e2226 = _group_0_binding_0_fs.isLinearRaw;
+            if ((_e2226 == 1)) {
+                float _e2232 = sampledColor.x;
+                if (!((_e2232 >= 1.0))) {
+                    float _e2239 = sampledColor.y;
+                    local_58 = (_e2239 >= 1.0);
                 } else {
-                    local_56 = true;
+                    local_58 = true;
                 }
-                bool _e2180 = local_56;
-                if (!(_e2180)) {
-                    float _e2185 = sampledColor.z;
-                    local_57 = (_e2185 >= 1.0);
+                bool _e2243 = local_58;
+                if (!(_e2243)) {
+                    float _e2248 = sampledColor.z;
+                    local_59 = (_e2248 >= 1.0);
                 } else {
-                    local_57 = true;
+                    local_59 = true;
                 }
-                bool _e2189 = local_57;
-                local_55 = _e2189;
+                bool _e2252 = local_59;
+                local_57 = _e2252;
             } else {
-                local_55 = false;
+                local_57 = false;
             }
-            bool _e2191 = local_55;
-            if (!(_e2191)) {
-                float _e2196 = finalColor.x;
-                float _e2198 = finalColor.y;
-                float _e2200 = finalColor.z;
-                local_58 = (max(_e2196, max(_e2198, _e2200)) >= (headroom * 0.99));
-            } else {
-                local_58 = true;
-            }
-            bool _e2207 = local_58;
-            if (!(_e2207)) {
-                float _e2212 = rec2020Color.x;
-                float _e2214 = rec2020Color.y;
-                float _e2216 = rec2020Color.z;
-                local_59 = (max(_e2212, max(_e2214, _e2216)) >= 2.88);
-            } else {
-                local_59 = true;
-            }
-            bool isHighlightClip = local_59;
-            vec3 _e2223 = rec2020Color;
-            float sceneLum_1 = dot(_e2223, vec3(0.2627, 0.678, 0.0593));
-            if (!((sceneLum_1 <= 0.0007))) {
-                float _e2235 = finalColor.x;
-                float _e2237 = finalColor.y;
-                float _e2239 = finalColor.z;
-                local_60 = (max(_e2235, max(_e2237, _e2239)) <= 0.0005);
+            bool _e2254 = local_57;
+            if (!(_e2254)) {
+                float _e2259 = finalColor.x;
+                float _e2261 = finalColor.y;
+                float _e2263 = finalColor.z;
+                local_60 = (max(_e2259, max(_e2261, _e2263)) >= (headroom * 0.99));
             } else {
                 local_60 = true;
             }
-            bool isShadowClip = local_60;
+            bool _e2270 = local_60;
+            if (!(_e2270)) {
+                float _e2275 = rec2020Color.x;
+                float _e2277 = rec2020Color.y;
+                float _e2279 = rec2020Color.z;
+                local_61 = (max(_e2275, max(_e2277, _e2279)) >= 2.88);
+            } else {
+                local_61 = true;
+            }
+            bool isHighlightClip = local_61;
+            vec3 _e2286 = rec2020Color;
+            float sceneLum_1 = dot(_e2286, vec3(0.2627, 0.678, 0.0593));
+            if (!((sceneLum_1 <= 0.0007))) {
+                float _e2298 = finalColor.x;
+                float _e2300 = finalColor.y;
+                float _e2302 = finalColor.z;
+                local_62 = (max(_e2298, max(_e2300, _e2302)) <= 0.0005);
+            } else {
+                local_62 = true;
+            }
+            bool isShadowClip = local_62;
             if (isHighlightClip) {
                 float zebraHighlight = fract(((in_.position.x + in_.position.y) / 14.0));
                 if ((zebraHighlight < 0.5)) {
-                    float _e2257 = sampledColor.w;
-                    _fs2p_location0 = vec4(1.0, 0.12, 0.12, _e2257);
+                    float _e2320 = sampledColor.w;
+                    _fs2p_location0 = vec4(1.0, 0.12, 0.12, _e2320);
                     return;
                 }
             } else {
                 if (isShadowClip) {
                     float zebraShadow = fract(((in_.position.x - in_.position.y) / 14.0));
                     if ((zebraShadow < 0.5)) {
-                        float _e2273 = sampledColor.w;
-                        _fs2p_location0 = vec4(0.05, 0.4, 1.0, _e2273);
+                        float _e2336 = sampledColor.w;
+                        _fs2p_location0 = vec4(0.05, 0.4, 1.0, _e2336);
                         return;
                     }
                 }
             }
         }
-        vec3 _e2278 = finalColor;
-        float _e2280 = sampledColor.w;
-        _fs2p_location0 = vec4(_e2278, _e2280);
+        vec3 _e2341 = finalColor;
+        float _e2343 = sampledColor.w;
+        _fs2p_location0 = vec4(_e2341, _e2343);
         return;
     } else {
-        vec3 _e2282 = finalColor;
-        vec3 _e2288 = linearToSrgbGamma3_(clamp(_e2282, vec3(0.0), vec3(1.0)));
-        int _e2291 = _group_0_binding_0_fs.clippingOverlayActive;
-        if ((_e2291 != 0)) {
-            float _e2298 = _group_0_binding_0_fs.isOriginal;
-            local_61 = (_e2298 < 0.5);
+        vec3 _e2345 = finalColor;
+        vec3 _e2351 = linearToSrgbGamma3_(clamp(_e2345, vec3(0.0), vec3(1.0)));
+        int _e2354 = _group_0_binding_0_fs.clippingOverlayActive;
+        if ((_e2354 != 0)) {
+            float _e2361 = _group_0_binding_0_fs.isOriginal;
+            local_63 = (_e2361 < 0.5);
         } else {
-            local_61 = false;
+            local_63 = false;
         }
-        bool _e2302 = local_61;
-        if (_e2302) {
-            int _e2305 = _group_0_binding_0_fs.isLinearRaw;
-            if ((_e2305 == 1)) {
-                float _e2311 = sampledColor.x;
-                if (!((_e2311 >= 1.0))) {
-                    float _e2318 = sampledColor.y;
-                    local_63 = (_e2318 >= 1.0);
+        bool _e2365 = local_63;
+        if (_e2365) {
+            int _e2368 = _group_0_binding_0_fs.isLinearRaw;
+            if ((_e2368 == 1)) {
+                float _e2374 = sampledColor.x;
+                if (!((_e2374 >= 1.0))) {
+                    float _e2381 = sampledColor.y;
+                    local_65 = (_e2381 >= 1.0);
                 } else {
-                    local_63 = true;
+                    local_65 = true;
                 }
-                bool _e2322 = local_63;
-                if (!(_e2322)) {
-                    float _e2327 = sampledColor.z;
-                    local_64 = (_e2327 >= 1.0);
+                bool _e2385 = local_65;
+                if (!(_e2385)) {
+                    float _e2390 = sampledColor.z;
+                    local_66 = (_e2390 >= 1.0);
                 } else {
-                    local_64 = true;
+                    local_66 = true;
                 }
-                bool _e2331 = local_64;
-                local_62 = _e2331;
+                bool _e2394 = local_66;
+                local_64 = _e2394;
             } else {
-                local_62 = false;
+                local_64 = false;
             }
-            bool _e2333 = local_62;
-            if (!(_e2333)) {
-                local_65 = (max(_e2288.x, max(_e2288.y, _e2288.z)) >= 0.992);
-            } else {
-                local_65 = true;
-            }
-            bool _e2345 = local_65;
-            if (!(_e2345)) {
-                float _e2350 = rec2020Color.x;
-                float _e2352 = rec2020Color.y;
-                float _e2354 = rec2020Color.z;
-                local_66 = (max(_e2350, max(_e2352, _e2354)) >= 2.88);
-            } else {
-                local_66 = true;
-            }
-            bool isHighlightClip_1 = local_66;
-            vec3 _e2361 = rec2020Color;
-            float sceneLum_2 = dot(_e2361, vec3(0.2627, 0.678, 0.0593));
-            if (!((sceneLum_2 <= 0.0007))) {
-                local_67 = (max(_e2288.x, max(_e2288.y, _e2288.z)) <= 0.004);
+            bool _e2396 = local_64;
+            if (!(_e2396)) {
+                local_67 = (max(_e2351.x, max(_e2351.y, _e2351.z)) >= 0.992);
             } else {
                 local_67 = true;
             }
-            bool isShadowClip_1 = local_67;
+            bool _e2408 = local_67;
+            if (!(_e2408)) {
+                float _e2413 = rec2020Color.x;
+                float _e2415 = rec2020Color.y;
+                float _e2417 = rec2020Color.z;
+                local_68 = (max(_e2413, max(_e2415, _e2417)) >= 2.88);
+            } else {
+                local_68 = true;
+            }
+            bool isHighlightClip_1 = local_68;
+            vec3 _e2424 = rec2020Color;
+            float sceneLum_2 = dot(_e2424, vec3(0.2627, 0.678, 0.0593));
+            if (!((sceneLum_2 <= 0.0007))) {
+                local_69 = (max(_e2351.x, max(_e2351.y, _e2351.z)) <= 0.004);
+            } else {
+                local_69 = true;
+            }
+            bool isShadowClip_1 = local_69;
             if (isHighlightClip_1) {
                 float zebraHighlight_1 = fract(((in_.position.x + in_.position.y) / 14.0));
                 if ((zebraHighlight_1 < 0.5)) {
-                    float _e2392 = sampledColor.w;
-                    _fs2p_location0 = vec4(1.0, 0.12, 0.12, _e2392);
+                    float _e2455 = sampledColor.w;
+                    _fs2p_location0 = vec4(1.0, 0.12, 0.12, _e2455);
                     return;
                 }
             } else {
                 if (isShadowClip_1) {
                     float zebraShadow_1 = fract(((in_.position.x - in_.position.y) / 14.0));
                     if ((zebraShadow_1 < 0.5)) {
-                        float _e2408 = sampledColor.w;
-                        _fs2p_location0 = vec4(0.05, 0.4, 1.0, _e2408);
+                        float _e2471 = sampledColor.w;
+                        _fs2p_location0 = vec4(0.05, 0.4, 1.0, _e2471);
                         return;
                     }
                 }
             }
         }
-        float _e2415 = ign(in_.position.xy);
-        float dither = ((_e2415 - 0.5) / 255.0);
-        float _e2428 = sampledColor.w;
-        _fs2p_location0 = vec4(clamp((_e2288 + vec3(dither)), vec3(0.0), vec3(1.0)), _e2428);
+        float _e2478 = ign(in_.position.xy);
+        float dither = ((_e2478 - 0.5) / 255.0);
+        float _e2491 = sampledColor.w;
+        _fs2p_location0 = vec4(clamp((_e2351 + vec3(dither)), vec3(0.0), vec3(1.0)), _e2491);
         return;
     }
 }
@@ -2846,7 +2884,7 @@ void main() {
 `;
 
 export const SHADER_UNIFORM_BLOCK_NAME = 'ShaderUniforms_block_0Fragment';
-export const SHADER_UNIFORM_SIZE_BYTES = 352;
+export const SHADER_UNIFORM_SIZE_BYTES = 368;
 
 export const SHADER_SAMPLER_NAMES = {
   texture: '_group_0_binding_1_fs',
@@ -2854,4 +2892,5 @@ export const SHADER_SAMPLER_NAMES = {
   curveMaster: '_group_0_binding_5_fs',
   curveRgb: '_group_0_binding_6_fs',
   gainMap: '_group_0_binding_8_fs',
+  proofLut: '_group_0_binding_11_fs',
 } as const;

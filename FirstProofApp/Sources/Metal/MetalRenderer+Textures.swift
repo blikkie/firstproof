@@ -17,6 +17,41 @@ extension MetalRenderer {
         }
     }
     
+    func setupDefaultProofLutTexture() {
+        let desc = MTLTextureDescriptor()
+        desc.textureType = .type3D
+        desc.pixelFormat = .rgba32Float
+        desc.width = 2
+        desc.height = 2
+        desc.depth = 2
+        desc.usage = [.shaderRead]
+        
+        guard let tex = device.makeTexture(descriptor: desc) else { return }
+        var identityData: [Float] = []
+        for b in 0..<2 {
+            let bVal = Float(b)
+            for g in 0..<2 {
+                let gVal = Float(g)
+                for r in 0..<2 {
+                    let rVal = Float(r)
+                    identityData.append(contentsOf: [rVal, gVal, bVal, 1.0])
+                }
+            }
+        }
+        identityData.withUnsafeBytes { raw in
+            guard let ptr = raw.baseAddress else { return }
+            tex.replace(
+                region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: 2, height: 2, depth: 2)),
+                mipmapLevel: 0,
+                slice: 0,
+                withBytes: ptr,
+                bytesPerRow: 2 * 4 * MemoryLayout<Float>.size,
+                bytesPerImage: 2 * 2 * 4 * MemoryLayout<Float>.size
+            )
+        }
+        self.defaultProofLutTexture = tex
+    }
+    
     func setupDefaultLutTexture() {
         let desc = MTLTextureDescriptor()
         desc.textureType = .type3D
@@ -171,6 +206,36 @@ extension MetalRenderer {
         self.lutTexture = tex
         self.uniforms.lutEnabled = 1
         self.uniforms.lutSize = Float(size)
+    }
+    
+    public func updateProofLutTexture(with lutRecord: CubeLutRecord?) {
+        guard let lut = lutRecord, lut.size >= 2 else {
+            self.proofLutTexture = nil
+            return
+        }
+        
+        let size = Int(lut.size)
+        let desc = MTLTextureDescriptor()
+        desc.textureType = .type3D
+        desc.pixelFormat = .rgba32Float
+        desc.width = size
+        desc.height = size
+        desc.depth = size
+        desc.usage = [.shaderRead]
+        
+        guard let tex = device.makeTexture(descriptor: desc) else { return }
+        lut.dataRgba32f.withUnsafeBytes { raw in
+            guard let ptr = raw.baseAddress else { return }
+            tex.replace(
+                region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0), size: MTLSize(width: size, height: size, depth: size)),
+                mipmapLevel: 0,
+                slice: 0,
+                withBytes: ptr,
+                bytesPerRow: size * 4 * MemoryLayout<Float>.size,
+                bytesPerImage: size * size * 4 * MemoryLayout<Float>.size
+            )
+        }
+        self.proofLutTexture = tex
     }
     
     public func updateGainMap(record: GainMapRecord?) {
