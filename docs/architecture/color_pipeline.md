@@ -38,17 +38,13 @@ To prevent tone-curve collisions (double tone-mapping), out-of-gamut clipping, a
         • Fine-Art Print Media Chemistry (Paper grades, enlarger filtration, toner chemistry)
                                      │
                                      ▼
-        [ 7. TERMINAL STAGE: Tone Mapping & RGB Target Transform ]
-        ┌────────────────────────────────────┴────────────────────────────────────┐
-        ▼                                                                         ▼
-   [ Mode A: AgX Filmic ]                                              [ Mode B: Camera Matching ]
-   • Gamut Inset Matrix (Rec.2020 -> AgX Inset)                         • Camera DCP Tone Curve (Anchored 0.18 Middle Gray)
-   • Log2 Normalization (-10.0 to +6.5 EV)                              • Memory Color HueSatMap Deltas
-   • Sigmoidal Filmic Curve & Outset Transform                          • Linear Rec.2020 -> Linear sRGB Matrix
-        │                                                                         │
-        └────────────────────────────────────┬────────────────────────────────────┘
-                                             │
-                                             ▼
+        [ 7. TERMINAL STAGE: Canonical AgX Tone Mapping & Gamut Transform ]
+        • Gamut Inset Matrix (Linear Rec.2020 -> AgX Inset)
+        • Log2 Normalization (-10.0 to +6.5 EV dynamic range scaling)
+        • Sigmoidal Filmic Contrast Curve & Chromatic Outset Transform (AgX Vivid formulation)
+        • Linear Rec.2020 / Target Gamut Mapping
+                                     │
+                                     ▼
         [ 8. Display & Export Encoding ]
         • Clamping to [0.0, 1.0] display gamut
         • Display Transfer Function: sRGB OETF / Gamma 2.2 (or Display P3 for EDR)
@@ -72,9 +68,11 @@ To prevent tone-curve collisions (double tone-mapping), out-of-gamut clipping, a
    - Real film grain simulates the physical distribution of silver halide crystals reacting to incident scene photons before optical tonality and print transfer.
    - Applying grain post-tone-mapping in narrow gamma sRGB non-linearly distorts shadow noise floors. Grain must be evaluated in the wide-gamut optical domain.
 
-4. **AgX Filmic Tone Mapping**:
-   - Eliminates digital highlight clipping and the Abney effect (where skin tones shift to harsh yellow/salmon when red saturates before green and blue).
-   - Inset matrix compresses wide gamuts safely; smooth sigmoidal curve rolls off highlights gently toward pure white.
+4. **Canonical AgX Tone Mapping (Vivid Formulation)**:
+   - First Proof standardizes universally on Troy Sobotka's canonical AgX (Vivid formulation) as its single terminal tone mapper, eliminating confusing mode toggles (`AgxFilmic`, `AgxPhotographic`, and closed-domain camera-matching profiles).
+   - Eliminates digital highlight clipping, highlight solarization, and the Abney effect (where skin tones shift to harsh yellow/salmon when red saturates before green and blue).
+   - The Vivid formulation provides rich, deep primary chromaticity preservation and natural highlight roll-off without muddy tonal shifts or plastic digital clipping.
+   - An AgX Inset matrix compresses wide-gamut scene radiance into the AgX working gamut; normalized $\log_2$ values $[-10.0, +6.5]$ are transformed via an analytical sigmoidal curve, and restored via the AgX Outset matrix before display encoding.
 
 5. **Adobe DCP Ingestion & Dual-Illuminant Calibration**:
    - Parses `ColorMatrix1/2`, `ForwardMatrix1/2`, and `CalibrationIlluminant1/2` from camera-specific DCP profiles.

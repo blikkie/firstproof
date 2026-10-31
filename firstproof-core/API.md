@@ -3,10 +3,17 @@
 > **Agent Invariant**: Never open `firstproof_core.swift` (4,400+ lines). Refer to this document or `firstproof-core/src/lib.rs` directly.
 
 ## Enums & Core Types
-- `ColorProfileMode`: `AgxVivid`, `AgxFilmic`, `CameraStandard`, `CameraPortrait`, `CameraLandscape`, `CameraVivid`
 - `ExportColorSpace`: `Srgb`, `DisplayP3`
 - `ExportRenderingIntent`: `Perceptual`, `RelativeColorimetric`
-- `EditSettings`: Complete adjustment state (exposure, contrast, highlights, shadows, whites, blacks, saturation, vibrance, temp, tint, crop rect/angle, tone curves, LUT settings, grain, lens correction, perspective).
+- `ProofIntent`: `RelativeColorimetric`, `Perceptual`, `AbsoluteColorimetric`
+- `IccProfileRecord`: ColorSync / ICC profile descriptor (`name`, `description`, `path`, `is_display`).
+- `EmulsionArchetype`: Film stock simulation presets (`Neutral`, `RochesterDaylight200`, `RochesterChrome64`, `TokyoSuperia400`, `AshigaraVelvia50`, `AshigaraPro400H`, `MobberleyHP5`, `MobberleyPanF`, `BaodingSilver100`).
+- `PrintMediaMode`: Fine-art print media archetypes (`Bypass`, `ChromogenicTypeC`, `SilverDyeBleachClassic`, `BarytaSilverGelatinFb`, `WarmtoneChlorobromide`, `PlatinumPalladium`, `HistoricCyanotype`, `BamakoSilverContact`).
+- `EmulsionFormat`: Film formats for optical grain and MTF scaling (`Format35mm`, `Format120Medium`, `FormatLargeFormat4x5`, `FormatSuper16`).
+- `EmulsionGrainMode`: Legacy grain synthesis modes (`SeedFromSensor`, `SynthesizePhysical`).
+- `RenderTier`: Pipeline processing tiers (`InteractiveViewport`, `ArchivalExport`).
+- `DemosaicQuality`: RAW demosaicing algorithms (`BilinearBinned`, `HamiltonAdams`, `Rcd`).
+- `EditSettings`: Complete adjustment state (exposure, contrast, highlights, shadows, whites, blacks, saturation, vibrance, temp, tint, crop rect/angle, tone curves, LUT settings, grain, emulsion, print media, lens correction, perspective).
 - `ToneCurvesRecord` / `CurvePointRecord`: Parametric master + RGB curve points.
 - `CubeLutRecord`: Loaded 3D LUT (title, size, `data_rgba32f`).
 - `RawPreviewRecord`: 16-bit linear decoded preview (`width`, `height`, `data`, `is_linear_float`).

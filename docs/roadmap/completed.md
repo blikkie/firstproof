@@ -60,6 +60,12 @@ This archive tracks completed stories and features moved from the active backlog
   - Dedicated "Look & 3D LUTs" management pane in Settings (`SettingsView.swift`) allowing photographers to import, rename, preview on the active photo in viewport, and delete custom 3D LUTs, plus "Show in Finder".
   - Configurable "Default Signature Look" setting in Settings (LUT picker + default intensity slider): applied automatically to newly ingested photos without saved edits and when clicking "Reset All".
   - Develop inspector integration: LUT picker dropdown aggregates built-in looks and all globally managed user LUTs, with an inline "+ Import..." button registering new LUTs into the persistent global library.
+- **Canonical AgX Standardization & Architecture Slop Elimination (Commit `e7cbf7d`)**:
+  - Standardized universally on Troy Sobotka's canonical AgX (Vivid formulation) as First Proof's single open-domain filmic tone mapper across Rust CPU (`pipeline.rs`), Metal (`Shaders.metal`, `ShaderTypes.h`), WGSL (`darkroom.wgsl`), and WebGL (`FragmentShader.ts`).
+  - Eliminated confusing and redundant tone profile modes (`AgxFilmic`, `AgxPhotographic`, and closed-domain camera-matching profiles), removing leaky `ColorProfileMode` toggles and unnecessary uniform branches.
+  - Restored `RochesterDaylight200` as a first-class optical emulsion stock with calibrated grain defaults and authentic sensitometric response.
+  - Integrated `XmpSyncCoordinator` in Swift to serialize asynchronous XMP sidecar disk writes onto a dedicated background actor queue, eliminating file write races and thread contention during rapid slider scrubs.
+  - Repaired viewport geometry bounds UV tracking in `MetalRenderer.swift` and unified detached task error propagation across the native desktop darkroom.
 
 ---
 

@@ -292,7 +292,7 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         }
         
         self.lastQuadBounds = (left, right, top, bottom)
-        self.lastQuadUVs = (tl, tr, bl, br)
+        self.lastQuadUVs = (uvs.tl, uvs.tr, uvs.bl, uvs.br)
     }
     
     // MARK: - MTKViewDelegate

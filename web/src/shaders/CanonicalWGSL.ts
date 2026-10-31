@@ -27,7 +27,6 @@ struct ShaderUniforms {
     k4: f32,
     isOriginal: f32,
     isLinearRaw: i32,
-    toneProfileMode: i32,
     lutEnabled: i32,
     lutIntensity: f32,
     lutSize: f32,
@@ -96,7 +95,8 @@ struct ShaderUniforms {
     gamutWarningEnabled: i32,
     proofIntent: i32,
     pad0: f32,
-    pad1: f32, // 16-byte std140/WebGPU alignment (92 fields * 4 bytes = 368 bytes = 23 * 16)
+    pad1: f32,
+    pad2: f32, // 16-byte std140/WebGPU alignment (92 fields * 4 bytes = 368 bytes = 23 * 16)
 };
 
 struct VertexOutput {

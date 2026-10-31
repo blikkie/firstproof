@@ -855,7 +855,6 @@ public struct EditSettings: Equatable, Hashable {
     public var rotation: Int32
     public var flipHorizontal: Bool
     public var flipVertical: Bool
-    public var toneProfile: ColorProfileMode
     public var lutName: String?
     public var lutIntensity: Float
     public var sharpeningAmount: Float
@@ -888,7 +887,7 @@ public struct EditSettings: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, toneProfile: ColorProfileMode, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, emulsionGrainMode: EmulsionGrainMode, grainScale: Float, grainSize: Float, grainAmount: Float, emulsionArchetype: EmulsionArchetype, emulsionFormat: EmulsionFormat, emulsionExposure: Float, remjetBacking: RemjetBackingMode, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float, printMedia: PrintMediaMode, enlargerFilter: EnlargerFilterMode, printPaperGrade: Float, printBaseWarmth: Float, printProcessDepth: Float, defringeAmount: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool, vignettingCorrectionEnabled: Bool) {
+    public init(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, vibrance: Float, saturation: Float, deepBlue: Float, foliage: Float, temperature: Float, tint: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, cropAngle: Float, perspectiveVertical: Float, perspectiveHorizontal: Float, cropConstrain: Bool, rotation: Int32, flipHorizontal: Bool, flipVertical: Bool, lutName: String?, lutIntensity: Float, sharpeningAmount: Float, sharpeningRadius: Float, sharpeningMasking: Float, noiseReduction: Float, emulsionGrainMode: EmulsionGrainMode, grainScale: Float, grainSize: Float, grainAmount: Float, emulsionArchetype: EmulsionArchetype, emulsionFormat: EmulsionFormat, emulsionExposure: Float, remjetBacking: RemjetBackingMode, curves: ToneCurvesRecord, splitToningShadowHue: Float, splitToningShadowSat: Float, splitToningHighlightHue: Float, splitToningHighlightSat: Float, splitToningBalance: Float, printMedia: PrintMediaMode, enlargerFilter: EnlargerFilterMode, printPaperGrade: Float, printBaseWarmth: Float, printProcessDepth: Float, defringeAmount: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool, vignettingCorrectionEnabled: Bool) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -912,7 +911,6 @@ public struct EditSettings: Equatable, Hashable {
         self.rotation = rotation
         self.flipHorizontal = flipHorizontal
         self.flipVertical = flipVertical
-        self.toneProfile = toneProfile
         self.lutName = lutName
         self.lutIntensity = lutIntensity
         self.sharpeningAmount = sharpeningAmount
@@ -983,7 +981,6 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
                 rotation: FfiConverterInt32.read(from: &buf), 
                 flipHorizontal: FfiConverterBool.read(from: &buf), 
                 flipVertical: FfiConverterBool.read(from: &buf), 
-                toneProfile: FfiConverterTypeColorProfileMode.read(from: &buf), 
                 lutName: FfiConverterOptionString.read(from: &buf), 
                 lutIntensity: FfiConverterFloat.read(from: &buf), 
                 sharpeningAmount: FfiConverterFloat.read(from: &buf), 
@@ -1040,7 +1037,6 @@ public struct FfiConverterTypeEditSettings: FfiConverterRustBuffer {
         FfiConverterInt32.write(value.rotation, into: &buf)
         FfiConverterBool.write(value.flipHorizontal, into: &buf)
         FfiConverterBool.write(value.flipVertical, into: &buf)
-        FfiConverterTypeColorProfileMode.write(value.toneProfile, into: &buf)
         FfiConverterOptionString.write(value.lutName, into: &buf)
         FfiConverterFloat.write(value.lutIntensity, into: &buf)
         FfiConverterFloat.write(value.sharpeningAmount, into: &buf)
@@ -1761,107 +1757,6 @@ public func FfiConverterTypeXmpData_lift(_ buf: RustBuffer) throws -> XmpData {
 public func FfiConverterTypeXmpData_lower(_ value: XmpData) -> RustBuffer {
     return FfiConverterTypeXmpData.lower(value)
 }
-
-
-
-public enum ColorProfileMode: Equatable, Hashable {
-    
-    case agxVivid
-    case agxFilmic
-    case cameraStandard
-    case cameraPortrait
-    case cameraLandscape
-    case cameraVivid
-    case agxPhotographic
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension ColorProfileMode: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeColorProfileMode: FfiConverterRustBuffer {
-    typealias SwiftType = ColorProfileMode
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColorProfileMode {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .agxVivid
-        
-        case 2: return .agxFilmic
-        
-        case 3: return .cameraStandard
-        
-        case 4: return .cameraPortrait
-        
-        case 5: return .cameraLandscape
-        
-        case 6: return .cameraVivid
-        
-        case 7: return .agxPhotographic
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ColorProfileMode, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .agxVivid:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .agxFilmic:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .cameraStandard:
-            writeInt(&buf, Int32(3))
-        
-        
-        case .cameraPortrait:
-            writeInt(&buf, Int32(4))
-        
-        
-        case .cameraLandscape:
-            writeInt(&buf, Int32(5))
-        
-        
-        case .cameraVivid:
-            writeInt(&buf, Int32(6))
-        
-        
-        case .agxPhotographic:
-            writeInt(&buf, Int32(7))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeColorProfileMode_lift(_ buf: RustBuffer) throws -> ColorProfileMode {
-    return try FfiConverterTypeColorProfileMode.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeColorProfileMode_lower(_ value: ColorProfileMode) -> RustBuffer {
-    return FfiConverterTypeColorProfileMode.lower(value)
-}
-
 
 
 

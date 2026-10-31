@@ -268,7 +268,7 @@ extension AppViewModel {
             guard self.activeDecodeToken == token else { return }
             
             // Background extraction: move synchronous disk/FFI calls off the main thread
-            let (meta, asShotWb, xmp) = await Task.detached(priority: .userInitiated) { () -> (MetadataRecord?, WhiteBalanceRecord?, XmpDataRecord?) in
+            let (meta, asShotWb, xmp) = await Task.detached(priority: .userInitiated) {
                 let m = extractMetadata(path: photo.filePath)
                 let wb = getAsShotWhiteBalance(path: photo.filePath)
                 let x = readXmp(path: photo.filePath)
@@ -391,25 +391,8 @@ extension AppViewModel {
                 } else {
                     self.isDemosaicing = false
                 }
-            }
-        } else {
-            // Non-RAW Workflow: Standard master images (PNG, TIFF, JPEG)
-            if let cached = ThumbnailCache.shared.image(for: photo.filePath) {
-                self.previewImage = cached
-                self.rawPreviewRecord = nil
-                self.isIntermediatePreviewActive = false
-                self.isDemosaicing = false
             } else {
-                self.previewImage = nil
-                self.rawPreviewRecord = nil
-                self.isIntermediatePreviewActive = false
-                self.isDemosaicing = true
-            }
-            
-            self.activeDecodeTask = Task { [weak self] in
-                guard let self = self else { return }
-                guard self.activeDecodeToken == token else { return }
-                
+                // Non-RAW Workflow: Standard master images (PNG, TIFF, JPEG)
                 let (preview, gainMap) = await Task.detached(priority: .userInitiated) { () -> (NSImage?, GainMapRecord?) in
                     var preview: NSImage? = nil
                     var gainMap: GainMapRecord? = nil
@@ -594,7 +577,6 @@ extension AppViewModel {
                 fallbackKeywords: photoKeywords
             )
         }
-    }
     }
     
     // MARK: - Viewport Zoom & Pan

@@ -29,7 +29,6 @@ struct ShaderUniforms {
     float k4_;
     float isOriginal;
     int isLinearRaw;
-    int toneProfileMode;
     int lutEnabled;
     float lutIntensity;
     float lutSize;
@@ -99,6 +98,7 @@ struct ShaderUniforms {
     int proofIntent;
     float pad0_;
     float pad1_;
+    float pad2_;
 };
 struct VertexOutput {
     vec4 position;

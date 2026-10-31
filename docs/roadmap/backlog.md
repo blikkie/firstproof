@@ -7,7 +7,8 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
+1. **Story 3.28: Unified Adaptive Emulsion Grain Engine & Computational Sensor Fusion** (P1)
+2. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
 
 ---
 
@@ -19,12 +20,35 @@ This document strictly tracks pending and deferred features calibrated against o
 > 
 > Film stock and print media emulation are **not** the main workflow and **not** a complex simulator. They are an exquisite, 100% opt-in **fine-art treat and differentiator** housed in a dedicated **Emulsion** workspace tab (`InspectorTab.emulsion`). Default state is always `None / Bypass`. When activated, the engine does all the heavy lifting under the hood so the photographer simply selects a curated stock or print medium without fiddling with chemical dials.
 
+### 3.28 Unified Adaptive Emulsion Grain Engine & Computational Sensor Fusion (P1)
+- **Eliminate Leaky Mode Toggles (Option B Unified Optical Model)**:
+  - Purge the user-facing implementation toggle between `SeedFromSensor` and `SynthesizePhysical` in `EmulsionWorkspaceView`. Photographers select an emulsion stock or enable grain without being asked how the engine computes noise statistics.
+  - Implement a single, unified adaptive grain kernel in canonical WGSL (`firstproof-engine/shaders/detail.wgsl` & `darkroom.wgsl`) and Rust export pipeline (`firstproof-core/src/export/pipeline.rs`).
+- **Computational Sensor Fusion (Pixel & DNG Support)**:
+  - Automatically measure local high-frequency sensor noise ($\Delta_{\text{sensor}} = Y_{\text{center}} - Y_{\text{lowpass}}$).
+  - On high-ISO RAW frames (e.g. ISO 1600–6400), seamlessly absorb and coalesce the sensor's physical shot noise into the emulsion grain lattice, preventing synthetic noise from clashing with digital CMOS speckling.
+  - On clean or computational sensors (e.g. Google Pixel multi-frame fused DNGs, base ISO 100 captures), stochastically synthesize full-amplitude physical crystal/dye-cloud granularity without starvation.
+- **Format Magnification & Grain Sizing Tuning**:
+  - Ground grain cluster scaling in film format magnification ($35\text{mm} = 1.0\times$, $120 = 0.48\times$, $4\times 5 = 0.28\times$, $16\text{mm} = 3.4\times$) and published ANSI/ISO 10505 diffuse RMS granularity measurements at $D = 1.0$.
+  - Calibrate grain cluster footprints for 300 DPI print dot-gain retention (cluster diameter $\ge 170\,\mu\text{m}$).
+- **Backward Compatibility & Post-Public Invariant**:
+  - Retain `EmulsionGrainMode` serialized values in domain models and XMP sidecars (`firstproof-engine/src/xmp.rs`), aliasing legacy `SeedFromSensor` and `SynthesizePhysical` cleanly into the unified engine so existing sidecars never break.
+
 ### 3.23 Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification (P2)
-- **Practical Commercial Lab Print Batch (Printique / Standard Lab Offerings)**:
-  - Instead of requiring unobtainable historical darkroom processes, execute a calibration test print run using accessible commercial fine-art lab options: e.g. Printique's Lustre, Glossy, Deep Matte, and Fine Art Cotton Rag (Hahnemühle Photo Rag).
-  - Evaluate how First Proof's AgX filmic tone curve, film emulsions, and print media archetypes translate to real-world commercial photo papers under standard gallery illumination ($D_{50}$ / $D_{65}$).
-  - Pair with Printique's downloadable ICC printer/paper profiles in Soft Proofing (Story 3.4) to benchmark on-screen soft-proof simulation against the physical delivered prints.
-  - Benchmark shadow floor formulations across physical prints: verify that carbon black ink ($D_{\max}$) remains deep and rich without milky digital floor lifts or premature shadow crushing.
+- **Real-World Photographic Subject Proof Batch (4×6" Format)**:
+  - Eliminate abstract synthetic test wedges in favor of physical, real-world photographs printed at 300 DPI 4×6" ($1200 \times 1800$) at a commercial lab (Printique / WhiteWall) for cost-effective ($<\$35$) tactile evaluation.
+  - Run 5 distinct challenge scenes across all 15–16 emulsion and print media archetypes (~75–80 prints total):
+    1. *Natural Light Portrait*: Evaluates skin tones, cheek highlight roll-off, and subtle facial grain.
+    2. *High Dynamic Range (Landscape/Architecture)*: Evaluates deep shadow toe separation vs. sky shoulder compression.
+    3. *Saturated Primaries (Nature/Foliage)*: Evaluates pure greens, blues, and reds under AgX gamut mapping.
+    4. *Textured Documentary*: Evaluates fine micro-contrast, lens acutance, and grain clumpiness.
+    5. *Low-Key / Night Scene*: Evaluates paper $D_{\max}$ (deepest black ink saturation without digital pooling).
+- **Automated Proof Matrix Export Engine with Marginally Burned Slugs**:
+  - Build a dedicated **"Export Proof Matrix..."** tool in First Proof that renders all archetypes for a selected photo into a ready-to-upload folder.
+  - Burn a discrete, darkroom-authentic proofing slug on the bottom margin of each 4×6" print (`[Photo ID] • [Emulsion Stock] • [Print Media] • [Format] • First Proof v0.7.0`) ensuring physical prints are unmistakably identifiable when sorted on a viewing table.
+- **Physical Evaluation & Sensitometric Parameter Refinement**:
+  - Compare delivered physical prints against on-screen LittleCMS2 Soft Proofing (Story 3.4) under gallery lighting ($D_{50}$ / $D_{65}$).
+  - Benchmark shadow floor formulations across physical papers (Lustre vs Deep Matte / Cotton Rag): verify that carbon black ink ($D_{\max}$) remains deep and rich without milky digital floor lifts or premature shadow crushing.
   - Tune paper grade and process depth default presets to guarantee 1:1 perceptual fidelity between darkroom viewport and physical framed gallery print.
 ---
 

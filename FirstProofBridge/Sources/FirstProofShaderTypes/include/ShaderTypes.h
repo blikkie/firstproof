@@ -40,7 +40,6 @@ struct ShaderUniforms {
     float k4;
     float isOriginal;        // 1.0 = Bypass edits
     int32_t isLinearRaw;     // 1 = Texture contains Wide-Gamut Linear Rec.2020 half-floats
-    int32_t toneProfileMode; // 0 = AgX Vivid, 1 = AgX Neutral, 2 = Standard, 3 = Portrait, 4 = Landscape, 5 = Vivid, 6 = AgX Photographic
     int32_t lutEnabled;      // 1 = 3D LUT active, 0 = disabled
     float lutIntensity;      // 0.0 .. 1.0
     float lutSize;           // Dimension N (e.g. 17, 33, 65)
@@ -110,6 +109,7 @@ struct ShaderUniforms {
     int32_t proofIntent;           // 0 = RelativeColorimetric, 1 = Perceptual, 2 = Absolute
     float pad0;                    // 16-byte std140/WebGPU alignment (92 fields * 4 bytes = 368 bytes = 23 * 16)
     float pad1;
+    float pad2;
 };
 
 #endif /* ShaderTypes_h */
