@@ -18,13 +18,17 @@ in vec2 a_texCoord;
 uniform vec2 u_fitScale;
 uniform float u_zoomScale;
 uniform vec2 u_panOffset;
+uniform vec2 u_flip;
 
 smooth out vec2 _vs2fs_location0;
 
 void main() {
     vec2 pos = a_position * u_fitScale * u_zoomScale + u_panOffset;
     gl_Position = vec4(pos, 0.0, 1.0);
-    _vs2fs_location0 = a_texCoord;
+    vec2 uv = a_texCoord;
+    if (u_flip.x > 0.5) { uv.x = 1.0 - uv.x; }
+    if (u_flip.y > 0.5) { uv.y = 1.0 - uv.y; }
+    _vs2fs_location0 = uv;
 }
 `;
 
@@ -61,6 +65,16 @@ const PRINT_MEDIA_MAP: Record<string, number> = {
   BamakoSilverContact: 7,
 };
 
+const EMULSION_FORMAT_MAP: Record<string, number> = {
+  Format35mm: 0,
+  Format120: 1,
+  MediumFormat: 1,
+  Format4x5: 2,
+  LargeFormat4x5: 2,
+  Super8: 3,
+  Format16mm: 4,
+};
+
 export class WebGLRenderer {
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram;
@@ -74,8 +88,19 @@ export class WebGLRenderer {
   public clippingOverlayActive: boolean = false;
   public lensCoefficients: LensCorrectionCoefficients | null = null;
   private vbo: WebGLBuffer | null = null;
+  private vao: WebGLVertexArrayObject | null = null;
+  public asShotTemperature: number = 5500.0;
+  public asShotTint: number = 0.0;
+  public softProofEnabled: boolean = false;
+  public gamutWarningEnabled: boolean = false;
+  public proofIntent: number = 0;
   private texWidth: number = 1920;
   private texHeight: number = 1080;
+
+  public setAsShotWhiteBalance(temp: number, tint: number): void {
+    this.asShotTemperature = temp;
+    this.asShotTint = tint;
+  }
 
   public setLensCoefficients(coeffs: LensCorrectionCoefficients | null): void {
     this.lensCoefficients = coeffs;
@@ -212,6 +237,7 @@ export class WebGLRenderer {
     this.uLocs.u_fitScale = this.gl.getUniformLocation(prog, 'u_fitScale');
     this.uLocs.u_zoomScale = this.gl.getUniformLocation(prog, 'u_zoomScale');
     this.uLocs.u_panOffset = this.gl.getUniformLocation(prog, 'u_panOffset');
+    this.uLocs.u_flip = this.gl.getUniformLocation(prog, 'u_flip');
 
     return prog;
   }
@@ -219,6 +245,7 @@ export class WebGLRenderer {
   private initBuffers() {
     const gl = this.gl;
     const vao = gl.createVertexArray();
+    this.vao = vao;
     gl.bindVertexArray(vao);
 
     // Static immutable full-screen quad: pos(2), uv(2)
@@ -253,7 +280,7 @@ export class WebGLRenderer {
     }
 
     this.masterLutTex = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE1);
+    gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.masterLutTex);
     gl.texImage2D(
       gl.TEXTURE_2D,
@@ -272,7 +299,7 @@ export class WebGLRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
     this.rgbLutTex = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE2);
+    gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, this.rgbLutTex);
     gl.texImage2D(
       gl.TEXTURE_2D,
@@ -612,8 +639,6 @@ export class WebGLRenderer {
       ? {
           ...edits,
           rotation: 0,
-          flip_horizontal: false,
-          flip_vertical: false,
           crop_left: 0.0,
           crop_top: 0.0,
           crop_right: 1.0,
@@ -638,6 +663,11 @@ export class WebGLRenderer {
     gl.uniform2f(this.uLocs.u_fitScale, fitScaleX, fitScaleY);
     gl.uniform1f(this.uLocs.u_zoomScale, zoomScale);
     gl.uniform2f(this.uLocs.u_panOffset, panOffset.x, panOffset.y);
+    gl.uniform2f(
+      this.uLocs.u_flip,
+      effectiveEdits.flip_horizontal ? 1.0 : 0.0,
+      effectiveEdits.flip_vertical ? 1.0 : 0.0,
+    );
 
     if (this.texture) {
       gl.activeTexture(gl.TEXTURE0);
@@ -656,15 +686,6 @@ export class WebGLRenderer {
       gl.bindTexture(gl.TEXTURE_3D, this.proofLutTex);
     }
 
-    const modeMap: Record<string, number> = {
-      AgxVivid: 0,
-      AgxFilmic: 1,
-      CameraStandard: 2,
-      CameraPortrait: 3,
-      CameraLandscape: 4,
-      CameraVivid: 5,
-      AgxPhotographic: 6,
-    };
     const filterMap: Record<string, number> = {
       NeutralPanchromatic: 0,
       FilterGrade2: 0,
@@ -685,7 +706,6 @@ export class WebGLRenderer {
       halationMode = 2;
     }
 
-    const grainSize = edits.grain_size ?? edits.grain_scale ?? 1.0;
     const grainAmount = edits.grain_amount ?? 1.0;
     const hasMaster = isCurveActive(edits.curves?.master) ? 1 : 0;
     const hasRgb =
@@ -724,73 +744,77 @@ export class WebGLRenderer {
     f[19] = lc?.has_distortion ? (lc.distortion[3] ?? 0.0) : 0.0;
     f[20] = isOriginal ? 1.0 : 0.0;
     i[21] = this.isLinearRec2020 ? 1 : 0;
-    i[22] = modeMap[edits.tone_profile] ?? 0;
-    i[23] = 0; // lutEnabled
-    f[24] = 0.0; // lutIntensity
-    f[25] = 0.0; // lutSize
-    f[26] = edits.sharpening_amount ?? 0.0;
-    f[27] = edits.sharpening_radius ?? 1.0;
-    f[28] = edits.sharpening_masking ?? 0.0;
-    f[29] = edits.noise_reduction ?? 0.0;
-    f[30] = this.baselineSharpness;
-    f[31] = effectiveEdits.crop_left ?? 0.0;
-    f[32] = effectiveEdits.crop_top ?? 0.0;
-    f[33] = effectiveEdits.crop_right ?? 1.0;
-    f[34] = effectiveEdits.crop_bottom ?? 1.0;
-    f[35] = edits.perspective_vertical ?? 0.0;
-    f[36] = edits.perspective_horizontal ?? 0.0;
-    i[37] = effectiveEdits.crop_constrain ? 1 : 0;
-    i[38] = cropModeActive ? 1 : 0;
-    i[39] = hasMaster || hasRgb ? 1 : 0;
-    i[40] = hasMaster;
-    i[41] = hasRgb;
-    f[42] = 1.0; // edrHeadroom
-    i[43] = 0; // edrEnabled
-    i[44] = 0; // hasGainMap
-    f[45] = 0.0; // gainMapMin
-    f[46] = 1.0; // gainMapMax
-    f[47] = 1.0; // gainMapGamma
-    f[48] = 1.0; // gainMapCapacityMax
-    i[49] = EMULSION_MAP[edits.emulsion_archetype] ?? 0;
-    i[50] = 0; // emulsionFormat
-    f[51] = edits.emulsion_exposure;
-    i[52] = GRAIN_MODE_MAP[edits.emulsion_grain_mode] ?? 0;
-    f[53] = grainSize;
-    f[54] = grainSize;
-    f[55] = grainAmount;
-    i[56] = this.isIntermediate ? 1 : 0;
-    f[57] = edits.split_toning_shadow_hue;
-    f[58] = edits.split_toning_shadow_sat;
-    f[59] = edits.split_toning_highlight_hue;
-    f[60] = edits.split_toning_highlight_sat;
-    f[61] = edits.split_toning_balance;
-    i[62] = PRINT_MEDIA_MAP[edits.print_media] ?? 0;
-    i[63] = filterMap[edits.enlarger_filter] ?? 0;
-    f[64] = edits.print_paper_grade;
-    f[65] = 0.0; // printBaseWarmth
-    f[66] = edits.print_process_depth ?? 100.0;
-    i[67] = halationMode;
-    i[68] = (((effectiveEdits.rotation ?? 0) % 360) + 360) % 360;
-    f[69] = 5500.0; // asShotTemperature
-    f[70] = 0.0; // asShotTint
+    i[22] = 0; // lutEnabled
+    f[23] = 0.0; // lutIntensity
+    f[24] = 0.0; // lutSize
+    f[25] = edits.sharpening_amount ?? 0.0;
+    f[26] = edits.sharpening_radius ?? 1.0;
+    f[27] = edits.sharpening_masking ?? 0.0;
+    f[28] = edits.noise_reduction ?? 0.0;
+    f[29] = this.baselineSharpness;
+    f[30] = effectiveEdits.crop_left ?? 0.0;
+    f[31] = effectiveEdits.crop_top ?? 0.0;
+    f[32] = effectiveEdits.crop_right ?? 1.0;
+    f[33] = effectiveEdits.crop_bottom ?? 1.0;
+    f[34] = edits.perspective_vertical ?? 0.0;
+    f[35] = edits.perspective_horizontal ?? 0.0;
+    i[36] = effectiveEdits.crop_constrain ? 1 : 0;
+    i[37] = cropModeActive ? 1 : 0;
+    i[38] = hasMaster || hasRgb ? 1 : 0;
+    i[39] = hasMaster;
+    i[40] = hasRgb;
+    f[41] = 1.0; // edrHeadroom
+    i[42] = 0; // edrEnabled
+    i[43] = 0; // hasGainMap
+    f[44] = 0.0; // gainMapMin
+    f[45] = 1.0; // gainMapMax
+    f[46] = 1.0; // gainMapGamma
+    f[47] = 1.0; // gainMapCapacityMax
+    i[48] = EMULSION_MAP[edits.emulsion_archetype] ?? 0;
+    i[49] = EMULSION_FORMAT_MAP[edits.emulsion_format] ?? 0;
+    f[50] = edits.emulsion_exposure;
+    i[51] = GRAIN_MODE_MAP[edits.emulsion_grain_mode] ?? 0;
+    f[52] = edits.grain_scale ?? 1.0;
+    f[53] = edits.grain_size ?? 1.0;
+    f[54] = grainAmount;
+    i[55] = this.isIntermediate ? 1 : 0;
+    f[56] = edits.split_toning_shadow_hue;
+    f[57] = edits.split_toning_shadow_sat;
+    f[58] = edits.split_toning_highlight_hue;
+    f[59] = edits.split_toning_highlight_sat;
+    f[60] = edits.split_toning_balance;
+    i[61] = PRINT_MEDIA_MAP[edits.print_media] ?? 0;
+    i[62] = filterMap[edits.enlarger_filter] ?? 0;
+    f[63] = edits.print_paper_grade;
+    f[64] = edits.print_base_warmth ?? 0.0;
+    f[65] = edits.print_process_depth ?? 100.0;
+    i[66] = halationMode;
+    i[67] = (((effectiveEdits.rotation ?? 0) % 360) + 360) % 360;
+    f[68] = this.asShotTemperature;
+    f[69] = this.asShotTint;
     const hasTca = lc?.has_tca ?? false;
-    i[71] = hasTca ? 1 : 0;
-    f[72] = hasTca ? (lc?.tca[0] ?? 1.0) : 1.0; // tcaVr
-    f[73] = hasTca ? (lc?.tca[1] ?? 1.0) : 1.0; // tcaVb
-    f[74] = hasTca ? (lc?.tca[2] ?? 0.0) : 0.0; // tcaBr
-    f[75] = hasTca ? (lc?.tca[3] ?? 0.0) : 0.0; // tcaBb
-    f[76] = hasTca ? (lc?.tca[4] ?? 0.0) : 0.0; // tcaCr
-    f[77] = hasTca ? (lc?.tca[5] ?? 0.0) : 0.0; // tcaCb
-    f[78] = edits.defringe_amount ?? 0.0;
-    i[79] = (effectiveEdits.tca_correction_enabled ?? true) ? 1 : 0;
-    i[80] = this.clippingOverlayActive ? 1 : 0;
-    i[81] = (effectiveEdits.vignetting_correction_enabled ?? false) ? 1 : 0;
-    i[82] = (lc?.has_vignetting ?? false) ? 1 : 0;
-    f[83] = lc?.has_vignetting ? (lc.vignetting[0] ?? 0.0) : 0.0; // vignettingK1
-    f[84] = lc?.has_vignetting ? (lc.vignetting[1] ?? 0.0) : 0.0; // vignettingK2
-    f[85] = lc?.has_vignetting ? (lc.vignetting[2] ?? 0.0) : 0.0; // vignettingK3
-    f[86] = 0.0; // vignettingK4
-    f[87] = 0.0; // pad0
+    i[70] = hasTca ? 1 : 0;
+    f[71] = hasTca ? (lc?.tca[0] ?? 1.0) : 1.0; // tcaVr
+    f[72] = hasTca ? (lc?.tca[1] ?? 1.0) : 1.0; // tcaVb
+    f[73] = hasTca ? (lc?.tca[2] ?? 0.0) : 0.0; // tcaBr
+    f[74] = hasTca ? (lc?.tca[3] ?? 0.0) : 0.0; // tcaBb
+    f[75] = hasTca ? (lc?.tca[4] ?? 0.0) : 0.0; // tcaCr
+    f[76] = hasTca ? (lc?.tca[5] ?? 0.0) : 0.0; // tcaCb
+    f[77] = edits.defringe_amount ?? 0.0;
+    i[78] = (effectiveEdits.tca_correction_enabled ?? true) ? 1 : 0;
+    i[79] = this.clippingOverlayActive ? 1 : 0;
+    i[80] = (effectiveEdits.vignetting_correction_enabled ?? false) ? 1 : 0;
+    i[81] = (lc?.has_vignetting ?? false) ? 1 : 0;
+    f[82] = lc?.has_vignetting ? (lc.vignetting[0] ?? 0.0) : 0.0; // vignettingK1
+    f[83] = lc?.has_vignetting ? (lc.vignetting[1] ?? 0.0) : 0.0; // vignettingK2
+    f[84] = lc?.has_vignetting ? (lc.vignetting[2] ?? 0.0) : 0.0; // vignettingK3
+    f[85] = 0.0; // vignettingK4
+    i[86] = this.softProofEnabled ? 1 : 0;
+    i[87] = this.gamutWarningEnabled ? 1 : 0;
+    i[88] = this.proofIntent;
+    f[89] = 0.0; // pad0
+    f[90] = 0.0; // pad1
+    f[91] = 0.0; // pad2
 
     if (this.uboBuffer) {
       gl.bindBuffer(gl.UNIFORM_BUFFER, this.uboBuffer);
@@ -824,6 +848,10 @@ export class WebGLRenderer {
       this.gl.deleteBuffer(this.vbo);
       this.vbo = null;
     }
+    if (this.vao) {
+      this.gl.deleteVertexArray(this.vao);
+      this.vao = null;
+    }
     if (this.texture) {
       this.gl.deleteTexture(this.texture);
       this.texture = null;
@@ -843,6 +871,9 @@ export class WebGLRenderer {
     if (this.uboBuffer) {
       this.gl.deleteBuffer(this.uboBuffer);
       this.uboBuffer = null;
+    }
+    if (this.program) {
+      this.gl.deleteProgram(this.program);
     }
   }
 

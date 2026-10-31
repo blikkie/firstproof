@@ -163,6 +163,169 @@ pub fn resample_rgb16(
     out
 }
 
+/// Resamples a 16-bit RGB image buffer with full darkroom geometry:
+/// orthogonal rotation, horizontal/vertical flips, crop box, straighten angle (`crop_angle`),
+/// vertical/horizontal perspective keystone homography, and auto-crop constraint (`crop_constrain`).
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+pub fn resample_rgb16_with_geometry(
+    src_w: usize,
+    src_h: usize,
+    src_data: &[u16],
+    rotation: i32,
+    crop_left: f32,
+    crop_top: f32,
+    crop_right: f32,
+    crop_bottom: f32,
+    crop_angle: f32,
+    perspective_vertical: f32,
+    perspective_horizontal: f32,
+    crop_constrain: bool,
+    flip_h: bool,
+    flip_v: bool,
+    target_w: usize,
+    target_h: usize,
+) -> Vec<u16> {
+    if crop_angle.abs() < 1e-4 && perspective_vertical.abs() < 1e-4 && perspective_horizontal.abs() < 1e-4 {
+        return resample_rgb16(
+            src_w, src_h, src_data, rotation,
+            crop_left, crop_top, crop_right, crop_bottom,
+            flip_h, flip_v, target_w, target_h,
+        );
+    }
+
+    let mut out = vec![0u16; target_w * target_h * 3];
+    if src_w == 0 || src_h == 0 || target_w == 0 || target_h == 0 || src_data.is_empty() {
+        return out;
+    }
+
+    let norm_rot = rotation.rem_euclid(360);
+    let is_orthogonal = norm_rot == 90 || norm_rot == 270;
+    let base_w = if is_orthogonal { src_h } else { src_w };
+    let base_h = if is_orthogonal { src_w } else { src_h };
+    let aspect_ratio = (base_w as f32) / (base_h.max(1) as f32);
+
+    let crop_l = crop_left.clamp(0.0, 0.99);
+    let crop_t = crop_top.clamp(0.0, 0.99);
+    let crop_r = crop_right.clamp(crop_l + 0.001, 1.0);
+    let crop_b = crop_bottom.clamp(crop_t + 0.001, 1.0);
+    let crop_w = crop_r - crop_l;
+    let crop_h = crop_b - crop_t;
+
+    let angle_rad = crop_angle * std::f32::consts::PI / 180.0;
+    let cos_theta = angle_rad.cos();
+    let sin_theta = angle_rad.sin();
+    let c_v = perspective_vertical * 0.005;
+    let c_h = perspective_horizontal * 0.005;
+
+    let mut auto_crop_scale = 1.0f32;
+    if crop_constrain {
+        let test_points = [
+            ( aspect_ratio,  1.0), (-aspect_ratio,  1.0),
+            ( aspect_ratio, -1.0), (-aspect_ratio, -1.0),
+            ( aspect_ratio,  0.0), (-aspect_ratio,  0.0),
+            ( 0.0,           1.0), ( 0.0,          -1.0),
+            ( aspect_ratio,  0.5), (-aspect_ratio,  0.5),
+            ( aspect_ratio, -0.5), (-aspect_ratio, -0.5),
+        ];
+        for (px, py) in test_points {
+            let rx = px * cos_theta - py * sin_theta;
+            let ry = px * sin_theta + py * cos_theta;
+            let denom = (1.0 + c_v * ry + c_h * rx).max(0.1);
+            let gx = rx / denom;
+            let gy = ry / denom;
+            let req = (gx.abs() / aspect_ratio).max(gy.abs());
+            if req > auto_crop_scale {
+                auto_crop_scale = req;
+            }
+        }
+    }
+
+    let src_w_f = src_w as f32;
+    let src_h_f = src_h as f32;
+    let max_x_f = (src_w - 1) as f32;
+    let max_y_f = (src_h - 1) as f32;
+
+    for dy in 0..target_h {
+        let mut v = (dy as f32 + 0.5) / (target_h as f32);
+        if flip_v {
+            v = 1.0 - v;
+        }
+        let mut dst_idx = dy * target_w * 3;
+
+        for dx in 0..target_w {
+            let mut u = (dx as f32 + 0.5) / (target_w as f32);
+            if flip_h {
+                u = 1.0 - u;
+            }
+
+            let u_crop = crop_l + u * crop_w;
+            let v_crop = crop_t + v * crop_h;
+
+            let centered_x = (u_crop - 0.5) * 2.0 * aspect_ratio / auto_crop_scale;
+            let centered_y = (v_crop - 0.5) * 2.0 / auto_crop_scale;
+
+            let rot_x = centered_x * cos_theta - centered_y * sin_theta;
+            let rot_y = centered_x * sin_theta + centered_y * cos_theta;
+
+            let denom = (1.0 + c_v * rot_y + c_h * rot_x).max(0.1);
+            let geom_x = rot_x / denom;
+            let geom_y = rot_y / denom;
+
+            let final_u = (geom_x / (2.0 * aspect_ratio) + 0.5).clamp(0.0, 1.0);
+            let final_v = (geom_y / 2.0 + 0.5).clamp(0.0, 1.0);
+
+            let (sx, sy) = match norm_rot {
+                90 => (final_v * src_w_f - 0.5, (1.0 - final_u) * src_h_f - 0.5),
+                180 => ((1.0 - final_u) * src_w_f - 0.5, (1.0 - final_v) * src_h_f - 0.5),
+                270 => ((1.0 - final_v) * src_w_f - 0.5, final_u * src_h_f - 0.5),
+                _ => (final_u * src_w_f - 0.5, final_v * src_h_f - 0.5),
+            };
+
+            let sx_c = sx.clamp(0.0, max_x_f);
+            let sy_c = sy.clamp(0.0, max_y_f);
+
+            let x0 = sx_c.floor() as usize;
+            let y0 = sy_c.floor() as usize;
+            let x1 = (x0 + 1).min(src_w - 1);
+            let y1 = (y0 + 1).min(src_h - 1);
+
+            let fx = sx_c - (x0 as f32);
+            let fy = sy_c - (y0 as f32);
+
+            let w00 = (1.0 - fx) * (1.0 - fy);
+            let w10 = fx * (1.0 - fy);
+            let w01 = (1.0 - fx) * fy;
+            let w11 = fx * fy;
+
+            let idx00 = (y0 * src_w + x0) * 3;
+            let idx10 = (y0 * src_w + x1) * 3;
+            let idx01 = (y1 * src_w + x0) * 3;
+            let idx11 = (y1 * src_w + x1) * 3;
+
+            let r = w00 * (src_data[idx00] as f32)
+                + w10 * (src_data[idx10] as f32)
+                + w01 * (src_data[idx01] as f32)
+                + w11 * (src_data[idx11] as f32);
+            let g = w00 * (src_data[idx00 + 1] as f32)
+                + w10 * (src_data[idx10 + 1] as f32)
+                + w01 * (src_data[idx01 + 1] as f32)
+                + w11 * (src_data[idx11 + 1] as f32);
+            let b = w00 * (src_data[idx00 + 2] as f32)
+                + w10 * (src_data[idx10 + 2] as f32)
+                + w01 * (src_data[idx01 + 2] as f32)
+                + w11 * (src_data[idx11 + 2] as f32);
+
+            out[dst_idx] = r.round().clamp(0.0, 65535.0) as u16;
+            out[dst_idx + 1] = g.round().clamp(0.0, 65535.0) as u16;
+            out[dst_idx + 2] = b.round().clamp(0.0, 65535.0) as u16;
+            dst_idx += 3;
+        }
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

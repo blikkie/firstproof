@@ -508,7 +508,10 @@ public struct AsyncThumbnailView: View {
                 )
                 
                 if hasEdits {
-                    self.enqueueRefinementRender(edits: xmp.edits)
+                    DispatchQueue.main.async {
+                        guard !fastOp.isCancelled else { return }
+                        self.enqueueRefinementRender(edits: xmp.edits)
+                    }
                 }
             }
         }
@@ -518,6 +521,7 @@ public struct AsyncThumbnailView: View {
     }
     
     private func enqueueRefinementRender(edits: EditSettings) {
+        dispatchPrecondition(condition: .onQueue(.main))
         let renderOp = BlockOperation()
         renderOp.queuePriority = .normal
         renderOp.addExecutionBlock { [weak renderOp] in

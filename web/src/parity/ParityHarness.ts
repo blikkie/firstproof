@@ -5,7 +5,7 @@
  * against the reference CPU export pipeline.
  */
 
-import { areCurvesActive } from '../utils/edits';
+import { areCurvesActive, getDefaultEdits } from '../utils/edits';
 import {
   type EditSettingsPayload,
   type EvaluatedLut,
@@ -89,60 +89,7 @@ export const MACBETH_SRGB_24: [number, number, number][] = [
   [52, 52, 52], // 24. Black 2 (1.50 D)
 ];
 
-export function createDefaultEdits(): EditSettingsPayload {
-  return {
-    exposure: 0.0,
-    contrast: 0.0,
-    highlights: 0.0,
-    shadows: 0.0,
-    whites: 0.0,
-    blacks: 0.0,
-    vibrance: 0.0,
-    saturation: 0.0,
-    deep_blue: 0.0,
-    foliage: 0.0,
-    temperature: 5500.0,
-    tint: 0.0,
-    crop_left: 0.0,
-    crop_top: 0.0,
-    crop_right: 1.0,
-    crop_bottom: 1.0,
-    crop_angle: 0.0,
-    perspective_vertical: 0.0,
-    perspective_horizontal: 0.0,
-    crop_constrain: false,
-    rotation: 0,
-    flip_horizontal: false,
-    flip_vertical: false,
-    tone_profile: 'CameraStandard',
-    lut_intensity: 0.0,
-    sharpening_amount: 0.0,
-    sharpening_radius: 1.0,
-    sharpening_masking: 0.0,
-    noise_reduction: 0.0,
-    emulsion_archetype: 'None',
-    emulsion_format: 'Format35mm',
-    emulsion_exposure: 0.0,
-    remjet_backing: 'Intact',
-    emulsion_grain_mode: 'Off',
-    grain_scale: 1.0,
-    print_media: 'None',
-    enlarger_filter: 'NeutralPanchromatic',
-    print_paper_grade: 2.0,
-    print_base_warmth: 0.0,
-    print_process_depth: 100.0,
-    defringe_amount: 0.0,
-    lens_correction_enabled: false,
-    tca_correction_enabled: true,
-    vignetting_correction_enabled: false,
-    split_toning_shadow_hue: 215.0,
-    split_toning_shadow_sat: 0.0,
-    split_toning_highlight_hue: 45.0,
-    split_toning_highlight_sat: 0.0,
-    split_toning_balance: 0.0,
-    curves: { master: [], red: [], green: [], blue: [] },
-  };
-}
+export const createDefaultEdits = getDefaultEdits;
 
 export class ParityHarness {
   private renderer: WebGLRenderer;
@@ -423,7 +370,7 @@ export class ParityHarness {
         id: 'macbeth_neutral_agx_filmic',
         name: 'Macbeth 24-Patch Baseline (AgX Filmic)',
         category: 'macbeth',
-        edits: { ...createDefaultEdits(), tone_profile: 'AgxFilmic' },
+        edits: createDefaultEdits(),
         isLinearRec2020: false,
         textureWidth: w,
         textureHeight: h,
@@ -493,46 +440,6 @@ export class ParityHarness {
         textureWidth: w,
         textureHeight: h,
         createTexture: () => this.createGradientTexture(),
-      },
-      {
-        id: 'camera_standard_profile',
-        name: 'Camera Standard Profile (Hermite S-Curve & Memory Colors)',
-        category: 'color',
-        edits: { ...createDefaultEdits(), tone_profile: 'CameraStandard' },
-        isLinearRec2020: false,
-        textureWidth: w,
-        textureHeight: h,
-        createTexture: () => this.createMacbethTexture(),
-      },
-      {
-        id: 'camera_landscape_profile',
-        name: 'Camera Landscape Profile (Punchy Skies & Foliage)',
-        category: 'color',
-        edits: { ...createDefaultEdits(), tone_profile: 'CameraLandscape' },
-        isLinearRec2020: false,
-        textureWidth: w,
-        textureHeight: h,
-        createTexture: () => this.createMacbethTexture(),
-      },
-      {
-        id: 'camera_vivid_profile',
-        name: 'Camera Vivid Profile (Rich Contrast & Boosted Saturation)',
-        category: 'color',
-        edits: { ...createDefaultEdits(), tone_profile: 'CameraVivid' },
-        isLinearRec2020: false,
-        textureWidth: w,
-        textureHeight: h,
-        createTexture: () => this.createMacbethTexture(),
-      },
-      {
-        id: 'camera_portrait_profile',
-        name: 'Camera Portrait Profile (Skin Smoothing & Calm Skies)',
-        category: 'color',
-        edits: { ...createDefaultEdits(), tone_profile: 'CameraPortrait' },
-        isLinearRec2020: false,
-        textureWidth: w,
-        textureHeight: h,
-        createTexture: () => this.createMacbethTexture(),
       },
       {
         id: 'emulsion_rochester_portrait_400',

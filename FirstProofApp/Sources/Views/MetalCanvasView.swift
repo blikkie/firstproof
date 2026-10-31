@@ -242,20 +242,10 @@ public struct MetalCanvasView: NSViewRepresentable {
             guard vm.canvasMode == .detail else { return nil }
             guard let activePath = vm.currentlyLoadedPhotoPath,
                   renderer.currentPhotoPath == activePath else { return nil }
-            let imageW: Float
-            let imageH: Float
-            if let raw = vm.rawPreviewRecord {
-                imageW = Float(raw.width)
-                imageH = Float(raw.height)
-            } else if let img = vm.previewImage {
-                imageW = Float(img.size.width)
-                imageH = Float(img.size.height)
-            } else {
-                imageW = 4000.0
-                imageH = 3000.0
-            }
-            let imageAspect = imageW / max(imageH, 1.0)
+            let dims = vm.currentImageDimensions
+            let imageAspect = Float(dims.width / max(dims.height, 1.0))
             
+            let savedUniforms = renderer.uniforms
             renderer.updateUniforms(
                 from: vm.currentEdits,
                 imageAspect: imageAspect,
@@ -269,7 +259,9 @@ public struct MetalCanvasView: NSViewRepresentable {
                 asShotTemperature: vm.asShotTemperature,
                 asShotTint: vm.asShotTint
             )
-            return renderer.renderThumbnailSnapshot(maxDimension: 320)
+            let snapshot = renderer.renderThumbnailSnapshot(maxDimension: 320)
+            renderer.uniforms = savedUniforms
+            return snapshot
         }
         
         viewModel.captureIntermediateSnapshot = { [weak renderer, weak viewModel] in
@@ -278,20 +270,10 @@ public struct MetalCanvasView: NSViewRepresentable {
             guard let activePath = vm.currentlyLoadedPhotoPath,
                   renderer.currentPhotoPath == activePath else { return nil }
             guard vm.rawPreviewRecord != nil else { return nil }
-            let imageW: Float
-            let imageH: Float
-            if let raw = vm.rawPreviewRecord {
-                imageW = Float(raw.width)
-                imageH = Float(raw.height)
-            } else if let img = vm.previewImage {
-                imageW = Float(img.size.width)
-                imageH = Float(img.size.height)
-            } else {
-                imageW = 4000.0
-                imageH = 3000.0
-            }
-            let imageAspect = imageW / max(imageH, 1.0)
+            let dims = vm.currentImageDimensions
+            let imageAspect = Float(dims.width / max(dims.height, 1.0))
             
+            let savedUniforms = renderer.uniforms
             renderer.updateUniforms(
                 from: vm.currentEdits,
                 imageAspect: imageAspect,
@@ -305,7 +287,9 @@ public struct MetalCanvasView: NSViewRepresentable {
                 asShotTemperature: vm.asShotTemperature,
                 asShotTint: vm.asShotTint
             )
-            return renderer.renderThumbnailSnapshot(maxDimension: 2560)
+            let snapshot = renderer.renderThumbnailSnapshot(maxDimension: 2560)
+            renderer.uniforms = savedUniforms
+            return snapshot
         }
     }
     

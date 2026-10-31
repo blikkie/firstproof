@@ -3,7 +3,6 @@ import type {
   AllCurvesLutRecord,
   AutoAdjustments,
   AutoWhiteBalanceResult,
-  ColorProfileMode,
   CropAspectRatioPreset,
   CurvePointRecord,
   EditSettings,
@@ -26,16 +25,18 @@ import type {
   XmpData,
 } from 'firstproof-wasm';
 import initWasm, * as wasm from 'firstproof-wasm';
+import type { EditSettingsPayload } from './types';
 
+// Aliases for backward compatibility with existing web darkroom modules
 export type {
   AdjustmentDescriptor,
   AllCurvesLutRecord,
   AutoAdjustments,
   AutoWhiteBalanceResult,
-  ColorProfileMode,
   CropAspectRatioPreset,
   CurvePointRecord,
   EditSettings,
+  EditSettingsPayload,
   EmulsionArchetype,
   EmulsionFormat,
   EmulsionGrainMode,
@@ -54,9 +55,6 @@ export type {
   WorkspaceCategory,
   XmpData,
 };
-
-// Aliases for backward compatibility with existing web darkroom modules
-export type EditSettingsPayload = EditSettings;
 export type XmpPayload = XmpData;
 export type ImageMetadata = ImageMetadataRecord;
 export type PreviewResult = PreviewResultRecord;
@@ -150,10 +148,7 @@ export class WasmBridge {
     return this.wasmMemory?.buffer ?? null;
   }
 
-  public decodeImageBytes(bytes: Uint8Array): {
-    preview: PreviewResult;
-    imageSlice: Uint8Array;
-  } {
+  private copyBytesToScratchpad(bytes: Uint8Array): void {
     const liveBuf = this.getWasmMemoryBuffer();
     const ptr = wasm.get_scratchpad_ptr();
     if (liveBuf && ptr + bytes.length <= liveBuf.byteLength) {
@@ -161,6 +156,13 @@ export class WasmBridge {
     } else {
       wasm.copy_into_scratchpad(0, bytes);
     }
+  }
+
+  public decodeImageBytes(bytes: Uint8Array): {
+    preview: PreviewResult;
+    imageSlice: Uint8Array;
+  } {
+    this.copyBytesToScratchpad(bytes);
     const preview: PreviewResult = wasm.decode_preview_from_scratchpad(
       bytes.length,
     ) as PreviewResult;
@@ -176,13 +178,7 @@ export class WasmBridge {
     res: RawLinearResultRecord;
     linearData: Uint16Array;
   } {
-    const liveBuf = this.getWasmMemoryBuffer();
-    const ptr = wasm.get_scratchpad_ptr();
-    if (liveBuf && ptr + bytes.length <= liveBuf.byteLength) {
-      new Uint8Array(liveBuf, ptr, bytes.length).set(bytes);
-    } else {
-      wasm.copy_into_scratchpad(0, bytes);
-    }
+    this.copyBytesToScratchpad(bytes);
 
     const res: RawLinearResultRecord = wasm.decode_raw_linear_from_scratchpad(
       bytes.length,
@@ -199,13 +195,7 @@ export class WasmBridge {
     res: RawLinearResultRecord;
     linearData: Uint16Array;
   } {
-    const liveBuf = this.getWasmMemoryBuffer();
-    const ptr = wasm.get_scratchpad_ptr();
-    if (liveBuf && ptr + bytes.length <= liveBuf.byteLength) {
-      new Uint8Array(liveBuf, ptr, bytes.length).set(bytes);
-    } else {
-      wasm.copy_into_scratchpad(0, bytes);
-    }
+    this.copyBytesToScratchpad(bytes);
 
     const res: RawLinearResultRecord =
       wasm.decode_raw_full_linear_from_scratchpad(
@@ -228,13 +218,7 @@ export class WasmBridge {
     height: number;
     linearData: Uint16Array;
   } {
-    const liveBuf = this.getWasmMemoryBuffer();
-    const ptr = wasm.get_scratchpad_ptr();
-    if (liveBuf && ptr + bytes.length <= liveBuf.byteLength) {
-      new Uint8Array(liveBuf, ptr, bytes.length).set(bytes);
-    } else {
-      wasm.copy_into_scratchpad(0, bytes);
-    }
+    this.copyBytesToScratchpad(bytes);
 
     const editsJson = JSON.stringify(edits);
     const qualityCode = quality === 'Archival' ? 1 : 0;
@@ -261,13 +245,7 @@ export class WasmBridge {
     customDimension: number,
     demosaicQuality: 'Standard' | 'Archival' = 'Standard',
   ): Uint8Array {
-    const liveBuf = this.getWasmMemoryBuffer();
-    const ptr = wasm.get_scratchpad_ptr();
-    if (liveBuf && ptr + bytes.length <= liveBuf.byteLength) {
-      new Uint8Array(liveBuf, ptr, bytes.length).set(bytes);
-    } else {
-      wasm.copy_into_scratchpad(0, bytes);
-    }
+    this.copyBytesToScratchpad(bytes);
 
     const editsJson = JSON.stringify(edits);
     const qualityCode = demosaicQuality === 'Archival' ? 1 : 0;
@@ -393,7 +371,7 @@ export class WasmBridge {
       r,
       g,
       b,
-    ) as AutoWhiteBalanceResultRecord | null;
+    ) as AutoWhiteBalanceResult | null;
     return res ?? null;
   }
 

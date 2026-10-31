@@ -51,7 +51,7 @@ pub use histogram::{
     NUM_BINS,
 };
 pub use modes::{
-    ColorProfileMode, CropAspectRatioPreset, DemosaicQuality, EmulsionArchetype, EmulsionFormat,
+    CropAspectRatioPreset, DemosaicQuality, EmulsionArchetype, EmulsionFormat,
     EmulsionGrainMode, EnlargerFilterMode, ExportColorSpace, ExportRenderingIntent, PrintMediaMode,
     RemjetBackingMode, RenderTier, WhiteBalancePreset,
 };
@@ -70,7 +70,7 @@ pub use xmp::{
     format_gps_xmp, generate_xmp_sidecar, parse_curve_points, parse_gps_xmp, parse_xmp_sidecar,
     serialize_curve_points, XmpData,
 };
-pub use resample::resample_rgb16;
+pub use resample::{resample_rgb16, resample_rgb16_with_geometry};
 pub use color::{
     develop_frame_pipeline, develop_pixel_pipeline,
     develop_raster_image_archival, develop_raw_sensor_frame_archival,

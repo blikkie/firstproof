@@ -94,7 +94,7 @@ export class FolderIntake {
             name: entry.name,
             file,
             handle: fileHandle,
-            dirHandle: parentDir,
+            dirHandle: dirHandle,
           });
         } catch (e) {
           console.warn(`[FolderIntake] Could not read file ${entry.name}:`, e);

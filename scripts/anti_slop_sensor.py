@@ -224,6 +224,65 @@ def check_edit_settings_parity():
             if f"edits.{c_field}" not in apply_edits_text and c_field not in apply_edits_text:
                 violations.append(f"EditSettings.{r_field} ({c_field}) is not restored by AppViewModel.applyEdits in AppViewModel+Editor.swift")
 
+        # 1. EditDelta in firstproof-engine/src/command.rs
+        command_rs = ROOT_DIR / "firstproof-engine" / "src" / "command.rs"
+        if command_rs.exists():
+            content_command = command_rs.read_text(encoding="utf-8")
+            delta_match = re.search(r"pub\s+struct\s+EditDelta\s*\{([^}]+)\}", content_command)
+            if delta_match:
+                delta_body = delta_match.group(1)
+                delta_fields = set()
+                for line in delta_body.splitlines():
+                    line = line.strip()
+                    if line.startswith("pub ") and ":" in line:
+                        delta_fields.add(line.split()[1].rstrip(":"))
+                for r_field in rust_fields:
+                    if r_field not in delta_fields:
+                        violations.append(f"EditSettings.{r_field} is missing from EditDelta in command.rs")
+            else:
+                violations.append("Could not find EditDelta struct in command.rs")
+
+        # 2. EditSettingsPayload in web/src/types.ts
+        web_types_ts = ROOT_DIR / "web" / "src" / "types.ts"
+        if web_types_ts.exists():
+            content_web_types = web_types_ts.read_text(encoding="utf-8")
+            types_match = re.search(r"export\s+interface\s+EditSettingsPayload\s*\{([^}]+)\}", content_web_types)
+            if types_match:
+                types_body = types_match.group(1)
+                payload_fields = set()
+                for line in types_body.splitlines():
+                    line = line.strip()
+                    if ":" in line:
+                        field_name = line.split(":")[0].rstrip("?").strip()
+                        payload_fields.add(field_name)
+                for r_field in rust_fields:
+                    if r_field not in payload_fields:
+                        violations.append(f"EditSettings.{r_field} is missing from EditSettingsPayload in web/src/types.ts")
+            else:
+                violations.append("Could not find EditSettingsPayload interface in web/src/types.ts")
+
+        # 3. getDefaultEdits in web/src/utils/edits.ts
+        web_edits_ts = ROOT_DIR / "web" / "src" / "utils" / "edits.ts"
+        if web_edits_ts.exists():
+            content_web_edits = web_edits_ts.read_text(encoding="utf-8")
+            gde_idx = content_web_edits.find("export function getDefaultEdits(")
+            if gde_idx != -1:
+                brace_start = content_web_edits.find("{", gde_idx)
+                brace_count = 1
+                i = brace_start + 1
+                while i < len(content_web_edits) and brace_count > 0:
+                    if content_web_edits[i] == "{":
+                        brace_count += 1
+                    elif content_web_edits[i] == "}":
+                        brace_count -= 1
+                    i += 1
+                gde_body = content_web_edits[brace_start:i]
+                for r_field in rust_fields:
+                    if not re.search(rf"\b{re.escape(r_field)}\s*:", gde_body):
+                        violations.append(f"EditSettings.{r_field} is missing from getDefaultEdits in web/src/utils/edits.ts")
+            else:
+                violations.append("Could not find getDefaultEdits in web/src/utils/edits.ts")
+
     except Exception as e:
         violations.append(f"Failed to check EditSettings parity: {e}")
 

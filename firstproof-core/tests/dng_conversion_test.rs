@@ -19,7 +19,7 @@ use firstproof_core::export::export_photo_file_advanced;
 use firstproof_core::raw_decoder::{RawDecoder, RawlerDecoder};
 use firstproof_core::xmp::read_xmp_file;
 use firstproof_core::{
-    ColorProfileMode, DemosaicQuality, EditSettings, ExportColorSpace, ExportRenderingIntent,
+    DemosaicQuality, EditSettings, ExportColorSpace, ExportRenderingIntent,
     RenderTier,
 };
 
@@ -84,7 +84,6 @@ fn test_dng_conversion_and_disk_verification() {
 
     let edits = EditSettings {
         exposure: 0.5,
-        tone_profile: ColorProfileMode::AgxVivid,
         ..Default::default()
     };
 

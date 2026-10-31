@@ -3,7 +3,7 @@ use std::path::Path;
 use image::{RgbImage, Rgb, imageops};
 use firstproof_core::raw::extract_preview_jpeg;
 use firstproof_core::xmp::read_xmp_file;
-use firstproof_core::{ColorProfileMode, ExportColorSpace, ExportRenderingIntent};
+use firstproof_core::{ExportColorSpace, ExportRenderingIntent};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -13,7 +13,6 @@ fn main() {
         eprintln!("============================================================");
         eprintln!("Usage: calibrate <raw_path> [options]");
         eprintln!("\nOptions:");
-        eprintln!("  --profile <CameraStandard|AgxVivid|AgxFilmic|CameraPortrait|CameraLandscape|CameraVivid>");
         eprintln!("  --exposure <ev>         Exposure compensation offset (e.g. +0.0, +0.5)");
         eprintln!("  --crop <x,y,w,h>        1:1 pixel crop for detail inspection (e.g. 1400,1500,800,800)");
         eprintln!("  --out-prefix <prefix>   Output filename prefix (default: raw_calibration)");
@@ -27,7 +26,6 @@ fn main() {
         std::process::exit(1);
     }
 
-    let mut profile = ColorProfileMode::CameraStandard;
     let mut custom_crop: Option<(u32, u32, u32, u32)> = None;
     let mut exposure_override: Option<f32> = None;
     let mut out_prefix = "raw_calibration".to_string();
@@ -36,18 +34,6 @@ fn main() {
     let mut i = 2;
     while i < args.len() {
         match args[i].as_str() {
-            "--profile" if i + 1 < args.len() => {
-                match args[i + 1].as_str() {
-                    "CameraStandard" => profile = ColorProfileMode::CameraStandard,
-                    "CameraPortrait" => profile = ColorProfileMode::CameraPortrait,
-                    "CameraLandscape" => profile = ColorProfileMode::CameraLandscape,
-                    "CameraVivid" => profile = ColorProfileMode::CameraVivid,
-                    "AgxVivid" => profile = ColorProfileMode::AgxVivid,
-                    "AgxFilmic" => profile = ColorProfileMode::AgxFilmic,
-                    other => eprintln!("Warning: unknown profile '{}', defaulting to CameraStandard", other),
-                }
-                i += 2;
-            }
             "--crop" if i + 1 < args.len() => {
                 let parts: Vec<&str> = args[i + 1].split(',').collect();
                 if parts.len() == 4 {
@@ -85,7 +71,6 @@ fn main() {
     println!("============================================================");
     println!("🔬 First Proof RAW vs Camera JPEG Calibration Diagnostics Tool");
     println!("Analyzing: {}", raw_path);
-    println!("Profile:   {:?}", profile);
     println!("============================================================\n");
 
     // 1. Extract Camera Reference JPEG
@@ -108,7 +93,7 @@ fn main() {
     println!("   Camera Reference JPEG: {}x{}", cam_rgb.width(), cam_rgb.height());
 
     // 2. Render First Proof Export
-    println!("⚙️  2. Rendering First Proof Export ({:?})...", profile);
+    println!("⚙️  2. Rendering First Proof Export (AgX Filmic)...");
     let temp_export_path = std::env::temp_dir().join(format!("fp_cal_{}_{}.jpg", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)));
     let mut edits = if use_xmp {
         println!("   Using edits from sidecar XMP...");
@@ -117,7 +102,6 @@ fn main() {
         println!("   Evaluating clean camera defaults (sidecar XMP ignored)...");
         firstproof_core::EditSettings::default()
     };
-    edits.tone_profile = profile;
     if let Some(ev) = exposure_override {
         edits.exposure = ev;
     }

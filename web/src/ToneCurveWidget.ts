@@ -129,10 +129,11 @@ export class ToneCurveWidget {
       if (this.draggingIdx === 0) mx = 0;
       if (this.draggingIdx === pts.length - 1) mx = 1;
 
-      pts[this.draggingIdx].x = mx;
-      pts[this.draggingIdx].y = my;
+      const draggedPt = pts[this.draggingIdx];
+      draggedPt.x = mx;
+      draggedPt.y = my;
       pts.sort((a, b) => a.x - b.x);
-      this.draggingIdx = pts.findIndex((p) => p.y === my);
+      this.draggingIdx = pts.indexOf(draggedPt);
 
       this.render();
       this.onChange();

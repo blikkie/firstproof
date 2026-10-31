@@ -271,44 +271,17 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         let top    =  effectiveScaleY + panOffset.y
         let bottom = -effectiveScaleY + panOffset.y
         
-        var tl: SIMD2<Float>, tr: SIMD2<Float>, bl: SIMD2<Float>, br: SIMD2<Float>
-        switch rotationDegrees {
-        case 90:
-            tl = SIMD2<Float>(0.0, 1.0)
-            tr = SIMD2<Float>(0.0, 0.0)
-            bl = SIMD2<Float>(1.0, 1.0)
-            br = SIMD2<Float>(1.0, 0.0)
-        case 180:
-            tl = SIMD2<Float>(1.0, 1.0)
-            tr = SIMD2<Float>(0.0, 1.0)
-            bl = SIMD2<Float>(1.0, 0.0)
-            br = SIMD2<Float>(0.0, 0.0)
-        case 270:
-            tl = SIMD2<Float>(1.0, 0.0)
-            tr = SIMD2<Float>(1.0, 1.0)
-            bl = SIMD2<Float>(0.0, 0.0)
-            br = SIMD2<Float>(0.0, 1.0)
-        default: // 0
-            tl = SIMD2<Float>(0.0, 0.0)
-            tr = SIMD2<Float>(1.0, 0.0)
-            bl = SIMD2<Float>(0.0, 1.0)
-            br = SIMD2<Float>(1.0, 1.0)
-        }
-        
-        if flipHorizontal {
-            swap(&tl, &tr)
-            swap(&bl, &br)
-        }
-        if flipVertical {
-            swap(&tl, &bl)
-            swap(&tr, &br)
-        }
+        let uvs = Self.calculateQuadUVs(
+            rotationDegrees: rotationDegrees,
+            flipHorizontal: flipHorizontal,
+            flipVertical: flipVertical
+        )
         
         let vertices: [Vertex] = [
-            Vertex(position: SIMD2<Float>(left,  top),    texCoord: tl),
-            Vertex(position: SIMD2<Float>(right, top),    texCoord: tr),
-            Vertex(position: SIMD2<Float>(left,  bottom), texCoord: bl),
-            Vertex(position: SIMD2<Float>(right, bottom), texCoord: br),
+            Vertex(position: SIMD2<Float>(left,  top),    texCoord: uvs.tl),
+            Vertex(position: SIMD2<Float>(right, top),    texCoord: uvs.tr),
+            Vertex(position: SIMD2<Float>(left,  bottom), texCoord: uvs.bl),
+            Vertex(position: SIMD2<Float>(right, bottom), texCoord: uvs.br),
         ]
         
         if let vb = self.vertexBuffer {
@@ -373,5 +346,46 @@ public final class MetalRenderer: NSObject, MTKViewDelegate {
         
         commandBuffer.present(drawable)
         commandBuffer.commit()
+    }
+    
+    // MARK: - Quad UV Mapping
+    public static func calculateQuadUVs(
+        rotationDegrees: Int,
+        flipHorizontal: Bool,
+        flipVertical: Bool
+    ) -> (tl: SIMD2<Float>, tr: SIMD2<Float>, bl: SIMD2<Float>, br: SIMD2<Float>) {
+        var tl: SIMD2<Float>, tr: SIMD2<Float>, bl: SIMD2<Float>, br: SIMD2<Float>
+        switch rotationDegrees {
+        case 90:
+            tl = SIMD2<Float>(0.0, 1.0)
+            tr = SIMD2<Float>(0.0, 0.0)
+            bl = SIMD2<Float>(1.0, 1.0)
+            br = SIMD2<Float>(1.0, 0.0)
+        case 180:
+            tl = SIMD2<Float>(1.0, 1.0)
+            tr = SIMD2<Float>(0.0, 1.0)
+            bl = SIMD2<Float>(1.0, 0.0)
+            br = SIMD2<Float>(0.0, 0.0)
+        case 270:
+            tl = SIMD2<Float>(1.0, 0.0)
+            tr = SIMD2<Float>(1.0, 1.0)
+            bl = SIMD2<Float>(0.0, 0.0)
+            br = SIMD2<Float>(0.0, 1.0)
+        default: // 0
+            tl = SIMD2<Float>(0.0, 0.0)
+            tr = SIMD2<Float>(1.0, 0.0)
+            bl = SIMD2<Float>(0.0, 1.0)
+            br = SIMD2<Float>(1.0, 1.0)
+        }
+        
+        if flipHorizontal {
+            swap(&tl, &tr)
+            swap(&bl, &br)
+        }
+        if flipVertical {
+            swap(&tl, &bl)
+            swap(&tr, &br)
+        }
+        return (tl, tr, bl, br)
     }
 }

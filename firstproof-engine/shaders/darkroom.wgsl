@@ -481,31 +481,9 @@ fn fragmentShader(in: VertexOutput) -> @location(0) vec4<f32> {
         } else {
             srgbLinearOut = clamp(srgb, vec3<f32>(0.0), vec3<f32>(1.0));
         }
-    } else if (uniforms.toneProfileMode == 0) {
-        // Mode 0: AgX Vivid (Filmic Punchy) - DEFAULT
-        srgbLinearOut = agxToneMapVivid(rec2020Color, contrastGain);
-    } else if (uniforms.toneProfileMode == 1) {
-        // Mode 1: AgX Neutral (Filmic Base)
-        srgbLinearOut = agxToneMap(rec2020Color, contrastGain);
-    } else if (uniforms.toneProfileMode == 6) {
-        // Mode 6: AgX Photographic (Chroma Preserving)
-        srgbLinearOut = agxToneMapPhotographic(rec2020Color, contrastGain);
     } else {
-        // Modes 2..5: Camera Matching (Standard, Portrait, Landscape, Vivid)
-        let camMode = uniforms.toneProfileMode - 1;
-        let c_srgb = max(REC2020_TO_LINEAR_SRGB * rec2020Color, vec3<f32>(0.0));
-        let rgbAdjusted = applyCameraHueSatMap(c_srgb, camMode);
-        
-        let curved = vec3<f32>(
-            applyCameraToneCurve(rgbAdjusted.r, camMode),
-            applyCameraToneCurve(rgbAdjusted.g, camMode),
-            applyCameraToneCurve(rgbAdjusted.b, camMode)
-        );
-        if (abs(contrastGain - 1.0) > 0.001) {
-            srgbLinearOut = clamp((curved - vec3<f32>(0.18)) * contrastGain + vec3<f32>(0.18), vec3<f32>(0.0), vec3<f32>(1.0));
-        } else {
-            srgbLinearOut = clamp(curved, vec3<f32>(0.0), vec3<f32>(1.0));
-        }
+        // Mode 0: Canonical AgX Vivid (Filmic Punchy)
+        srgbLinearOut = agxToneMapVivid(rec2020Color, contrastGain);
     }
 
     // 9.1 Curated Fine-Art Print Media Archetypes

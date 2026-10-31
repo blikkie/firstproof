@@ -105,7 +105,7 @@ impl Database {
             .map(|root| root.join(".lumenbox").join("catalog.db"));
         if let Some(legacy_path) = legacy_db {
             if legacy_path.exists() {
-                let conn = db.conn.lock().unwrap();
+                let conn = db.conn.lock().unwrap_or_else(|e| e.into_inner());
                 let legacy_str = legacy_path.to_string_lossy();
                 if conn.execute("ATTACH DATABASE ? AS legacy;", [&*legacy_str]).is_ok() {
                     let _ = conn.execute(
@@ -153,7 +153,7 @@ impl Database {
     }
 
     fn init_schema(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS photos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -391,10 +391,15 @@ impl Database {
 
     fn preload_cache(&self, folder_prefix: &str) -> std::collections::HashMap<String, (i64, i64)> {
         let mut map = std::collections::HashMap::new();
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let normalized_prefix = if folder_prefix.ends_with('/') || folder_prefix.ends_with(std::path::MAIN_SEPARATOR) {
+            folder_prefix.to_string()
+        } else {
+            format!("{}{}", folder_prefix, std::path::MAIN_SEPARATOR)
+        };
         let query = "SELECT file_path, modified_time, file_size FROM photos WHERE file_path LIKE ?1 || '%'";
         if let Ok(mut stmt) = conn.prepare(query) {
-            let res = stmt.query_map([folder_prefix], |row| {
+            let res = stmt.query_map([&normalized_prefix], |row| {
                 Ok((row.get::<_, String>(0)?, (row.get::<_, i64>(1)?, row.get::<_, i64>(2)?)))
             });
             if let Ok(rows) = res {
@@ -407,7 +412,7 @@ impl Database {
     }
 
     fn flush_batch(&self, batch: &[PhotoRecord]) -> Result<()> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let tx = conn.transaction()?;
         {
             let mut stmt = tx.prepare_cached(
@@ -482,7 +487,7 @@ impl Database {
     }
 
     pub fn upsert_photo(&self, photo: &PhotoRecord) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let now = current_timestamp();
 
         conn.execute(
@@ -553,7 +558,7 @@ impl Database {
     }
 
     pub fn get_photo(&self, file_path: &str) -> Result<Option<PhotoRecord>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT id, file_path, file_name, file_size, modified_time,
                     camera_make, camera_model, lens_model, iso, aperture, shutter_speed, focal_length,
@@ -598,7 +603,7 @@ impl Database {
     }
 
     pub fn get_all_photos(&self) -> Result<Vec<PhotoRecord>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT id, file_path, file_name, file_size, modified_time,
                     camera_make, camera_model, lens_model, iso, aperture, shutter_speed, focal_length,
@@ -783,7 +788,7 @@ impl Database {
         copyright: Option<&str>,
         keywords: Option<&str>,
     ) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let now = current_timestamp();
         let updated = conn.execute(
             "UPDATE photos SET title = ?1, description = ?2, creator = ?3, copyright = ?4, keywords = ?5, updated_at = ?6 WHERE file_path = ?7",
@@ -798,7 +803,7 @@ impl Database {
         rating: Option<i32>,
         status: &str,
     ) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let now = current_timestamp();
         let updated = conn.execute(
             "UPDATE photos SET rating = ?1, status = ?2, updated_at = ?3 WHERE file_path = ?4",
@@ -815,7 +820,7 @@ impl Database {
         update_rating: bool,
         status: Option<&str>,
     ) -> Result<u32> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let tx = conn.transaction()?;
         let now = current_timestamp();
         let mut count = 0u32;
@@ -850,13 +855,13 @@ impl Database {
     }
 
     pub fn delete_photo(&self, file_path: &str) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let deleted = conn.execute("DELETE FROM photos WHERE file_path = ?1", params![file_path])?;
         Ok(deleted > 0)
     }
 
     pub fn delete_photos(&self, file_paths: &[String]) -> Result<usize> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let tx = conn.transaction()?;
         let mut count = 0;
         {
@@ -878,7 +883,7 @@ impl Database {
         new_file_path: &str,
         new_file_size: i64,
     ) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let now = current_timestamp();
         let new_name = Path::new(new_file_path)
             .file_name()
@@ -955,7 +960,7 @@ impl Database {
         dng_file_path: &str,
         dng_file_size: i64,
     ) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let now = current_timestamp();
         let dng_name = Path::new(dng_file_path)
             .file_name()
@@ -1455,8 +1460,8 @@ impl Database {
                 dest_file_path.clone()
             };
 
-            // Consolidate or transfer sidecars
-            if options.consolidate_sidecars {
+            // Read source sidecars before transferring master negative (in case convert_to_dng removes src_path)
+            let pre_read_consolidated_xmp = if options.consolidate_sidecars {
                 let mut xmp_data = xmp::io::read_xmp_file(&src_path).ok();
                 if xmp_data.is_none() {
                     for sib in &siblings {
@@ -1484,74 +1489,13 @@ impl Database {
                         xmp_data = Some(data);
                     }
                 }
-
-                if let Some(data) = xmp_data {
-                    let dst_xmp = dest_folder.join(format!("{}.xmp", src_path.file_stem().unwrap_or_default().to_string_lossy()));
-                    let xml_str = xmp::generate_xmp(&data);
-                    if let Err(e) = fs::write(&dst_xmp, xml_str) {
-                        error_messages.push(format!("Failed to write consolidated XMP for {}: {}", src_path.display(), e));
-                    } else {
-                        consolidated_sidecars += 1;
-                    }
-
-                    // If moving, clean up disparate source sidecars
-                    if options.move_files {
-                        let sidecars = [
-                            src_path.with_extension("xmp"),
-                            PathBuf::from(format!("{}.xmp", src_path_str)),
-                        ];
-                        for s in &sidecars {
-                            if s.exists() && s != &src_path {
-                                let _ = fs::remove_file(s);
-                            }
-                        }
-                        if let Some(json_path) = takeout::match_takeout_json(&src_path) {
-                            let _ = fs::remove_file(json_path);
-                        }
-                        // Clean up suppressed siblings and their sidecars
-                        for sib in &siblings {
-                            let _ = fs::remove_file(sib);
-                            let sib_str = sib.to_string_lossy().to_string();
-                            let sib_sidecars = [
-                                sib.with_extension("xmp"),
-                                PathBuf::from(format!("{}.xmp", sib_str)),
-                            ];
-                            for s in &sib_sidecars {
-                                if s.exists() && s != sib {
-                                    let _ = fs::remove_file(s);
-                                }
-                            }
-                            if let Some(json_path) = takeout::match_takeout_json(sib) {
-                                let _ = fs::remove_file(json_path);
-                            }
-                        }
-                    }
-                }
+                xmp_data
             } else {
-                let sidecar_candidates = [
-                    (src_path.with_extension("xmp"), dest_folder.join(format!("{}.xmp", src_path.file_stem().unwrap_or_default().to_string_lossy()))),
-                    (PathBuf::from(format!("{}.xmp", src_path_str)), dest_folder.join(format!("{}.xmp", file_name.to_string_lossy()))),
-                ];
-                for (src_s, dst_s) in sidecar_candidates {
-                    if src_s.exists() && src_s != src_path {
-                        let _ = fs::copy(&src_s, &dst_s);
-                        if options.move_files {
-                            let _ = fs::remove_file(&src_s);
-                        }
-                    }
-                }
-                if let Some(src_json) = takeout::match_takeout_json(&src_path) {
-                    if let Some(jname) = src_json.file_name() {
-                        let dst_json = dest_folder.join(jname);
-                        let _ = fs::copy(&src_json, &dst_json);
-                        if options.move_files {
-                            let _ = fs::remove_file(&src_json);
-                        }
-                    }
-                }
-            }
+                None
+            };
+            let pre_matched_takeout_json = takeout::match_takeout_json(&src_path);
 
-            // Transfer master negative
+            // Transfer master negative FIRST before writing destination sidecars or deleting source sidecars/siblings
             let is_convertible_raw = options.convert_to_dng
                 && is_raw_format(&src_path)
                 && src_path.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase()) != Some("dng".to_string());
@@ -1620,6 +1564,75 @@ impl Database {
                 (final_dest_file_path, src_size)
             };
 
+            // Consolidate or transfer sidecars AFTER master file transfer succeeded
+            if options.consolidate_sidecars {
+                if let Some(data) = pre_read_consolidated_xmp {
+                    let dst_xmp = actual_dest_path.with_extension("xmp");
+                    let xml_str = xmp::generate_xmp(&data);
+                    if let Err(e) = fs::write(&dst_xmp, xml_str) {
+                        error_messages.push(format!("Failed to write consolidated XMP for {}: {}", src_path.display(), e));
+                    } else {
+                        consolidated_sidecars += 1;
+                    }
+                }
+
+                // If moving, clean up disparate source sidecars and suppressed siblings now that master transfer succeeded
+                if options.move_files {
+                    let sidecars = [
+                        src_path.with_extension("xmp"),
+                        PathBuf::from(format!("{}.xmp", src_path_str)),
+                    ];
+                    for s in &sidecars {
+                        if s.exists() && s != &src_path {
+                            let _ = fs::remove_file(s);
+                        }
+                    }
+                    if let Some(ref json_path) = pre_matched_takeout_json {
+                        let _ = fs::remove_file(json_path);
+                    }
+                    for sib in &siblings {
+                        let _ = fs::remove_file(sib);
+                        let sib_str = sib.to_string_lossy().to_string();
+                        let sib_sidecars = [
+                            sib.with_extension("xmp"),
+                            PathBuf::from(format!("{}.xmp", sib_str)),
+                        ];
+                        for s in &sib_sidecars {
+                            if s.exists() && s != sib {
+                                let _ = fs::remove_file(s);
+                            }
+                        }
+                        if let Some(json_path) = takeout::match_takeout_json(sib) {
+                            let _ = fs::remove_file(json_path);
+                        }
+                    }
+                }
+            } else {
+                let dst_xmp = actual_dest_path.with_extension("xmp");
+                let dst_full_xmp = PathBuf::from(format!("{}.xmp", actual_dest_path.to_string_lossy()));
+                let sidecar_candidates = [
+                    (src_path.with_extension("xmp"), dst_xmp),
+                    (PathBuf::from(format!("{}.xmp", src_path_str)), dst_full_xmp),
+                ];
+                for (src_s, dst_s) in sidecar_candidates {
+                    if src_s.exists() && src_s != src_path {
+                        let _ = fs::copy(&src_s, &dst_s);
+                        if options.move_files {
+                            let _ = fs::remove_file(&src_s);
+                        }
+                    }
+                }
+                if let Some(src_json) = pre_matched_takeout_json {
+                    if let Some(jname) = src_json.file_name() {
+                        let dst_json = dest_folder.join(jname);
+                        let _ = fs::copy(&src_json, &dst_json);
+                        if options.move_files {
+                            let _ = fs::remove_file(&src_json);
+                        }
+                    }
+                }
+            }
+
             let actual_name_lower = actual_dest_path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
             dest_by_name_and_size.insert((actual_name_lower, actual_dest_size));
 
@@ -1675,7 +1688,7 @@ impl Database {
 
         // Atomic SQL transaction insert into destination catalog database
         if !records_to_insert.is_empty() {
-            let mut conn = dest_db.conn.lock().unwrap();
+            let mut conn = dest_db.conn.lock().unwrap_or_else(|e| e.into_inner());
             let tx = conn.transaction().map_err(|e| e.to_string())?;
             for record in &records_to_insert {
                 let mut stmt = tx.prepare_cached(

@@ -3,21 +3,6 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[derive(Default)]
-pub enum ColorProfileMode {
-    #[default]
-    AgxVivid,
-    AgxFilmic,
-    CameraStandard,
-    CameraPortrait,
-    CameraLandscape,
-    CameraVivid,
-    AgxPhotographic,
-}
-
-
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
 pub enum ExportColorSpace {
     #[default]
     Srgb,
@@ -244,7 +229,7 @@ pub enum EmulsionArchetype {
     AshigaraChrome50,      // E-6 Color Reversal (Minamiashigara, Japan)
     RochesterK14Chrome64,  // K-14 Non-Substantive Reversal (Rochester NY)
     RochesterCinema500,    // ECN-2 Tungsten Cinema Negative (Rochester NY)
-    RochesterDaylight200,  // [Deprecated/Merged into RochesterPortrait400]
+    RochesterDaylight200,  // C-41 Daylight Consumer Color Negative (Rochester NY)
     MobberleySilver400,    // Panchromatic Silver Halide B&W Negative (Mobberley, UK)
     CambridgeDiffusion100, // Instant Dye Diffusion Reversal (Cambridge MA)
     LeverkusenPortrait160, // Substantive Ochre/Pastel Color Negative (Leverkusen, DE)
@@ -279,8 +264,7 @@ impl EmulsionArchetype {
             2 => Self::AshigaraChrome50,
             3 => Self::RochesterK14Chrome64,
             4 => Self::RochesterCinema500,
-            // 5 was RochesterDaylight200, now merged into RochesterPortrait400 per spec
-            5 => Self::RochesterPortrait400,
+            5 => Self::RochesterDaylight200,
             6 => Self::MobberleySilver400,
             7 => Self::CambridgeDiffusion100,
             8 => Self::LeverkusenPortrait160,
@@ -309,6 +293,7 @@ impl EmulsionArchetype {
             Self::LiguriaCinema80 => (0.75, 0.65),         // ISO 80 High-silver cinema B&W
             Self::LeverkusenPortrait160 => (0.80, 0.70),   // RMS 10 (Fine color negative)
             Self::CambridgeDiffusion100 => (0.85, 0.50),   // Instant dye diffusion transfer (DDT)
+            Self::RochesterDaylight200 => (0.90, 0.75),    // RMS 11 (Fine ISO 200 daylight consumer color negative)
             Self::AshigaraPortrait400 => (0.95, 0.75),     // RMS 11 (Sigma-crystal 4th layer)
             Self::RochesterPortrait400 => (1.00, 0.80),    // RMS 11 (T-Grain tabular portrait)
             Self::BaodingSilver100 => (1.05, 1.00),        // RMS 14 (Cubic domestic silver)

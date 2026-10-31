@@ -701,42 +701,6 @@ impl DcpProfile {
         ]
     }
 
-    pub fn built_in_portrait_tone_curve() -> Vec<(f32, f32)> {
-        vec![
-            (0.00, 0.000),
-            (0.02, 0.010),
-            (0.05, 0.035),
-            (0.18, 0.185),
-            (0.50, 0.510),
-            (0.80, 0.820),
-            (1.00, 1.000),
-        ]
-    }
-
-    pub fn built_in_landscape_tone_curve() -> Vec<(f32, f32)> {
-        vec![
-            (0.00, 0.000),
-            (0.02, 0.006),
-            (0.05, 0.022),
-            (0.18, 0.200),
-            (0.50, 0.560),
-            (0.80, 0.860),
-            (1.00, 1.000),
-        ]
-    }
-
-    pub fn built_in_vivid_tone_curve() -> Vec<(f32, f32)> {
-        vec![
-            (0.00, 0.000),
-            (0.02, 0.004),
-            (0.05, 0.018),
-            (0.18, 0.210),
-            (0.50, 0.580),
-            (0.80, 0.880),
-            (1.00, 1.000),
-        ]
-    }
-
     // -----------------------------------------------------------------------
     // Built-in Camera-Matching HueSatMaps (Memory Color Enhancements)
     // -----------------------------------------------------------------------
@@ -749,39 +713,6 @@ impl DcpProfile {
         // 120 deg (Green/Foliage): slightly richer green
         deltas[4 * 2 + 0] = (1.5, 1.06, 0.99);
         deltas[4 * 2 + 1] = (2.0, 1.10, 0.98);
-        DcpHueSatMap::new(12, 2, 1, deltas)
-    }
-
-    pub fn built_in_portrait_huesatmap() -> DcpHueSatMap {
-        let mut deltas = vec![(0.0, 1.0, 1.0); 24];
-        // Red (0 deg)
-        deltas[0 * 2 + 0] = (1.5, 0.96, 1.02);
-        deltas[0 * 2 + 1] = (2.0, 0.94, 1.03);
-        // Orange (30 deg)
-        deltas[1 * 2 + 0] = (0.0, 0.96, 1.03);
-        deltas[1 * 2 + 1] = (0.0, 0.94, 1.04);
-        // Yellow (60 deg)
-        deltas[2 * 2 + 0] = (-1.5, 0.96, 1.02);
-        deltas[2 * 2 + 1] = (-2.0, 0.94, 1.03);
-        DcpHueSatMap::new(12, 2, 1, deltas)
-    }
-
-    pub fn built_in_landscape_huesatmap() -> DcpHueSatMap {
-        let mut deltas = vec![(0.0, 1.0, 1.0); 24];
-        // Green (120 deg)
-        deltas[4 * 2 + 0] = (2.5, 1.15, 0.97);
-        deltas[4 * 2 + 1] = (3.5, 1.22, 0.95);
-        // Sky blue (210 & 240 deg): rich natural azure sky saturation without cyan shift
-        deltas[7 * 2 + 0] = (0.0, 1.05, 1.00);
-        deltas[7 * 2 + 1] = (0.0, 1.05, 1.00);
-        deltas[8 * 2 + 0] = (0.0, 1.05, 1.00);
-        deltas[8 * 2 + 1] = (0.0, 1.05, 1.00);
-        DcpHueSatMap::new(12, 2, 1, deltas)
-    }
-
-    pub fn built_in_vivid_huesatmap() -> DcpHueSatMap {
-        let mut deltas = vec![(0.0, 1.15, 1.02); 24];
-        deltas[4 * 2 + 1] = (2.0, 1.25, 0.96);
         DcpHueSatMap::new(12, 2, 1, deltas)
     }
 

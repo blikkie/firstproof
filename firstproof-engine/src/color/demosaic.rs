@@ -366,7 +366,7 @@ pub fn rcd_archival_demosaic(
 /// Applies chromatic difference median filtering to eliminate Bayer demosaicing
 /// checkerboard moiré and false-color maze artifacts along subtle gradients.
 pub fn apply_chromatic_median_filter(
-    pixels: &mut Vec<[f32; 3]>,
+    pixels: &mut [[f32; 3]],
     width: usize,
     height: usize,
     passes: usize,
@@ -375,7 +375,7 @@ pub fn apply_chromatic_median_filter(
         return;
     }
 
-    let mut src = std::mem::take(pixels);
+    let mut src = pixels.to_vec();
     let mut dst = src.clone();
 
     for _ in 0..passes {
@@ -432,5 +432,5 @@ pub fn apply_chromatic_median_filter(
         std::mem::swap(&mut src, &mut dst);
     }
 
-    *pixels = src;
+    pixels[..width * height].copy_from_slice(&src[..width * height]);
 }

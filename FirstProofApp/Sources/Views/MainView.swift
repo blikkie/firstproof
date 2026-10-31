@@ -203,6 +203,16 @@ struct MainView: View {
                 }
                 return event
             }
+            if viewModel.isDngConversionSheetPresented {
+                if event.keyCode == 53 && event.type == .keyDown {
+                    viewModel.isDngConversionSheetPresented = false
+                    return nil
+                }
+                return event
+            }
+            if NSApp.keyWindow?.sheetParent != nil || NSApp.keyWindow?.attachedSheet != nil {
+                return event
+            }
             
             // Allow system commands (Cmd+A, Cmd+E, Cmd+W, etc.) to pass through
             if event.modifierFlags.contains(.command) {

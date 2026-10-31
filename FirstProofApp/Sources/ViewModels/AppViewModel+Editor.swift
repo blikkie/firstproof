@@ -31,7 +31,6 @@ extension AppViewModel {
             rotation: Int32(self.rotationDegrees),
             flipHorizontal: self.flipHorizontal,
             flipVertical: self.flipVertical,
-            toneProfile: self.toneProfile,
             lutName: self.selectedLutName,
             lutIntensity: self.lutIntensity,
             sharpeningAmount: self.sharpeningAmount,
@@ -67,16 +66,9 @@ extension AppViewModel {
 
 extension EditSettings {
     /// Gracefully migrates legacy/retired closed-domain camera profiles to First Proof's
-    /// open-domain AgX Vivid filmic tone profile.
+    /// open-domain AgX filmic tone mapper.
     public var migratingLegacyProfiles: EditSettings {
-        var copy = self
-        if copy.toneProfile == .cameraStandard ||
-           copy.toneProfile == .cameraPortrait ||
-           copy.toneProfile == .cameraLandscape ||
-           copy.toneProfile == .cameraVivid {
-            copy.toneProfile = .agxVivid
-        }
-        return copy
+        return self
     }
 
     public static var defaultIdentity: EditSettings {
@@ -104,7 +96,6 @@ extension EditSettings {
             rotation: 0,
             flipHorizontal: false,
             flipVertical: false,
-            toneProfile: .agxVivid,
             lutName: nil,
             lutIntensity: 1.0,
             sharpeningAmount: 0.0,
@@ -164,7 +155,6 @@ extension AppViewModel {
         self.rotationDegrees = Int(edits.rotation)
         self.flipHorizontal = edits.flipHorizontal
         self.flipVertical = edits.flipVertical
-        self.toneProfile = edits.toneProfile
         self.selectedLutName = edits.lutName
         self.lutIntensity = edits.lutIntensity
         self.sharpeningAmount = edits.sharpeningAmount
@@ -216,7 +206,12 @@ extension AppViewModel {
     }
     
     public var hasCustomEdits: Bool {
-        editsHasModifications(edits: currentEdits, asShotTemp: asShotTemperature, asShotTint: asShotTint)
+        editsHasModifications(
+            edits: currentEdits,
+            asShotTemp: asShotTemperature,
+            asShotTint: asShotTint,
+            exifRotation: defaultExifRotation
+        )
     }
     
     // MARK: - Undo/Redo & Coalesced Scrubbing
@@ -312,12 +307,12 @@ extension AppViewModel {
                 title = "Split Balance (\(splitToningBalance >= 0 ? "+" : "")\(Int(splitToningBalance)))"
             case .printPaperGrade:
                 title = "Paper Grade (\(String(format: "%+.1f", printPaperGrade)))"
-            case .printBaseWarmth:
-                title = "Base Warmth (\(printBaseWarmth >= 0 ? "+" : "")\(Int(printBaseWarmth)))"
             case .printProcessDepth:
                 title = "Process Depth (\(Int(printProcessDepth))%)"
             case .defringeAmount:
                 title = "Defringe (\(Int(defringeAmount)))"
+            case .emulsionExposure:
+                title = "Push / Pull EV (\(emulsionExposure >= 0 ? "+" : "")\(String(format: "%.2f", emulsionExposure)) EV)"
             }
             endSliderScrub(actionName: title)
         }
@@ -508,21 +503,12 @@ extension AppViewModel {
         let currentPhotoAspect: CGFloat = (currentW / max(currentH, 0.001)) * originalAspect
         let isPortrait = (currentW >= 0.99 && currentH >= 0.99) ? (origW < origH) : (currentPhotoAspect < 1.0)
         
-        let targetAspect: CGFloat
-        switch preset {
-        case .original:
-            targetAspect = originalAspect
-        case .square:
-            targetAspect = 1.0
-        case .fourThree:
-            targetAspect = isPortrait ? (3.0 / 4.0) : (4.0 / 3.0)
-        case .threeTwo:
-            targetAspect = isPortrait ? (2.0 / 3.0) : (3.0 / 2.0)
-        case .sixteenNine:
-            targetAspect = isPortrait ? (9.0 / 16.0) : (16.0 / 9.0)
-        case .freeform:
-            return
-        }
+        guard let targetRatio = calculateTargetCropRatio(
+            preset: preset,
+            imageAspect: Float(originalAspect),
+            isPortrait: isPortrait
+        ) else { return }
+        let targetAspect = CGFloat(targetRatio)
         
         let rCurr: CGFloat = currentPhotoAspect / originalAspect
         let maxWCurr: CGFloat = (rCurr >= 1.0) ? 1.0 : rCurr
@@ -530,25 +516,11 @@ extension AppViewModel {
         let rawScale: CGFloat = min(currentW / max(maxWCurr, 0.001), currentH / max(maxHCurr, 0.001), 1.0)
         let scale: CGFloat = (rawScale > 0.995) ? 1.0 : rawScale
         
-        let rTarget: CGFloat = targetAspect / originalAspect
-        let maxWTarget: CGFloat = (rTarget >= 1.0) ? 1.0 : rTarget
-        let maxHTarget: CGFloat = (rTarget >= 1.0) ? (1.0 / max(rTarget, 0.001)) : 1.0
-        
-        let newW: CGFloat = min(scale * maxWTarget, 1.0)
-        let newH: CGFloat = min(scale * maxHTarget, 1.0)
-        
-        let newLeft = max(center.x - newW / 2.0, 0.0)
-        let newRight = min(newLeft + newW, 1.0)
-        let finalLeft = max(newRight - newW, 0.0)
-        
-        let newTop = max(center.y - newH / 2.0, 0.0)
-        let newBottom = min(newTop + newH, 1.0)
-        let finalTop = max(newBottom - newH, 0.0)
-        
-        self.cropLeft = Float(finalLeft)
-        self.cropTop = Float(finalTop)
-        self.cropRight = Float(newRight)
-        self.cropBottom = Float(newBottom)
+        let box = fitCropBox(center: center, scale: scale, targetAspect: targetAspect, originalAspect: originalAspect)
+        self.cropLeft = box.left
+        self.cropTop = box.top
+        self.cropRight = box.right
+        self.cropBottom = box.bottom
         registerDiscreteEdit(title: "Aspect Ratio (\(preset.rawValue))", before: before)
         notifyThumbnailChanged()
     }
@@ -565,17 +537,30 @@ extension AppViewModel {
         let origH: CGFloat = isOrthogonal ? dims.width : dims.height
         let originalAspect: CGFloat = origW / max(origH, 1.0)
         
-        // 1. Current physical aspect ratio and normalized ratio R_curr
         let currentPhotoAspect: CGFloat = (currentW / max(currentH, 0.001)) * originalAspect
-        let rCurr: CGFloat = currentPhotoAspect / originalAspect // == currentW / currentH
+        let rCurr: CGFloat = currentPhotoAspect / originalAspect
         let maxWCurr: CGFloat = (rCurr >= 1.0) ? 1.0 : rCurr
         let maxHCurr: CGFloat = (rCurr >= 1.0) ? (1.0 / max(rCurr, 0.001)) : 1.0
         let rawScale: CGFloat = min(currentW / max(maxWCurr, 0.001), currentH / max(maxHCurr, 0.001), 1.0)
         let scale: CGFloat = (rawScale > 0.995) ? 1.0 : rawScale
         
-        // 2. Inverted target physical aspect ratio and normalized ratio R_target
         let targetPhotoAspect: CGFloat = 1.0 / max(currentPhotoAspect, 0.001)
-        let rTarget: CGFloat = targetPhotoAspect / originalAspect
+        let box = fitCropBox(center: center, scale: scale, targetAspect: targetPhotoAspect, originalAspect: originalAspect)
+        self.cropLeft = box.left
+        self.cropTop = box.top
+        self.cropRight = box.right
+        self.cropBottom = box.bottom
+        registerDiscreteEdit(title: "Flip Aspect Ratio", before: before)
+        notifyThumbnailChanged()
+    }
+    
+    private func fitCropBox(
+        center: CGPoint,
+        scale: CGFloat,
+        targetAspect: CGFloat,
+        originalAspect: CGFloat
+    ) -> (left: Float, top: Float, right: Float, bottom: Float) {
+        let rTarget: CGFloat = targetAspect / originalAspect
         let maxWTarget: CGFloat = (rTarget >= 1.0) ? 1.0 : rTarget
         let maxHTarget: CGFloat = (rTarget >= 1.0) ? (1.0 / max(rTarget, 0.001)) : 1.0
         
@@ -590,12 +575,7 @@ extension AppViewModel {
         let newBottom = min(newTop + newH, 1.0)
         let finalTop = max(newBottom - newH, 0.0)
         
-        self.cropLeft = Float(finalLeft)
-        self.cropTop = Float(finalTop)
-        self.cropRight = Float(newRight)
-        self.cropBottom = Float(newBottom)
-        registerDiscreteEdit(title: "Flip Aspect Ratio", before: before)
-        notifyThumbnailChanged()
+        return (Float(finalLeft), Float(finalTop), Float(newRight), Float(newBottom))
     }
     
     public func resetCrop() {
@@ -801,9 +781,9 @@ extension AppViewModel {
         case .grainScale:
             grainScale = defaultGrainScale
         case .grainSize:
-            grainSize = defaultGrainSize
+            grainSize = emulsionArchetype != .none ? emulsionArchetype.calibratedGrainDefaults.size : defaultGrainSize
         case .grainAmount:
-            grainAmount = defaultGrainAmount
+            grainAmount = emulsionArchetype != .none ? emulsionArchetype.calibratedGrainDefaults.amount : defaultGrainAmount
         case .temperature:
             temperature = asShotTemperature
         case .tint:
@@ -816,16 +796,12 @@ extension AppViewModel {
             perspectiveHorizontal = 0.0
         case .lutIntensity:
             lutIntensity = defaultLookLutIntensity
-        case .splitToningShadowHue:
+        case .splitToningShadowHue, .splitToningShadowSat:
             splitToningShadowHue = 215.0
-            selectedSplitToningPresetId = nil
-        case .splitToningShadowSat:
             splitToningShadowSat = 0.0
             selectedSplitToningPresetId = nil
-        case .splitToningHighlightHue:
+        case .splitToningHighlightHue, .splitToningHighlightSat:
             splitToningHighlightHue = 45.0
-            selectedSplitToningPresetId = nil
-        case .splitToningHighlightSat:
             splitToningHighlightSat = 0.0
             selectedSplitToningPresetId = nil
         case .splitToningBalance:
@@ -833,14 +809,30 @@ extension AppViewModel {
             selectedSplitToningPresetId = nil
         case .printPaperGrade:
             printPaperGrade = 0.0
-        case .printBaseWarmth:
-            printBaseWarmth = 0.0
         case .printProcessDepth:
             printProcessDepth = 100.0
         case .defringeAmount:
             defringeAmount = 0.0
+        case .emulsionExposure:
+            emulsionExposure = 0.0
         }
         registerDiscreteEdit(title: "Reset \(type.displayName)", before: before)
+    }
+    
+    public func resetSplitToningShadows() {
+        let before = currentEdits
+        splitToningShadowHue = 215.0
+        splitToningShadowSat = 0.0
+        selectedSplitToningPresetId = nil
+        registerDiscreteEdit(title: "Reset Shadow Tone", before: before)
+    }
+    
+    public func resetSplitToningHighlights() {
+        let before = currentEdits
+        splitToningHighlightHue = 45.0
+        splitToningHighlightSat = 0.0
+        selectedSplitToningPresetId = nil
+        registerDiscreteEdit(title: "Reset Highlight Tone", before: before)
     }
     
     public func applySplitToningPreset(_ preset: SplitToningPreset?) {
@@ -902,7 +894,6 @@ extension AppViewModel {
         remjetBacking = .intact
         flipHorizontal = defaultExifFlipH
         flipVertical = defaultExifFlipV
-        toneProfile = .agxVivid
         if let defaultLut = defaultLookLutName, !defaultLut.isEmpty {
             selectedLutName = defaultLut
             lutIntensity = defaultLookLutIntensity
@@ -1043,24 +1034,6 @@ extension AppViewModel {
         }
     }
     
-    public func setToneProfile(_ profile: ColorProfileMode) {
-        guard self.toneProfile != profile else { return }
-        let before = currentEdits
-        self.toneProfile = profile
-        let title: String
-        switch profile {
-        case .agxVivid: title = "Tone Profile: AgX Vivid"
-        case .agxFilmic: title = "Tone Profile: AgX Neutral"
-        case .cameraStandard: title = "Tone Profile: Camera Standard"
-        case .cameraPortrait: title = "Tone Profile: Camera Portrait"
-        case .cameraLandscape: title = "Tone Profile: Camera Landscape"
-        case .cameraVivid: title = "Tone Profile: Camera Vivid"
-        case .agxPhotographic: title = "Tone Profile: AgX Photographic"
-        }
-        registerDiscreteEdit(title: title, before: before)
-        notifyThumbnailChanged()
-    }
-    
     public func setSelectedLutName(_ name: String?) {
         guard self.selectedLutName != name else { return }
         let before = currentEdits
@@ -1179,6 +1152,9 @@ extension AppViewModel {
             if self.emulsionGrainMode == .off {
                 self.emulsionGrainMode = .seedFromSensor
             }
+            let defaults = archetype.calibratedGrainDefaults
+            self.grainSize = defaults.size
+            self.grainAmount = defaults.amount
         } else {
             self.emulsionGrainMode = .off
         }
@@ -1276,4 +1252,47 @@ extension AppViewModel {
         registerDiscreteEdit(title: "Reset Film Emulsion", before: before)
         notifyThumbnailChanged()
     }
+}
+
+// MARK: - Emulsion Archetype Grain Defaults
+extension EmulsionArchetype {
+    /// Returns the science-calibrated default `(grainSize, grainAmount)` for this emulsion archetype,
+    /// derived from published ANSI/ISO 10505 diffuse RMS granularity measurements at D = 1.0.
+    public var calibratedGrainDefaults: (size: Float, amount: Float) {
+        switch self {
+        case .ashigaraChrome50: return (0.55, 0.45)
+        case .rochesterK14Chrome64: return (0.70, 0.60)
+        case .liguriaCinema80: return (0.75, 0.65)
+        case .leverkusenPortrait160: return (0.80, 0.70)
+        case .cambridgeDiffusion100: return (0.85, 0.50)
+        case .rochesterDaylight200: return (0.90, 0.75)
+        case .ashigaraPortrait400: return (0.95, 0.75)
+        case .rochesterPortrait400: return (1.00, 0.80)
+        case .baodingSilver100: return (1.05, 1.00)
+        case .rochesterCinema500: return (1.25, 1.10)
+        case .mobberleySilver400: return (1.35, 1.20)
+        default: return (1.00, 1.00)
+        }
+    }
+}
+
+/// Checks whether an EditSettings instance differs from default/as-shot settings,
+/// taking baseline EXIF orientation into account so user rotation to 0° on portrait
+/// photos is correctly detected as a custom modification.
+public func editsHasModifications(
+    edits: EditSettings,
+    asShotTemp: Float?,
+    asShotTint: Float?,
+    exifRotation: Int = 0
+) -> Bool {
+    if edits.rotation != Int32(exifRotation) {
+        return true
+    }
+    var normalized = edits
+    normalized.rotation = 0
+    return FirstProofBridge.editsHasModifications(
+        edits: normalized,
+        asShotTemp: asShotTemp,
+        asShotTint: asShotTint
+    )
 }

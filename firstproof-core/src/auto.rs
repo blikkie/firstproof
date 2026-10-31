@@ -3,7 +3,6 @@
 //! Analyzes scene-referred linear Rec.2020 image luminance distributions to compute
 //! conservative, aesthetically pleasing exposure compensation (EV) and contrast adjustments.
 
-use crate::export::f16_to_f32;
 use crate::{calculate_white_balance_from_sample, WhiteBalanceResult};
 use std::path::Path;
 
@@ -43,54 +42,10 @@ pub fn compute_auto_white_balance_from_f16_buffer(
     height: u32,
     data: &[u8],
 ) -> WhiteBalanceResult {
-    let pixel_count = (width * height) as usize;
-    if pixel_count == 0 || data.len() < pixel_count * 8 {
-        return WhiteBalanceResult {
-            temperature: 5500.0,
-            tint: 0.0,
-        };
-    }
-
-    let step = (pixel_count / 10_000).max(1);
-    let mut r_sum = 0.0f64;
-    let mut g_sum = 0.0f64;
-    let mut b_sum = 0.0f64;
-    let mut wb_count = 0usize;
-
-    for i in (0..pixel_count).step_by(step) {
-        let offset = i * 8;
-        if offset + 6 > data.len() {
-            break;
-        }
-        let r_u16 = u16::from_le_bytes([data[offset], data[offset + 1]]);
-        let g_u16 = u16::from_le_bytes([data[offset + 2], data[offset + 3]]);
-        let b_u16 = u16::from_le_bytes([data[offset + 4], data[offset + 5]]);
-
-        let r = f16_to_f32(r_u16);
-        let g = f16_to_f32(g_u16);
-        let b = f16_to_f32(b_u16);
-
-        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
-        if (0.02..=0.85).contains(&y) && r > 0.0 && g > 0.0 && b > 0.0 {
-            r_sum += r as f64;
-            g_sum += g as f64;
-            b_sum += b as f64;
-            wb_count += 1;
-        }
-    }
-
-    if wb_count > 0 {
-        calculate_white_balance_from_sample(
-            (r_sum / wb_count as f64) as f32,
-            (g_sum / wb_count as f64) as f32,
-            (b_sum / wb_count as f64) as f32,
-        )
-    } else {
-        WhiteBalanceResult {
-            temperature: 5500.0,
-            tint: 0.0,
-        }
+    let res = firstproof_engine::auto::compute_auto_white_balance_from_f16_buffer(width, height, data);
+    WhiteBalanceResult {
+        temperature: res.temperature,
+        tint: res.tint,
     }
 }
 
@@ -114,7 +69,7 @@ pub fn compute_auto_adjustments_from_path<P: AsRef<Path>>(path: P) -> Option<Aut
         let g = demosaiced.data[offset + 1];
         let b = demosaiced.data[offset + 2];
 
-        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        let y = 0.2627 * r + 0.6780 * g + 0.0593 * b;
         lums.push(y.max(0.0));
     }
 
@@ -144,7 +99,7 @@ pub fn compute_auto_white_balance_from_path<P: AsRef<Path>>(path: P) -> Option<W
         let g = demosaiced.data[offset + 1];
         let b = demosaiced.data[offset + 2];
 
-        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        let y = 0.2627 * r + 0.6780 * g + 0.0593 * b;
 
         if (0.02..=0.85).contains(&y) && r > 0.0 && g > 0.0 && b > 0.0 {
             r_sum += r as f64;

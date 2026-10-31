@@ -17,39 +17,7 @@ pub struct AutoWhiteBalanceResult {
     pub tint: f32,        // -200.0 .. +200.0
 }
 
-/// Convert IEEE 754 half-precision float (u16) to single-precision float (f32).
-#[inline]
-pub fn f16_to_f32(h: u16) -> f32 {
-    let sign = ((h >> 15) & 1) as u32;
-    let exp = ((h >> 10) & 0x1f) as u32;
-    let mant = (h & 0x3ff) as u32;
-
-    if exp == 0 {
-        if mant == 0 {
-            f32::from_bits(sign << 31)
-        } else {
-            let mut m = mant << 1;
-            let mut e = 0;
-            while (m & 0x400) == 0 {
-                m <<= 1;
-                e += 1;
-            }
-            let exp_f32 = 127 - 15 - e;
-            let mant_f32 = (m & 0x3ff) << 13;
-            f32::from_bits((sign << 31) | (exp_f32 << 23) | mant_f32)
-        }
-    } else if exp == 31 {
-        if mant == 0 {
-            f32::from_bits((sign << 31) | (0xff << 23))
-        } else {
-            f32::from_bits((sign << 31) | (0xff << 23) | (mant << 13))
-        }
-    } else {
-        let exp_f32 = exp + (127 - 15);
-        let mant_f32 = mant << 13;
-        f32::from_bits((sign << 31) | (exp_f32 << 23) | mant_f32)
-    }
-}
+pub use crate::raw::f16_to_f32;
 
 /// Computes conservative auto adjustments from an array of linear Rec.2020 luminance samples.
 pub fn compute_auto_adjustments_from_luminances(mut lums: Vec<f32>) -> AutoAdjustments {
@@ -163,7 +131,7 @@ pub fn compute_auto_adjustments_from_f16_buffer(
         let g = f16_to_f32(g_u16);
         let b = f16_to_f32(b_u16);
 
-        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        let y = 0.2627 * r + 0.6780 * g + 0.0593 * b;
         lums.push(y.max(0.0));
     }
 
@@ -196,7 +164,7 @@ pub fn compute_auto_adjustments_from_u16_slice(
         let g = f16_to_f32(data[offset + 1]);
         let b = f16_to_f32(data[offset + 2]);
 
-        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        let y = 0.2627 * r + 0.6780 * g + 0.0593 * b;
         lums.push(y.max(0.0));
     }
 
@@ -232,7 +200,7 @@ pub fn compute_auto_white_balance_from_u16_slice(
         let g = f16_to_f32(data[offset + 1]);
         let b = f16_to_f32(data[offset + 2]);
 
-        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        let y = 0.2627 * r + 0.6780 * g + 0.0593 * b;
         // Filter out extreme highlights (>0.85) and deep shadow noise (<0.02)
         if (0.02..=0.85).contains(&y) && r > 0.0 && g > 0.0 && b > 0.0 {
             r_sum += r as f64;
@@ -255,33 +223,85 @@ pub fn compute_auto_white_balance_from_u16_slice(
     }
 }
 
+/// Computes standalone Gray-World white balance from a 16-bit half-float RGBA byte buffer in Linear Rec.2020 space.
+pub fn compute_auto_white_balance_from_f16_buffer(
+    width: u32,
+    height: u32,
+    data: &[u8],
+) -> AutoWhiteBalanceResult {
+    let pixel_count = (width * height) as usize;
+    if pixel_count == 0 || data.len() < pixel_count * 8 {
+        return AutoWhiteBalanceResult {
+            temperature: 5500.0,
+            tint: 0.0,
+        };
+    }
+
+    let step = (pixel_count / 10_000).max(1);
+    let mut r_sum = 0.0f64;
+    let mut g_sum = 0.0f64;
+    let mut b_sum = 0.0f64;
+    let mut wb_count = 0usize;
+
+    for i in (0..pixel_count).step_by(step) {
+        let offset = i * 8;
+        if offset + 6 > data.len() {
+            break;
+        }
+        let r_u16 = u16::from_le_bytes([data[offset], data[offset + 1]]);
+        let g_u16 = u16::from_le_bytes([data[offset + 2], data[offset + 3]]);
+        let b_u16 = u16::from_le_bytes([data[offset + 4], data[offset + 5]]);
+
+        let r = f16_to_f32(r_u16);
+        let g = f16_to_f32(g_u16);
+        let b = f16_to_f32(b_u16);
+
+        let y = 0.2627 * r + 0.6780 * g + 0.0593 * b;
+
+        if (0.02..=0.85).contains(&y) && r > 0.0 && g > 0.0 && b > 0.0 {
+            r_sum += r as f64;
+            g_sum += g as f64;
+            b_sum += b as f64;
+            wb_count += 1;
+        }
+    }
+
+    if wb_count > 0 {
+        calculate_white_balance_from_sample(
+            (r_sum / wb_count as f64) as f32,
+            (g_sum / wb_count as f64) as f32,
+            (b_sum / wb_count as f64) as f32,
+        )
+    } else {
+        AutoWhiteBalanceResult {
+            temperature: 5500.0,
+            tint: 0.0,
+        }
+    }
+}
+
 /// Computes White Balance (Kelvin & Tint) from an averaged RGB reflectance sample in Linear Rec.2020.
 pub fn calculate_white_balance_from_sample(r: f32, g: f32, b: f32) -> AutoWhiteBalanceResult {
-    let r = r.max(1e-4);
-    let g = g.max(1e-4);
-    let b = b.max(1e-4);
+    if r <= 1e-5 || g <= 1e-5 || b <= 1e-5 {
+        return AutoWhiteBalanceResult {
+            temperature: 5500.0,
+            tint: 0.0,
+        };
+    }
 
-    // Target is neutral D65 white point in Rec.2020 (R = G = B)
-    // Multipliers needed to bring the sample to neutral:
-    // WB_R = G / R, WB_B = G / B
-    let ratio_r = g / r;
-    let ratio_b = g / b;
+    let temp_ratio = (b / r).max(1e-4);
+    let temp_norm = temp_ratio.powf(2.0 / 3.0);
+    let target_temp = (5500.0 * temp_norm).clamp(2000.0, 20000.0);
 
-    // Rec.2020 / D65 correlated color temperature empirical Planckian inversion:
-    // When blue dominates (ratio_b < 1.0), scene is cool -> raise temperature
-    // When red dominates (ratio_r < 1.0), scene is warm -> lower temperature
-    let log_rb = (ratio_r / ratio_b).ln();
-    let temp = 5500.0 * (-0.72 * log_rb).exp();
-    let clamped_temp = temp.clamp(2000.0, 20000.0);
+    let r_scaled = r * temp_norm.powf(0.75);
+    let b_scaled = b * (1.0 / temp_norm).powf(0.75);
+    let rb_avg = (r_scaled + b_scaled) * 0.5;
 
-    // Tint represents Green-Magenta axis deviation from the Planckian blackbody locus
-    // Expected G for blackbody at this balance is approximately sqrt(R * B)
-    let expected_g = (r * b).sqrt();
-    let tint_raw = (expected_g - g) / g.max(1e-3) * 100.0;
-    let clamped_tint = tint_raw.clamp(-200.0, 200.0);
+    let tint_factor = 1.0 - (rb_avg / g.max(1e-4));
+    let target_tint = (tint_factor / 0.002).clamp(-200.0, 200.0);
 
     AutoWhiteBalanceResult {
-        temperature: (clamped_temp / 50.0).round() * 50.0,
-        tint: clamped_tint.round(),
+        temperature: (target_temp / 50.0).round() * 50.0,
+        tint: target_tint.round(),
     }
 }

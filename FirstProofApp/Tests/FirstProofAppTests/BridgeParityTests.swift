@@ -32,9 +32,6 @@ struct BridgeParityTests {
         #expect(!edits.flipHorizontal)
         #expect(!edits.flipVertical)
         
-        // Tone profile default
-        #expect(edits.toneProfile == ColorProfileMode.agxVivid)
-        
         // Optics defaults
         #expect(!edits.lensCorrectionEnabled)
         #expect(edits.tcaCorrectionEnabled)

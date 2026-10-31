@@ -223,8 +223,11 @@ extension AppViewModel {
                 do {
                     let retryDb = try FirstProofDatabase.open(dbPath: catalogPath)
                     self.db = retryDb
-                    _ = retryDb.indexFolder(folderPath: folderPath)
-                    let freshPhotos = retryDb.getAllPhotos()
+                    let freshPhotos = await Task.detached(priority: .userInitiated) { () -> [PhotoRecord] in
+                        _ = retryDb.indexFolder(folderPath: folderPath)
+                        return retryDb.getAllPhotos()
+                    }.value
+                    guard !Task.isCancelled else { return }
                     self.photos = freshPhotos
                     self.isScanning = false
                     self.scanningStatusMessage = nil
@@ -306,10 +309,6 @@ extension AppViewModel {
         applyDisplayFilters()
     }
     
-    public func rebuildMasterPhotosCache() {
-        rebuildOriginalPhotosCache()
-    }
-
     public func applyDisplayFilters() {
         if ratingFilter == nil && statusFilter == nil {
             self.filteredPhotos = self.cachedOriginalPhotos
@@ -327,14 +326,14 @@ extension AppViewModel {
     }
 
     public func updateFilteredPhotos() {
-        rebuildMasterPhotosCache()
+        rebuildOriginalPhotosCache()
     }
 
     public func toggleHideDerivativeClones() {
         let currentSelected = selectedPhoto
         hideDerivativeClones.toggle()
         if let folder = currentFolderPath {
-            UserDefaults.standard.set(hideDerivativeClones, forKey: "mastersOnly_\(folder)")
+            UserDefaults.standard.set(hideDerivativeClones, forKey: "originalsOnly_\(folder)")
         }
         
         // If currentSelected was a derivative clone that is now hidden,

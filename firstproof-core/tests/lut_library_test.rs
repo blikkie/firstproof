@@ -106,7 +106,6 @@ fn test_export_pipeline_resolves_global_lut_by_title() {
     img.save(&tmp_in).unwrap();
 
     let edits = firstproof_core::EditSettings {
-        tone_profile: firstproof_core::ColorProfileMode::AgxVivid,
         lut_name: Some("Global Monochrome".to_string()),
         lut_intensity: 1.0,
         ..Default::default()

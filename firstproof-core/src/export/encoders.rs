@@ -8,7 +8,10 @@ use image::codecs::tiff::TiffEncoder;
 use crate::{DemosaicQuality, EditSettings, ExportColorSpace, ExportRenderingIntent, LensCorrectionCoefficientsRecord, RenderTier};
 use crate::color::linear_to_srgb_gamma;
 use super::decode::{decode_image_with_quality, sample_bilinear};
-use super::pipeline::{apply_detail_and_sharpening_rgb, apply_edits_with_tier};
+use super::pipeline::{
+    apply_detail_and_sharpening_rgb, apply_scene_referred_edits_with_tier,
+    apply_terminal_tone_map_and_print_media,
+};
 use super::icc::{create_display_p3_profile, inject_icc_profile_into_jpeg};
 
 /// Exports an edited photo to JPEG or true 16-bit TIFF on disk with default standard demosaicing.
@@ -56,7 +59,12 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     let output_path = output_path.as_ref();
     
     let mut image = decode_image_with_quality(input_path, demosaic_quality)?;
-    apply_edits_with_tier(&mut image, edits, render_tier);
+    apply_scene_referred_edits_with_tier(&mut image, edits, lens_coeffs, render_tier);
+    let contrast_gain = if edits.contrast >= 0.0 {
+        1.0 + (edits.contrast / 100.0)
+    } else {
+        1.0 + (edits.contrast / 100.0) * 0.60
+    };
     
     let orig_width = image.width as u32;
     let orig_height = image.height as u32;
@@ -138,20 +146,6 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
         }
     } else {
         (false, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0)
-    };
-
-    let (has_vignetting, vig_k1, vig_k2, vig_k3, vig_k4) = if let Some(c) = lens_coeffs {
-        if edits.vignetting_correction_enabled && c.has_vignetting {
-            let k1 = c.vignetting.first().copied().unwrap_or(0.0);
-            let k2 = c.vignetting.get(1).copied().unwrap_or(0.0);
-            let k3 = c.vignetting.get(2).copied().unwrap_or(0.0);
-            let k4 = c.vignetting.get(3).copied().unwrap_or(0.0);
-            (true, k1, k2, k3, k4)
-        } else {
-            (false, 0.0, 0.0, 0.0, 0.0)
-        }
-    } else {
-        (false, 0.0, 0.0, 0.0, 0.0)
     };
 
     let mut auto_crop_scale = 1.0f32;
@@ -261,7 +255,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
             let sx = (geom_x / (2.0 * aspect_ratio) + 0.5) * (orig_width as f32);
             let sy = (geom_y / 2.0 + 0.5) * (orig_height as f32);
             
-            let (mut r_lin, mut g_lin, mut b_lin) = if has_tca {
+            let (mut r_rec2020, mut g_rec2020, mut b_rec2020) = if has_tca {
                 let r2 = geom_x * geom_x + geom_y * geom_y;
                 let r4 = r2 * r2;
                 let scale_r = tca_vr + tca_br * r2 + tca_cr * r4;
@@ -283,34 +277,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
                 sample_bilinear(&image, sx, sy)
             };
 
-            // 2b. Lens Vignetting Radial Illumination Gain
-            if has_vignetting {
-                let u_orig = sx / (orig_width as f32).max(1.0);
-                let v_orig = sy / (orig_height as f32).max(1.0);
-                let xc = (u_orig - 0.5) * 2.0 * aspect_ratio;
-                let yc = (v_orig - 0.5) * 2.0;
-                let r2 = (xc * xc + yc * yc) / (aspect_ratio * aspect_ratio + 1.0);
-                let r4 = r2 * r2;
-                let r6 = r4 * r2;
-                let r8 = r4 * r4;
-                let poly = 1.0 + vig_k1 * r2 + vig_k2 * r4 + vig_k3 * r6 + vig_k4 * r8;
-                let vig_gain = if poly < 1.0 { 1.0 / poly.max(0.05) } else { poly };
-                r_lin *= vig_gain;
-                g_lin *= vig_gain;
-                b_lin *= vig_gain;
-            }
-
-            // 3. 3D Look-Up Table (display-referred linear stage post-tone-mapping)
-            if let Some(ref lut) = active_lut {
-                if lut_intensity > 0.0 {
-                    let lut_out = lut.interpolate_tetrahedral([r_lin, g_lin, b_lin]);
-                    r_lin = r_lin * (1.0 - lut_intensity) + lut_out[0] * lut_intensity;
-                    g_lin = g_lin * (1.0 - lut_intensity) + lut_out[1] * lut_intensity;
-                    b_lin = b_lin * (1.0 - lut_intensity) + lut_out[2] * lut_intensity;
-                }
-            }
-
-            // 3a. Longitudinal / Axial Purple Defringing
+            // 3a. Longitudinal / Axial Purple Defringing in Wide-Gamut Linear Rec.2020
             if edits.defringe_amount > 0.0 {
                 let (rl, gl, bl) = sample_bilinear(&image, sx - 1.0, sy);
                 let (rr, gr, br) = sample_bilinear(&image, sx + 1.0, sy);
@@ -320,7 +287,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
                 let (rtr, gtr, btr) = sample_bilinear(&image, sx + 1.0, sy - 1.0);
                 let (rbl, gbl, bbl) = sample_bilinear(&image, sx - 1.0, sy + 1.0);
                 let (rbr, gbr, bbr) = sample_bilinear(&image, sx + 1.0, sy + 1.0);
-                let y_c = 0.2627 * r_lin + 0.6780 * g_lin + 0.0593 * b_lin;
+                let y_c = 0.2627 * r_rec2020 + 0.6780 * g_rec2020 + 0.0593 * b_rec2020;
                 let y_l = 0.2627 * rl + 0.6780 * gl + 0.0593 * bl;
                 let y_r = 0.2627 * rr + 0.6780 * gr + 0.0593 * br;
                 let y_t = 0.2627 * rt + 0.6780 * gt + 0.0593 * bt;
@@ -330,13 +297,13 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
                 let y_bl = 0.2627 * rbl + 0.6780 * gbl + 0.0593 * bbl;
                 let y_br = 0.2627 * rbr + 0.6780 * gbr + 0.0593 * bbr;
                 let y_max_neighbor = y_l.max(y_r).max(y_t).max(y_b).max(y_tl).max(y_tr).max(y_bl).max(y_br);
-                let (r_def, g_def, b_def) = apply_defringe_rgb(r_lin, g_lin, b_lin, y_c, y_max_neighbor, edits.defringe_amount);
-                r_lin = r_def;
-                g_lin = g_def;
-                b_lin = b_def;
+                let (r_def, g_def, b_def) = apply_defringe_rgb(r_rec2020, g_rec2020, b_rec2020, y_c, y_max_neighbor, edits.defringe_amount);
+                r_rec2020 = r_def;
+                g_rec2020 = g_def;
+                b_rec2020 = b_def;
             }
 
-            // 3b. Detail & Sharpening / Noise Reduction / Stochastic Emulsion Grain
+            // 3b. Detail & Sharpening / Noise Reduction / Stochastic Emulsion Grain in Wide-Gamut Linear Rec.2020
             if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 || edits.emulsion_grain_mode != crate::EmulsionGrainMode::Off {
                 let r_step = if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
                     (edits.sharpening_radius * image.baseline_sharpness).max(0.5)
@@ -351,7 +318,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
                 let (rtr, gtr, btr) = sample_bilinear(&image, sx + r_step, sy - r_step);
                 let (rbl, gbl, bbl) = sample_bilinear(&image, sx - r_step, sy + r_step);
                 let (rbr, gbr, bbr) = sample_bilinear(&image, sx + r_step, sy + r_step);
-                let y_c = 0.2627 * r_lin + 0.6780 * g_lin + 0.0593 * b_lin;
+                let y_c = 0.2627 * r_rec2020 + 0.6780 * g_rec2020 + 0.0593 * b_rec2020;
                 let y_l = 0.2627 * rl + 0.6780 * gl + 0.0593 * bl;
                 let y_r = 0.2627 * rr + 0.6780 * gr + 0.0593 * br;
                 let y_t = 0.2627 * rt + 0.6780 * gt + 0.0593 * bt;
@@ -362,15 +329,15 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
                 let y_br = 0.2627 * rbr + 0.6780 * gbr + 0.0593 * bbr;
                 if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
                     let (r_sharp, g_sharp, b_sharp) = apply_detail_and_sharpening_rgb(
-                        r_lin, g_lin, b_lin,
+                        r_rec2020, g_rec2020, b_rec2020,
                         y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br,
                         edits.sharpening_amount,
                         edits.sharpening_masking,
                         edits.noise_reduction,
                     );
-                    r_lin = r_sharp;
-                    g_lin = g_sharp;
-                    b_lin = b_sharp;
+                    r_rec2020 = r_sharp;
+                    g_rec2020 = g_sharp;
+                    b_rec2020 = b_sharp;
                 }
                 if edits.emulsion_grain_mode != crate::EmulsionGrainMode::Off {
                     let grain_mag = edits.emulsion_format.magnification_factor();
@@ -378,7 +345,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
                     let cluster_size = (edits.grain_size * s_format).clamp(0.5, 3.5);
                     let effective_grain_amount = edits.grain_amount * grain_mag.powf(0.25);
                     let (gr, gg, gb) = firstproof_engine::color::grain::apply_stochastic_emulsion_grain(
-                        r_lin, g_lin, b_lin,
+                        r_rec2020, g_rec2020, b_rec2020,
                         y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br,
                         tx as f32, ty as f32,
                         edits.emulsion_grain_mode,
@@ -386,9 +353,32 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
                         effective_grain_amount,
                         edits.emulsion_archetype,
                     );
-                    r_lin = gr;
-                    g_lin = gg;
-                    b_lin = gb;
+                    r_rec2020 = gr;
+                    g_rec2020 = gg;
+                    b_rec2020 = gb;
+                }
+            }
+
+            // Pre-tone-mapped scene-referred Rec.2020 luminance for Ultra HDR headroom
+            let y_hdr = 0.2627 * r_rec2020.max(0.0) + 0.6780 * g_rec2020.max(0.0) + 0.0593 * b_rec2020.max(0.0);
+
+            // 4. Terminal Tone Mapping & Print Media -> Display-Referred Linear sRGB
+            let (mut r_lin, mut g_lin, mut b_lin) = apply_terminal_tone_map_and_print_media(
+                r_rec2020,
+                g_rec2020,
+                b_rec2020,
+                image.is_raw,
+                contrast_gain,
+                edits,
+            );
+
+            // 5. Creative 3D Look-Up Table (display-referred linear stage post-tone-mapping)
+            if let Some(ref lut) = active_lut {
+                if lut_intensity > 0.0 {
+                    let lut_out = lut.interpolate_tetrahedral([r_lin, g_lin, b_lin]);
+                    r_lin = r_lin * (1.0 - lut_intensity) + lut_out[0] * lut_intensity;
+                    g_lin = g_lin * (1.0 - lut_intensity) + lut_out[1] * lut_intensity;
+                    b_lin = b_lin * (1.0 - lut_intensity) + lut_out[2] * lut_intensity;
                 }
             }
 
@@ -411,8 +401,7 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
                 rgb_img.put_pixel(tx, ty, Rgb(srgb8));
 
                 if ultra_hdr {
-                    let y_sdr = 0.2627 * r_disp + 0.6780 * g_disp + 0.0593 * b_disp;
-                    let y_hdr = 0.2627 * r_lin.max(0.0) + 0.6780 * g_lin.max(0.0) + 0.0593 * b_lin.max(0.0);
+                    let y_sdr = 0.2126 * r_lin.max(0.0) + 0.7152 * g_lin.max(0.0) + 0.0722 * b_lin.max(0.0);
                     sdr_luma.push(y_sdr);
                     hdr_luma.push(y_hdr);
                 }
@@ -556,48 +545,4 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     Ok(())
 }
 
-/// Attenuates excess purple chrominance at high-contrast specular borders.
-#[inline]
-pub fn apply_defringe_rgb(
-    r: f32,
-    g: f32,
-    b: f32,
-    y_c: f32,
-    y_max_neighbor: f32,
-    defringe_amount: f32,
-) -> (f32, f32, f32) {
-    if defringe_amount <= 0.0 {
-        return (r, g, b);
-    }
-    let excess_b = b - g;
-    let excess_r = r - g;
-    if excess_b <= 0.0 || excess_r <= 0.0 {
-        return (r, g, b);
-    }
-    let u = 2.0 * r - g - b;
-    let v = 1.7320508 * (g - b);
-    let mut hue = v.atan2(u).to_degrees();
-    if hue < 0.0 {
-        hue += 360.0;
-    }
-    let w_hue = smoothstep(250.0, 270.0, hue) * (1.0 - smoothstep(330.0, 350.0, hue));
-    if w_hue <= 0.001 {
-        return (r, g, b);
-    }
-    let edge_contrast = y_max_neighbor - y_c;
-    let w_edge = smoothstep(0.04, 0.25, edge_contrast);
-    let w_highlight = smoothstep(0.04, 0.25, y_max_neighbor);
-    let w_fringe = w_hue * w_edge * w_highlight * (defringe_amount / 100.0);
-    if w_fringe <= 0.001 {
-        return (r, g, b);
-    }
-    let r_adj = r - w_fringe * excess_r;
-    let b_adj = b - w_fringe * excess_b;
-    (r_adj, g, b_adj)
-}
-
-#[inline]
-fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
-    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
+pub use firstproof_engine::color::apply_defringe_rgb;

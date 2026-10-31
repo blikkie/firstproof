@@ -460,6 +460,18 @@ body.darkroom-body {
 .thumb-badge-flag.pick { background: var(--accent-green); color: #000; }
 .thumb-badge-flag.reject { background: var(--accent-red); color: #fff; }
 
+.thumb-badge-modified {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 0.6rem;
+  color: var(--accent-amber);
+  background: rgba(0, 0, 0, 0.75);
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
 /* Left Metadata Sidebar (First-Class Drawer) */
 .metadata-sidebar {
   width: 320px;

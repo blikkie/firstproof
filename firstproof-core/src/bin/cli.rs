@@ -14,9 +14,8 @@ use firstproof_core::lensfun::LensfunDatabase;
 use firstproof_core::raw::extract_metadata;
 use firstproof_core::xmp::read_xmp_file;
 use firstproof_core::{
-    ColorProfileMode, DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat,
-    EmulsionGrainMode, EnlargerFilterMode, ExportColorSpace, ExportRenderingIntent, PrintMediaMode,
-    RenderTier,
+    DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode,
+    EnlargerFilterMode, ExportColorSpace, ExportRenderingIntent, PrintMediaMode, RenderTier,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -41,8 +40,8 @@ EXAMPLES:
     # Develop a RAW with default AgX Vivid tone mapping to 16-bit TIFF
     firstproof-cli develop photo.cr2
 
-    # Develop with custom exposure, profile, and JPEG output
-    firstproof-cli develop photo.cr2 --out preview.jpg --exposure +0.5 --profile agx-vivid
+    # Develop with custom exposure and JPEG output
+    firstproof-cli develop photo.cr2 --out preview.jpg --exposure +0.5
 
     # Convert Canon CR2 to archival DNG with automatic AgX preview & disk verification
     firstproof-cli dng photo.cr2
@@ -80,9 +79,6 @@ OPTIONS:
         --saturation <N>         Saturation (-100 to +100, default: 0.0)
     -t, --temp <KELVIN>          White balance temperature in Kelvin (2000-20000)
         --tint <TINT>            White balance green/magenta tint (-100 to +100)
-    -p, --profile <NAME>         Tone profile (default: agx-vivid)
-                                 [agx-vivid, agx-neutral, camera-standard,
-                                  camera-portrait, camera-landscape, camera-vivid]
     -m, --emulsion <STOCK>       Film stock archetype (default: none)
                                  [rochester-portrait-400, ashigara-chrome-50,
                                   rochester-k14-chrome-64, rochester-cinema-500,
@@ -104,19 +100,6 @@ OPTIONS:
     -h, --help                   Print help information
 "#
     );
-}
-
-fn parse_color_profile(s: &str) -> Option<ColorProfileMode> {
-    match s.to_lowercase().replace(['-', '_'], "").as_str() {
-        "agxvivid" | "vivid" => Some(ColorProfileMode::AgxVivid),
-        "agxneutral" | "agxfilmic" | "neutral" | "filmic" => Some(ColorProfileMode::AgxFilmic),
-        "agxphotographic" | "photographic" | "photo" => Some(ColorProfileMode::AgxPhotographic),
-        "camerastandard" | "standard" => Some(ColorProfileMode::CameraStandard),
-        "cameraportrait" | "portrait" => Some(ColorProfileMode::CameraPortrait),
-        "cameralandscape" | "landscape" => Some(ColorProfileMode::CameraLandscape),
-        "cameravivid" => Some(ColorProfileMode::CameraVivid),
-        _ => None,
-    }
 }
 
 fn parse_emulsion_archetype(s: &str) -> Option<EmulsionArchetype> {
@@ -173,6 +156,10 @@ fn parse_print_media(s: &str) -> Option<PrintMediaMode> {
         "platinum" | "platinumpalladium" => Some(PrintMediaMode::PlatinumPalladium),
         "cyanotype" => Some(PrintMediaMode::Cyanotype),
         "bamako" | "bamakosilvercontact" => Some(PrintMediaMode::BamakoSilverContact),
+        "chromogenic" | "typec" | "ra4" | "chromogenictypec" => {
+            Some(PrintMediaMode::ChromogenicTypeC)
+        }
+        "silverdyebleach" | "ilfochrome" | "azo" => Some(PrintMediaMode::SilverDyeBleach),
         _ => None,
     }
 }
@@ -326,14 +313,6 @@ fn cmd_develop(args: &[String]) -> Result<(), String> {
                 }
                 edits.tint = args[i].parse::<f32>().map_err(|_| "Invalid tint value")?;
             }
-            "-p" | "--profile" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err("--profile requires an argument".into());
-                }
-                edits.tone_profile = parse_color_profile(&args[i])
-                    .ok_or_else(|| format!("Unknown profile: {}", args[i]))?;
-            }
             "-m" | "--emulsion" => {
                 i += 1;
                 if i >= args.len() {
@@ -480,8 +459,8 @@ fn cmd_develop(args: &[String]) -> Result<(), String> {
             println!("📑 Loaded edits from XMP sidecar");
         }
         println!(
-            "🎨 Tone Profile: {:?} | Exposure: {:+.2} EV | Contrast: {:+.0}",
-            edits.tone_profile, edits.exposure, edits.contrast
+            "🎨 Tone Mapping: AgX Filmic | Exposure: {:+.2} EV | Contrast: {:+.0}",
+            edits.exposure, edits.contrast
         );
         if edits.emulsion_archetype != EmulsionArchetype::None {
             println!(
@@ -643,7 +622,6 @@ fn cmd_inspect(args: &[String]) -> Result<(), String> {
                 "   Tone Recovery: H:{:+.0} S:{:+.0} W:{:+.0} B:{:+.0}",
                 e.highlights, e.shadows, e.whites, e.blacks
             );
-            println!("   Tone Profile:  {:?}", e.tone_profile);
             if e.emulsion_archetype != EmulsionArchetype::None {
                 println!(
                     "   Emulsion:      {:?} ({:?})",

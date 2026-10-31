@@ -1,6 +1,6 @@
 use crate::curve::ToneCurvesRecord;
 use crate::modes::{
-    ColorProfileMode, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode,
+    EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode,
     PrintMediaMode, RemjetBackingMode,
 };
 use serde::{Deserialize, Serialize};
@@ -39,7 +39,6 @@ pub struct EditSettings {
     pub rotation: i32,
     pub flip_horizontal: bool,
     pub flip_vertical: bool,
-    pub tone_profile: ColorProfileMode,
     pub lut_name: Option<String>,
     pub lut_intensity: f32,
     pub sharpening_amount: f32,
@@ -97,7 +96,6 @@ impl Default for EditSettings {
             rotation: 0,
             flip_horizontal: false,
             flip_vertical: false,
-            tone_profile: ColorProfileMode::AgxVivid,
             lut_name: None,
             lut_intensity: 1.0,
             sharpening_amount: 0.0,

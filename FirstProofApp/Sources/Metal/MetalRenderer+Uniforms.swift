@@ -17,7 +17,7 @@ extension MetalRenderer {
         vignettingCorrectionEnabled: Bool = true,
         lensCoefficients: LensCorrectionCoefficientsRecord? = nil,
         edrHeadroom: Float = 1.0,
-        edrEnabled: Bool = true,
+        edrEnabled: Bool = false,
         isIntermediate: Bool = false,
         baselineSharpness: Float = 1.0,
         asShotTemperature: Float = 5500.0,
@@ -169,23 +169,6 @@ extension MetalRenderer {
         uniforms.printBaseWarmth = edits.printBaseWarmth
         uniforms.printProcessDepth = edits.printProcessDepth
         
-        switch edits.toneProfile {
-        case .agxVivid:
-            uniforms.toneProfileMode = 0
-        case .agxFilmic:
-            uniforms.toneProfileMode = 1
-        case .cameraStandard:
-            uniforms.toneProfileMode = 2
-        case .cameraPortrait:
-            uniforms.toneProfileMode = 3
-        case .cameraLandscape:
-            uniforms.toneProfileMode = 4
-        case .cameraVivid:
-            uniforms.toneProfileMode = 5
-        case .agxPhotographic:
-            uniforms.toneProfileMode = 6
-        }
-        
         if let coeff = lensCoefficients, coeff.hasDistortion {
             uniforms.distortionModel = (coeff.distortionModel == "ptlens") ? 1 : 0
             uniforms.k1 = coeff.distortion.indices.contains(0) ? coeff.distortion[0] : 0.0
@@ -243,6 +226,7 @@ extension MetalRenderer {
         }
         uniforms.pad0 = 0.0
         uniforms.pad1 = 0.0
+        uniforms.pad2 = 0.0
         
         self.rotationDegrees = Int(edits.rotation)
         self.flipHorizontal = edits.flipHorizontal

@@ -6,7 +6,11 @@
 //! Conforms to First Proof anti-slop principles:
 //! "Pure capture. Honest color. Zero digital plastic."
 
-use crate::modes::{ColorProfileMode, EmulsionArchetype, EmulsionFormat, PrintMediaMode};
+use crate::curve::ToneCurvesRecord;
+use crate::modes::{
+    EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode, PrintMediaMode,
+    RemjetBackingMode,
+};
 use crate::schema::WorkspaceCategory;
 use crate::settings::EditSettings;
 use serde::{Deserialize, Serialize};
@@ -26,19 +30,40 @@ pub struct EditDelta {
     pub foliage: Option<f32>,
     pub temperature: Option<f32>,
     pub tint: Option<f32>,
-    pub tone_profile: Option<ColorProfileMode>,
     pub rotation: Option<i32>,
     pub crop: Option<[f32; 4]>,
+    pub crop_left: Option<f32>,
+    pub crop_top: Option<f32>,
+    pub crop_right: Option<f32>,
+    pub crop_bottom: Option<f32>,
     pub crop_angle: Option<f32>,
     pub perspective_vertical: Option<f32>,
     pub perspective_horizontal: Option<f32>,
+    pub crop_constrain: Option<bool>,
+    pub flip_horizontal: Option<bool>,
+    pub flip_vertical: Option<bool>,
+    pub lut_name: Option<Option<String>>,
+    pub lut_intensity: Option<f32>,
     pub sharpening_amount: Option<f32>,
     pub sharpening_radius: Option<f32>,
+    pub sharpening_masking: Option<f32>,
     pub noise_reduction: Option<f32>,
+    pub emulsion_grain_mode: Option<EmulsionGrainMode>,
+    pub grain_scale: Option<f32>,
+    pub grain_size: Option<f32>,
+    pub grain_amount: Option<f32>,
     pub emulsion_archetype: Option<EmulsionArchetype>,
     pub emulsion_format: Option<EmulsionFormat>,
     pub emulsion_exposure: Option<f32>,
+    pub remjet_backing: Option<RemjetBackingMode>,
+    pub curves: Option<ToneCurvesRecord>,
+    pub split_toning_shadow_hue: Option<f32>,
+    pub split_toning_shadow_sat: Option<f32>,
+    pub split_toning_highlight_hue: Option<f32>,
+    pub split_toning_highlight_sat: Option<f32>,
+    pub split_toning_balance: Option<f32>,
     pub print_media: Option<PrintMediaMode>,
+    pub enlarger_filter: Option<EnlargerFilterMode>,
     pub print_paper_grade: Option<f32>,
     pub print_base_warmth: Option<f32>,
     pub print_process_depth: Option<f32>,
@@ -63,7 +88,6 @@ impl EditDelta {
         if let Some(v) = self.foliage { settings.foliage = v; }
         if let Some(v) = self.temperature { settings.temperature = v; }
         if let Some(v) = self.tint { settings.tint = v; }
-        if let Some(v) = self.tone_profile { settings.tone_profile = v; }
         if let Some(v) = self.rotation { settings.rotation = v; }
         if let Some(c) = self.crop {
             settings.crop_left = c[0];
@@ -71,16 +95,38 @@ impl EditDelta {
             settings.crop_right = c[2];
             settings.crop_bottom = c[3];
         }
+        if let Some(v) = self.crop_left { settings.crop_left = v; }
+        if let Some(v) = self.crop_top { settings.crop_top = v; }
+        if let Some(v) = self.crop_right { settings.crop_right = v; }
+        if let Some(v) = self.crop_bottom { settings.crop_bottom = v; }
         if let Some(v) = self.crop_angle { settings.crop_angle = v; }
         if let Some(v) = self.perspective_vertical { settings.perspective_vertical = v; }
         if let Some(v) = self.perspective_horizontal { settings.perspective_horizontal = v; }
+        if let Some(v) = self.crop_constrain { settings.crop_constrain = v; }
+        if let Some(v) = self.flip_horizontal { settings.flip_horizontal = v; }
+        if let Some(v) = self.flip_vertical { settings.flip_vertical = v; }
+        if let Some(ref v) = self.lut_name { settings.lut_name = v.clone(); }
+        if let Some(v) = self.lut_intensity { settings.lut_intensity = v; }
         if let Some(v) = self.sharpening_amount { settings.sharpening_amount = v; }
         if let Some(v) = self.sharpening_radius { settings.sharpening_radius = v; }
+        if let Some(v) = self.sharpening_masking { settings.sharpening_masking = v; }
         if let Some(v) = self.noise_reduction { settings.noise_reduction = v; }
+        if let Some(v) = self.emulsion_grain_mode { settings.emulsion_grain_mode = v; }
+        if let Some(v) = self.grain_scale { settings.grain_scale = v; }
+        if let Some(v) = self.grain_size { settings.grain_size = v; }
+        if let Some(v) = self.grain_amount { settings.grain_amount = v; }
         if let Some(v) = self.emulsion_archetype { settings.emulsion_archetype = v; }
         if let Some(v) = self.emulsion_format { settings.emulsion_format = v; }
         if let Some(v) = self.emulsion_exposure { settings.emulsion_exposure = v; }
+        if let Some(v) = self.remjet_backing { settings.remjet_backing = v; }
+        if let Some(ref v) = self.curves { settings.curves = v.clone(); }
+        if let Some(v) = self.split_toning_shadow_hue { settings.split_toning_shadow_hue = v; }
+        if let Some(v) = self.split_toning_shadow_sat { settings.split_toning_shadow_sat = v; }
+        if let Some(v) = self.split_toning_highlight_hue { settings.split_toning_highlight_hue = v; }
+        if let Some(v) = self.split_toning_highlight_sat { settings.split_toning_highlight_sat = v; }
+        if let Some(v) = self.split_toning_balance { settings.split_toning_balance = v; }
         if let Some(v) = self.print_media { settings.print_media = v; }
+        if let Some(v) = self.enlarger_filter { settings.enlarger_filter = v; }
         if let Some(v) = self.print_paper_grade { settings.print_paper_grade = v; }
         if let Some(v) = self.print_base_warmth { settings.print_base_warmth = v; }
         if let Some(v) = self.print_process_depth { settings.print_process_depth = v; }
@@ -114,8 +160,6 @@ pub enum DarkroomCommand {
     SetTemperature { kelvin: f64 },
     /// Set white balance tint (-100.0 .. +100.0).
     SetTint { tint: f32 },
-    /// Set camera/filmic tone reproduction profile.
-    SetToneProfile { profile: ColorProfileMode },
     /// Set curated fine-art film emulsion archetype.
     SetEmulsion {
         archetype: EmulsionArchetype,
@@ -201,6 +245,8 @@ pub fn parse_emulsion_format_str(s: &str) -> Option<EmulsionFormat> {
 pub fn parse_print_media_str(s: &str) -> Option<PrintMediaMode> {
     match s.to_lowercase().replace(['-', '_'], "").as_str() {
         "none" | "off" => Some(PrintMediaMode::None),
+        "chromogenic" | "typec" | "ra4" | "chromogenictypec" => Some(PrintMediaMode::ChromogenicTypeC),
+        "silverdyebleach" | "ilfochrome" | "azo" => Some(PrintMediaMode::SilverDyeBleach),
         "baryta" | "barytasilvergelatin" => Some(PrintMediaMode::BarytaSilverGelatin),
         "warmtone" | "warmtonechlorobromide" => Some(PrintMediaMode::WarmtoneChlorobromide),
         "platinum" | "platinumpalladium" => Some(PrintMediaMode::PlatinumPalladium),

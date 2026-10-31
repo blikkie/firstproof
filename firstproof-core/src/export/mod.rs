@@ -3,14 +3,12 @@ pub mod decode;
 pub mod pipeline;
 pub mod encoders;
 pub mod batch;
-pub mod arena;
 
 pub use icc::*;
 pub use decode::*;
 pub use pipeline::*;
 pub use encoders::*;
 pub use batch::*;
-pub use arena::*;
 
 #[cfg(test)]
 mod tests {
@@ -36,7 +34,6 @@ mod tests {
             contrast: 20.0,
             temperature: 6500.0,
             tint: 10.0,
-            tone_profile: crate::ColorProfileMode::AgxFilmic,
             ..Default::default()
         };
         
@@ -76,7 +73,6 @@ mod tests {
         };
         let edits = EditSettings {
             temperature: 5500.0,
-            tone_profile: crate::ColorProfileMode::AgxFilmic,
             ..Default::default()
         };
         apply_edits(&mut img, &edits);
@@ -101,10 +97,7 @@ mod tests {
         });
         img.save(tmp_in).unwrap();
         
-        let mut edits = EditSettings {
-            tone_profile: crate::ColorProfileMode::AgxVivid,
-            ..Default::default()
-        };
+        let mut edits = EditSettings::default();
         
         let tmp_cube = "test_mono.cube";
         let cube_content = "TITLE \"Test Mono\"\nLUT_3D_SIZE 2\nDOMAIN_MIN 0.0 0.0 0.0\nDOMAIN_MAX 1.0 1.0 1.0\n0.0 0.0 0.0\n0.5 0.5 0.5\n0.5 0.5 0.5\n1.0 1.0 1.0\n0.5 0.5 0.5\n1.0 1.0 1.0\n1.0 1.0 1.0\n1.0 1.0 1.0\n";
@@ -142,10 +135,7 @@ mod tests {
         });
         img.save(tmp_in).unwrap();
         
-        let edits = EditSettings {
-            tone_profile: crate::ColorProfileMode::AgxVivid,
-            ..Default::default()
-        };
+        let edits = EditSettings::default();
         
         export_photo_file(tmp_in, tmp_out, &edits, None, 95, None, ExportColorSpace::Srgb, ExportRenderingIntent::RelativeColorimetric, false).unwrap();
         

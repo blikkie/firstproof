@@ -1,8 +1,6 @@
 use firstproof_core::color::dcp::{
     DcpProfile, evaluate_tone_curve, rgb_to_hsv, hsv_to_rgb,
 };
-use firstproof_core::ColorProfileMode;
-use firstproof_core::xmp::{XmpData, generate_xmp, parse_xmp};
 
 #[test]
 fn test_rgb_hsv_roundtrip() {
@@ -76,9 +74,6 @@ fn test_luminance_scaled_tone_curve_preserves_chromaticity() {
 fn test_camera_tone_curves_monotonicity() {
     let curves = [
         ("Standard", DcpProfile::built_in_standard_tone_curve()),
-        ("Portrait", DcpProfile::built_in_portrait_tone_curve()),
-        ("Landscape", DcpProfile::built_in_landscape_tone_curve()),
-        ("Vivid", DcpProfile::built_in_vivid_tone_curve()),
     ];
 
     for (name, curve) in &curves {
@@ -108,33 +103,6 @@ fn test_camera_tone_curves_monotonicity() {
         );
     }
 }
-
-#[test]
-fn test_xmp_tone_profile_roundtrip() {
-    let modes = [
-        ColorProfileMode::AgxVivid,
-        ColorProfileMode::AgxFilmic,
-        ColorProfileMode::CameraStandard,
-        ColorProfileMode::CameraPortrait,
-        ColorProfileMode::CameraLandscape,
-        ColorProfileMode::CameraVivid,
-        ColorProfileMode::AgxPhotographic,
-    ];
-
-    for mode in modes {
-        let mut data = XmpData::default();
-        data.edits.tone_profile = mode;
-
-        let xml = generate_xmp(&data);
-        let parsed = parse_xmp(&xml).expect("Failed to parse generated XMP");
-
-        assert_eq!(
-            parsed.edits.tone_profile, mode,
-            "XMP roundtrip failed for {:?}", mode
-        );
-    }
-}
-
 
 #[test]
 fn test_agx_rec2020_saturation_and_vivid_restoration() {
@@ -173,14 +141,10 @@ fn test_agx_rec2020_saturation_and_vivid_restoration() {
     }
 }
 
-
-
 #[test]
 fn test_sliders_dual_engine_parity_sweep() {
-    use firstproof_core::color::{Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB, agx_tone_map, agx_tone_map_photographic, agx_tone_map_vivid, evaluate_tone_curve, linear_to_srgb_gamma};
+    use firstproof_core::color::{Color3, LINEAR_SRGB_TO_REC2020, agx_tone_map_vivid, linear_to_srgb_gamma};
     use firstproof_core::export::{apply_tone_recovery, apply_color_adjustments};
-    use firstproof_core::color::dcp::DcpProfile;
-    use firstproof_core::ColorProfileMode;
 
     // Test palette in linear sRGB
     let test_patches = [
@@ -193,30 +157,23 @@ fn test_sliders_dual_engine_parity_sweep() {
         ("Bright Highlight", [0.92, 0.90, 0.88]),
     ];
 
-    // Slider configurations to sweep: (exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint, mode)
-    // Slider configurations to sweep: (exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint, mode)
-    let test_configs: [(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, ColorProfileMode); 9] = [
+    // Slider configurations to sweep: (exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint)
+    let test_configs: [(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32); 6] = [
         // Neutral
-        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5500.0, 0.0, ColorProfileMode::AgxVivid),
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5500.0, 0.0),
         // Saturated & Punchy with color adjustments
-        (0.5, 20.0, -30.0, 25.0, -15.0, 10.0, 35.0, 20.0, 6200.0, 10.0, ColorProfileMode::AgxVivid),
-        // AgX Filmic neutral base with deep blue boost
-        (-0.5, -10.0, 10.0, -10.0, 0.0, 0.0, 15.0, -10.0, 4800.0, -8.0, ColorProfileMode::AgxFilmic),
-        // AgX Photographic ratio-preserving filmic with rich chroma
-        (0.2, 10.0, -20.0, 15.0, -10.0, 5.0, 20.0, 10.0, 5500.0, 0.0, ColorProfileMode::AgxPhotographic),
-        // Camera Standard profile with high vibrance & foliage
-        (0.0, 15.0, -20.0, 20.0, -10.0, 5.0, 50.0, 15.0, 5500.0, 0.0, ColorProfileMode::CameraStandard),
-        // Camera Portrait profile with negative vibrance
-        (0.2, -5.0, -15.0, 15.0, 0.0, 0.0, -30.0, -20.0, 5600.0, 4.0, ColorProfileMode::CameraPortrait),
-        // Camera Landscape profile with deep blue and foliage
-        (0.0, 25.0, -40.0, 30.0, -20.0, 10.0, 40.0, 30.0, 5200.0, -5.0, ColorProfileMode::CameraLandscape),
+        (0.5, 20.0, -30.0, 25.0, -15.0, 10.0, 35.0, 20.0, 6200.0, 10.0),
+        // Under-exposed with deep blue boost
+        (-0.5, -10.0, 10.0, -10.0, 0.0, 0.0, 15.0, -10.0, 4800.0, -8.0),
+        // Negative vibrance & saturation
+        (0.2, -5.0, -15.0, 15.0, 0.0, 0.0, -30.0, -20.0, 5600.0, 4.0),
         // Extreme positive tint (+190) under warm tungsten (subway/mercury spikes)
-        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3200.0, 190.0, ColorProfileMode::AgxVivid),
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3200.0, 190.0),
         // Extreme negative tint (-190) under cool shade
-        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 7500.0, -190.0, ColorProfileMode::AgxFilmic),
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 7500.0, -190.0),
     ];
 
-    for (profile_idx, &(exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint, mode)) in test_configs.iter().enumerate() {
+    for (profile_idx, &(exp, contrast, hl, sh, wh, bl, vib, sat, temp, tint)) in test_configs.iter().enumerate() {
         for (patch_name, [r_in, g_in, b_in]) in test_patches {
             // Input in Rec.2020 wide gamut space
             let c_rec2020 = LINEAR_SRGB_TO_REC2020.multiply_vector(Color3::new(r_in, g_in, b_in));
@@ -249,71 +206,18 @@ fn test_sliders_dual_engine_parity_sweep() {
                 vib, sat, 30.0, 20.0,
             );
 
-            // Tone Profile
+            // Canonical AgX Tone Mapping
             let contrast_gain = if contrast >= 0.0 {
                 1.0 + (contrast / 100.0)
             } else {
                 1.0 + (contrast / 100.0) * 0.60
             };
-            let (r_disp_gpu, g_disp_gpu, b_disp_gpu) = match mode {
-                ColorProfileMode::AgxVivid => {
-                    let srgb = agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
-                    (
-                        linear_to_srgb_gamma(srgb.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                        linear_to_srgb_gamma(srgb.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                        linear_to_srgb_gamma(srgb.b().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                    )
-                }
-                ColorProfileMode::AgxFilmic => {
-                    let srgb = agx_tone_map(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
-                    (
-                        linear_to_srgb_gamma(srgb.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                        linear_to_srgb_gamma(srgb.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                        linear_to_srgb_gamma(srgb.b().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                    )
-                }
-                ColorProfileMode::AgxPhotographic => {
-                    let srgb = agx_tone_map_photographic(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
-                    (
-                        linear_to_srgb_gamma(srgb.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                        linear_to_srgb_gamma(srgb.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                        linear_to_srgb_gamma(srgb.b().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                    )
-                }
-                m => {
-                    let srgb_init = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r_rec, g_rec, b_rec));
-                    let (rm_raw, gm_raw, bm_raw) = (srgb_init.r().max(0.0), srgb_init.g().max(0.0), srgb_init.b().max(0.0));
-                    let hsm = match m {
-                        ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_huesatmap(),
-                        ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_huesatmap(),
-                        ColorProfileMode::CameraVivid => DcpProfile::built_in_vivid_huesatmap(),
-                        _ => DcpProfile::built_in_standard_huesatmap(),
-                    };
-                    let (h, s, v) = rgb_to_hsv(rm_raw, gm_raw, bm_raw);
-                    let (ho, so, vo) = hsm.apply_hsv(h, s, v);
-                    let (rm, gm, bm) = hsv_to_rgb(ho, so, vo);
-                    let curve = match m {
-                        ColorProfileMode::CameraPortrait => DcpProfile::built_in_portrait_tone_curve(),
-                        ColorProfileMode::CameraLandscape => DcpProfile::built_in_landscape_tone_curve(),
-                        ColorProfileMode::CameraVivid => DcpProfile::built_in_vivid_tone_curve(),
-                        _ => DcpProfile::built_in_standard_tone_curve(),
-                    };
-                    let apply_curve = |v: f32| -> f32 {
-                        let curved = evaluate_tone_curve(v, &curve);
-                        if (contrast_gain - 1.0).abs() > 0.001 {
-                            ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
-                        } else {
-                            curved.clamp(0.0, 1.0)
-                        }
-                    };
-                    let srgb_lin = Color3::new(apply_curve(rm), apply_curve(gm), apply_curve(bm));
-                    (
-                        linear_to_srgb_gamma(srgb_lin.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                        linear_to_srgb_gamma(srgb_lin.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                        linear_to_srgb_gamma(srgb_lin.b().clamp(0.0, 1.0)).clamp(0.0, 1.0),
-                    )
-                }
-            };
+            let srgb = agx_tone_map_vivid(Color3::new(r_rec, g_rec, b_rec), contrast_gain);
+            let (r_disp_gpu, g_disp_gpu, b_disp_gpu) = (
+                linear_to_srgb_gamma(srgb.r().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                linear_to_srgb_gamma(srgb.g().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+                linear_to_srgb_gamma(srgb.b().clamp(0.0, 1.0)).clamp(0.0, 1.0),
+            );
             
             let gpu_8bit = [
                 (r_disp_gpu * 255.0).round() as u8,
@@ -346,7 +250,6 @@ fn test_sliders_dual_engine_parity_sweep() {
                 foliage: 20.0,
                 temperature: temp,
                 tint,
-                tone_profile: mode,
                 ..Default::default()
             };
             firstproof_core::export::apply_edits(&mut demosaiced, &edits);
@@ -551,13 +454,13 @@ fn test_sharpening_and_masking_parity() {
             t * t * (3.0 - 2.0 * t)
         };
         let sharp_gain = (amount / 100.0) * 1.5;
-        let sharp_term = sharp_gain * w_edge * delta_y;
+        let sharp_term = (sharp_gain * w_edge * delta_y).max(-0.75 * y_c);
         let nr_term = (nr / 100.0) * (1.0 - w_edge) * delta_y;
         let delta_adj = sharp_term - nr_term;
         (
-            (color.0 + delta_adj).clamp(0.0, 1.0),
-            (color.1 + delta_adj).clamp(0.0, 1.0),
-            (color.2 + delta_adj).clamp(0.0, 1.0),
+            (color.0 + delta_adj).max(0.0),
+            (color.1 + delta_adj).max(0.0),
+            (color.2 + delta_adj).max(0.0),
         )
     }
 
@@ -805,10 +708,7 @@ fn test_bilateral_tone_recovery_metal_parity() {
 #[test]
 fn test_huesatmap_shader_and_cpu_parity() {
     let profiles = [
-        ("Standard", 1, DcpProfile::built_in_standard_huesatmap()),
-        ("Portrait", 2, DcpProfile::built_in_portrait_huesatmap()),
-        ("Landscape", 3, DcpProfile::built_in_landscape_huesatmap()),
-        ("Vivid", 4, DcpProfile::built_in_vivid_huesatmap()),
+        ("Standard", DcpProfile::built_in_standard_huesatmap()),
     ];
 
     let test_colors = [
@@ -822,7 +722,7 @@ fn test_huesatmap_shader_and_cpu_parity() {
         (0.70, 0.15, 0.15), // Deep red
     ];
 
-    for (name, mode, map) in profiles {
+    for (name, map) in profiles {
         for &(r, g, b) in &test_colors {
             // 1. Rust CPU path:
             let (h, s, v) = rgb_to_hsv(r, g, b);
@@ -830,12 +730,7 @@ fn test_huesatmap_shader_and_cpu_parity() {
             let (r_cpu, g_cpu, b_cpu) = hsv_to_rgb(h_cpu, s_cpu, v_cpu);
 
             // 2. Shader simulated path (evaluating 24-entry table with lerp):
-            let table = match mode {
-                2 => DcpProfile::built_in_portrait_huesatmap(),
-                3 => DcpProfile::built_in_landscape_huesatmap(),
-                4 => DcpProfile::built_in_vivid_huesatmap(),
-                _ => DcpProfile::built_in_standard_huesatmap(),
-            };
+            let table = DcpProfile::built_in_standard_huesatmap();
             let (h_s, s_s, v_s) = rgb_to_hsv(r, g, b);
             let (h_out, s_out, v_out) = table.apply_hsv(h_s, s_s, v_s);
             let (r_sim, g_sim, b_sim) = hsv_to_rgb(h_out, s_out, v_out);

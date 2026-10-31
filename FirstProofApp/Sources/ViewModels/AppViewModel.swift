@@ -57,9 +57,9 @@ public enum EditSliderType {
     case splitToningHighlightSat
     case splitToningBalance
     case printPaperGrade
-    case printBaseWarmth
     case printProcessDepth
     case defringeAmount
+    case emulsionExposure
     
     public var displayName: String {
         switch self {
@@ -92,9 +92,9 @@ public enum EditSliderType {
         case .splitToningHighlightSat: return "Highlight Saturation"
         case .splitToningBalance: return "Split Toning Balance"
         case .printPaperGrade: return "Paper Grade"
-        case .printBaseWarmth: return "Base Warmth"
         case .printProcessDepth: return "Process Depth"
         case .defringeAmount: return "Defringe"
+        case .emulsionExposure: return "Push / Pull EV"
         }
     }
     
@@ -119,6 +119,7 @@ public enum EditSliderType {
         case .printPaperGrade: return "paper_grade"
         case .printProcessDepth: return "process_depth"
         case .defringeAmount: return "defringe_amount"
+        case .emulsionExposure: return "emulsion_exposure"
         default: return nil
         }
     }
@@ -142,6 +143,7 @@ public enum EditSliderType {
         case .splitToningShadowHue, .splitToningHighlightHue: return 0.0...360.0
         case .splitToningShadowSat, .splitToningHighlightSat: return 0.0...100.0
         case .splitToningBalance: return -100.0...100.0
+        case .emulsionExposure: return -2.0...2.0
         default: return -100.0...100.0
         }
     }
@@ -153,6 +155,7 @@ public enum EditSliderType {
         case .grainSize, .grainAmount: return "%.2fx"
         case .lutIntensity: return "%.0f%%"
         case .splitToningShadowHue, .splitToningHighlightHue: return "%.0f°"
+        case .emulsionExposure: return "%+.2f EV"
         default: return "%.0f"
         }
     }
@@ -250,7 +253,6 @@ public final class AppViewModel {
     public var currentFolderPath: String? = nil
     public var openedFolders: [String] = []
     public var isExternalVolume: Bool = false
-    public var isPortableCatalog: Bool = false
     public var isScanning: Bool = false
     public var scanningStatusMessage: String? = nil
     
@@ -273,10 +275,6 @@ public final class AppViewModel {
     }
     public internal(set) var filteredPhotos: [PhotoRecord] = []
     public internal(set) var cachedOriginalPhotos: [PhotoRecord] = []
-    public var cachedMasterPhotos: [PhotoRecord] {
-        get { cachedOriginalPhotos }
-        set { cachedOriginalPhotos = newValue }
-    }
     public var selectedPhoto: PhotoRecord? = nil
     public var selectedPhotoPaths: Set<String> = []
     public var isBulkSelectionMode: Bool = false
@@ -317,10 +315,6 @@ public final class AppViewModel {
     public var importSourcePath: String? = nil
     public var importSelectedPaths: [String] = []
     public var importOriginalsOnly: Bool = true
-    public var importMastersOnly: Bool {
-        get { importOriginalsOnly }
-        set { importOriginalsOnly = newValue }
-    }
     public var isImporting: Bool = false
     public var importProgressStatus: String = ""
     public var importProgressCurrent: UInt32 = 0
@@ -446,7 +440,7 @@ public final class AppViewModel {
     public var hideDerivativeClones: Bool = UserDefaults.standard.object(forKey: "hideDerivativeClones") as? Bool ?? true {
         didSet {
             UserDefaults.standard.set(hideDerivativeClones, forKey: "hideDerivativeClones")
-            rebuildMasterPhotosCache()
+            rebuildOriginalPhotosCache()
         }
     }
     
@@ -582,7 +576,6 @@ public final class AppViewModel {
             scheduleHistogramUpdate()
         }
     }
-    public var toneProfile: ColorProfileMode = .agxVivid
     public var selectedLutName: String? = nil
     public var lutIntensity: Float = 1.0
     public var availableLutTitles: [String] = []
@@ -616,7 +609,6 @@ public final class AppViewModel {
     public var defaultExifFlipH: Bool = false
     public var defaultExifFlipV: Bool = false
     public var isShowingOriginal: Bool = false
-    public var isShowingCameraJpeg: Bool = false
     
     // MARK: - Undo/Redo & Session History
     public var undoHistory = UndoHistoryManager()
@@ -756,10 +748,6 @@ public final class AppViewModel {
             return val
         }
         return hideDerivativeClones
-    }
-    
-    public func isMastersOnly(for folderPath: String?) -> Bool {
-        return isOriginalsOnly(for: folderPath)
     }
     
     public func promptImport(from sourcePath: String? = nil, selectedPaths: [String] = []) {
@@ -938,62 +926,39 @@ public final class AppViewModel {
             selectedPhoto?.keywords = keywords
         }
 
-        // Sync to XMP sidecar off main thread
-        let activeSnapshot = currentEdits
+        // Parse keywords array (or empty if cleared)
+        let splitKeywords: [String] = keywords?
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+
+        let metaUpdate = MetadataUpdate(
+            title: title,
+            description: description,
+            creator: creator,
+            copyright: copyright,
+            keywords: splitKeywords
+        )
+
+        // Sync to XMP sidecar via serialized coordinator
+        let activeSnapshot = (path == currentlyLoadedPhotoPath) ? currentEdits : nil
         let currentRating = photos.first(where: { $0.filePath == path })?.rating
         let currentStatus = photos.first(where: { $0.filePath == path })?.status ?? "None"
         let currentLat = photos.first(where: { $0.filePath == path })?.latitude
         let currentLon = photos.first(where: { $0.filePath == path })?.longitude
-        let isCurrent = (path == currentlyLoadedPhotoPath)
 
         Task.detached(priority: .utility) {
-            let existing = readXmp(path: path)
-            let splitKeywords: [String] = keywords?
-                .split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty } ?? existing?.keywords ?? []
-
-            let finalTitle = (title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? title : existing?.title
-            let finalDescription = (description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? description : existing?.description
-            let finalCreator = (creator?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? creator : existing?.creator
-            let finalCopyright = (copyright?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? copyright : existing?.copyright
-
-            let finalEdits: EditSettings
-            if isCurrent {
-                finalEdits = activeSnapshot
-            } else if let e = existing?.edits {
-                finalEdits = e
-            } else {
-                var baseline = EditSettings.defaultIdentity
-                if let asShot = getAsShotWhiteBalance(path: path) {
-                    baseline.temperature = asShot.temperature
-                    baseline.tint = asShot.tint
-                }
-                if let orient = extractMetadata(path: path)?.orientation {
-                    let dec = decodeExifOrientation(orientation: orient)
-                    baseline.rotation = Int32(dec.rotation)
-                    baseline.flipHorizontal = dec.flipHorizontal
-                    baseline.flipVertical = dec.flipVertical
-                }
-                baseline.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
-                baseline.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
-                baseline.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
-                finalEdits = baseline
-            }
-
-            let record = XmpDataRecord(
-                rating: currentRating ?? existing?.rating,
-                status: currentStatus,
-                title: finalTitle,
-                description: finalDescription,
-                creator: finalCreator,
-                copyright: finalCopyright,
-                keywords: splitKeywords,
-                latitude: existing?.latitude ?? currentLat,
-                longitude: existing?.longitude ?? currentLon,
-                edits: finalEdits
+            await XmpSyncCoordinator.shared.sync(
+                filePath: path,
+                rating: nil,
+                status: nil,
+                edits: activeSnapshot,
+                metadata: metaUpdate,
+                inMemoryRating: currentRating,
+                inMemoryStatus: currentStatus,
+                inMemoryLat: currentLat,
+                inMemoryLon: currentLon
             )
-            _ = writeXmp(path: path, record: record)
         }
     }
 }

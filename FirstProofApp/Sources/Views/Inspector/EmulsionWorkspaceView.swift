@@ -8,6 +8,7 @@ public struct EmulsionWorkspaceView: View {
     
     private var hasActiveEmulsionEdits: Bool {
         viewModel.emulsionArchetype != .none ||
+        abs(viewModel.emulsionExposure) > 0.001 ||
         viewModel.remjetBacking != .intact ||
         viewModel.emulsionGrainMode != .off ||
         viewModel.grainSize != 1.0 ||
@@ -161,6 +162,27 @@ public struct EmulsionWorkspaceView: View {
                             .labelsHidden()
                             .pickerStyle(.menu)
                         }
+                    }
+                    
+                    // Push / Pull Development EV
+                    VStack(alignment: .leading, spacing: 2) {
+                        SliderRow(
+                            slider: .emulsionExposure,
+                            value: $viewModel.emulsionExposure,
+                            onReset: { viewModel.resetSlider(.emulsionExposure) },
+                            onEditingChanged: { viewModel.handleSliderEditing($0, slider: .emulsionExposure) },
+                            onCancel: { viewModel.cancelSliderScrub() },
+                            customLabel: "Push / Pull EV"
+                        )
+                        HStack {
+                            Text("-2.0 EV (Pull)")
+                            Spacer()
+                            Text("0.0 (Normal)")
+                            Spacer()
+                            Text("+2.0 EV (Push)")
+                        }
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary.opacity(0.7))
                     }
                 }
                 

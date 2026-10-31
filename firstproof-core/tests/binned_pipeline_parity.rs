@@ -1,6 +1,5 @@
 use firstproof_core::raw_decoder::{CfaPattern, RawSensorFrame};
 use firstproof_core::export::decode::{f16_to_f32, f32_to_f16};
-use firstproof_core::export::arena::with_decode_arena;
 
 #[test]
 fn test_binned_quad_patterns_math() {
@@ -96,23 +95,4 @@ fn test_half_float_alpha_invariants() {
     assert_eq!(a16, 0x3c00);
     let a_back = f16_to_f32(a16);
     assert!((a_back - 1.0).abs() < 1e-6);
-}
-
-#[test]
-fn test_scratch_arena_reusability() {
-    with_decode_arena(|arena| {
-        // Initial decode size: 10MB
-        let initial_size = 10 * 1024 * 1024;
-        let _ = arena.acquire_raw_bytes(initial_size);
-        let initial_cap = arena.rgb_raw_bytes.capacity();
-        assert!(initial_cap >= initial_size);
-
-        // Next photo is smaller (e.g. 6MB) -> should not reallocate
-        let _ = arena.acquire_raw_bytes(6 * 1024 * 1024);
-        assert_eq!(arena.rgb_raw_bytes.capacity(), initial_cap, "Arena capacity grew unexpectedly when requesting smaller buffer");
-
-        // Next photo is same size -> should not reallocate
-        let _ = arena.acquire_raw_bytes(initial_size);
-        assert_eq!(arena.rgb_raw_bytes.capacity(), initial_cap, "Arena capacity must be reused without heap churn");
-    });
 }

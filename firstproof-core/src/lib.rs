@@ -25,7 +25,7 @@ pub use lut::LutRecord;
 pub use firstproof_engine::{
     all_adjustments, get_adjustment, kelvin_to_mired_norm, mired_norm_to_kelvin,
     AdjustmentDescriptor, ScaleMode, WorkspaceCategory,
-    evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord, ColorProfileMode,
+    evaluate_all_curves_lut, evaluate_curve_lut, AllCurvesLutRecord,
     CommandResponse, CropAspectRatioPreset, CurvePointRecord, DarkroomCommand, DemosaicQuality,
     EditDelta, EditSettings, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode,
     EnlargerFilterMode, EvHistogramRecord, ExifOrientationRecord, ExportColorSpace, ExportRenderingIntent,
@@ -94,27 +94,10 @@ pub fn edits_has_modifications(
 /// Calculates photographic Kelvin temperature and tint from an unadjusted neutral pixel sample.
 #[uniffi::export]
 pub fn calculate_white_balance_from_sample(r: f32, g: f32, b: f32) -> WhiteBalanceResult {
-    if r <= 1e-5 || g <= 1e-5 || b <= 1e-5 {
-        return WhiteBalanceResult {
-            temperature: 5500.0,
-            tint: 0.0,
-        };
-    }
-
-    let temp_ratio = (b / r).max(1e-4);
-    let temp_norm = temp_ratio.powf(2.0 / 3.0);
-    let target_temp = (5500.0 * temp_norm).clamp(2000.0, 20000.0);
-
-    let r_scaled = r * temp_norm.powf(0.75);
-    let b_scaled = b * (1.0 / temp_norm).powf(0.75);
-    let rb_avg = (r_scaled + b_scaled) * 0.5;
-
-    let tint_factor = 1.0 - (rb_avg / g.max(1e-4));
-    let target_tint = (tint_factor / 0.002).clamp(-200.0, 200.0);
-
+    let res = firstproof_engine::auto::calculate_white_balance_from_sample(r, g, b);
     WhiteBalanceResult {
-        temperature: (target_temp / 50.0).round() * 50.0,
-        tint: target_tint.round(),
+        temperature: res.temperature,
+        tint: res.tint,
     }
 }
 
@@ -1382,17 +1365,6 @@ pub fn execute_darkroom_command_headless(json_str: String) -> String {
             match serde_json::to_value(&settings) {
                 Ok(val) => CommandResponse::ok(serde_json::json!({
                     "tint": tint,
-                    "settings": val
-                })).to_json(),
-                Err(e) => CommandResponse::error(e.to_string()).to_json(),
-            }
-        }
-        DarkroomCommand::SetToneProfile { profile } => {
-            let mut settings = EditSettings::default();
-            settings.tone_profile = profile;
-            match serde_json::to_value(&settings) {
-                Ok(val) => CommandResponse::ok(serde_json::json!({
-                    "profile": profile,
                     "settings": val
                 })).to_json(),
                 Err(e) => CommandResponse::error(e.to_string()).to_json(),

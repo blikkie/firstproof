@@ -85,6 +85,8 @@ export class CropController {
   private onStraightenEndCallback: (() => void) | null = null;
   private onDoneCallback: (() => void) | null = null;
   private onCancelCallback: (() => void) | null = null;
+  private boundPointerMove: (e: PointerEvent) => void;
+  private boundPointerUp: (e: PointerEvent) => void;
 
   constructor(
     overlayId: string = 'crop-overlay',
@@ -161,6 +163,9 @@ export class CropController {
     if (callbacks?.onDone) this.onDoneCallback = callbacks.onDone;
     if (callbacks?.onCancel) this.onCancelCallback = callbacks.onCancel;
 
+    this.boundPointerMove = this.onPointerMove.bind(this);
+    this.boundPointerUp = this.onPointerUp.bind(this);
+
     this.initEvents();
   }
 
@@ -169,9 +174,12 @@ export class CropController {
       'pointerdown',
       this.onPointerDown.bind(this),
     );
-    window.addEventListener('pointermove', this.onPointerMove.bind(this));
-    window.addEventListener('pointerup', this.onPointerUp.bind(this));
-    window.addEventListener('pointercancel', this.onPointerUp.bind(this));
+    this.gestureSurface?.addEventListener('pointermove', (e: PointerEvent) => {
+      if (!this.activeHandle) {
+        const handle = this.resolveHitTarget(e.clientX, e.clientY);
+        this.updateCursor(handle);
+      }
+    });
 
     this.aspectSelect?.addEventListener('change', () => {
       this.aspectMode = this.aspectSelect.value as AspectRatioMode;
@@ -279,6 +287,9 @@ export class CropController {
     }
     this.isRotating = false;
     this.activeHandle = null;
+    window.removeEventListener('pointermove', this.boundPointerMove);
+    window.removeEventListener('pointerup', this.boundPointerUp);
+    window.removeEventListener('pointercancel', this.boundPointerUp);
   }
 
   public setImageRect(
@@ -531,6 +542,9 @@ export class CropController {
     }
 
     this.updateCursor(handle);
+    window.addEventListener('pointermove', this.boundPointerMove);
+    window.addEventListener('pointerup', this.boundPointerUp);
+    window.addEventListener('pointercancel', this.boundPointerUp);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     e.preventDefault();
   }
@@ -640,6 +654,9 @@ export class CropController {
       try {
         (e.target as HTMLElement).releasePointerCapture(e.pointerId);
       } catch (_) {}
+      window.removeEventListener('pointermove', this.boundPointerMove);
+      window.removeEventListener('pointerup', this.boundPointerUp);
+      window.removeEventListener('pointercancel', this.boundPointerUp);
       const handle = this.resolveHitTarget(e.clientX, e.clientY);
       this.updateCursor(handle);
     }

@@ -10,41 +10,12 @@ public struct DevelopWorkspaceView: View {
     public var body: some View {
         @Bindable var viewModel = viewModel
         VStack(alignment: .leading, spacing: 14) {
-            // MARK: - Tone Profile & 3D LUT Look
+            // MARK: - Look / 3D LUT
             VStack(alignment: .leading, spacing: 6) {
-                Text("TONE PROFILE & LOOK")
+                Text("LOOK / 3D LUT")
                     .font(.caption)
                     .fontWeight(.bold)
                     .foregroundColor(.secondary)
-                
-                if viewModel.selectedPhotoIsRaw {
-                    Picker("", selection: Binding<ColorProfileMode>(
-                        get: { viewModel.toneProfile },
-                        set: { viewModel.setToneProfile($0) }
-                    )) {
-                        Text("AgX Vivid (Filmic Punchy)").tag(ColorProfileMode.agxVivid)
-                        Text("AgX Neutral (Filmic Base)").tag(ColorProfileMode.agxFilmic)
-                        Text("AgX Photographic (Chroma Preserving)").tag(ColorProfileMode.agxPhotographic)
-                        
-                        if viewModel.toneProfile == .cameraStandard ||
-                           viewModel.toneProfile == .cameraPortrait ||
-                           viewModel.toneProfile == .cameraLandscape ||
-                           viewModel.toneProfile == .cameraVivid {
-                            Divider()
-                            Text("Camera Matching (Legacy)").tag(viewModel.toneProfile)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                } else {
-                    HStack {
-                        Text("Embedded Camera Profile")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                    }
-                    .padding(.vertical, 2)
-                }
                 
                 HStack(spacing: 6) {
                     Picker("", selection: Binding<String>(
@@ -344,7 +315,7 @@ public struct DevelopWorkspaceView: View {
                             title: "Shadows",
                             hue: $viewModel.splitToningShadowHue,
                             saturation: $viewModel.splitToningShadowSat,
-                            onReset: { viewModel.resetSlider(.splitToningShadowSat) },
+                            onReset: { viewModel.resetSplitToningShadows() },
                             onEditingChanged: { viewModel.handleSliderEditing($0, slider: .splitToningShadowSat) }
                         )
                         
@@ -352,7 +323,7 @@ public struct DevelopWorkspaceView: View {
                             title: "Highlights",
                             hue: $viewModel.splitToningHighlightHue,
                             saturation: $viewModel.splitToningHighlightSat,
-                            onReset: { viewModel.resetSlider(.splitToningHighlightSat) },
+                            onReset: { viewModel.resetSplitToningHighlights() },
                             onEditingChanged: { viewModel.handleSliderEditing($0, slider: .splitToningHighlightSat) }
                         )
                     }

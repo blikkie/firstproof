@@ -356,8 +356,8 @@ vec3 applyDetailAndSharpening(vec3 color, float y_c, float y_l_1, float y_r_1, f
     float gy = ((((y_bl_1 + (2.0 * y_b_1)) + y_br_1) - ((y_tl_1 + (2.0 * y_t_1)) + y_tr_1)) * 0.125);
     float grad_mag = sqrt(((gx * gx) + (gy * gy)));
     if ((masking > 0.0)) {
-        float m_1 = clamp((masking / 100.0), 0.0, 1.0);
-        float threshold = (pow(m_1, 1.5) * 0.08);
+        float m = clamp((masking / 100.0), 0.0, 1.0);
+        float threshold = (pow(m, 1.5) * 0.08);
         w_edge = smoothstep(0.0, max(threshold, 0.0001), grad_mag);
     }
     float sharp_gain = ((amount / 100.0) * 1.5);
@@ -486,8 +486,8 @@ vec3 applyStochasticEmulsionGrain(vec3 color_2, float y_c_2, float y_l_2, float 
     float denom_2 = max(sqrt(max(y_c_2, 0.0)), 0.05);
     float sensor_seed_1 = clamp(((delta_noise / denom_2) * 20.0), -1.0, 1.0);
     bool is_instant_2 = (archetype == 7);
-    float s_3 = max(cluster_size, 0.25);
-    float _e82 = evalGrainProcNoise(p_1, s_3, is_instant_2);
+    float s_2 = max(cluster_size, 0.25);
+    float _e82 = evalGrainProcNoise(p_1, s_2, is_instant_2);
     float _e83 = evalGrainEta(_e82, sensor_seed_1, grain_mode_1, is_instant_2);
     float y_clamped = clamp(y_c_2, 0.0, 1.0);
     float nutting = ((4.0 * y_clamped) * (1.0 - y_clamped));
@@ -505,13 +505,13 @@ vec3 applyStochasticEmulsionGrain(vec3 color_2, float y_c_2, float y_l_2, float 
     }
     bool is_monochrome = local_76;
     if (is_monochrome) {
-        float delta_2 = (((_e83 * nutting) * 0.28) * amount_1);
-        float y_res = max((y_pixel * (1.0 + delta_2)), 0.0);
+        float delta_1 = (((_e83 * nutting) * 0.28) * amount_1);
+        float y_res = max((y_pixel * (1.0 + delta_1)), 0.0);
         return vec3(y_res);
     } else {
-        float _e127 = evalGrainProcNoise((p_1 + vec2(17.3, 31.7)), s_3, is_instant_2);
-        float _e132 = evalGrainProcNoise((p_1 + vec2(73.1, 19.9)), s_3, is_instant_2);
-        float _e137 = evalGrainProcNoise((p_1 + vec2(43.7, 89.3)), s_3, is_instant_2);
+        float _e127 = evalGrainProcNoise((p_1 + vec2(17.3, 31.7)), s_2, is_instant_2);
+        float _e132 = evalGrainProcNoise((p_1 + vec2(73.1, 19.9)), s_2, is_instant_2);
+        float _e137 = evalGrainProcNoise((p_1 + vec2(43.7, 89.3)), s_2, is_instant_2);
         float _e138 = evalGrainEta(_e127, sensor_seed_1, grain_mode_1, is_instant_2);
         float _e139 = evalGrainEta(_e132, sensor_seed_1, grain_mode_1, is_instant_2);
         float _e140 = evalGrainEta(_e137, sensor_seed_1, grain_mode_1, is_instant_2);
@@ -574,10 +574,10 @@ vec3 rgb2hsv(vec3 c_6) {
     float s_1 = 0.0;
     float maxV = max(c_6.x, max(c_6.y, c_6.z));
     float minV = min(c_6.x, min(c_6.y, c_6.z));
-    float delta_3 = (maxV - minV);
-    if ((delta_3 > 1e-5)) {
+    float delta_2 = (maxV - minV);
+    if ((delta_2 > 1e-5)) {
         if ((maxV == c_6.x)) {
-            h = ((c_6.y - c_6.z) / delta_3);
+            h = ((c_6.y - c_6.z) / delta_2);
             float _e22 = h;
             if ((_e22 < 0.0)) {
                 float _e25 = h;
@@ -585,16 +585,16 @@ vec3 rgb2hsv(vec3 c_6) {
             }
         } else {
             if ((maxV == c_6.y)) {
-                h = (((c_6.z - c_6.x) / delta_3) + 2.0);
+                h = (((c_6.z - c_6.x) / delta_2) + 2.0);
             } else {
-                h = (((c_6.x - c_6.y) / delta_3) + 4.0);
+                h = (((c_6.x - c_6.y) / delta_2) + 4.0);
             }
         }
         float _e42 = h;
         h = (_e42 * 60.0);
     }
     if ((maxV > 1e-5)) {
-        s_1 = (delta_3 / maxV);
+        s_1 = (delta_2 / maxV);
     }
     float _e50 = h;
     float _e51 = s_1;
@@ -604,12 +604,12 @@ vec3 rgb2hsv(vec3 c_6) {
 vec3 hsv2rgb(vec3 c_7) {
     vec3 rgb = vec3(0.0);
     float h_1 = (c_7.x / 60.0);
-    float s_4 = c_7.y;
+    float s_3 = c_7.y;
     float v_2 = c_7.z;
-    float C = (v_2 * s_4);
+    float C = (v_2 * s_3);
     float _e8 = float_mod(h_1, 2.0);
     float X = (C * (1.0 - abs((_e8 - 1.0))));
-    float m_2 = (v_2 - C);
+    float m_1 = (v_2 - C);
     if ((h_1 < 1.0)) {
         rgb = vec3(C, X, 0.0);
     } else {
@@ -632,138 +632,12 @@ vec3 hsv2rgb(vec3 c_7) {
         }
     }
     vec3 _e41 = rgb;
-    return (_e41 + vec3(m_2));
+    return (_e41 + vec3(m_1));
 }
 
-float evalCameraHermite7_(float x_1, vec2 knots[7], float m[7]) {
-    int k = 0;
-    if ((x_1 <= knots[0].x)) {
-        return knots[0].y;
-    }
-    if ((x_1 >= knots[6].x)) {
-        return knots[6].y;
-    }
-    bool loop_init_1 = true;
-    while(true) {
-        if (!loop_init_1) {
-            int _e83 = k;
-            k = (_e83 + 1);
-        }
-        loop_init_1 = false;
-        int _e15 = k;
-        if ((_e15 < 6)) {
-        } else {
-            break;
-        }
-        {
-            int _e18 = k;
-            if ((x_1 <= knots[(_e18 + 1)].x)) {
-                int _e24 = k;
-                int _e29 = k;
-                float dx = (knots[(_e24 + 1)].x - knots[_e29].x);
-                int _e33 = k;
-                float t = ((x_1 - knots[_e33].x) / dx);
-                float t2_ = (t * t);
-                float t3_ = (t2_ * t);
-                float h00_ = (((2.0 * t3_) - (3.0 * t2_)) + 1.0);
-                float h10_ = ((t3_ - (2.0 * t2_)) + t);
-                float h01_ = ((-2.0 * t3_) + (3.0 * t2_));
-                float h11_ = (t3_ - t2_);
-                int _e57 = k;
-                int _e61 = k;
-                int _e66 = k;
-                int _e73 = k;
-                return clamp(((((h00_ * knots[_e57].y) + ((h10_ * m[_e61]) * dx)) + (h01_ * knots[(_e66 + 1)].y)) + ((h11_ * m[(_e73 + 1)]) * dx)), 0.0, 1.0);
-            }
-        }
-    }
-    return x_1;
-}
-
-float applyCameraToneCurve(float x_2, int mode) {
-    float xc = clamp(x_2, 0.0, 1.0);
-    if ((mode == 2)) {
-        float _e9 = evalCameraHermite7_(xc, DCP_KNOTS_PORTRAIT, DCP_TANGENTS_PORTRAIT);
-        return _e9;
-    } else {
-        if ((mode == 3)) {
-            float _e14 = evalCameraHermite7_(xc, DCP_KNOTS_LANDSCAPE, DCP_TANGENTS_LANDSCAPE);
-            return _e14;
-        } else {
-            if ((mode == 4)) {
-                float _e19 = evalCameraHermite7_(xc, DCP_KNOTS_VIVID, DCP_TANGENTS_VIVID);
-                return _e19;
-            } else {
-                float _e22 = evalCameraHermite7_(xc, DCP_KNOTS_STANDARD, DCP_TANGENTS_STANDARD);
-                return _e22;
-            }
-        }
-    }
-}
-
-vec3 evalHueSatMapDelta(float h_deg, float s_2, vec3 table[24]) {
-    float h_norm = 0.0;
-    h_norm = fract((h_deg / 360.0));
-    float _e7 = h_norm;
-    if ((_e7 < 0.0)) {
-        float _e10 = h_norm;
-        h_norm = (_e10 + 1.0);
-    }
-    float _e13 = h_norm;
-    float h_coord = (_e13 * 12.0);
-    int h0_ = (int(floor(h_coord)) % 12);
-    int h1_ = ((h0_ + 1) % 12);
-    float h_frac = (h_coord - floor(h_coord));
-    float s_clamped = clamp(s_2, 0.0, 1.0);
-    vec3 c00_ = table[((h0_ * 2) + 0)];
-    vec3 c01_ = table[((h0_ * 2) + 1)];
-    vec3 c10_ = table[((h1_ * 2) + 0)];
-    vec3 c11_ = table[((h1_ * 2) + 1)];
-    vec3 c0_ = mix(c00_, c01_, s_clamped);
-    vec3 c1_ = mix(c10_, c11_, s_clamped);
-    return mix(c0_, c1_, h_frac);
-}
-
-vec3 applyCameraHueSatMap(vec3 c_srgb, int mode_1) {
-    vec3 delta = vec3(0.0);
-    if ((max(max(c_srgb.x, c_srgb.y), c_srgb.z) <= 1e-6)) {
-        return c_srgb;
-    }
-    vec3 _e9 = rgb2hsv(c_srgb);
-    if ((_e9.y <= 1e-6)) {
-        return c_srgb;
-    }
-    if ((mode_1 == 2)) {
-        vec3 _e21 = evalHueSatMapDelta(_e9.x, _e9.y, DCP_HSM_PORTRAIT);
-        delta = _e21;
-    } else {
-        if ((mode_1 == 3)) {
-            vec3 _e27 = evalHueSatMapDelta(_e9.x, _e9.y, DCP_HSM_LANDSCAPE);
-            delta = _e27;
-        } else {
-            if ((mode_1 == 4)) {
-                vec3 _e33 = evalHueSatMapDelta(_e9.x, _e9.y, DCP_HSM_VIVID);
-                delta = _e33;
-            } else {
-                vec3 _e37 = evalHueSatMapDelta(_e9.x, _e9.y, DCP_HSM_STANDARD);
-                delta = _e37;
-            }
-        }
-    }
-    float _e40 = delta.x;
-    float _e43 = float_mod((_e9.x + _e40), 360.0);
-    float _e47 = float_mod((_e43 + 360.0), 360.0);
-    float _e50 = delta.y;
-    float s_out = clamp((_e9.y * _e50), 0.0, 1.0);
-    float _e57 = delta.z;
-    float v_out = max((_e9.z * _e57), 0.0);
-    vec3 _e62 = hsv2rgb(vec3(_e47, s_out, v_out));
-    return _e62;
-}
-
-float agxApplyCurveChannel(float x_3) {
-    float xc_1 = clamp(x_3, 0.0, 1.0);
-    float curved = (((((((((((15.45672 * xc_1) - 40.02792) * xc_1) + 31.87076) * xc_1) - 6.84882) * xc_1) + 0.4286) * xc_1) + 0.12066) * xc_1);
+float agxApplyCurveChannel(float x_1) {
+    float xc = clamp(x_1, 0.0, 1.0);
+    float curved = (((((((((((15.45672 * xc) - 40.02792) * xc) + 31.87076) * xc) - 6.84882) * xc) + 0.4286) * xc) + 0.12066) * xc);
     return clamp(curved, 0.0, 1.0);
 }
 
@@ -799,49 +673,10 @@ vec3 agxToneMapVivid(vec3 rec2020_color_1, float contrast_gain_1) {
     float punchyContrast = (contrast_gain_1 * 1.35);
     vec3 _e4 = agxToneMap(rec2020_color_1, punchyContrast);
     float lum = (((0.2126 * _e4.x) + (0.7152 * _e4.y)) + (0.0722 * _e4.z));
-    float t_1 = clamp(((lum - 0.65) / 0.35), 0.0, 1.0);
-    float h_2 = ((t_1 * t_1) * (3.0 - (2.0 * t_1)));
+    float t = clamp(((lum - 0.65) / 0.35), 0.0, 1.0);
+    float h_2 = ((t * t) * (3.0 - (2.0 * t)));
     float sat = (1.25 - (0.25 * h_2));
     return clamp(vec3((lum + (sat * (_e4.x - lum))), (lum + (sat * (_e4.y - lum))), (lum + (sat * (_e4.z - lum)))), vec3(0.0), vec3(1.0));
-}
-
-vec3 agxToneMapPhotographic(vec3 rec2020_color_2, float contrast_gain_2) {
-    vec3 compressed = vec3(0.0);
-    float norm_1 = 0.0;
-    float gain = 1.0;
-    float minC_1 = min(rec2020_color_2.x, min(rec2020_color_2.y, rec2020_color_2.z));
-    compressed = rec2020_color_2;
-    if ((minC_1 < 0.0)) {
-        compressed = (rec2020_color_2 - vec3(minC_1));
-    }
-    float photoContrast = (contrast_gain_2 * 1.28);
-    float _e15 = compressed.x;
-    float _e19 = compressed.y;
-    float _e24 = compressed.z;
-    float lumRec = (((0.2627 * _e15) + (0.678 * _e19)) + (0.0593 * _e24));
-    float xRel_1 = max((lumRec / 0.18), 1e-6);
-    float logEncoded_1 = ((log2(xRel_1) - AGX_MIN_EV) / AGX_EV_RANGE);
-    norm_1 = clamp(logEncoded_1, 0.0, 1.0);
-    if ((abs((photoContrast - 1.0)) > 0.001)) {
-        float _e47 = norm_1;
-        norm_1 = clamp((AGX_MID_GRAY_NORM + ((_e47 - AGX_MID_GRAY_NORM) * photoContrast)), 0.0, 1.0);
-    }
-    float _e55 = norm_1;
-    float _e56 = agxApplyCurveChannel(_e55);
-    float lumMapped = pow(max(_e56, 0.0), AGX_GAMMA);
-    if ((lumRec > 1e-6)) {
-        gain = (lumMapped / lumRec);
-    }
-    vec3 _e66 = compressed;
-    float _e67 = gain;
-    vec3 cScaled = (_e66 * _e67);
-    vec3 sRatio = (REC2020_TO_LINEAR_SRGB * cScaled);
-    vec3 _e71 = compressed;
-    vec3 _e72 = agxToneMap(_e71, photoContrast);
-    float peakVal = max(lumMapped, max(max(sRatio.x, 0.0), max(max(sRatio.y, 0.0), max(sRatio.z, 0.0))));
-    float t_2 = clamp(((peakVal - 0.85) / 0.2), 0.0, 1.0);
-    float h_3 = ((t_2 * t_2) * (3.0 - (2.0 * t_2)));
-    return clamp(vec3(((max(sRatio.x, 0.0) * (1.0 - h_3)) + (_e72.x * h_3)), ((max(sRatio.y, 0.0) * (1.0 - h_3)) + (_e72.y * h_3)), ((max(sRatio.z, 0.0) * (1.0 - h_3)) + (_e72.z * h_3))), vec3(0.0), vec3(1.0));
 }
 
 vec3 applyBilateralToneRecovery(vec3 color_3, float y_c_3, float y_neighbors_1[16], float highlights, float shadows, float whites, float blacks) {
@@ -881,13 +716,13 @@ vec3 applyBilateralToneRecovery(vec3 color_3, float y_c_3, float y_neighbors_1[1
     }
     float ev_c = log2((max(y_c_3, 1e-5) / 0.18));
     weighted_ev_sum = ev_c;
-    bool loop_init_2 = true;
+    bool loop_init_1 = true;
     while(true) {
-        if (!loop_init_2) {
+        if (!loop_init_1) {
             int _e63 = i_3;
             i_3 = (_e63 + 1);
         }
-        loop_init_2 = false;
+        loop_init_1 = false;
         int _e42 = i_3;
         if ((_e42 < 4)) {
         } else {
@@ -905,13 +740,13 @@ vec3 applyBilateralToneRecovery(vec3 color_3, float y_c_3, float y_neighbors_1[1
             weighted_ev_sum = (_e60 + (w * ev_i));
         }
     }
-    bool loop_init_3 = true;
+    bool loop_init_2 = true;
     while(true) {
-        if (!loop_init_3) {
+        if (!loop_init_2) {
             int _e89 = i_4;
             i_4 = (_e89 + 1);
         }
-        loop_init_3 = false;
+        loop_init_2 = false;
         int _e68 = i_4;
         if ((_e68 < 8)) {
         } else {
@@ -929,13 +764,13 @@ vec3 applyBilateralToneRecovery(vec3 color_3, float y_c_3, float y_neighbors_1[1
             weighted_ev_sum = (_e86 + (w_1 * ev_i_1));
         }
     }
-    bool loop_init_4 = true;
+    bool loop_init_3 = true;
     while(true) {
-        if (!loop_init_4) {
+        if (!loop_init_3) {
             int _e115 = i_5;
             i_5 = (_e115 + 1);
         }
-        loop_init_4 = false;
+        loop_init_3 = false;
         int _e94 = i_5;
         if ((_e94 < 12)) {
         } else {
@@ -953,13 +788,13 @@ vec3 applyBilateralToneRecovery(vec3 color_3, float y_c_3, float y_neighbors_1[1
             weighted_ev_sum = (_e112 + (w_2 * ev_i_2));
         }
     }
-    bool loop_init_5 = true;
+    bool loop_init_4 = true;
     while(true) {
-        if (!loop_init_5) {
+        if (!loop_init_4) {
             int _e141 = i_6;
             i_6 = (_e141 + 1);
         }
-        loop_init_5 = false;
+        loop_init_4 = false;
         int _e120 = i_6;
         if ((_e120 < 16)) {
         } else {
@@ -1012,8 +847,8 @@ vec3 applyBilateralToneRecovery(vec3 color_3, float y_c_3, float y_neighbors_1[1
     float _e244 = delta_ev;
     float detail_boost = ((0.35 * detail) * (abs(_e244) / 2.25));
     float _e249 = delta_ev;
-    float gain_1 = exp2(clamp((_e249 + detail_boost), -6.0, 6.0));
-    return (color_3 * gain_1);
+    float gain = exp2(clamp((_e249 + detail_boost), -6.0, 6.0));
+    return (color_3 * gain);
 }
 
 vec3 applyColorAdjustments(vec3 rgb_1, float vibrance, float saturation, float deepBlue, float foliage) {
@@ -1062,8 +897,8 @@ vec3 applyColorAdjustments(vec3 rgb_1, float vibrance, float saturation, float d
         float _e68 = c_8.x;
         float _e70 = c_8.y;
         float _e73 = c_8.z;
-        float minC_2 = min(min(_e68, _e70), _e73);
-        float chroma = (maxC - minC_2);
+        float minC_1 = min(min(_e68, _e70), _e73);
+        float chroma = (maxC - minC_1);
         float _e79 = c_8.x;
         float _e81 = c_8.y;
         float _e84 = c_8.z;
@@ -1108,8 +943,8 @@ vec3 applyColorAdjustments(vec3 rgb_1, float vibrance, float saturation, float d
         float _e210 = c_8.z;
         float skySignal = max((_e210 - maxWarm), 0.0);
         if ((skySignal > 0.0)) {
-            float x_5 = (deepBlue / 100.0);
-            float factor = (sign(x_5) * pow(abs(x_5), 1.6));
+            float x_3 = (deepBlue / 100.0);
+            float factor = (sign(x_3) * pow(abs(x_3), 1.6));
             float _e225 = c_8.x;
             c_8.x = (_e225 - ((factor * skySignal) * 0.28));
             float _e232 = c_8.y;
@@ -1125,8 +960,8 @@ vec3 applyColorAdjustments(vec3 rgb_1, float vibrance, float saturation, float d
         float _e252 = c_8.y;
         float greenSignal = max((_e252 - maxRb), 0.0);
         if ((greenSignal > 0.0)) {
-            float x_6 = (foliage / 100.0);
-            float factor_1 = (sign(x_6) * pow(abs(x_6), 1.6));
+            float x_4 = (foliage / 100.0);
+            float factor_1 = (sign(x_4) * pow(abs(x_4), 1.6));
             float _e267 = c_8.x;
             c_8.x = (_e267 - ((factor_1 * greenSignal) * 0.3));
             float _e274 = c_8.z;
@@ -1141,7 +976,7 @@ vec3 applyColorAdjustments(vec3 rgb_1, float vibrance, float saturation, float d
 
 vec3 applySplitToning(vec3 rgb_2, float shadowHue, float shadowSat, float highlightHue, float highlightSat, float balance) {
     bool local_83 = false;
-    vec3 delta_1 = vec3(0.0);
+    vec3 delta = vec3(0.0);
     bool local_84 = false;
     bool local_85 = false;
     if ((shadowSat <= 0.0)) {
@@ -1155,36 +990,36 @@ vec3 applySplitToning(vec3 rgb_2, float shadowHue, float shadowSat, float highli
     }
     float lum_2 = (((0.2627 * rgb_2.x) + (0.678 * rgb_2.y)) + (0.0593 * rgb_2.z));
     float yClamp = clamp(lum_2, 0.0, 1.0);
-    float t_3 = clamp((0.5 - ((balance / 100.0) * 0.25)), 0.1, 0.9);
+    float t_1 = clamp((0.5 - ((balance / 100.0) * 0.25)), 0.1, 0.9);
     if ((shadowSat > 0.0)) {
-        local_84 = (yClamp < t_3);
+        local_84 = (yClamp < t_1);
     } else {
         local_84 = false;
     }
     bool _e46 = local_84;
     if (_e46) {
-        float u_s = ((t_3 - yClamp) / t_3);
+        float u_s = ((t_1 - yClamp) / t_1);
         float w_s = (((u_s * u_s) * (3.0 - (2.0 * u_s))) * (shadowSat / 100.0));
         vec3 _e61 = hsv2rgb(vec3(shadowHue, 1.0, 1.0));
         float tLum = (((0.2627 * _e61.x) + (0.678 * _e61.y)) + (0.0593 * _e61.z));
-        vec3 _e73 = delta_1;
-        delta_1 = (_e73 + (vec3(w_s) * (_e61 - vec3(tLum))));
+        vec3 _e73 = delta;
+        delta = (_e73 + (vec3(w_s) * (_e61 - vec3(tLum))));
     }
     if ((highlightSat > 0.0)) {
-        local_85 = (yClamp > t_3);
+        local_85 = (yClamp > t_1);
     } else {
         local_85 = false;
     }
     bool _e85 = local_85;
     if (_e85) {
-        float u_h = ((yClamp - t_3) / (1.0 - t_3));
+        float u_h = ((yClamp - t_1) / (1.0 - t_1));
         float w_h = (((u_h * u_h) * (3.0 - (2.0 * u_h))) * (highlightSat / 100.0));
         vec3 _e102 = hsv2rgb(vec3(highlightHue, 1.0, 1.0));
         float tLum_1 = (((0.2627 * _e102.x) + (0.678 * _e102.y)) + (0.0593 * _e102.z));
-        vec3 _e114 = delta_1;
-        delta_1 = (_e114 + (vec3(w_h) * (_e102 - vec3(tLum_1))));
+        vec3 _e114 = delta;
+        delta = (_e114 + (vec3(w_h) * (_e102 - vec3(tLum_1))));
     }
-    vec3 _e120 = delta_1;
+    vec3 _e120 = delta;
     return clamp((rgb_2 + _e120), vec3(0.0), vec3(1.0));
 }
 
@@ -1387,8 +1222,8 @@ vec3 applyDirChemicalCoupling(vec3 rgb_5, float c_rg, float c_rb, float c_gr, fl
     return clamp(vec3(pow(10.0, -(d_r_out)), pow(10.0, -(d_g_out)), pow(10.0, -(d_b_out))), vec3(0.0), vec3(2.0));
 }
 
-float applyEmulsionSCurve(float x_4, float alpha, float beta) {
-    float c_12 = clamp(x_4, 0.0, 1.0);
+float applyEmulsionSCurve(float x_2, float alpha, float beta) {
+    float c_12 = clamp(x_2, 0.0, 1.0);
     float poly = ((c_12 + (((alpha * c_12) * (1.0 - c_12)) * ((2.0 * c_12) - 1.0))) + ((beta * c_12) * (1.0 - c_12)));
     return clamp(poly, 0.0, 1.0);
 }
@@ -1989,9 +1824,9 @@ void main() {
     if (_e561) {
         float _e564 = _group_0_binding_0_fs.aspectRatio;
         float A_1 = max(_e564, 0.01);
-        float xc_2 = (((uv_2.x - 0.5) * 2.0) * A_1);
+        float xc_1 = (((uv_2.x - 0.5) * 2.0) * A_1);
         float yc = ((uv_2.y - 0.5) * 2.0);
-        float r2_3 = (((xc_2 * xc_2) + (yc * yc)) / ((A_1 * A_1) + 1.0));
+        float r2_3 = (((xc_1 * xc_1) + (yc * yc)) / ((A_1 * A_1) + 1.0));
         float r4_1 = (r2_3 * r2_3);
         float r6_ = (r4_1 * r2_3);
         float r8_ = (r4_1 * r4_1);
@@ -2070,13 +1905,13 @@ void main() {
         vec4 s_obl = texture(_group_0_binding_1_fs, vec2((uv_2 + vec2(-(stepOuter.x), stepOuter.y))));
         vec4 s_obr = texture(_group_0_binding_1_fs, vec2((uv_2 + vec2(stepOuter.x, stepOuter.y))));
         vec4 s_neighbors[16] = vec4[16](s_l, s_r, s_t, s_b, s_tl, s_tr, s_bl, s_br, s_ol, s_or, s_ot, s_ob, s_otl, s_otr, s_obl, s_obr);
-        bool loop_init_6 = true;
+        bool loop_init_5 = true;
         while(true) {
-            if (!loop_init_6) {
+            if (!loop_init_5) {
                 int _e864 = i;
                 i = (_e864 + 1);
             }
-            loop_init_6 = false;
+            loop_init_5 = false;
             int _e835 = i;
             if ((_e835 < 16)) {
             } else {
@@ -2189,13 +2024,13 @@ void main() {
         float cosJ = cos(jitter);
         float sinJ = sin(jitter);
         mat2x2 rot_1 = mat2x2(vec2(cosJ, sinJ), vec2(-(sinJ), cosJ));
-        bool loop_init_7 = true;
+        bool loop_init_6 = true;
         while(true) {
-            if (!loop_init_7) {
+            if (!loop_init_6) {
                 int _e1053 = i_1;
                 i_1 = (_e1053 + 1);
             }
-            loop_init_7 = false;
+            loop_init_6 = false;
             int _e1006 = i_1;
             if ((_e1006 < 16)) {
             } else {
@@ -2205,13 +2040,13 @@ void main() {
                 int _e1010 = i_1;
                 vec2 _e1013 = halationRadius;
                 vec2 rotatedOffset = ((rot_1 * FERMAT_DISK[_e1010]) * _e1013);
-                vec4 s_5 = texture(_group_0_binding_1_fs, vec2((uv_2 + rotatedOffset)));
+                vec4 s_4 = texture(_group_0_binding_1_fs, vec2((uv_2 + rotatedOffset)));
                 c_1 = vec3(0.0);
                 int _e1023 = _group_0_binding_0_fs.isLinearRaw;
                 if ((_e1023 == 1)) {
-                    c_1 = s_5.xyz;
+                    c_1 = s_4.xyz;
                 } else {
-                    vec3 _e1028 = srgbGammaToLinear3_(s_5.xyz);
+                    vec3 _e1028 = srgbGammaToLinear3_(s_4.xyz);
                     c_1 = (LINEAR_SRGB_TO_REC2020_ * _e1028);
                 }
                 vec3 _e1031 = c_1;
@@ -2537,112 +2372,76 @@ void main() {
             srgbLinearOut = clamp(srgb, vec3(0.0), vec3(1.0));
         }
     } else {
-        int _e1848 = _group_0_binding_0_fs.toneProfileMode;
-        if ((_e1848 == 0)) {
-            vec3 _e1851 = rec2020Color;
-            float _e1852 = contrastGain;
-            vec3 _e1853 = agxToneMapVivid(_e1851, _e1852);
-            srgbLinearOut = _e1853;
-        } else {
-            int _e1856 = _group_0_binding_0_fs.toneProfileMode;
-            if ((_e1856 == 1)) {
-                vec3 _e1859 = rec2020Color;
-                float _e1860 = contrastGain;
-                vec3 _e1861 = agxToneMap(_e1859, _e1860);
-                srgbLinearOut = _e1861;
-            } else {
-                int _e1864 = _group_0_binding_0_fs.toneProfileMode;
-                if ((_e1864 == 6)) {
-                    vec3 _e1867 = rec2020Color;
-                    float _e1868 = contrastGain;
-                    vec3 _e1869 = agxToneMapPhotographic(_e1867, _e1868);
-                    srgbLinearOut = _e1869;
-                } else {
-                    int _e1872 = _group_0_binding_0_fs.toneProfileMode;
-                    int camMode = (_e1872 - 1);
-                    vec3 _e1876 = rec2020Color;
-                    vec3 c_srgb_1 = max((REC2020_TO_LINEAR_SRGB * _e1876), vec3(0.0));
-                    vec3 _e1881 = applyCameraHueSatMap(c_srgb_1, camMode);
-                    float _e1883 = applyCameraToneCurve(_e1881.x, camMode);
-                    float _e1885 = applyCameraToneCurve(_e1881.y, camMode);
-                    float _e1887 = applyCameraToneCurve(_e1881.z, camMode);
-                    vec3 curved_2 = vec3(_e1883, _e1885, _e1887);
-                    float _e1889 = contrastGain;
-                    if ((abs((_e1889 - 1.0)) > 0.001)) {
-                        float _e1898 = contrastGain;
-                        srgbLinearOut = clamp((((curved_2 - vec3(0.18)) * _e1898) + vec3(0.18)), vec3(0.0), vec3(1.0));
-                    } else {
-                        srgbLinearOut = clamp(curved_2, vec3(0.0), vec3(1.0));
-                    }
-                }
-            }
-        }
+        vec3 _e1846 = rec2020Color;
+        float _e1847 = contrastGain;
+        vec3 _e1848 = agxToneMapVivid(_e1846, _e1847);
+        srgbLinearOut = _e1848;
     }
-    float _e1915 = _group_0_binding_0_fs.isOriginal;
-    if ((_e1915 < 0.5)) {
-        int _e1922 = _group_0_binding_0_fs.printMediaMode;
-        local_50 = (_e1922 != 0);
+    float _e1851 = _group_0_binding_0_fs.isOriginal;
+    if ((_e1851 < 0.5)) {
+        int _e1858 = _group_0_binding_0_fs.printMediaMode;
+        local_50 = (_e1858 != 0);
     } else {
         local_50 = false;
     }
-    bool _e1926 = local_50;
-    if (_e1926) {
-        vec3 _e1927 = srgbLinearOut;
-        int _e1930 = _group_0_binding_0_fs.printMediaMode;
-        int _e1933 = _group_0_binding_0_fs.enlargerFilterMode;
-        float _e1936 = _group_0_binding_0_fs.printPaperGrade;
-        float _e1939 = _group_0_binding_0_fs.printProcessDepth;
-        vec3 _e1940 = applyPrintMedia(_e1927, _e1930, _e1933, _e1936, _e1939);
-        srgbLinearOut = _e1940;
+    bool _e1862 = local_50;
+    if (_e1862) {
+        vec3 _e1863 = srgbLinearOut;
+        int _e1866 = _group_0_binding_0_fs.printMediaMode;
+        int _e1869 = _group_0_binding_0_fs.enlargerFilterMode;
+        float _e1872 = _group_0_binding_0_fs.printPaperGrade;
+        float _e1875 = _group_0_binding_0_fs.printProcessDepth;
+        vec3 _e1876 = applyPrintMedia(_e1863, _e1866, _e1869, _e1872, _e1875);
+        srgbLinearOut = _e1876;
     }
-    vec3 _e1941 = srgbLinearOut;
-    finalColor = _e1941;
-    int _e1945 = _group_0_binding_0_fs.lutEnabled;
-    if ((_e1945 != 0)) {
-        float _e1952 = _group_0_binding_0_fs.lutIntensity;
-        local_51 = (_e1952 > 0.0);
+    vec3 _e1877 = srgbLinearOut;
+    finalColor = _e1877;
+    int _e1881 = _group_0_binding_0_fs.lutEnabled;
+    if ((_e1881 != 0)) {
+        float _e1888 = _group_0_binding_0_fs.lutIntensity;
+        local_51 = (_e1888 > 0.0);
     } else {
         local_51 = false;
     }
-    bool _e1956 = local_51;
-    if (_e1956) {
-        float _e1961 = _group_0_binding_0_fs.isOriginal;
-        local_52 = (_e1961 < 0.5);
+    bool _e1892 = local_51;
+    if (_e1892) {
+        float _e1897 = _group_0_binding_0_fs.isOriginal;
+        local_52 = (_e1897 < 0.5);
     } else {
         local_52 = false;
     }
-    bool _e1965 = local_52;
-    if (_e1965) {
-        float _e1968 = _group_0_binding_0_fs.lutSize;
-        float size = max(_e1968, 2.0);
-        vec3 _e1971 = finalColor;
-        vec3 lutCoord = (((_e1971 * (size - 1.0)) + vec3(0.5)) / vec3(size));
-        vec4 _e1982 = texture(_group_0_binding_3_fs, vec3(lutCoord));
-        vec3 lutSample = _e1982.xyz;
-        vec3 _e1984 = finalColor;
-        float _e1987 = _group_0_binding_0_fs.lutIntensity;
-        finalColor = mix(_e1984, lutSample, clamp(_e1987, 0.0, 1.0));
+    bool _e1901 = local_52;
+    if (_e1901) {
+        float _e1904 = _group_0_binding_0_fs.lutSize;
+        float size = max(_e1904, 2.0);
+        vec3 _e1907 = finalColor;
+        vec3 lutCoord = (((_e1907 * (size - 1.0)) + vec3(0.5)) / vec3(size));
+        vec4 _e1918 = texture(_group_0_binding_3_fs, vec3(lutCoord));
+        vec3 lutSample = _e1918.xyz;
+        vec3 _e1920 = finalColor;
+        float _e1923 = _group_0_binding_0_fs.lutIntensity;
+        finalColor = mix(_e1920, lutSample, clamp(_e1923, 0.0, 1.0));
     }
-    int _e1994 = _group_0_binding_0_fs.softProofEnabled;
-    if ((_e1994 != 0)) {
-        float _e2001 = _group_0_binding_0_fs.isOriginal;
-        local_53 = (_e2001 < 0.5);
+    int _e1930 = _group_0_binding_0_fs.softProofEnabled;
+    if ((_e1930 != 0)) {
+        float _e1937 = _group_0_binding_0_fs.isOriginal;
+        local_53 = (_e1937 < 0.5);
     } else {
         local_53 = false;
     }
-    bool _e2005 = local_53;
-    if (_e2005) {
-        vec3 _e2007 = finalColor;
-        vec3 proofCoord = (((clamp(_e2007, vec3(0.0), vec3(1.0)) * (33.0 - 1.0)) + vec3(0.5)) / vec3(33.0));
+    bool _e1941 = local_53;
+    if (_e1941) {
+        vec3 _e1943 = finalColor;
+        vec3 proofCoord = (((clamp(_e1943, vec3(0.0), vec3(1.0)) * (33.0 - 1.0)) + vec3(0.5)) / vec3(33.0));
         vec4 proofSample = texture(_group_0_binding_11_fs, vec3(proofCoord));
-        int _e2026 = _group_0_binding_0_fs.gamutWarningEnabled;
-        if ((_e2026 != 0)) {
+        int _e1962 = _group_0_binding_0_fs.gamutWarningEnabled;
+        if ((_e1962 != 0)) {
             local_54 = (proofSample.w < 0.5);
         } else {
             local_54 = false;
         }
-        bool _e2035 = local_54;
-        if (_e2035) {
+        bool _e1971 = local_54;
+        if (_e1971) {
             float zebra = fract(((in_.position.x + in_.position.y) / 12.0));
             if ((zebra < 0.5)) {
                 finalColor = vec3(0.0, 0.9, 1.0);
@@ -2653,125 +2452,125 @@ void main() {
             finalColor = proofSample.xyz;
         }
     }
-    int _e2057 = _group_0_binding_0_fs.edrEnabled;
-    if ((_e2057 != 0)) {
-        float _e2064 = _group_0_binding_0_fs.edrHeadroom;
-        local_55 = (_e2064 > 1.001);
+    int _e1993 = _group_0_binding_0_fs.edrEnabled;
+    if ((_e1993 != 0)) {
+        float _e2000 = _group_0_binding_0_fs.edrHeadroom;
+        local_55 = (_e2000 > 1.001);
     } else {
         local_55 = false;
     }
-    bool _e2068 = local_55;
-    if (_e2068) {
-        float _e2071 = _group_0_binding_0_fs.edrHeadroom;
-        float headroom = clamp(_e2071, 1.0, 4.0);
-        int _e2077 = _group_0_binding_0_fs.hasGainMap;
-        if ((_e2077 != 0)) {
-            vec4 _e2082 = texture(_group_0_binding_8_fs, vec2(uv_2));
-            float g_1 = _e2082.x;
-            float _e2086 = _group_0_binding_0_fs.gainMapMin;
-            float _e2089 = _group_0_binding_0_fs.gainMapMax;
-            float _e2092 = _group_0_binding_0_fs.gainMapMin;
-            float gainLog2_ = (_e2086 + (g_1 * (_e2089 - _e2092)));
-            float _e2098 = _group_0_binding_0_fs.gainMapGamma;
-            float gamma_1 = max(_e2098, 0.01);
+    bool _e2004 = local_55;
+    if (_e2004) {
+        float _e2007 = _group_0_binding_0_fs.edrHeadroom;
+        float headroom = clamp(_e2007, 1.0, 4.0);
+        int _e2013 = _group_0_binding_0_fs.hasGainMap;
+        if ((_e2013 != 0)) {
+            vec4 _e2018 = texture(_group_0_binding_8_fs, vec2(uv_2));
+            float g_1 = _e2018.x;
+            float _e2022 = _group_0_binding_0_fs.gainMapMin;
+            float _e2025 = _group_0_binding_0_fs.gainMapMax;
+            float _e2028 = _group_0_binding_0_fs.gainMapMin;
+            float gainLog2_ = (_e2022 + (g_1 * (_e2025 - _e2028)));
+            float _e2034 = _group_0_binding_0_fs.gainMapGamma;
+            float gamma_1 = max(_e2034, 0.01);
             float gainFactor = pow(2.0, (gainLog2_ / gamma_1));
-            float _e2106 = _group_0_binding_0_fs.gainMapCapacityMax;
-            float maxCap = max(_e2106, 1.01);
+            float _e2042 = _group_0_binding_0_fs.gainMapCapacityMax;
+            float maxCap = max(_e2042, 1.01);
             float weight = clamp(((headroom - 1.0) / (maxCap - 1.0)), 0.0, 1.0);
             float effectiveGain = (1.0 + ((gainFactor - 1.0) * weight));
-            vec3 _e2122 = finalColor;
-            finalColor = (_e2122 * effectiveGain);
+            vec3 _e2058 = finalColor;
+            finalColor = (_e2058 * effectiveGain);
         } else {
-            int _e2126 = _group_0_binding_0_fs.isLinearRaw;
-            if ((_e2126 == 1)) {
-                vec3 _e2129 = rec2020Color;
-                float sceneLum = dot(_e2129, vec3(0.2627, 0.678, 0.0593));
-                vec3 _e2135 = finalColor;
-                float outLum = dot(_e2135, vec3(0.2126, 0.7152, 0.0722));
+            int _e2062 = _group_0_binding_0_fs.isLinearRaw;
+            if ((_e2062 == 1)) {
+                vec3 _e2065 = rec2020Color;
+                float sceneLum = dot(_e2065, vec3(0.2627, 0.678, 0.0593));
+                vec3 _e2071 = finalColor;
+                float outLum = dot(_e2071, vec3(0.2126, 0.7152, 0.0722));
                 float highlightFactor = smoothstep(0.85, 1.0, max(outLum, clamp((sceneLum - 0.15), 0.0, 1.0)));
                 if ((highlightFactor > 0.0)) {
                     float edrBoost = (1.0 + ((headroom - 1.0) * pow(highlightFactor, 1.5)));
-                    vec3 _e2159 = finalColor;
-                    finalColor = (_e2159 * edrBoost);
+                    vec3 _e2095 = finalColor;
+                    finalColor = (_e2095 * edrBoost);
                 }
             }
         }
-        float _e2162 = finalColor.x;
-        float _e2164 = finalColor.y;
-        float _e2166 = finalColor.z;
-        float peakC = max(_e2162, max(_e2164, _e2166));
+        float _e2098 = finalColor.x;
+        float _e2100 = finalColor.y;
+        float _e2102 = finalColor.z;
+        float peakC = max(_e2098, max(_e2100, _e2102));
         if ((peakC > headroom)) {
             float excess_1 = ((peakC - headroom) / peakC);
-            vec3 _e2172 = finalColor;
-            finalColor = mix((_e2172 * (headroom / peakC)), vec3(headroom), clamp((excess_1 * 1.5), 0.0, 1.0));
+            vec3 _e2108 = finalColor;
+            finalColor = mix((_e2108 * (headroom / peakC)), vec3(headroom), clamp((excess_1 * 1.5), 0.0, 1.0));
         } else {
             if ((peakC > 1.0)) {
                 float desatThreshold = (1.0 + ((headroom - 1.0) * 0.8));
                 if ((peakC > desatThreshold)) {
-                    float t_4 = ((peakC - desatThreshold) / max((headroom - desatThreshold), 0.0001));
-                    vec3 _e2196 = finalColor;
-                    finalColor = mix(_e2196, vec3(peakC), clamp((t_4 * 0.4), 0.0, 0.4));
+                    float t_2 = ((peakC - desatThreshold) / max((headroom - desatThreshold), 0.0001));
+                    vec3 _e2132 = finalColor;
+                    finalColor = mix(_e2132, vec3(peakC), clamp((t_2 * 0.4), 0.0, 0.4));
                 }
             }
         }
-        vec3 _e2205 = finalColor;
-        finalColor = max((LINEAR_SRGB_TO_DISPLAY_P3_ * _e2205), vec3(0.0));
-        int _e2212 = _group_0_binding_0_fs.clippingOverlayActive;
-        if ((_e2212 != 0)) {
-            float _e2219 = _group_0_binding_0_fs.isOriginal;
-            local_56 = (_e2219 < 0.5);
+        vec3 _e2141 = finalColor;
+        finalColor = max((LINEAR_SRGB_TO_DISPLAY_P3_ * _e2141), vec3(0.0));
+        int _e2148 = _group_0_binding_0_fs.clippingOverlayActive;
+        if ((_e2148 != 0)) {
+            float _e2155 = _group_0_binding_0_fs.isOriginal;
+            local_56 = (_e2155 < 0.5);
         } else {
             local_56 = false;
         }
-        bool _e2223 = local_56;
-        if (_e2223) {
-            int _e2226 = _group_0_binding_0_fs.isLinearRaw;
-            if ((_e2226 == 1)) {
-                float _e2232 = sampledColor.x;
-                if (!((_e2232 >= 1.0))) {
-                    float _e2239 = sampledColor.y;
-                    local_58 = (_e2239 >= 1.0);
+        bool _e2159 = local_56;
+        if (_e2159) {
+            int _e2162 = _group_0_binding_0_fs.isLinearRaw;
+            if ((_e2162 == 1)) {
+                float _e2168 = sampledColor.x;
+                if (!((_e2168 >= 1.0))) {
+                    float _e2175 = sampledColor.y;
+                    local_58 = (_e2175 >= 1.0);
                 } else {
                     local_58 = true;
                 }
-                bool _e2243 = local_58;
-                if (!(_e2243)) {
-                    float _e2248 = sampledColor.z;
-                    local_59 = (_e2248 >= 1.0);
+                bool _e2179 = local_58;
+                if (!(_e2179)) {
+                    float _e2184 = sampledColor.z;
+                    local_59 = (_e2184 >= 1.0);
                 } else {
                     local_59 = true;
                 }
-                bool _e2252 = local_59;
-                local_57 = _e2252;
+                bool _e2188 = local_59;
+                local_57 = _e2188;
             } else {
                 local_57 = false;
             }
-            bool _e2254 = local_57;
-            if (!(_e2254)) {
-                float _e2259 = finalColor.x;
-                float _e2261 = finalColor.y;
-                float _e2263 = finalColor.z;
-                local_60 = (max(_e2259, max(_e2261, _e2263)) >= (headroom * 0.99));
+            bool _e2190 = local_57;
+            if (!(_e2190)) {
+                float _e2195 = finalColor.x;
+                float _e2197 = finalColor.y;
+                float _e2199 = finalColor.z;
+                local_60 = (max(_e2195, max(_e2197, _e2199)) >= (headroom * 0.99));
             } else {
                 local_60 = true;
             }
-            bool _e2270 = local_60;
-            if (!(_e2270)) {
-                float _e2275 = rec2020Color.x;
-                float _e2277 = rec2020Color.y;
-                float _e2279 = rec2020Color.z;
-                local_61 = (max(_e2275, max(_e2277, _e2279)) >= 2.88);
+            bool _e2206 = local_60;
+            if (!(_e2206)) {
+                float _e2211 = rec2020Color.x;
+                float _e2213 = rec2020Color.y;
+                float _e2215 = rec2020Color.z;
+                local_61 = (max(_e2211, max(_e2213, _e2215)) >= 2.88);
             } else {
                 local_61 = true;
             }
             bool isHighlightClip = local_61;
-            vec3 _e2286 = rec2020Color;
-            float sceneLum_1 = dot(_e2286, vec3(0.2627, 0.678, 0.0593));
+            vec3 _e2222 = rec2020Color;
+            float sceneLum_1 = dot(_e2222, vec3(0.2627, 0.678, 0.0593));
             if (!((sceneLum_1 <= 0.0007))) {
-                float _e2298 = finalColor.x;
-                float _e2300 = finalColor.y;
-                float _e2302 = finalColor.z;
-                local_62 = (max(_e2298, max(_e2300, _e2302)) <= 0.0005);
+                float _e2234 = finalColor.x;
+                float _e2236 = finalColor.y;
+                float _e2238 = finalColor.z;
+                local_62 = (max(_e2234, max(_e2236, _e2238)) <= 0.0005);
             } else {
                 local_62 = true;
             }
@@ -2779,78 +2578,78 @@ void main() {
             if (isHighlightClip) {
                 float zebraHighlight = fract(((in_.position.x + in_.position.y) / 14.0));
                 if ((zebraHighlight < 0.5)) {
-                    float _e2320 = sampledColor.w;
-                    _fs2p_location0 = vec4(1.0, 0.12, 0.12, _e2320);
+                    float _e2256 = sampledColor.w;
+                    _fs2p_location0 = vec4(1.0, 0.12, 0.12, _e2256);
                     return;
                 }
             } else {
                 if (isShadowClip) {
                     float zebraShadow = fract(((in_.position.x - in_.position.y) / 14.0));
                     if ((zebraShadow < 0.5)) {
-                        float _e2336 = sampledColor.w;
-                        _fs2p_location0 = vec4(0.05, 0.4, 1.0, _e2336);
+                        float _e2272 = sampledColor.w;
+                        _fs2p_location0 = vec4(0.05, 0.4, 1.0, _e2272);
                         return;
                     }
                 }
             }
         }
-        vec3 _e2341 = finalColor;
-        float _e2343 = sampledColor.w;
-        _fs2p_location0 = vec4(_e2341, _e2343);
+        vec3 _e2277 = finalColor;
+        float _e2279 = sampledColor.w;
+        _fs2p_location0 = vec4(_e2277, _e2279);
         return;
     } else {
-        vec3 _e2345 = finalColor;
-        vec3 _e2351 = linearToSrgbGamma3_(clamp(_e2345, vec3(0.0), vec3(1.0)));
-        int _e2354 = _group_0_binding_0_fs.clippingOverlayActive;
-        if ((_e2354 != 0)) {
-            float _e2361 = _group_0_binding_0_fs.isOriginal;
-            local_63 = (_e2361 < 0.5);
+        vec3 _e2281 = finalColor;
+        vec3 _e2287 = linearToSrgbGamma3_(clamp(_e2281, vec3(0.0), vec3(1.0)));
+        int _e2290 = _group_0_binding_0_fs.clippingOverlayActive;
+        if ((_e2290 != 0)) {
+            float _e2297 = _group_0_binding_0_fs.isOriginal;
+            local_63 = (_e2297 < 0.5);
         } else {
             local_63 = false;
         }
-        bool _e2365 = local_63;
-        if (_e2365) {
-            int _e2368 = _group_0_binding_0_fs.isLinearRaw;
-            if ((_e2368 == 1)) {
-                float _e2374 = sampledColor.x;
-                if (!((_e2374 >= 1.0))) {
-                    float _e2381 = sampledColor.y;
-                    local_65 = (_e2381 >= 1.0);
+        bool _e2301 = local_63;
+        if (_e2301) {
+            int _e2304 = _group_0_binding_0_fs.isLinearRaw;
+            if ((_e2304 == 1)) {
+                float _e2310 = sampledColor.x;
+                if (!((_e2310 >= 1.0))) {
+                    float _e2317 = sampledColor.y;
+                    local_65 = (_e2317 >= 1.0);
                 } else {
                     local_65 = true;
                 }
-                bool _e2385 = local_65;
-                if (!(_e2385)) {
-                    float _e2390 = sampledColor.z;
-                    local_66 = (_e2390 >= 1.0);
+                bool _e2321 = local_65;
+                if (!(_e2321)) {
+                    float _e2326 = sampledColor.z;
+                    local_66 = (_e2326 >= 1.0);
                 } else {
                     local_66 = true;
                 }
-                bool _e2394 = local_66;
-                local_64 = _e2394;
+                bool _e2330 = local_66;
+                local_64 = _e2330;
             } else {
                 local_64 = false;
             }
-            bool _e2396 = local_64;
-            if (!(_e2396)) {
-                local_67 = (max(_e2351.x, max(_e2351.y, _e2351.z)) >= 0.992);
+            bool _e2332 = local_64;
+            if (!(_e2332)) {
+                local_67 = (max(_e2287.x, max(_e2287.y, _e2287.z)) >= 0.992);
             } else {
                 local_67 = true;
             }
-            bool _e2408 = local_67;
-            if (!(_e2408)) {
-                float _e2413 = rec2020Color.x;
-                float _e2415 = rec2020Color.y;
-                float _e2417 = rec2020Color.z;
-                local_68 = (max(_e2413, max(_e2415, _e2417)) >= 2.88);
+            bool _e2344 = local_67;
+            if (!(_e2344)) {
+                float _e2349 = rec2020Color.x;
+                float _e2351 = rec2020Color.y;
+                float _e2353 = rec2020Color.z;
+                local_68 = (max(_e2349, max(_e2351, _e2353)) >= 2.88);
             } else {
                 local_68 = true;
             }
             bool isHighlightClip_1 = local_68;
-            vec3 _e2424 = rec2020Color;
-            float sceneLum_2 = dot(_e2424, vec3(0.2627, 0.678, 0.0593));
+            vec3 _e2360 = rec2020Color;
+            float sceneLum_2 = dot(_e2360, vec3(0.2627, 0.678, 0.0593));
             if (!((sceneLum_2 <= 0.0007))) {
-                local_69 = (max(_e2351.x, max(_e2351.y, _e2351.z)) <= 0.004);
+                local_69 = (max(_e2287.x, max(_e2287.y, _e2287.z)) <= 0.004);
             } else {
                 local_69 = true;
             }
@@ -2858,25 +2657,25 @@ void main() {
             if (isHighlightClip_1) {
                 float zebraHighlight_1 = fract(((in_.position.x + in_.position.y) / 14.0));
                 if ((zebraHighlight_1 < 0.5)) {
-                    float _e2455 = sampledColor.w;
-                    _fs2p_location0 = vec4(1.0, 0.12, 0.12, _e2455);
+                    float _e2391 = sampledColor.w;
+                    _fs2p_location0 = vec4(1.0, 0.12, 0.12, _e2391);
                     return;
                 }
             } else {
                 if (isShadowClip_1) {
                     float zebraShadow_1 = fract(((in_.position.x - in_.position.y) / 14.0));
                     if ((zebraShadow_1 < 0.5)) {
-                        float _e2471 = sampledColor.w;
-                        _fs2p_location0 = vec4(0.05, 0.4, 1.0, _e2471);
+                        float _e2407 = sampledColor.w;
+                        _fs2p_location0 = vec4(0.05, 0.4, 1.0, _e2407);
                         return;
                     }
                 }
             }
         }
-        float _e2478 = ign(in_.position.xy);
-        float dither = ((_e2478 - 0.5) / 255.0);
-        float _e2491 = sampledColor.w;
-        _fs2p_location0 = vec4(clamp((_e2351 + vec3(dither)), vec3(0.0), vec3(1.0)), _e2491);
+        float _e2414 = ign(in_.position.xy);
+        float dither = ((_e2414 - 0.5) / 255.0);
+        float _e2427 = sampledColor.w;
+        _fs2p_location0 = vec4(clamp((_e2287 + vec3(dither)), vec3(0.0), vec3(1.0)), _e2427);
         return;
     }
 }

@@ -475,7 +475,10 @@ public struct CropOverlayView: View {
         @Bindable var viewModel = viewModel
         return HStack(spacing: 12) {
             // Aspect Ratio Picker
-            Picker("Aspect", selection: $viewModel.cropAspectRatioPreset) {
+            Picker("Aspect", selection: Binding<CropAspectRatioPreset>(
+                get: { viewModel.cropAspectRatioPreset },
+                set: { viewModel.setCropAspectRatioPreset($0) }
+            )) {
                 ForEach(CropAspectRatioPreset.allCases) { preset in
                     Text(preset.rawValue).tag(preset)
                 }
@@ -484,9 +487,6 @@ public struct CropOverlayView: View {
             .pickerStyle(.segmented)
             .controlSize(.small)
             .frame(width: 330)
-            .onChange(of: viewModel.cropAspectRatioPreset) { _, newPreset in
-                viewModel.setCropAspectRatioPreset(newPreset)
-            }
             
             Divider()
                 .frame(height: 18)

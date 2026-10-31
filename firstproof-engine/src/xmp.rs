@@ -1,6 +1,6 @@
 use crate::curve::CurvePointRecord;
 use crate::modes::{
-    ColorProfileMode, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode,
+    EmulsionArchetype, EmulsionFormat, EmulsionGrainMode, EnlargerFilterMode,
     PrintMediaMode, RemjetBackingMode,
 };
 use crate::settings::EditSettings;
@@ -251,17 +251,6 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
             "true"
         } else {
             "false"
-        });
-    writer
-        .element("toneProfile", pm_ns.clone())
-        .value(match data.edits.tone_profile {
-            ColorProfileMode::AgxVivid => "AgxVivid",
-            ColorProfileMode::AgxFilmic => "AgxFilmic",
-            ColorProfileMode::CameraStandard => "CameraStandard",
-            ColorProfileMode::CameraPortrait => "CameraPortrait",
-            ColorProfileMode::CameraLandscape => "CameraLandscape",
-            ColorProfileMode::CameraVivid => "CameraVivid",
-            ColorProfileMode::AgxPhotographic => "AgxPhotographic",
         });
     if let Some(lut) = &data.edits.lut_name {
         writer.element("lutName", pm_ns.clone()).value(lut.as_str());
@@ -636,8 +625,7 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
             "AshigaraChrome50" => EmulsionArchetype::AshigaraChrome50,
             "RochesterK14Chrome64" => EmulsionArchetype::RochesterK14Chrome64,
             "RochesterCinema500" => EmulsionArchetype::RochesterCinema500,
-            // RochesterDaylight200 merged into RochesterPortrait400
-            "RochesterDaylight200" => EmulsionArchetype::RochesterPortrait400,
+            "RochesterDaylight200" => EmulsionArchetype::RochesterDaylight200,
             "MobberleySilver400" => EmulsionArchetype::MobberleySilver400,
             "CambridgeDiffusion100" => EmulsionArchetype::CambridgeDiffusion100,
             "LeverkusenPortrait160" => EmulsionArchetype::LeverkusenPortrait160,
@@ -725,18 +713,6 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
     }
     if let Some(fv_str) = get(pm, "flipVertical") {
         data.edits.flip_vertical = fv_str == "true" || fv_str == "1";
-    }
-    if let Some(tp_str) = get(pm, "toneProfile") {
-        data.edits.tone_profile = match tp_str {
-            "AgxVivid" => ColorProfileMode::AgxVivid,
-            "AgxFilmic" => ColorProfileMode::AgxFilmic,
-            "CameraStandard" => ColorProfileMode::CameraStandard,
-            "CameraPortrait" => ColorProfileMode::CameraPortrait,
-            "CameraLandscape" => ColorProfileMode::CameraLandscape,
-            "CameraVivid" => ColorProfileMode::CameraVivid,
-            "AgxPhotographic" => ColorProfileMode::AgxPhotographic,
-            _ => ColorProfileMode::AgxVivid,
-        };
     }
     if let Some(pm_str) = get(pm, "printMedia") {
         data.edits.print_media = match pm_str {

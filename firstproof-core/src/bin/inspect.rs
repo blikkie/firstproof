@@ -117,23 +117,12 @@ fn main() {
         }
         "export-photo" => {
             if args.len() < 4 {
-                eprintln!("Usage: inspect export-photo <input> <output> [--profile <AgxVivid|AgxFilmic|CameraStandard|CameraPortrait|CameraLandscape|CameraVivid>]");
+                eprintln!("Usage: inspect export-photo <input> <output> [--exposure <EV>] [--temperature <K>] [--tint <T>] [--as-shot]");
                 std::process::exit(1);
             }
             let mut edits = read_xmp_file(Path::new(&args[2])).map(|x| x.edits).unwrap_or_default();
             for i in 4..args.len() {
-                if args[i] == "--profile" && i + 1 < args.len() {
-                    match args[i + 1].as_str() {
-                        "AgxVivid" => edits.tone_profile = firstproof_core::ColorProfileMode::AgxVivid,
-                        "AgxFilmic" => edits.tone_profile = firstproof_core::ColorProfileMode::AgxFilmic,
-                        "AgxPhotographic" => edits.tone_profile = firstproof_core::ColorProfileMode::AgxPhotographic,
-                        "CameraStandard" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraStandard,
-                        "CameraPortrait" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraPortrait,
-                        "CameraLandscape" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraLandscape,
-                        "CameraVivid" => edits.tone_profile = firstproof_core::ColorProfileMode::CameraVivid,
-                        other => eprintln!("Unknown profile: {}", other),
-                    }
-                } else if args[i] == "--exposure" && i + 1 < args.len() {
+                if args[i] == "--exposure" && i + 1 < args.len() {
                     if let Ok(ev) = args[i + 1].parse::<f32>() {
                         edits.exposure = ev;
                     }
@@ -163,7 +152,7 @@ fn main() {
                 firstproof_core::ExportRenderingIntent::Perceptual,
                 false,
             ).unwrap();
-            println!("Exported successfully to {} with profile {:?}", args[3], edits.tone_profile);
+            println!("Exported successfully to {}", args[3]);
         }
         "extract-preview" => {
             if args.len() < 4 {
@@ -950,7 +939,7 @@ fn main() {
                     if c_srgb.r() > 0.15 && c_srgb.r() > c_srgb.g() * 1.8 && c_srgb.r() > c_srgb.b() * 1.8 {
                         let agx_vivid = firstproof_core::color::agx_tone_map_vivid(c_rec, 1.0);
                         let agx_neutral = firstproof_core::color::agx_tone_map(c_rec, 1.0);
-                        let port_curve = firstproof_core::color::dcp::DcpProfile::built_in_portrait_tone_curve();
+                        let port_curve = firstproof_core::color::dcp::DcpProfile::built_in_standard_tone_curve();
                         let cam_port_r = firstproof_core::color::evaluate_tone_curve(c_srgb.r().max(0.0), &port_curve);
                         let cam_port_g = firstproof_core::color::evaluate_tone_curve(c_srgb.g().max(0.0), &port_curve);
                         let cam_port_b = firstproof_core::color::evaluate_tone_curve(c_srgb.b().max(0.0), &port_curve);
@@ -1210,7 +1199,6 @@ fn cmd_inspect_photo(path_str: &str) {
             println!("   Saturation: {:+.1}, Vibrance: {:+.1}", e.saturation, e.vibrance);
             println!("   Crop: [left={:.3}, top={:.3}, right={:.3}, bottom={:.3}], Rotation: {:.1}°",
                 e.crop_left, e.crop_top, e.crop_right, e.crop_bottom, e.rotation);
-            println!("   Tone Profile: {:?}", e.tone_profile);
         }
         Err(e) => {
             println!("\nℹ️  No XMP sidecar found ({})", e);
@@ -1492,10 +1480,9 @@ fn cmd_compare_camera_preview(raw_path_str: &str) {
         .expect("Failed to decode embedded camera preview")
         .to_rgb8();
 
-    println!("Rendering First Proof CameraStandard export from {}...", raw_path_str);
+    println!("Rendering First Proof AgX Filmic export from {}...", raw_path_str);
     let temp_export = std::env::temp_dir().join(format!("fp_cam_std_{}.jpg", std::process::id()));
-    let mut edits = read_xmp_file(raw_path).map(|x| x.edits).unwrap_or_default();
-    edits.tone_profile = firstproof_core::ColorProfileMode::CameraStandard;
+    let edits = read_xmp_file(raw_path).map(|x| x.edits).unwrap_or_default();
 
     firstproof_core::export::export_photo_file(
         raw_path,

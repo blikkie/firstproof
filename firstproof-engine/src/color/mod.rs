@@ -16,11 +16,8 @@ pub mod demosaic;
 pub mod pipeline;
 pub mod print_media;
 
-pub use agx::{agx_tone_map, agx_tone_map_photographic, agx_tone_map_vivid, AGX_INSET_MATRIX, AGX_OUTSET_MATRIX};
-pub use camera_curves::{
-    built_in_landscape_tone_curve, built_in_portrait_tone_curve, built_in_standard_tone_curve,
-    built_in_vivid_tone_curve, evaluate_tone_curve, hsv_to_rgb, rgb_to_hsv,
-};
+pub use agx::{agx_tone_map, agx_tone_map_vivid, AGX_INSET_MATRIX, AGX_OUTSET_MATRIX};
+pub use camera_curves::{evaluate_tone_curve, hsv_to_rgb, rgb_to_hsv};
 pub use demosaic::*;
 pub use emulsion::{apply_emulsion_s_curve, apply_recording_emulsion, EmulsionArchetype, EmulsionFormat};
 pub use grain::apply_stochastic_emulsion_grain;

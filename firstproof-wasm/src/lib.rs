@@ -7,7 +7,7 @@ pub use firstproof_engine::{
     all_adjustments, develop_raster_image_archival, evaluate_all_curves_lut, evaluate_curve_lut,
     extract_preview_slice, generate_xmp_sidecar, get_adjustment, get_jpeg_dimensions,
     kelvin_to_mired_norm, mired_norm_to_kelvin, parse_xmp_sidecar, AdjustmentDescriptor,
-    AllCurvesLutRecord, AutoAdjustments, AutoWhiteBalanceResult, CfaPattern, ColorProfileMode,
+    AllCurvesLutRecord, AutoAdjustments, AutoWhiteBalanceResult, CfaPattern,
     CropAspectRatioPreset, CurvePointRecord, DemosaicQuality, EditSettings, EmulsionArchetype,
     EmulsionFormat, EnlargerFilterMode, EvHistogramRecord, ExifOrientationRecord, ExportColorSpace,
     ExportRenderingIntent, f16_to_f32, f32_to_f16, ImageMetadataRecord, LensCorrectionCoefficients,
@@ -377,8 +377,8 @@ pub fn export_raw_from_scratchpad(
             (effective_w, effective_h)
         };
 
-        // 4. Bilinear geometry resampling in Rust
-        let resampled_u16 = firstproof_engine::resample_rgb16(
+        // 4. Bilinear geometry resampling in Rust (including crop_angle, perspective, and crop_constrain)
+        let resampled_u16 = firstproof_engine::resample_rgb16_with_geometry(
             dev_w,
             dev_h,
             &dev_u16,
@@ -387,6 +387,10 @@ pub fn export_raw_from_scratchpad(
             crop_t,
             crop_r,
             crop_b,
+            edits.crop_angle,
+            edits.perspective_vertical,
+            edits.perspective_horizontal,
+            edits.crop_constrain,
             edits.flip_horizontal,
             edits.flip_vertical,
             target_w,
@@ -911,6 +915,11 @@ export interface ImageMetadataRecord {
     raw_width?: number;
     raw_height?: number;
     baseline_sharpness?: number;
+    latitude?: number | null;
+    longitude?: number | null;
+    description?: string | null;
+    creator?: string | null;
+    copyright?: string | null;
 }
 
 export interface PreviewResultRecord {
@@ -950,15 +959,6 @@ export interface AllCurvesLutRecord {
     green: number[];
     blue: number[];
 }
-
-export type ColorProfileMode =
-    | 'AgxVivid'
-    | 'AgxFilmic'
-    | 'CameraStandard'
-    | 'CameraPortrait'
-    | 'CameraLandscape'
-    | 'CameraVivid'
-    | 'AgxPhotographic';
 
 export type ExportColorSpace =
     | 'Srgb'
@@ -1042,7 +1042,6 @@ export interface EditSettings {
     rotation: number;
     flip_horizontal: boolean;
     flip_vertical: boolean;
-    tone_profile: ColorProfileMode;
     lut_name?: string;
     lut_intensity: number;
     sharpening_amount: number;
@@ -1155,12 +1154,6 @@ pub fn execute_darkroom_command(json_str: &str) -> String {
             firstproof_engine::CommandResponse::ok(serde_json::json!({
                 "action": "set_tint",
                 "tint": tint,
-            })).to_json()
-        }
-        firstproof_engine::DarkroomCommand::SetToneProfile { profile } => {
-            firstproof_engine::CommandResponse::ok(serde_json::json!({
-                "action": "set_tone_profile",
-                "profile": profile,
             })).to_json()
         }
         firstproof_engine::DarkroomCommand::SetEmulsion { archetype, format, exposure } => {

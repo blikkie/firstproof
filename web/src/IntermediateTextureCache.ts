@@ -30,55 +30,7 @@ export class IntermediateTextureCache {
    * Computes a deterministic compact fingerprint hash of the edit parameters
    */
   public static hashEdits(edits: EditSettingsPayload): string {
-    const parts = [
-      edits.exposure?.toFixed(2) ?? '0',
-      edits.contrast?.toFixed(1) ?? '0',
-      edits.highlights?.toFixed(1) ?? '0',
-      edits.shadows?.toFixed(1) ?? '0',
-      edits.whites?.toFixed(1) ?? '0',
-      edits.blacks?.toFixed(1) ?? '0',
-      edits.temperature?.toFixed(0) ?? '5500',
-      edits.tint?.toFixed(0) ?? '0',
-      edits.vibrance?.toFixed(1) ?? '0',
-      edits.saturation?.toFixed(1) ?? '0',
-      edits.tone_profile ?? 'AgxVivid',
-      edits.emulsion_archetype ?? 'None',
-      edits.remjet_backing ?? 'Intact',
-      edits.print_media ?? 'None',
-      edits.rotation ?? '0',
-      edits.flip_horizontal ? '1' : '0',
-      edits.flip_vertical ? '1' : '0',
-      edits.crop_left?.toFixed(3) ?? '0',
-      edits.crop_top?.toFixed(3) ?? '0',
-      edits.crop_right?.toFixed(3) ?? '1',
-      edits.crop_bottom?.toFixed(3) ?? '1',
-      edits.crop_angle?.toFixed(2) ?? '0',
-      edits.curves?.master
-        ?.map(
-          (p: { x: number; y: number }) =>
-            `${p.x.toFixed(3)},${p.y.toFixed(3)}`,
-        )
-        .join(';') ?? '0',
-      edits.curves?.red
-        ?.map(
-          (p: { x: number; y: number }) =>
-            `${p.x.toFixed(3)},${p.y.toFixed(3)}`,
-        )
-        .join(';') ?? '0',
-      edits.curves?.green
-        ?.map(
-          (p: { x: number; y: number }) =>
-            `${p.x.toFixed(3)},${p.y.toFixed(3)}`,
-        )
-        .join(';') ?? '0',
-      edits.curves?.blue
-        ?.map(
-          (p: { x: number; y: number }) =>
-            `${p.x.toFixed(3)},${p.y.toFixed(3)}`,
-        )
-        .join(';') ?? '0',
-    ];
-    return parts.join('|');
+    return JSON.stringify(edits);
   }
 
   /**

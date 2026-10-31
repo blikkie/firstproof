@@ -26,7 +26,7 @@ export function getDefaultEdits(_isRaw: boolean = false): EditSettingsPayload {
     rotation: 0,
     flip_horizontal: false,
     flip_vertical: false,
-    tone_profile: 'AgxVivid',
+    lut_name: undefined,
     lut_intensity: 1.0,
     sharpening_amount: 0.0,
     sharpening_radius: 1.0,
@@ -133,7 +133,6 @@ export function hasModifications(
   if (Math.abs(edits.saturation) > 1e-4) return true;
   if (Math.abs(edits.deep_blue) > 1e-4) return true;
   if (Math.abs(edits.foliage) > 1e-4) return true;
-  if (edits.tone_profile !== 'AgxVivid') return true;
   if (edits.emulsion_archetype !== 'None') return true;
   if (edits.remjet_backing === 'Stripped') return true;
   if (edits.emulsion_grain_mode && edits.emulsion_grain_mode !== 'Off')
@@ -155,20 +154,55 @@ export function hasModifications(
     edits.emulsion_format !== 'Format35mm'
   )
     return true;
+  if (Math.abs(edits.emulsion_exposure ?? 0.0) > 1e-4) return true;
   if (edits.print_media !== 'None') return true;
+  if (
+    edits.enlarger_filter !== undefined &&
+    edits.enlarger_filter !== 'NeutralPanchromatic'
+  )
+    return true;
+  if (Math.abs(edits.print_paper_grade ?? 0.0) > 1e-4) return true;
+  if (Math.abs(edits.print_base_warmth ?? 0.0) > 1e-4) return true;
+  if (Math.abs((edits.print_process_depth ?? 100.0) - 100.0) > 1e-4)
+    return true;
   if (Math.abs(edits.split_toning_shadow_sat) > 1e-4) return true;
   if (Math.abs(edits.split_toning_highlight_sat) > 1e-4) return true;
+  if (
+    Math.abs(edits.split_toning_shadow_hue - 215.0) > 1e-4 &&
+    edits.split_toning_shadow_sat > 1e-4
+  )
+    return true;
+  if (
+    Math.abs(edits.split_toning_highlight_hue - 45.0) > 1e-4 &&
+    edits.split_toning_highlight_sat > 1e-4
+  )
+    return true;
+  if (Math.abs(edits.split_toning_balance) > 1e-4) return true;
   if (Math.abs(edits.crop_angle ?? 0.0) > 1e-4) return true;
   if (Math.abs((edits.crop_left ?? 0.0) - 0.0) > 1e-4) return true;
   if (Math.abs((edits.crop_top ?? 0.0) - 0.0) > 1e-4) return true;
   if (Math.abs((edits.crop_right ?? 1.0) - 1.0) > 1e-4) return true;
   if (Math.abs((edits.crop_bottom ?? 1.0) - 1.0) > 1e-4) return true;
+  if (Math.abs(edits.perspective_vertical ?? 0.0) > 1e-4) return true;
+  if (Math.abs(edits.perspective_horizontal ?? 0.0) > 1e-4) return true;
+  if (edits.crop_constrain === false) return true;
+  if (edits.lut_name) return true;
+  if (edits.lut_name && Math.abs((edits.lut_intensity ?? 1.0) - 1.0) > 1e-4)
+    return true;
   if (Math.abs(edits.sharpening_amount ?? 0.0) > 1e-4) return true;
+  if (Math.abs((edits.sharpening_radius ?? 1.0) - 1.0) > 1e-4) return true;
+  if (Math.abs(edits.sharpening_masking ?? 0.0) > 1e-4) return true;
   if (Math.abs(edits.noise_reduction ?? 0.0) > 1e-4) return true;
+  if (Math.abs(edits.defringe_amount ?? 0.0) > 1e-4) return true;
+  if (edits.lens_correction_enabled === true) return true;
+  if (edits.tca_correction_enabled === false) return true;
+  if (edits.vignetting_correction_enabled === true) return true;
   if (areCurvesActive(edits.curves)) return true;
 
   const exifOri = decodeExifOrientation(orientation);
   if ((edits.rotation ?? 0) !== exifOri.rotation) return true;
+  if ((edits.flip_horizontal ?? false) !== exifOri.flip_horizontal) return true;
+  if ((edits.flip_vertical ?? false) !== exifOri.flip_vertical) return true;
 
   return false;
 }

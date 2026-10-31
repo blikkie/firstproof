@@ -448,41 +448,7 @@ public final class DebugIPCService {
     }
     
     private func setToneProfileResponse(profile: String?) -> String {
-        guard let prof = profile?.lowercased().replacingOccurrences(of: "-", with: "").replacingOccurrences(of: "_", with: "") else {
-            return "{\"status\":\"error\",\"message\":\"Missing profile\"}\n"
-        }
-        var resolved = "agx_vivid"
-        DispatchQueue.main.sync {
-            MainActor.assumeIsolated {
-                guard let vm = self.viewModel else { return }
-                switch prof {
-                case "agxvivid", "vivid":
-                    vm.toneProfile = .agxVivid
-                    resolved = "agx_vivid"
-                case "agxfilmic", "agxneutral", "filmic", "neutral":
-                    vm.toneProfile = .agxFilmic
-                    resolved = "agx_filmic"
-                case "agxphotographic", "photographic":
-                    vm.toneProfile = .agxPhotographic
-                    resolved = "agx_photographic"
-                case "camerastandard", "standard":
-                    vm.toneProfile = .cameraStandard
-                    resolved = "camera_standard"
-                case "cameraportrait", "portrait":
-                    vm.toneProfile = .cameraPortrait
-                    resolved = "camera_portrait"
-                case "cameralandscape", "landscape":
-                    vm.toneProfile = .cameraLandscape
-                    resolved = "camera_landscape"
-                case "cameravivid":
-                    vm.toneProfile = .cameraVivid
-                    resolved = "camera_vivid"
-                default:
-                    break
-                }
-            }
-        }
-        return "{\"status\":\"ok\",\"toneProfile\":\"\(resolved)\"}\n"
+        return "{\"status\":\"ok\",\"toneProfile\":\"none\"}\n"
     }
     
     private func setPrintMediaResponse(params: [String: Any]?) -> String {

@@ -255,7 +255,6 @@ export class FilmstripController {
       nextIdx = wrap ? 0 : this.fileEntries.length - 1;
     }
     if (nextIdx !== this.activeIdx) {
-      this.selectIndex(nextIdx, true, false);
       this.delegate.onSelectPhoto(nextIdx, true, false);
     }
   }
@@ -267,7 +266,6 @@ export class FilmstripController {
       prevIdx = wrap ? this.fileEntries.length - 1 : 0;
     }
     if (prevIdx !== this.activeIdx) {
-      this.selectIndex(prevIdx, true, false);
       this.delegate.onSelectPhoto(prevIdx, true, false);
     }
   }
@@ -347,6 +345,23 @@ export class FilmstripController {
       flagBadge.innerText = status.toUpperCase();
     } else if (flagBadge) {
       flagBadge.remove();
+    }
+  }
+
+  public updateThumbnailCardModifiedBadge(idx: number, isModified: boolean) {
+    const cardEl = document.getElementById(`thumb-card-${idx}`);
+    if (!cardEl) return;
+
+    let modBadge = cardEl.querySelector('.thumb-badge-modified') as HTMLElement;
+    if (isModified) {
+      if (!modBadge) {
+        modBadge = document.createElement('div');
+        modBadge.className = 'thumb-badge-modified';
+        cardEl.appendChild(modBadge);
+      }
+      modBadge.innerText = '●';
+    } else if (modBadge) {
+      modBadge.remove();
     }
   }
 

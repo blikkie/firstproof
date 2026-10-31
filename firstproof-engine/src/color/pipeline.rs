@@ -12,14 +12,13 @@
 //! 3. Pure Linear Rec.2020 working space before terminal display conversion.
 
 use crate::color::{
-    agx_tone_map, agx_tone_map_photographic, agx_tone_map_vivid, apply_print_media, apply_recording_emulsion,
-    built_in_landscape_tone_curve, built_in_portrait_tone_curve, built_in_standard_tone_curve,
-    built_in_vivid_tone_curve, evaluate_tone_curve, hsv_to_rgb, linear_rgb_to_srgb8,
+    agx_tone_map_vivid, apply_print_media, apply_recording_emulsion,
+    hsv_to_rgb, linear_rgb_to_srgb8,
     linear_to_srgb_gamma, srgb_gamma_to_linear, Color3, LINEAR_SRGB_TO_REC2020, REC2020_TO_LINEAR_SRGB,
 };
 use crate::curve::AllCurvesLutRecord;
 use crate::modes::{
-    ColorProfileMode, EmulsionArchetype, EmulsionGrainMode, PrintMediaMode, RemjetBackingMode,
+    EmulsionArchetype, EmulsionGrainMode, PrintMediaMode, RemjetBackingMode,
 };
 use crate::raw::f16_to_f32;
 use crate::settings::EditSettings;
@@ -38,6 +37,17 @@ pub fn is_neutral_edits(edits: &EditSettings) -> bool {
         && edits.foliage == 0.0
         && (edits.temperature - 5500.0).abs() < 1.0
         && edits.tint == 0.0
+        && edits.crop_left == 0.0
+        && edits.crop_top == 0.0
+        && edits.crop_right == 1.0
+        && edits.crop_bottom == 1.0
+        && edits.crop_angle == 0.0
+        && edits.perspective_vertical == 0.0
+        && edits.perspective_horizontal == 0.0
+        && edits.rotation == 0
+        && !edits.flip_horizontal
+        && !edits.flip_vertical
+        && edits.lut_name.is_none()
         && edits.emulsion_archetype == EmulsionArchetype::None
         && edits.emulsion_grain_mode == EmulsionGrainMode::Off
         && edits.print_media == PrintMediaMode::None
@@ -45,6 +55,14 @@ pub fn is_neutral_edits(edits: &EditSettings) -> bool {
         && edits.split_toning_highlight_sat == 0.0
         && edits.sharpening_amount == 0.0
         && edits.noise_reduction == 0.0
+        && edits.defringe_amount == 0.0
+        && !edits.lens_correction_enabled
+        && !edits.tca_correction_enabled
+        && !edits.vignetting_correction_enabled
+        && !crate::curve::is_curve_active(&edits.curves.master)
+        && !crate::curve::is_curve_active(&edits.curves.red)
+        && !crate::curve::is_curve_active(&edits.curves.green)
+        && !crate::curve::is_curve_active(&edits.curves.blue)
 }
 
 /// Samples a 256-entry 1D curve LUT with linear interpolation matching GPU texture hardware samplers.
@@ -456,16 +474,62 @@ pub fn apply_detail_and_sharpening_rgb(
     let sharp_gain = (amount / 100.0) * 1.5;
     let sharp_term = sharp_gain * w_edge * delta_y;
     let nr_term = (noise_reduction / 100.0) * (1.0 - w_edge) * delta_y;
-    let delta_adj = sharp_term - nr_term;
+    let delta_adj = (sharp_term - nr_term).max(-0.75 * y_c);
 
     (
-        (r + delta_adj).clamp(0.0, 1.0),
-        (g + delta_adj).clamp(0.0, 1.0),
-        (b + delta_adj).clamp(0.0, 1.0),
+        (r + delta_adj).max(0.0),
+        (g + delta_adj).max(0.0),
+        (b + delta_adj).max(0.0),
     )
 }
 
-/// Evaluates pre-sharpening display luminance for unsharp mask neighborhood probing.
+#[inline]
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Attenuates excess purple chrominance at high-contrast specular borders in Linear Rec.2020.
+#[inline(always)]
+pub fn apply_defringe_rgb(
+    r: f32,
+    g: f32,
+    b: f32,
+    y_c: f32,
+    y_max_neighbor: f32,
+    defringe_amount: f32,
+) -> (f32, f32, f32) {
+    if defringe_amount <= 0.0 {
+        return (r, g, b);
+    }
+    let excess_b = b - g;
+    let excess_r = r - g;
+    if excess_b <= 0.0 || excess_r <= 0.0 {
+        return (r, g, b);
+    }
+    let u = 2.0 * r - g - b;
+    let v = 1.7320508 * (g - b);
+    let mut hue = v.atan2(u).to_degrees();
+    if hue < 0.0 {
+        hue += 360.0;
+    }
+    let w_hue = smoothstep(250.0, 270.0, hue) * (1.0 - smoothstep(330.0, 350.0, hue));
+    if w_hue <= 0.001 {
+        return (r, g, b);
+    }
+    let edge_contrast = y_max_neighbor - y_c;
+    let w_edge = smoothstep(0.04, 0.25, edge_contrast);
+    let w_highlight = smoothstep(0.04, 0.25, y_max_neighbor);
+    let w_fringe = w_hue * w_edge * w_highlight * (defringe_amount / 100.0);
+    if w_fringe <= 0.001 {
+        return (r, g, b);
+    }
+    let r_adj = r - w_fringe * excess_r;
+    let b_adj = b - w_fringe * excess_b;
+    (r_adj, g, b_adj)
+}
+
+/// Evaluates pre-sharpening scene-referred Linear Rec.2020 luminance for unsharp mask neighborhood probing.
 pub fn evaluate_display_luma(
     r_in: f32,
     g_in: f32,
@@ -506,83 +570,9 @@ pub fn evaluate_display_luma(
         rec2020 = Color3::new(rec2020.r() * gain, rec2020.g() * gain, rec2020.b() * gain);
     }
 
-    // Tone recovery
-    let (tr, tg, tb) = apply_tone_recovery(
-        rec2020.r(),
-        rec2020.g(),
-        rec2020.b(),
-        edits.highlights,
-        edits.shadows,
-        edits.whites,
-        edits.blacks,
-    );
-    rec2020 = Color3::new(tr, tg, tb);
-
-    // Recording emulsion
-    if edits.emulsion_archetype != EmulsionArchetype::None {
-        let (er, eg, eb) = apply_recording_emulsion(
-            rec2020.r(),
-            rec2020.g(),
-            rec2020.b(),
-            edits.emulsion_archetype,
-            edits.emulsion_exposure,
-            edits.enlarger_filter,
-        );
-        rec2020 = Color3::new(er, eg, eb);
-    }
-
-    let contrast_gain = if edits.contrast >= 0.0 {
-        1.0 + edits.contrast / 100.0
-    } else {
-        1.0 + (edits.contrast / 100.0) * 0.60
-    };
-
-    if !is_linear_rec2020 {
-        let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
-        let lum = 0.2627 * c_srgb.r().max(0.0) + 0.6780 * c_srgb.g().max(0.0) + 0.0593 * c_srgb.b().max(0.0);
-        if (contrast_gain - 1.0).abs() > 0.001 {
-            ((lum - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
-        } else {
-            lum.clamp(0.0, 1.0)
-        }
-    } else {
-        match edits.tone_profile {
-            ColorProfileMode::AgxVivid => {
-                let srgb = agx_tone_map_vivid(rec2020, contrast_gain);
-                0.2627 * srgb.r().clamp(0.0, 1.0)
-                    + 0.6780 * srgb.g().clamp(0.0, 1.0)
-                    + 0.0593 * srgb.b().clamp(0.0, 1.0)
-            }
-            ColorProfileMode::AgxFilmic => {
-                let srgb = agx_tone_map(rec2020, contrast_gain);
-                0.2627 * srgb.r().clamp(0.0, 1.0)
-                    + 0.6780 * srgb.g().clamp(0.0, 1.0)
-                    + 0.0593 * srgb.b().clamp(0.0, 1.0)
-            }
-            ColorProfileMode::AgxPhotographic => {
-                let srgb = agx_tone_map_photographic(rec2020, contrast_gain);
-                0.2627 * srgb.r().clamp(0.0, 1.0)
-                    + 0.6780 * srgb.g().clamp(0.0, 1.0)
-                    + 0.0593 * srgb.b().clamp(0.0, 1.0)
-            }
-            mode => {
-                let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
-                let lum = 0.2627 * c_srgb.r() + 0.6780 * c_srgb.g() + 0.0593 * c_srgb.b();
-                let curve = match mode {
-                    ColorProfileMode::CameraPortrait => built_in_portrait_tone_curve(),
-                    ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
-                    ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
-                    _ => built_in_standard_tone_curve(),
-                };
-                let lum_curved = evaluate_tone_curve(lum, &curve);
-                if (contrast_gain - 1.0).abs() > 0.001 {
-                    ((lum_curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
-                } else {
-                    lum_curved.clamp(0.0, 1.0)
-                }
-            }
-        }
-    }
+    0.2627 * rec2020.r().max(0.0)
+        + 0.6780 * rec2020.g().max(0.0)
+        + 0.0593 * rec2020.b().max(0.0)
 }
 
 /// Executes full reference CPU export pipeline on a single pixel.
@@ -713,6 +703,19 @@ pub fn develop_pixel_pipeline(
 
     // 8. Detail, Sharpening & Stochastic Emulsion Resynthesis (Optical Domain)
     if let Some([y_c, y_l, y_r, y_t, y_b, y_tl, y_tr, y_bl, y_br]) = neighbors {
+        if edits.defringe_amount > 0.0 {
+            let y_max_neighbor = y_l.max(y_r).max(y_t).max(y_b).max(y_tl).max(y_tr).max(y_bl).max(y_br);
+            let (dr, dg, db) = apply_defringe_rgb(
+                rec2020.r(),
+                rec2020.g(),
+                rec2020.b(),
+                y_c,
+                y_max_neighbor,
+                edits.defringe_amount,
+            );
+            rec2020 = Color3::new(dr, dg, db);
+        }
+
         if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
             let (dr, dg, db) = apply_detail_and_sharpening_rgb(
                 rec2020.r(),
@@ -763,7 +766,7 @@ pub fn develop_pixel_pipeline(
         }
     }
 
-    // 9. TERMINAL STAGE: AgX Filmic Tone Mapping Engine OR Camera Matching Profiles -> Linear sRGB
+    // 9. TERMINAL STAGE: AgX Filmic Tone Mapping Engine -> Linear sRGB
     let contrast_gain = if edits.contrast >= 0.0 {
         1.0 + edits.contrast / 100.0
     } else {
@@ -786,33 +789,7 @@ pub fn develop_pixel_pipeline(
         }
         Color3::new(r, g, b)
     } else {
-        match edits.tone_profile {
-            ColorProfileMode::AgxVivid => agx_tone_map_vivid(rec2020, contrast_gain),
-            ColorProfileMode::AgxFilmic => agx_tone_map(rec2020, contrast_gain),
-            ColorProfileMode::AgxPhotographic => agx_tone_map_photographic(rec2020, contrast_gain),
-            mode => {
-                let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(rec2020);
-                let curve = match mode {
-                    ColorProfileMode::CameraPortrait => built_in_portrait_tone_curve(),
-                    ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
-                    ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
-                    _ => built_in_standard_tone_curve(),
-                };
-                let apply_curve = |v: f32| -> f32 {
-                    let c = evaluate_tone_curve(v.max(0.0), &curve);
-                    if (contrast_gain - 1.0).abs() > 0.001 {
-                        ((c - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
-                    } else {
-                        c.clamp(0.0, 1.0)
-                    }
-                };
-                Color3::new(
-                    apply_curve(c_srgb.r()),
-                    apply_curve(c_srgb.g()),
-                    apply_curve(c_srgb.b()),
-                )
-            }
-        }
+        agx_tone_map_vivid(rec2020, contrast_gain)
     };
 
     // 10. Curated Fine-Art Print Media Archetypes & Optical Enlarger Filtration in Linear Display Space
@@ -850,7 +827,8 @@ pub fn develop_frame_pipeline(
 
     let needs_sharpening = edits.sharpening_amount > 0.0
         || edits.noise_reduction > 0.0
-        || edits.emulsion_grain_mode != EmulsionGrainMode::Off;
+        || edits.emulsion_grain_mode != EmulsionGrainMode::Off
+        || edits.defringe_amount > 0.0;
 
     // Helper to extract a pixel in float [0..] from input buffer
     let get_input_pixel = |x: usize, y: usize| -> (f32, f32, f32) {
@@ -1154,7 +1132,8 @@ pub fn develop_raw_sensor_frame_archival(
         edits,
         true,
         frame.baseline_sharpness,
-        frame.profile_tone_curve.as_deref(),
+        Some(frame.as_shot_temperature()),
+        Some(frame.as_shot_tint()),
     )
 }
 
@@ -1176,7 +1155,7 @@ pub fn develop_raster_image_archival(
         rec2020_data.push(c_rec.g().max(0.0));
         rec2020_data.push(c_rec.b().max(0.0));
     }
-    develop_rec2020_buffer_archival(rec2020_data, width, height, edits, false, 1.0, None)
+    develop_rec2020_buffer_archival(rec2020_data, width, height, edits, false, 1.0, None, None)
 }
 
 /// Multi-pass archival development pipeline operating directly on a Linear Rec.2020 buffer.
@@ -1187,7 +1166,8 @@ pub fn develop_rec2020_buffer_archival(
     edits: &EditSettings,
     is_raw: bool,
     baseline_sharpness: f32,
-    profile_tone_curve: Option<&[(f32, f32)]>,
+    as_shot_temperature: Option<f32>,
+    as_shot_tint: Option<f32>,
 ) -> (usize, usize, Vec<u16>) {
     let total_pixels = active_w * active_h;
 
@@ -1200,13 +1180,31 @@ pub fn develop_rec2020_buffer_archival(
         1.0 + (edits.contrast / 100.0) * 0.60
     };
 
-    let temp_norm = (edits.temperature / 5500.0).clamp(0.25, 4.0);
-    let mut r_scale = temp_norm.powf(0.75);
-    let mut b_scale = (1.0 / temp_norm).powf(0.75);
-    let tint_factor = edits.tint * 0.002;
-    let g_scale = (1.0 - tint_factor).max(0.01);
-    r_scale = (r_scale + tint_factor * 0.5).max(0.01);
-    b_scale = (b_scale + tint_factor * 0.5).max(0.01);
+    let base_temp = if is_raw {
+        as_shot_temperature.unwrap_or(5500.0)
+    } else {
+        5500.0
+    };
+    let base_tint = if is_raw {
+        as_shot_tint.unwrap_or(0.0)
+    } else {
+        0.0
+    };
+
+    let (r_scale, g_scale, b_scale) = if (edits.temperature - base_temp).abs() >= 1.0
+        || (edits.tint - base_tint).abs() >= 0.1
+    {
+        let temp_norm = (edits.temperature / base_temp).clamp(0.25, 4.0);
+        let mut r = temp_norm.powf(0.75);
+        let mut b = (1.0 / temp_norm).powf(0.75);
+        let tint_factor = (edits.tint - base_tint) * 0.002;
+        let g = (1.0 - tint_factor).max(0.01);
+        r = (r + tint_factor * 0.5).max(0.01);
+        b = (b + tint_factor * 0.5).max(0.01);
+        (r, g, b)
+    } else {
+        (1.0, 1.0, 1.0)
+    };
 
     let curve_lut = crate::curve::evaluate_all_curves_lut(&edits.curves);
     let has_master_curve = crate::curve::is_curve_active(&edits.curves.master);
@@ -1231,8 +1229,8 @@ pub fn develop_rec2020_buffer_archival(
     };
 
     let max_dim = (active_w.max(active_h)) as f32;
-    let r_inner = 1usize;
-    let r_outer = ((max_dim * 0.016).round() as usize).max(16);
+    let r_inner = ((max_dim * 0.003).round() as usize).max(3);
+    let r_outer = ((max_dim * 0.024).round() as usize).max(24);
 
     // Pass 1: Upstream optical exposure, WB, bilateral tone recovery, recording emulsion
     for i in 0..total_pixels {
@@ -1346,18 +1344,22 @@ pub fn develop_rec2020_buffer_archival(
         rec2020_data[idx + 2] = b_st;
     }
 
-    // Pass 4: Detail Sharpening & Stochastic Emulsion Grain in Linear Rec.2020
-    if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 || edits.emulsion_grain_mode != EmulsionGrainMode::Off {
+    // Pass 4: Defringe, Detail Sharpening & Stochastic Emulsion Grain in Linear Rec.2020
+    if edits.defringe_amount > 0.0
+        || edits.sharpening_amount > 0.0
+        || edits.noise_reduction > 0.0
+        || edits.emulsion_grain_mode != EmulsionGrainMode::Off
+    {
         let mut luma_plane = Vec::with_capacity(total_pixels);
         for i in 0..total_pixels {
             let idx = i * 3;
-            let r = rec2020_data[idx];
-            let g = rec2020_data[idx + 1];
-            let b = rec2020_data[idx + 2];
-            luma_plane.push(evaluate_display_luma(r, g, b, is_raw, edits));
+            let r = rec2020_data[idx].max(0.0);
+            let g = rec2020_data[idx + 1].max(0.0);
+            let b = rec2020_data[idx + 2].max(0.0);
+            luma_plane.push(0.2627 * r + 0.6780 * g + 0.0593 * b);
         }
 
-        let r_step = if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
+        let r_step = if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 || edits.defringe_amount > 0.0 {
             (edits.sharpening_radius * baseline_sharpness).max(0.5)
         } else {
             1.0
@@ -1395,7 +1397,7 @@ pub fn develop_rec2020_buffer_archival(
                 let gy_bl = luma_plane[yb * active_w + xl];
                 let gy_br = luma_plane[yb * active_w + xr];
 
-                if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
+                if edits.defringe_amount > 0.0 || edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
                     let s_xl = (x as f32 - r_step).round().clamp(0.0, (active_w - 1) as f32) as usize;
                     let s_xr = (x as f32 + r_step).round().clamp(0.0, (active_w - 1) as f32) as usize;
                     let s_yt = (y as f32 - r_step).round().clamp(0.0, (active_h - 1) as f32) as usize;
@@ -1410,16 +1412,26 @@ pub fn develop_rec2020_buffer_archival(
                     let sy_bl = luma_plane[s_yb * active_w + s_xl];
                     let sy_br = luma_plane[s_yb * active_w + s_xr];
 
-                    let (dr, dg, db) = apply_detail_and_sharpening_rgb(
-                        r, g, b, y_c,
-                        sy_l, sy_r, sy_t, sy_b, sy_tl, sy_tr, sy_bl, sy_br,
-                        edits.sharpening_amount,
-                        edits.sharpening_masking,
-                        edits.noise_reduction,
-                    );
-                    r = dr;
-                    g = dg;
-                    b = db;
+                    if edits.defringe_amount > 0.0 {
+                        let y_max_neighbor = sy_l.max(sy_r).max(sy_t).max(sy_b).max(sy_tl).max(sy_tr).max(sy_bl).max(sy_br);
+                        let (dr, dg, db) = apply_defringe_rgb(r, g, b, y_c, y_max_neighbor, edits.defringe_amount);
+                        r = dr;
+                        g = dg;
+                        b = db;
+                    }
+
+                    if edits.sharpening_amount > 0.0 || edits.noise_reduction > 0.0 {
+                        let (dr, dg, db) = apply_detail_and_sharpening_rgb(
+                            r, g, b, y_c,
+                            sy_l, sy_r, sy_t, sy_b, sy_tl, sy_tr, sy_bl, sy_br,
+                            edits.sharpening_amount,
+                            edits.sharpening_masking,
+                            edits.noise_reduction,
+                        );
+                        r = dr;
+                        g = dg;
+                        b = db;
+                    }
                 }
 
                 if edits.emulsion_grain_mode != EmulsionGrainMode::Off {
@@ -1445,39 +1457,6 @@ pub fn develop_rec2020_buffer_archival(
         rec2020_data = processed_rec2020;
     }
 
-    // Precompute tone profile LUT if Camera matching mode
-    let camera_curve_lut: Option<Vec<f32>> = match edits.tone_profile {
-        ColorProfileMode::AgxVivid | ColorProfileMode::AgxFilmic => None,
-        mode => {
-            let curve = match mode {
-                ColorProfileMode::CameraPortrait => built_in_portrait_tone_curve(),
-                ColorProfileMode::CameraLandscape => built_in_landscape_tone_curve(),
-                ColorProfileMode::CameraVivid => built_in_vivid_tone_curve(),
-                _ => {
-                    if let Some(ptc) = profile_tone_curve {
-                        ptc.to_vec()
-                    } else {
-                        built_in_standard_tone_curve()
-                    }
-                }
-            };
-            let lut_size = 4096;
-            Some(
-                (0..lut_size)
-                    .map(|i| {
-                        let x = i as f32 / (lut_size - 1) as f32;
-                        let curved = evaluate_tone_curve(x, &curve);
-                        if (contrast_gain - 1.0).abs() > 0.001 {
-                            ((curved - 0.18) * contrast_gain + 0.18).clamp(0.0, 1.0)
-                        } else {
-                            curved.clamp(0.0, 1.0)
-                        }
-                    })
-                    .collect(),
-            )
-        }
-    };
-
     // Pass 5: Tone mapping, Print media, Gamma -> 16-bit
     let mut out_u16 = Vec::with_capacity(total_pixels * 3);
     for i in 0..total_pixels {
@@ -1502,36 +1481,10 @@ pub fn develop_rec2020_buffer_archival(
                 b = b_lin.clamp(0.0, 1.0);
             }
         } else {
-            match edits.tone_profile {
-                ColorProfileMode::AgxVivid => {
-                    let c_srgb = agx_tone_map_vivid(Color3::new(r, g, b), contrast_gain);
-                    r = c_srgb.r();
-                    g = c_srgb.g();
-                    b = c_srgb.b();
-                }
-                ColorProfileMode::AgxFilmic => {
-                    let c_srgb = agx_tone_map(Color3::new(r, g, b), contrast_gain);
-                    r = c_srgb.r();
-                    g = c_srgb.g();
-                    b = c_srgb.b();
-                }
-                _ => {
-                    let c_srgb = REC2020_TO_LINEAR_SRGB.multiply_vector(Color3::new(r, g, b));
-                    if let Some(ref lut) = camera_curve_lut {
-                        let lut_size_f = (lut.len() - 1) as f32;
-                        let apply_curve = |v: f32| -> f32 {
-                            let pos = v.clamp(0.0, 1.0) * lut_size_f;
-                            let i0 = pos.floor() as usize;
-                            let i1 = (i0 + 1).min(lut.len() - 1);
-                            let frac = pos - i0 as f32;
-                            lut[i0] * (1.0 - frac) + lut[i1] * frac
-                        };
-                        r = apply_curve(c_srgb.r().max(0.0));
-                        g = apply_curve(c_srgb.g().max(0.0));
-                        b = apply_curve(c_srgb.b().max(0.0));
-                    }
-                }
-            }
+            let c_srgb = agx_tone_map_vivid(Color3::new(r, g, b), contrast_gain);
+            r = c_srgb.r();
+            g = c_srgb.g();
+            b = c_srgb.b();
         }
 
         if edits.print_media != PrintMediaMode::None {
@@ -1592,7 +1545,9 @@ mod tests {
             sensor_data: vec![500u16; w * h],
         };
 
-        let edits = EditSettings::default();
+        let mut edits = EditSettings::default();
+        edits.temperature = frame.as_shot_temperature();
+        edits.tint = frame.as_shot_tint();
         let (out_w, out_h, u16_data) = develop_raw_sensor_frame_archival(&frame, &edits, DemosaicQuality::Archival);
         assert_eq!(out_w, w);
         assert_eq!(out_h, h);
@@ -1637,7 +1592,9 @@ mod tests {
             sensor_data: vec![1000u16; w * h], // Saturated photosites (cloud highlight)
         };
 
-        let edits = EditSettings::default();
+        let mut edits = EditSettings::default();
+        edits.temperature = frame.as_shot_temperature();
+        edits.tint = frame.as_shot_tint();
         let (out_w, out_h, u16_data) = develop_raw_sensor_frame_archival(&frame, &edits, DemosaicQuality::Archival);
         assert_eq!(out_w, w);
         assert_eq!(out_h, h);
@@ -1763,6 +1720,8 @@ mod tests {
 
         // 1. Off: 35mm and Super8 yield identical output when grain is off
         let mut edits_off = EditSettings::default();
+        edits_off.temperature = frame.as_shot_temperature();
+        edits_off.tint = frame.as_shot_tint();
         edits_off.emulsion_grain_mode = EmulsionGrainMode::Off;
         edits_off.emulsion_format = crate::modes::EmulsionFormat::Format35mm;
         let (_, _, out_35_off) = develop_raw_sensor_frame_archival(&frame, &edits_off, DemosaicQuality::Archival);
@@ -1773,6 +1732,8 @@ mod tests {
 
         // 2. Active Grain: Rochester Cinema 500 with Super8 vs 35mm
         let mut edits_grain_35 = EditSettings::default();
+        edits_grain_35.temperature = frame.as_shot_temperature();
+        edits_grain_35.tint = frame.as_shot_tint();
         edits_grain_35.emulsion_archetype = EmulsionArchetype::RochesterCinema500;
         edits_grain_35.emulsion_grain_mode = EmulsionGrainMode::SynthesizePhysical;
         edits_grain_35.grain_size = 1.35;

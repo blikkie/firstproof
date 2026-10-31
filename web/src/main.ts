@@ -15,7 +15,7 @@ import {
 } from './services/PhotoLoaderService';
 import { ToneCurveWidget } from './ToneCurveWidget';
 import { isDebugMode } from './utils/debug';
-import { getDefaultEdits } from './utils/edits';
+import { getDefaultEdits, hasModifications } from './utils/edits';
 import { decodeExifOrientation } from './utils/exifReader';
 import { updateMetadataHeaderElements } from './utils/metadataHeader';
 import {
@@ -34,9 +34,11 @@ class DarkroomApp {
   private curveWidget!: ToneCurveWidget;
   private histogramWidget!: HistogramWidget;
   private histogramDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private parityModal: ParityModal = new ParityModal();
+  private parityModal: ParityModal | null = null;
   private exportModal: ExportModal = new ExportModal();
   private cropController!: CropController;
+  private asShotTemperature: number = 5500.0;
+  private asShotTint: number = 0.0;
 
   // Controllers
   private viewportController!: CanvasViewportController;
@@ -104,38 +106,10 @@ class DarkroomApp {
     canvas.height = 1080;
     this.renderer = new WebGLRenderer(canvas);
 
-    // Parity Modal (Mechanical Parity Audit)
-    this.parityModal.init(
-      this.renderer,
-      () => this.edits,
-      () => {
-        if (this.filmstripController.getActiveIndex() < 0) return null;
-        if (
-          this.activeLinearData &&
-          this.activeLinearW > 0 &&
-          this.activeLinearH > 0
-        ) {
-          return {
-            isLinearRec2020: true,
-            width: this.activeLinearW,
-            height: this.activeLinearH,
-            linearData: this.activeLinearData,
-          };
-        } else if (
-          this.activeSourceImage &&
-          this.activeSourceW > 0 &&
-          this.activeSourceH > 0
-        ) {
-          return {
-            isLinearRec2020: false,
-            width: this.activeSourceW,
-            height: this.activeSourceH,
-            imageSource: this.activeSourceImage,
-          };
-        }
-        return null;
-      },
-    );
+    // Parity Modal (Mechanical Parity Audit) - lazy in production, eager only in debug mode
+    if (isDebugMode()) {
+      this.getParityModal();
+    }
 
     // 3. Init Export Modal
     this.exportModal.init((photos, options, onProgress) =>
@@ -147,7 +121,7 @@ class DarkroomApp {
       'curve-canvas',
     ) as HTMLCanvasElement;
     this.curveWidget = new ToneCurveWidget(curveCanvas, () =>
-      this.onCurveChange(),
+      this.onCurveChange(true),
     );
     const initialLut = this.bridge.evaluateCurves(this.edits.curves);
     this.renderer.updateToneCurvesLut(initialLut);
@@ -163,13 +137,6 @@ class DarkroomApp {
       },
       onStraightenUpdate: (angle) => {
         this.edits.crop_angle = angle;
-        const straightenSlider = document.getElementById(
-          'slider-straighten',
-        ) as HTMLInputElement;
-        const straightenVal = document.getElementById('val-straighten');
-        if (straightenSlider) straightenSlider.value = `${angle}`;
-        if (straightenVal)
-          straightenVal.textContent = `${angle > 0 ? '+' : ''}${angle.toFixed(1)}°`;
         this.renderCanvas();
       },
       onStraightenEnd: () => {
@@ -255,6 +222,7 @@ class DarkroomApp {
         if (this.isCropActive) this.toggleCropMode(false);
       },
       isCropActive: () => this.isCropActive,
+      onCropFlipOrientation: () => this.cropController.flipCropOrientation(),
       onEscape: () => {
         if (this.cropController?.isRotating) {
           this.cropController.cancelRotation();
@@ -322,6 +290,9 @@ class DarkroomApp {
       getRating: () => this.currentRating,
       getStatus: () => this.currentStatus,
       getActiveIndex: () => this.filmstripController.getActiveIndex(),
+      updateRatingFlagBadge: (idx, rating, status) => {
+        this.filmstripController.updateRatingFlagBadge(idx, rating, status);
+      },
       onResetAllEdits: () => this.resetAllEdits(),
       scheduleHistogramUpdate: () => this.scheduleHistogramUpdate(),
     });
@@ -440,7 +411,6 @@ class DarkroomApp {
       'btn-reject',
       'modal-shortcuts',
       'btn-close-modal',
-      'select-tone-profile',
       'select-wb-preset',
       'btn-wb-eyedropper',
       'btn-white-point-picker',
@@ -480,22 +450,24 @@ class DarkroomApp {
   ) {
     if (mode === 'wb') {
       if (r > 0 && g > 0 && b > 0) {
-        const curTemp = this.edits.temperature;
-        const curTint = this.edits.tint;
-        const targetTemp = Math.min(
-          Math.max(Math.round(curTemp * (b / r) ** 0.35), 2000),
-          15000,
+        // Convert display sRGB sample back to linear color space
+        const toLinear = (c: number) =>
+          c > 0.04045 ? ((c + 0.055) / 1.055) ** 2.4 : c / 12.92;
+        const rLin = toLinear(r);
+        const gLin = toLinear(g);
+        const bLin = toLinear(b);
+        const wb = this.bridge.calculateWhiteBalanceFromSample(
+          rLin,
+          gLin,
+          bLin,
         );
-        const targetTint = Math.min(
-          Math.max(Math.round(curTint + (g - (r + b) / 2) * 80), -150),
-          150,
-        );
-
-        this.edits.temperature = targetTemp;
-        this.edits.tint = targetTint;
-        if (this.elements['select-wb-preset']) {
-          (this.elements['select-wb-preset'] as HTMLSelectElement).value =
-            'Custom';
+        if (wb) {
+          this.edits.temperature = wb.temperature;
+          this.edits.tint = wb.tint;
+          if (this.elements['select-wb-preset']) {
+            (this.elements['select-wb-preset'] as HTMLSelectElement).value =
+              'Custom';
+          }
         }
       }
     } else if (mode === 'white') {
@@ -616,7 +588,7 @@ class DarkroomApp {
 
     // Mechanical Parity Audit Modal
     this.elements['btn-parity-audit']?.addEventListener('click', () =>
-      this.parityModal.show(),
+      this.getParityModal().show(),
     );
 
     // Shortcuts Modal
@@ -681,8 +653,8 @@ class DarkroomApp {
     this.elements['select-wb-preset']?.addEventListener('change', (e) => {
       const preset = (e.target as HTMLSelectElement).value;
       if (preset === 'AsShot') {
-        this.edits.temperature = 5500.0;
-        this.edits.tint = 0.0;
+        this.edits.temperature = this.asShotTemperature;
+        this.edits.tint = this.asShotTint;
       } else if (preset === 'Auto') {
         this.applyAutoWhiteBalance();
       } else {
@@ -706,20 +678,22 @@ class DarkroomApp {
     const entries = this.filmstripController.getEntries();
     if (idx < 0 || idx >= entries.length) return;
 
+    const requestId = ++this.selectRequestId;
+    this.inspectorController.commitActiveScrub();
+
     // Save previous active photo edits and auto-save sidecar
     const prevIdx = this.filmstripController.getActiveIndex();
     if (prevIdx >= 0 && prevIdx < entries.length && prevIdx !== idx) {
       const prevEntry = entries[prevIdx];
       await this.saveActivePhotoState(prevEntry);
+      if (requestId !== this.selectRequestId) return;
     }
 
-    const requestId = ++this.selectRequestId;
     this.filmstripController.selectIndex(
       idx,
       centerFilmstrip,
       keepMultiSelection,
     );
-    this.inspectorController.rollbackActiveScrub();
 
     const entry = entries[idx];
     if (this.elements['meta-filename']) {
@@ -838,6 +812,29 @@ class DarkroomApp {
           flipV: exifOri.flipV,
         });
 
+        if (!record.hasSidecarOnDisk) {
+          this.edits.rotation = exifOri.rotation;
+          this.edits.flip_horizontal = exifOri.flipH;
+          this.edits.flip_vertical = exifOri.flipV;
+          record.edits.rotation = exifOri.rotation;
+          record.edits.flip_horizontal = exifOri.flipH;
+          record.edits.flip_vertical = exifOri.flipV;
+          this.loaderService.setPhotoRecord(entry.name, record);
+          this.filmstripController.updateThumbnailCardOrientation(
+            idx,
+            exifOri.rotation,
+            exifOri.flipH,
+            exifOri.flipV,
+          );
+        }
+
+        this.asShotTemperature = this.edits.temperature || 5500.0;
+        this.asShotTint = this.edits.tint || 0.0;
+        this.renderer.setAsShotWhiteBalance(
+          this.asShotTemperature,
+          this.asShotTint,
+        );
+
         if (frame.linearData && frame.linearW > 0 && frame.linearH > 0) {
           this.activeLinearData = frame.linearData;
           this.activeLinearW = frame.linearW;
@@ -863,7 +860,7 @@ class DarkroomApp {
         }
 
         this.viewportController.updateCanvasDimensions();
-        this.onCurveChange();
+        this.onCurveChange(false);
 
         this.loaderService.scheduleIntermediateSnapshot(
           entry.name,
@@ -947,11 +944,28 @@ class DarkroomApp {
     }
   }
 
-  private onCurveChange() {
+  private onCurveChange(autoSave: boolean = true) {
     this.edits.curves = this.curveWidget.getPoints();
     const lut = this.bridge.evaluateCurves(this.edits.curves);
     this.renderer.updateToneCurvesLut(lut);
     this.renderCanvas();
+    if (autoSave) {
+      this.autoSaveSidecar();
+      const activeIdx = this.filmstripController.getActiveIndex();
+      if (activeIdx >= 0) {
+        const orientation = this.currentMetadata?.orientation ?? 1;
+        const isMod = hasModifications(
+          this.edits,
+          orientation,
+          this.currentRating,
+          this.currentStatus,
+        );
+        this.filmstripController.updateThumbnailCardModifiedBadge(
+          activeIdx,
+          isMod,
+        );
+      }
+    }
   }
 
   public selectInspectorTab(tab: string) {
@@ -1072,6 +1086,11 @@ class DarkroomApp {
     const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
     if (!wrapper) return;
 
+    const bounds = this.renderer.getPhotoViewportBounds(this.edits, true);
+    const canvas = this.renderer.glContext.canvas as HTMLCanvasElement;
+    const scaleX = wrapper.clientWidth / Math.max(canvas.width, 1);
+    const scaleY = wrapper.clientHeight / Math.max(canvas.height, 1);
+
     const imgW = this.activeLinearW || this.activeSourceW || 1920;
     const imgH = this.activeLinearH || this.activeSourceH || 1080;
     const isOrthogonal =
@@ -1080,25 +1099,13 @@ class DarkroomApp {
     const dispH = isOrthogonal ? imgW : imgH;
     const imgAspect = dispW / Math.max(dispH, 1);
 
-    const viewW = wrapper.clientWidth;
-    const viewH = wrapper.clientHeight;
-    const viewAspect = viewW / Math.max(viewH, 1);
-
-    let renderW: number;
-    let renderH: number;
-    if (viewAspect > imgAspect) {
-      renderH = viewH;
-      renderW = renderH * imgAspect;
-    } else {
-      renderW = viewW;
-      renderH = renderW / imgAspect;
-    }
-
-    const left = (viewW - renderW) / 2.0;
-    const top = (viewH - renderH) / 2.0;
-
     this.cropController.setImageRect(
-      { x: left, y: top, width: renderW, height: renderH },
+      {
+        x: bounds.x * scaleX,
+        y: bounds.y * scaleY,
+        width: bounds.width * scaleX,
+        height: bounds.height * scaleY,
+      },
       imgAspect,
     );
   }
@@ -1183,26 +1190,32 @@ class DarkroomApp {
       ? this.loaderService.getPhotoRecord(activeEntry.name)
       : undefined;
 
-    const titleInput = (
-      this.elements['meta-input-title'] as HTMLInputElement
-    )?.value.trim();
-    const title = titleInput ? titleInput : existing?.title || '';
+    const titleEl = this.elements['meta-input-title'] as
+      | HTMLInputElement
+      | undefined;
+    const title =
+      titleEl !== undefined ? titleEl.value.trim() : existing?.title || '';
 
-    const descInput = (
-      this.elements['meta-input-caption'] as HTMLTextAreaElement
-    )?.value.trim();
-    const description = descInput ? descInput : existing?.description || '';
+    const descEl = this.elements['meta-input-caption'] as
+      | HTMLTextAreaElement
+      | undefined;
+    const description =
+      descEl !== undefined ? descEl.value.trim() : existing?.description || '';
 
-    const creatorInput = (
-      this.elements['meta-input-creator'] as HTMLInputElement
-    )?.value.trim();
-    const creator = creatorInput ? creatorInput : existing?.creator || '';
+    const creatorEl = this.elements['meta-input-creator'] as
+      | HTMLInputElement
+      | undefined;
+    const creator =
+      creatorEl !== undefined
+        ? creatorEl.value.trim()
+        : existing?.creator || '';
 
-    const kwStr = (this.elements['meta-input-keywords'] as HTMLInputElement)
-      ?.value;
+    const kwEl = this.elements['meta-input-keywords'] as
+      | HTMLInputElement
+      | undefined;
     const keywords =
-      kwStr && kwStr.trim().length > 0
-        ? kwStr
+      kwEl !== undefined
+        ? kwEl.value
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
@@ -1253,6 +1266,44 @@ class DarkroomApp {
     const photos = this.filmstripController.getSelectedPhotos();
     if (photos.length === 0) return;
     this.exportModal.open(photos);
+  }
+
+  private getParityModal(): ParityModal {
+    if (!this.parityModal) {
+      this.parityModal = new ParityModal();
+      this.parityModal.init(
+        this.renderer,
+        () => this.edits,
+        () => {
+          if (this.filmstripController.getActiveIndex() < 0) return null;
+          if (
+            this.activeLinearData &&
+            this.activeLinearW > 0 &&
+            this.activeLinearH > 0
+          ) {
+            return {
+              isLinearRec2020: true,
+              width: this.activeLinearW,
+              height: this.activeLinearH,
+              linearData: this.activeLinearData,
+            };
+          } else if (
+            this.activeSourceImage &&
+            this.activeSourceW > 0 &&
+            this.activeSourceH > 0
+          ) {
+            return {
+              isLinearRec2020: false,
+              width: this.activeSourceW,
+              height: this.activeSourceH,
+              imageSource: this.activeSourceImage,
+            };
+          }
+          return null;
+        },
+      );
+    }
+    return this.parityModal;
   }
 
   private async handleExport(

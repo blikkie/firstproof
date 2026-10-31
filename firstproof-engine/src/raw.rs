@@ -1208,10 +1208,7 @@ impl RawSensorFrame {
 }
 
 /// Reconstructs the full color RGB buffer using soft-adaptive directional demosaicing.
-///
-/// Blends horizontal and vertical estimates smoothly via C^1 Hermite weights,
-/// permanently eliminating "labyrinths", maze patterns, and checkerboard artifacts across smooth skin,
-/// out-of-focus backgrounds, and low-contrast gradients while preserving 100% of optical edge acutance.
+#[inline]
 pub fn soft_adaptive_demosaic_rgb(
     norm_pixels: &[f32],
     full_w: usize,
@@ -1222,208 +1219,27 @@ pub fn soft_adaptive_demosaic_rgb(
     active_h: usize,
     frame: &RawSensorFrame,
 ) -> Vec<[f32; 3]> {
-    let sample = |fy: usize, fx: usize| -> f32 {
-        let y_clamped = fy.clamp(0, full_h - 1);
-        let x_clamped = fx.clamp(0, full_w - 1);
-        norm_pixels[y_clamped * full_w + x_clamped]
-    };
-
-    // Step 1: Reconstruct the full Green plane across the active image (with a 2-pixel apron for boundary safety)
-    let apron_w = active_w + 4;
-    let apron_h = active_h + 4;
-    let mut green_plane = vec![0.0f32; apron_w * apron_h];
-
-    for ay in 0..apron_h {
-        let fy = (active_y as isize + ay as isize - 2).clamp(2, (full_h - 3) as isize) as usize;
-        let g_row_start = ay * apron_w;
-        for ax in 0..apron_w {
-            let fx = (active_x as isize + ax as isize - 2).clamp(2, (full_w - 3) as isize) as usize;
-            let color = frame.color_at(fy, fx);
-            if color == CFA_COLOR_GREEN {
-                green_plane[g_row_start + ax] = sample(fy, fx);
-            } else {
-                let c = sample(fy, fx);
-                let g_n = sample(fy - 1, fx);
-                let g_s = sample(fy + 1, fx);
-                let g_w = sample(fy, fx - 1);
-                let g_e = sample(fy, fx + 1);
-
-                let c_n2 = sample(fy - 2, fx);
-                let c_s2 = sample(fy + 2, fx);
-                let c_w2 = sample(fy, fx - 2);
-                let c_e2 = sample(fy, fx + 2);
-
-                let delta_h = (g_w - g_e).abs() + (2.0 * c - c_w2 - c_e2).abs();
-                let delta_v = (g_n - g_s).abs() + (2.0 * c - c_n2 - c_s2).abs();
-
-                let g_h = 0.5 * (g_w + g_e) + 0.25 * (2.0 * c - c_w2 - c_e2);
-                let g_v = 0.5 * (g_n + g_s) + 0.25 * (2.0 * c - c_n2 - c_s2);
-
-                // Continuous soft blending (C^1 continuous Hermite):
-                let diff = delta_h - delta_v;
-                let sum = delta_h + delta_v + 1e-5;
-                let t = (diff / sum).clamp(-1.0, 1.0);
-                let u = 0.5 + 0.5 * t;
-                let w_v = u * u * (3.0 - 2.0 * u);
-                let w_h = 1.0 - w_v;
-
-                green_plane[g_row_start + ax] = (w_h * g_h + w_v * g_v).max(0.0);
-            }
-        }
-    }
-
-    let g_sample = |ay: usize, ax: usize| -> f32 {
-        green_plane[ay * apron_w + ax]
-    };
-
-    // Step 2: Interpolate Red and Blue using smooth color differences
-    let mut out_rgb = vec![[0.0f32; 3]; active_w * active_h];
-
-    for y in 0..active_h {
-        let ay = y + 2;
-        let fy = active_y + y;
-        let out_row_start = y * active_w;
-
-        for x in 0..active_w {
-            let ax = x + 2;
-            let fx = active_x + x;
-            let color = frame.color_at(fy, fx);
-            let g = g_sample(ay, ax);
-
-            let r: f32;
-            let b: f32;
-
-            if color == CFA_COLOR_RED {
-                r = sample(fy, fx);
-                let d_nw = sample(fy - 1, fx - 1) - g_sample(ay - 1, ax - 1);
-                let d_ne = sample(fy - 1, fx + 1) - g_sample(ay - 1, ax + 1);
-                let d_sw = sample(fy + 1, fx - 1) - g_sample(ay + 1, ax - 1);
-                let d_se = sample(fy + 1, fx + 1) - g_sample(ay + 1, ax + 1);
-
-                let grad_d1 = (sample(fy - 1, fx - 1) - sample(fy + 1, fx + 1)).abs() + (g_sample(ay - 1, ax - 1) - g_sample(ay + 1, ax + 1)).abs();
-                let grad_d2 = (sample(fy - 1, fx + 1) - sample(fy + 1, fx - 1)).abs() + (g_sample(ay - 1, ax + 1) - g_sample(ay + 1, ax - 1)).abs();
-
-                let diff_d = grad_d1 - grad_d2;
-                let sum_d = grad_d1 + grad_d2 + 1e-5;
-                let t_d = (diff_d / sum_d).clamp(-1.0, 1.0);
-                let u_d = 0.5 + 0.5 * t_d;
-                let w_d2 = u_d * u_d * (3.0 - 2.0 * u_d);
-                let w_d1 = 1.0 - w_d2;
-
-                let b_d1 = 0.5 * (d_nw + d_se);
-                let b_d2 = 0.5 * (d_ne + d_sw);
-                b = (g + w_d1 * b_d1 + w_d2 * b_d2).max(0.0);
-            } else if color == CFA_COLOR_BLUE {
-                b = sample(fy, fx);
-                let d_nw = sample(fy - 1, fx - 1) - g_sample(ay - 1, ax - 1);
-                let d_ne = sample(fy - 1, fx + 1) - g_sample(ay - 1, ax + 1);
-                let d_sw = sample(fy + 1, fx - 1) - g_sample(ay + 1, ax - 1);
-                let d_se = sample(fy + 1, fx + 1) - g_sample(ay + 1, ax + 1);
-
-                let grad_d1 = (sample(fy - 1, fx - 1) - sample(fy + 1, fx + 1)).abs() + (g_sample(ay - 1, ax - 1) - g_sample(ay + 1, ax + 1)).abs();
-                let grad_d2 = (sample(fy - 1, fx + 1) - sample(fy + 1, fx - 1)).abs() + (g_sample(ay - 1, ax + 1) - g_sample(ay + 1, ax - 1)).abs();
-
-                let diff_d = grad_d1 - grad_d2;
-                let sum_d = grad_d1 + grad_d2 + 1e-5;
-                let t_d = (diff_d / sum_d).clamp(-1.0, 1.0);
-                let u_d = 0.5 + 0.5 * t_d;
-                let w_d2 = u_d * u_d * (3.0 - 2.0 * u_d);
-                let w_d1 = 1.0 - w_d2;
-
-                let r_d1 = 0.5 * (d_nw + d_se);
-                let r_d2 = 0.5 * (d_ne + d_sw);
-                r = (g + w_d1 * r_d1 + w_d2 * r_d2).max(0.0);
-            } else {
-                let is_r_horizontal = frame.color_at(fy, fx.saturating_sub(1)) == CFA_COLOR_RED
-                    || frame.color_at(fy, fx + 1) == CFA_COLOR_RED;
-
-                let d_w = sample(fy, fx - 1) - g_sample(ay, ax - 1);
-                let d_e = sample(fy, fx + 1) - g_sample(ay, ax + 1);
-                let d_n = sample(fy - 1, fx) - g_sample(ay - 1, ax);
-                let d_s = sample(fy + 1, fx) - g_sample(ay + 1, ax);
-
-                let d_h = 0.5 * (d_w + d_e);
-                let d_v = 0.5 * (d_n + d_s);
-
-                if is_r_horizontal {
-                    r = (g + d_h).max(0.0);
-                    b = (g + d_v).max(0.0);
-                } else {
-                    b = (g + d_h).max(0.0);
-                    r = (g + d_v).max(0.0);
-                }
-            }
-
-            out_rgb[out_row_start + x] = [r, g, b];
-        }
-    }
-
-    out_rgb
+    crate::color::demosaic::soft_adaptive_demosaic(
+        norm_pixels,
+        full_w,
+        full_h,
+        active_x,
+        active_y,
+        active_w,
+        active_h,
+        frame,
+    )
 }
 
 /// Applies chromatic difference median filtering to eliminate Bayer demosaicing artifacts.
+#[inline]
 pub fn apply_chromatic_median_filter_rgb(
     pixels: &mut [[f32; 3]],
     width: usize,
     height: usize,
     passes: usize,
 ) {
-    if passes == 0 || width < 3 || height < 3 || pixels.len() < width * height {
-        return;
-    }
-
-    let mut buf = pixels.to_vec();
-
-    for _ in 0..passes {
-        for y in 0..height {
-            let y_top = y.saturating_sub(1);
-            let y_bot = (y + 1).min(height - 1);
-            let row_top = &pixels[y_top * width..(y_top + 1) * width];
-            let row_mid = &pixels[y * width..(y + 1) * width];
-            let row_bot = &pixels[y_bot * width..(y_bot + 1) * width];
-            let dst_offset = y * width;
-
-            for x in 0..width {
-                let x_left = x.saturating_sub(1);
-                let x_right = (x + 1).min(width - 1);
-                let g_mid = row_mid[x][1];
-
-                let mut cr = [
-                    row_top[x_left][0] - row_top[x_left][1],
-                    row_top[x][0] - row_top[x][1],
-                    row_top[x_right][0] - row_top[x_right][1],
-                    row_mid[x_left][0] - row_mid[x_left][1],
-                    row_mid[x][0] - g_mid,
-                    row_mid[x_right][0] - row_mid[x_right][1],
-                    row_bot[x_left][0] - row_bot[x_left][1],
-                    row_bot[x][0] - row_bot[x][1],
-                    row_bot[x_right][0] - row_bot[x_right][1],
-                ];
-
-                let mut cb = [
-                    row_top[x_left][2] - row_top[x_left][1],
-                    row_top[x][2] - row_top[x][1],
-                    row_top[x_right][2] - row_top[x_right][1],
-                    row_mid[x_left][2] - row_mid[x_left][1],
-                    row_mid[x][2] - g_mid,
-                    row_mid[x_right][2] - row_mid[x_right][1],
-                    row_bot[x_left][2] - row_bot[x_left][1],
-                    row_bot[x][2] - row_bot[x][1],
-                    row_bot[x_right][2] - row_bot[x_right][1],
-                ];
-
-                cr.sort_unstable_by(|a, b| a.total_cmp(b));
-                cb.sort_unstable_by(|a, b| a.total_cmp(b));
-
-                buf[dst_offset + x] = [
-                    (g_mid + cr[4]).max(0.0),
-                    g_mid,
-                    (g_mid + cb[4]).max(0.0),
-                ];
-            }
-        }
-        pixels.copy_from_slice(&buf);
-    }
+    crate::color::demosaic::apply_chromatic_median_filter(pixels, width, height, passes);
 }
 
 /// Suppresses isolated single-photosite read-noise spikes and hot-pixels on the normalized CFA grid

@@ -232,112 +232,122 @@ extension AppViewModel {
             resolvedCoeffs = nil
         }
         
-        // 1. Determine baseline EXIF camera orientation
-        let exifRotation: Int
-        let exifFlipH: Bool
-        let exifFlipV: Bool
-        if let meta = extractMetadata(path: photo.filePath), let orient = meta.orientation {
-            let dec = decodeExifOrientation(orientation: orient)
-            exifRotation = Int(dec.rotation)
-            exifFlipH = dec.flipHorizontal
-            exifFlipV = dec.flipVertical
-        } else {
-            exifRotation = 0
-            exifFlipH = false
-            exifFlipV = false
-        }
-        
-        // 2. Resolve target edits from XMP sidecar or baseline defaults
-        let asShotWb = getAsShotWhiteBalance(path: photo.filePath)
-        let asShotTemp = asShotWb?.temperature ?? 5500.0
-        let asShotTint = asShotWb?.tint ?? 0.0
-        self.asShotTemperature = asShotTemp
-        self.asShotTint = asShotTint
-
-        let targetEdits: EditSettings
-        if let xmp = readXmp(path: photo.filePath) {
-            var edits = xmp.edits.migratingLegacyProfiles
-            if !editsHasModifications(edits: edits, asShotTemp: asShotTemp, asShotTint: asShotTint) {
-                // Sidecar has no custom develop adjustments (e.g. metadata-only sidecar):
-                // preserve camera as-shot WB, baseline EXIF orientation, and user default lens preferences.
-                edits.temperature = asShotTemp
-                edits.tint = asShotTint
-                edits.rotation = Int32(exifRotation)
-                edits.flipHorizontal = exifFlipH
-                edits.flipVertical = exifFlipV
-                edits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
-                edits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
-                edits.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
-                if let defaultLut = UserDefaults.standard.string(forKey: "defaultLookLutName"), !defaultLut.isEmpty {
-                    edits.lutName = defaultLut
-                    edits.lutIntensity = UserDefaults.standard.object(forKey: "defaultLookLutIntensity") as? Float ?? 1.0
-                }
-            }
-            targetEdits = edits
-        } else {
-            var defaultEdits = EditSettings.defaultIdentity
-            defaultEdits.rotation = Int32(exifRotation)
-            defaultEdits.flipHorizontal = exifFlipH
-            defaultEdits.flipVertical = exifFlipV
-            defaultEdits.temperature = asShotTemp
-            defaultEdits.tint = asShotTint
-            defaultEdits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
-            defaultEdits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
-            defaultEdits.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
-            if let defaultLut = UserDefaults.standard.string(forKey: "defaultLookLutName"), !defaultLut.isEmpty {
-                defaultEdits.lutName = defaultLut
-                defaultEdits.lutIntensity = UserDefaults.standard.object(forKey: "defaultLookLutIntensity") as? Float ?? 1.0
-            }
-            targetEdits = defaultEdits
-        }
-        
         let token = UUID()
         self.activeDecodeToken = token
         self.activeDecodeTask?.cancel()
         self.isDemosaicing = true
-        
-        self.currentlyLoadedPhotoPath = photo.filePath
-        self.defaultExifRotation = exifRotation
-        self.defaultExifFlipH = exifFlipH
-        self.defaultExifFlipV = exifFlipV
         self.lensCoefficients = resolvedCoeffs
-        self.applyEdits(targetEdits)
         self.isCropToolActive = false
         self.cropSessionSnapshot = nil
         self.currentGainMapRecord = nil
         
-        if self.selectedPhotoIsRaw {
-            // RAW Workflow: 100% Honest First Proof Color. Zero Camera JPEG Flashing.
-            // Tier 0: In-Memory Ring Buffer Check (0ms instant transition for pre-warmed neighbor)
-            let preloadedRecord = PreviewRingBuffer.shared.getRawPreview(for: photo.filePath)
+        // Fast in-memory lookup on @MainActor (0ms instant transition for pre-warmed / cached items)
+        let preloadedRecord = self.selectedPhotoIsRaw ? PreviewRingBuffer.shared.getRawPreview(for: photo.filePath) : nil
+        if let preloaded = preloadedRecord {
+            self.rawPreviewRecord = preloaded
+            self.previewImage = nil
+            self.isIntermediatePreviewActive = false
+            self.isDemosaicing = false
+            if self.canvasMode == .detail && self.isHistogramVisible {
+                self.scheduleHistogramUpdate()
+            }
+        } else if !self.selectedPhotoIsRaw, let cached = ThumbnailCache.shared.image(for: photo.filePath) {
+            self.previewImage = cached
+            self.rawPreviewRecord = nil
+            self.isIntermediatePreviewActive = false
+            self.isDemosaicing = false
+        } else {
+            self.previewImage = nil
+            self.rawPreviewRecord = nil
+            self.isIntermediatePreviewActive = false
+            self.isDemosaicing = true
+        }
+        
+        self.activeDecodeTask = Task { [weak self] in
+            guard let self = self else { return }
+            guard self.activeDecodeToken == token else { return }
             
-            if let preloaded = preloadedRecord {
-                self.rawPreviewRecord = preloaded
-                self.previewImage = nil
-                self.isIntermediatePreviewActive = false
-                self.isDemosaicing = false
-                if self.canvasMode == .detail && self.isHistogramVisible {
-                    self.scheduleHistogramUpdate()
-                }
-            } else if let intermediate = ThumbnailCache.shared.intermediateImage(for: photo.filePath, edits: targetEdits) {
-                // Tier 1: Instant First Proof Intermediate render matching targetEdits
-                self.previewImage = intermediate
-                self.rawPreviewRecord = nil
-                self.isIntermediatePreviewActive = true
-                self.isDemosaicing = false
+            // Background extraction: move synchronous disk/FFI calls off the main thread
+            let (meta, asShotWb, xmp) = await Task.detached(priority: .userInitiated) { () -> (MetadataRecord?, WhiteBalanceRecord?, XmpDataRecord?) in
+                let m = extractMetadata(path: photo.filePath)
+                let wb = getAsShotWhiteBalance(path: photo.filePath)
+                let x = readXmp(path: photo.filePath)
+                return (m, wb, x)
+            }.value
+            
+            guard !Task.isCancelled, self.activeDecodeToken == token else { return }
+            
+            // 1. Determine baseline EXIF camera orientation
+            let exifRotation: Int
+            let exifFlipH: Bool
+            let exifFlipV: Bool
+            if let orient = meta?.orientation {
+                let dec = decodeExifOrientation(orientation: orient)
+                exifRotation = Int(dec.rotation)
+                exifFlipH = dec.flipHorizontal
+                exifFlipV = dec.flipVertical
             } else {
-                // Tier 2: Neutral dark transition with developing spinner while 10-15ms decode runs
-                self.previewImage = nil
-                self.rawPreviewRecord = nil
-                self.isIntermediatePreviewActive = false
-                self.isDemosaicing = true
+                exifRotation = 0
+                exifFlipH = false
+                exifFlipV = false
             }
             
-            // Immediate 10-15ms RAW binned decode directly into Linear Rec.2020 (if not already preloaded)
-            // Followed by full-resolution demosaic stream for 100% zoom pixel peeping
-            self.activeDecodeTask = Task { [weak self] in
-                guard let self = self else { return }
-                guard self.activeDecodeToken == token else { return }
+            // 2. Resolve target edits from XMP sidecar or baseline defaults
+            let asShotTemp = asShotWb?.temperature ?? 5500.0
+            let asShotTint = asShotWb?.tint ?? 0.0
+            self.asShotTemperature = asShotTemp
+            self.asShotTint = asShotTint
+            self.defaultExifRotation = exifRotation
+            self.defaultExifFlipH = exifFlipH
+            self.defaultExifFlipV = exifFlipV
+            
+            let targetEdits: EditSettings
+            if let xmp = xmp {
+                var edits = xmp.edits.migratingLegacyProfiles
+                if !editsHasModifications(edits: edits, asShotTemp: asShotTemp, asShotTint: asShotTint, exifRotation: exifRotation) {
+                    // Sidecar has no custom develop adjustments (e.g. metadata-only sidecar):
+                    // preserve camera as-shot WB, baseline EXIF orientation, and user default lens preferences.
+                    // NOTE: Respect saved edits.rotation rather than overwriting when .xmp exists on disk!
+                    edits.temperature = asShotTemp
+                    edits.tint = asShotTint
+                    edits.flipHorizontal = exifFlipH
+                    edits.flipVertical = exifFlipV
+                    edits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
+                    edits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+                    edits.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
+                    if let defaultLut = UserDefaults.standard.string(forKey: "defaultLookLutName"), !defaultLut.isEmpty {
+                        edits.lutName = defaultLut
+                        edits.lutIntensity = UserDefaults.standard.object(forKey: "defaultLookLutIntensity") as? Float ?? 1.0
+                    }
+                }
+                targetEdits = edits
+            } else {
+                var defaultEdits = EditSettings.defaultIdentity
+                defaultEdits.rotation = Int32(exifRotation)
+                defaultEdits.flipHorizontal = exifFlipH
+                defaultEdits.flipVertical = exifFlipV
+                defaultEdits.temperature = asShotTemp
+                defaultEdits.tint = asShotTint
+                defaultEdits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
+                defaultEdits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+                defaultEdits.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
+                if let defaultLut = UserDefaults.standard.string(forKey: "defaultLookLutName"), !defaultLut.isEmpty {
+                    defaultEdits.lutName = defaultLut
+                    defaultEdits.lutIntensity = UserDefaults.standard.object(forKey: "defaultLookLutIntensity") as? Float ?? 1.0
+                }
+                targetEdits = defaultEdits
+            }
+            
+            self.applyEdits(targetEdits)
+            
+            if self.selectedPhotoIsRaw {
+                // RAW Workflow: 100% Honest First Proof Color. Zero Camera JPEG Flashing.
+                if preloadedRecord == nil, let intermediate = ThumbnailCache.shared.intermediateImage(for: photo.filePath, edits: targetEdits) {
+                    self.previewImage = intermediate
+                    self.rawPreviewRecord = nil
+                    self.isIntermediatePreviewActive = true
+                    self.isDemosaicing = false
+                }
                 
                 // Stage 2A: Viewport-aware 2x2 Bayer box binning (10-15ms fast preview if uncached)
                 if preloadedRecord == nil {
@@ -556,7 +566,7 @@ extension AppViewModel {
     
     func syncXmp(for filePath: String, rating: Int32??, status: String?, edits: EditSettings? = nil) {
         let currentPhoto = (selectedPhoto?.filePath == filePath ? selectedPhoto : nil) ?? photos.first(where: { $0.filePath == filePath })
-        let photoKeywords = currentPhoto?.keywords
+        let photoKeywords = currentPhoto?.keywords?.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } ?? []
         let photoTitle = currentPhoto?.title
         let photoDescription = currentPhoto?.description
         let photoCreator = currentPhoto?.creator
@@ -564,87 +574,27 @@ extension AppViewModel {
         let photoLat = currentPhoto?.latitude
         let photoLon = currentPhoto?.longitude
         let photoStatus = currentPhoto?.status
+        let targetEdits = edits ?? ((filePath == self.currentlyLoadedPhotoPath) ? self.currentEdits : nil)
 
         Task.detached(priority: .utility) {
-            let existingXmp = readXmp(path: filePath)
-            let finalEdits: EditSettings
-            if let e = edits {
-                finalEdits = e
-            } else if let e = existingXmp?.edits {
-                finalEdits = e
-            } else {
-                var baseline = EditSettings.defaultIdentity
-                if let asShot = getAsShotWhiteBalance(path: filePath) {
-                    baseline.temperature = asShot.temperature
-                    baseline.tint = asShot.tint
-                }
-                if let orient = extractMetadata(path: filePath)?.orientation {
-                    let dec = decodeExifOrientation(orientation: orient)
-                    baseline.rotation = Int32(dec.rotation)
-                    baseline.flipHorizontal = dec.flipHorizontal
-                    baseline.flipVertical = dec.flipVertical
-                }
-                baseline.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
-                baseline.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
-                baseline.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
-                finalEdits = baseline
-            }
-
-            // Resolve Keywords: preserve existing if in-memory is nil or empty
-            let splitKeywords: [String]
-            if let kw = photoKeywords, !kw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                splitKeywords = kw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-            } else {
-                splitKeywords = existingXmp?.keywords ?? []
-            }
-
-            // Resolve Rating:
-            // - If rating was explicitly provided as .some(val): use val (can be nil to clear).
-            // - If rating was nil (not provided): preserve in-memory rating or existing XMP rating.
-            let finalRating: Int32?
-            if let explicitRating = rating {
-                finalRating = explicitRating
-            } else {
-                finalRating = currentPhoto?.rating ?? existingXmp?.rating
-            }
-
-            // Resolve Status:
-            // - If status was explicitly provided: use it.
-            // - If status was nil: preserve in-memory if non-empty and not "none", else preserve existing XMP status.
-            let finalStatus: String
-            if let s = status {
-                finalStatus = s
-            } else if let s = photoStatus, !s.isEmpty && s.lowercased() != "none" {
-                finalStatus = s
-            } else {
-                finalStatus = existingXmp?.status ?? "none"
-            }
-
-            // Resolve Title / Description / Creator / Copyright:
-            // Preserve existing XMP values if in-memory values are empty or nil
-            let finalTitle = (photoTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? photoTitle : existingXmp?.title
-            let finalDescription = (photoDescription?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? photoDescription : existingXmp?.description
-            let finalCreator = (photoCreator?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? photoCreator : existingXmp?.creator
-            let finalCopyright = (photoCopyright?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? photoCopyright : existingXmp?.copyright
-            // GPS coordinates: Sidecar coordinates (from geotagging tools or previous edits)
-            // strictly take precedence over camera raw EXIF coordinates.
-            let finalLat = existingXmp?.latitude ?? photoLat
-            let finalLon = existingXmp?.longitude ?? photoLon
-
-            let record = XmpDataRecord(
-                rating: finalRating,
-                status: finalStatus,
-                title: finalTitle,
-                description: finalDescription,
-                creator: finalCreator,
-                copyright: finalCopyright,
-                keywords: splitKeywords,
-                latitude: finalLat,
-                longitude: finalLon,
-                edits: finalEdits
+            await XmpSyncCoordinator.shared.sync(
+                filePath: filePath,
+                rating: rating,
+                status: status,
+                edits: targetEdits,
+                metadata: nil,
+                inMemoryRating: currentPhoto?.rating,
+                inMemoryStatus: photoStatus,
+                inMemoryLat: photoLat,
+                inMemoryLon: photoLon,
+                fallbackTitle: photoTitle,
+                fallbackDescription: photoDescription,
+                fallbackCreator: photoCreator,
+                fallbackCopyright: photoCopyright,
+                fallbackKeywords: photoKeywords
             )
-            _ = writeXmp(path: filePath, record: record)
         }
+    }
     }
     
     // MARK: - Viewport Zoom & Pan

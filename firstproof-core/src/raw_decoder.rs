@@ -27,11 +27,9 @@ pub struct RawlerDecoder;
 
 impl RawDecoder for RawlerDecoder {
     fn decode(&self, path: &Path) -> Result<RawSensorFrame, String> {
-        let raw = rawler::decode_file(path).map_err(|e| format!("Rawler decode error: {}", e))?;
+        let bytes = std::fs::read(path).map_err(|e| format!("Failed to read RAW file: {}", e))?;
 
-        let bytes = std::fs::read(path).unwrap_or_default();
-
-        RawSensorFrame::decode_from_raw_image(raw, &bytes)
+        RawSensorFrame::decode_from_bytes(&bytes)
             .ok_or_else(|| "Failed to construct RawSensorFrame from decoded RAW".to_string())
     }
 }

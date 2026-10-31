@@ -20,7 +20,6 @@ import {
 import type { ToneCurveWidget } from '../ToneCurveWidget';
 import { formatAdjustmentValue } from '../utils/formatters';
 import type {
-  ColorProfileMode,
   EditSettingsPayload,
   EmulsionArchetype,
   EmulsionFormat,
@@ -72,6 +71,7 @@ export interface InspectorDelegate {
   getRating: () => number;
   getStatus: () => string;
   getActiveIndex: () => number;
+  updateRatingFlagBadge?: (idx: number, rating: number, status: string) => void;
   onResetAllEdits?: () => void;
   scheduleHistogramUpdate?: () => void;
 }
@@ -395,26 +395,6 @@ export class InspectorSyncController {
 
     this.updateSplitToningHint();
 
-    const isRaw = this.delegate.isCurrentPhotoRaw();
-    const selectTone = document.getElementById(
-      'select-tone-profile',
-    ) as HTMLSelectElement | null;
-    const embeddedTone = document.getElementById('tone-profile-embedded');
-    if (selectTone) {
-      if (isRaw) {
-        selectTone.classList.remove('hidden');
-        embeddedTone?.classList.add('hidden');
-        if (edits.tone_profile) {
-          if (edits.tone_profile.startsWith('Camera')) {
-            edits.tone_profile = 'AgxVivid';
-          }
-          selectTone.value = edits.tone_profile;
-        }
-      } else {
-        selectTone.classList.add('hidden');
-        embeddedTone?.classList.remove('hidden');
-      }
-    }
     const selectEmulsion = document.getElementById(
       'select-emulsion',
     ) as HTMLSelectElement | null;
@@ -479,37 +459,7 @@ export class InspectorSyncController {
     if (btnReject) btnReject.classList.toggle('active', status === 'Reject');
 
     if (activeIdx >= 0) {
-      const cardEl = document.getElementById(`thumb-card-${activeIdx}`);
-      if (cardEl) {
-        let ratingBadge = cardEl.querySelector(
-          '.thumb-badge-rating',
-        ) as HTMLElement;
-        if (rating > 0) {
-          if (!ratingBadge) {
-            ratingBadge = document.createElement('div');
-            ratingBadge.className = 'thumb-badge-rating';
-            cardEl.appendChild(ratingBadge);
-          }
-          ratingBadge.innerText = '★'.repeat(rating);
-        } else if (ratingBadge) {
-          ratingBadge.remove();
-        }
-
-        let flagBadge = cardEl.querySelector(
-          '.thumb-badge-flag',
-        ) as HTMLElement;
-        if (status === 'Pick' || status === 'Reject') {
-          if (!flagBadge) {
-            flagBadge = document.createElement('div');
-            flagBadge.className = 'thumb-badge-flag';
-            cardEl.appendChild(flagBadge);
-          }
-          flagBadge.className = `thumb-badge-flag ${status.toLowerCase()}`;
-          flagBadge.innerText = status.toUpperCase();
-        } else if (flagBadge) {
-          flagBadge.remove();
-        }
-      }
+      this.delegate.updateRatingFlagBadge?.(activeIdx, rating, status);
     }
   }
 
@@ -835,17 +785,6 @@ export class InspectorSyncController {
   }
 
   private bindSelects(): void {
-    const selectTone = document.getElementById(
-      'select-tone-profile',
-    ) as HTMLSelectElement | null;
-    selectTone?.addEventListener('change', (e) => {
-      const edits = this.delegate.getEdits();
-      edits.tone_profile = (e.target as HTMLSelectElement)
-        .value as ColorProfileMode;
-      this.delegate.renderCanvas();
-      this.delegate.autoSaveSidecar();
-    });
-
     const selectEmulsion = document.getElementById(
       'select-emulsion',
     ) as HTMLSelectElement | null;
