@@ -116,34 +116,33 @@ fn clusteredGrainNoise(p: vec2<f32>) -> f32 {
 
 fn evalGrainProcNoise(pos: vec2<f32>, s: f32, is_instant: bool) -> f32 {
     if (is_instant) {
-        return 0.60 * clusteredGrainNoise(pos / s)
-            + 0.40 * clusteredGrainNoise(pos / (s * 1.8) + vec2<f32>(17.3, 31.7));
-    } else if (s > 1.0) {
-        let t_cluster = clamp((s - 1.0) / 2.0, 0.0, 1.0);
-        let cluster = clusteredGrainNoise(pos / s);
-        let micro = proceduralGrainNoise(pos.x, pos.y);
-        let clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
-        return mix(micro, clumped, t_cluster);
+        let s_inst = max(s * 1.5, 1.25);
+        let c1 = clusteredGrainNoise(pos / s_inst);
+        let c2 = clusteredGrainNoise(pos / (s_inst * 1.8) + vec2<f32>(17.3, 31.7));
+        return clamp((0.60 * c1 + 0.40 * c2) * 1.35, -1.0, 1.0);
     } else {
-        return proceduralGrainNoise(pos.x, pos.y);
+        // Physical silver halide crystal aggregates & chromogenic dye clouds:
+        // Band-limited multi-scale continuous Hermite clusters ensure organic spatial
+        // clumping across smooth bokeh backgrounds with zero single-pixel dither aliasing.
+        let s_phys = max(s * 1.65, 1.25);
+        let c1 = clusteredGrainNoise(pos / s_phys);
+        let c2 = clusteredGrainNoise(pos / (s_phys * 0.62) + vec2<f32>(37.7, 53.3));
+        return clamp((0.70 * c1 + 0.30 * c2) * 1.40, -1.0, 1.0);
     }
 }
 
 fn evalGrainEta(proc_val: f32, sensor_seed: f32, grain_mode: i32, is_instant: bool) -> f32 {
-    if (grain_mode == 1) { // SeedFromSensor
-        if (is_instant) {
-            return clamp(0.55 * proc_val + 0.20 * sensor_seed, -1.0, 1.0);
-        } else {
-            return clamp(proc_val * (0.45 + 0.55 * abs(sensor_seed)) + 0.45 * sensor_seed, -1.0, 1.0);
-        }
-    } else if (grain_mode == 2) { // SynthesizePhysical
-        if (is_instant) {
-            return clamp(0.85 * proc_val + 0.05 * sensor_seed, -1.0, 1.0);
-        } else {
-            return clamp(0.90 * proc_val + 0.10 * sensor_seed, -1.0, 1.0);
-        }
+    if (grain_mode == 0) {
+        return 0.0;
     }
-    return 0.0;
+    let n_sensor = abs(sensor_seed);
+    if (is_instant) {
+        let w_proc = 1.0 - 0.25 * n_sensor;
+        return clamp(w_proc * proc_val + 0.25 * sensor_seed, -1.0, 1.0);
+    } else {
+        let w_proc = 1.0 - 0.35 * n_sensor;
+        return clamp(w_proc * proc_val + 0.45 * sensor_seed, -1.0, 1.0);
+    }
 }
 
 fn applyStochasticEmulsionGrain(

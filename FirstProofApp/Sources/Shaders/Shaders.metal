@@ -476,20 +476,15 @@ float evalGrainProcNoise(
     bool is_instant
 ) {
     if (is_instant) {
-        float _e5 = clusteredGrainNoise(pos / metal::float2(s));
-        float _e16 = clusteredGrainNoise((pos / metal::float2(s * 1.8)) + metal::float2(17.3, 31.7));
-        return (0.6 * _e5) + (0.4 * _e16);
+        float s_inst = metal::max(s * 1.5, 1.25);
+        float _e9 = clusteredGrainNoise(pos / metal::float2(s_inst));
+        float _e18 = clusteredGrainNoise((pos / metal::float2(s_inst * 1.8)) + metal::float2(17.3, 31.7));
+        return metal::clamp(((0.6 * _e9) + (0.4 * _e18)) * 1.35, -1.0, 1.0);
     } else {
-        if (s > 1.0) {
-            float t_cluster = metal::clamp((s - 1.0) / 2.0, 0.0, 1.0);
-            float _e31 = clusteredGrainNoise(pos / metal::float2(s));
-            float _e34 = proceduralGrainNoise(pos.x, pos.y);
-            float clumped = (_e34 * (0.6 + (0.4 * _e31))) + (0.25 * _e31);
-            return metal::mix(_e34, clumped, t_cluster);
-        } else {
-            float _e46 = proceduralGrainNoise(pos.x, pos.y);
-            return _e46;
-        }
+        float s_phys = metal::max(s * 1.65, 1.25);
+        float _e35 = clusteredGrainNoise(pos / metal::float2(s_phys));
+        float _e44 = clusteredGrainNoise((pos / metal::float2(s_phys * 0.62)) + metal::float2(37.7, 53.3));
+        return metal::clamp(((0.7 * _e35) + (0.3 * _e44)) * 1.4, -1.0, 1.0);
     }
 }
 
@@ -499,22 +494,17 @@ float evalGrainEta(
     int grain_mode,
     bool is_instant_1
 ) {
-    if (grain_mode == 1) {
-        if (is_instant_1) {
-            return metal::clamp((0.55 * proc_val) + (0.2 * sensor_seed), -1.0, 1.0);
-        } else {
-            return metal::clamp((proc_val * (0.45 + (0.55 * metal::abs(sensor_seed)))) + (0.45 * sensor_seed), -1.0, 1.0);
-        }
-    } else {
-        if (grain_mode == 2) {
-            if (is_instant_1) {
-                return metal::clamp((0.85 * proc_val) + (0.05 * sensor_seed), -1.0, 1.0);
-            } else {
-                return metal::clamp((0.9 * proc_val) + (0.1 * sensor_seed), -1.0, 1.0);
-            }
-        }
+    if (grain_mode == 0) {
+        return 0.0;
     }
-    return 0.0;
+    float n_sensor = metal::abs(sensor_seed);
+    if (is_instant_1) {
+        float w_proc = 1.0 - (0.25 * n_sensor);
+        return metal::clamp((w_proc * proc_val) + (0.25 * sensor_seed), -1.0, 1.0);
+    } else {
+        float w_proc_1 = 1.0 - (0.35 * n_sensor);
+        return metal::clamp((w_proc_1 * proc_val) + (0.45 * sensor_seed), -1.0, 1.0);
+    }
 }
 
 metal::float3 applyStochasticEmulsionGrain(

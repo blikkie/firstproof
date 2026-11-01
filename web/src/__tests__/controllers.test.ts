@@ -202,6 +202,7 @@ describe('Controller & First-Responder Architecture', () => {
           <option value="None" selected>None</option>
           <option value="RochesterPortrait400">Rochester Portrait 400</option>
         </select>
+        <input type="checkbox" id="toggle-emulsion-grain" />
         <select id="select-emulsion-grain-mode" class="select-input">
           <option value="Off" selected>Off</option>
           <option value="SeedFromSensor">SeedFromSensor</option>
@@ -248,21 +249,27 @@ describe('Controller & First-Responder Architecture', () => {
       expect(edits.emulsion_archetype).toBe('None');
       expect(edits.emulsion_grain_mode).toBe('Off');
 
-      // 2. Select Rochester Portrait 400: "when we simulate a film, default to all of the film"
+      // 2. Select Rochester Portrait 400: populates calibrated grain params while leaving grain toggle cleanly opt-in (Off)
       selectEmulsion.value = 'RochesterPortrait400';
       selectEmulsion.dispatchEvent(new Event('change'));
 
       expect(edits.emulsion_archetype).toBe('RochesterPortrait400');
-      expect(edits.emulsion_grain_mode).toBe('SeedFromSensor');
-      expect(selectGrainMode.value).toBe('SeedFromSensor');
+      expect(edits.emulsion_grain_mode).toBe('Off');
+      expect(selectGrainMode.value).toBe('Off');
       expect(edits.grain_size).toBe(1.0);
       expect(edits.grain_amount).toBe(0.8);
 
-      // 3. Reverting back to None resets grain mode to Off
-      selectEmulsion.value = 'None';
-      selectEmulsion.dispatchEvent(new Event('change'));
+      // 3. Explicit checkbox toggle engages grain
+      const toggleGrain = document.getElementById(
+        'toggle-emulsion-grain',
+      ) as HTMLInputElement;
+      toggleGrain.checked = true;
+      toggleGrain.dispatchEvent(new Event('change'));
+      expect(edits.emulsion_grain_mode).toBe('SeedFromSensor');
+      expect(selectGrainMode.value).toBe('SeedFromSensor');
 
-      expect(edits.emulsion_archetype).toBe('None');
+      toggleGrain.checked = false;
+      toggleGrain.dispatchEvent(new Event('change'));
       expect(edits.emulsion_grain_mode).toBe('Off');
       expect(selectGrainMode.value).toBe('Off');
     });

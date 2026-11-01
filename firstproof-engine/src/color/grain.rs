@@ -112,34 +112,29 @@ pub fn apply_stochastic_emulsion_grain(
 
     let eval_proc_noise = |x: f32, y: f32| -> f32 {
         if is_instant {
-            0.60 * clustered_grain_noise(x / s, y / s)
-                + 0.40 * clustered_grain_noise(x / (s * 1.8) + 17.3, y / (s * 1.8) + 31.7)
-        } else if s > 1.0 {
-            let t_cluster = ((s - 1.0) / 2.0).clamp(0.0, 1.0);
-            let cluster = clustered_grain_noise(x / s, y / s);
-            let micro = procedural_grain_noise(x, y);
-            let clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
-            (1.0 - t_cluster) * micro + t_cluster * clumped
+            let s_inst = (s * 1.5).max(1.25);
+            let c1 = clustered_grain_noise(x / s_inst, y / s_inst);
+            let c2 = clustered_grain_noise(x / (s_inst * 1.8) + 17.3, y / (s_inst * 1.8) + 31.7);
+            ((0.60 * c1 + 0.40 * c2) * 1.35).clamp(-1.0, 1.0)
         } else {
-            procedural_grain_noise(x, y)
+            let s_phys = (s * 1.65).max(1.25);
+            let c1 = clustered_grain_noise(x / s_phys, y / s_phys);
+            let c2 = clustered_grain_noise(x / (s_phys * 0.62) + 37.7, y / (s_phys * 0.62) + 53.3);
+            ((0.70 * c1 + 0.30 * c2) * 1.40).clamp(-1.0, 1.0)
         }
     };
 
     let eval_eta = |proc: f32| -> f32 {
         match grain_mode {
             EmulsionGrainMode::Off => 0.0,
-            EmulsionGrainMode::SeedFromSensor => {
+            EmulsionGrainMode::SeedFromSensor | EmulsionGrainMode::SynthesizePhysical => {
+                let n_sensor = sensor_seed.abs();
                 if is_instant {
-                    (0.55 * proc + 0.20 * sensor_seed).clamp(-1.0, 1.0)
+                    let w_proc = 1.0 - 0.25 * n_sensor;
+                    (w_proc * proc + 0.25 * sensor_seed).clamp(-1.0, 1.0)
                 } else {
-                    (proc * (0.45 + 0.55 * sensor_seed.abs()) + 0.45 * sensor_seed).clamp(-1.0, 1.0)
-                }
-            }
-            EmulsionGrainMode::SynthesizePhysical => {
-                if is_instant {
-                    (0.85 * proc + 0.05 * sensor_seed).clamp(-1.0, 1.0)
-                } else {
-                    (0.90 * proc + 0.10 * sensor_seed).clamp(-1.0, 1.0)
+                    let w_proc = 1.0 - 0.35 * n_sensor;
+                    (w_proc * proc + 0.45 * sensor_seed).clamp(-1.0, 1.0)
                 }
             }
         }

@@ -7,8 +7,7 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.28: Unified Adaptive Emulsion Grain Engine & Computational Sensor Fusion** (P1)
-2. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
+1. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
 
 ---
 
@@ -19,20 +18,6 @@ This document strictly tracks pending and deferred features calibrated against o
 > First Proof's primary workhorse default is **pure optical RAW capture via AgX filmic tone mapping**. The core workspaces (**Light**, **Color**, **Detail**, **Optics**) are dedicated strictly to sensor reality: standard White Balance (Temperature & Tint), exposure, tone recovery, and sensor sharpness. Photos look 90% finished immediately without any analog styling.  
 > 
 > Film stock and print media emulation are **not** the main workflow and **not** a complex simulator. They are an exquisite, 100% opt-in **fine-art treat and differentiator** housed in a dedicated **Emulsion** workspace tab (`InspectorTab.emulsion`). Default state is always `None / Bypass`. When activated, the engine does all the heavy lifting under the hood so the photographer simply selects a curated stock or print medium without fiddling with chemical dials.
-
-### 3.28 Unified Adaptive Emulsion Grain Engine & Computational Sensor Fusion (P1)
-- **Eliminate Leaky Mode Toggles (Option B Unified Optical Model)**:
-  - Purge the user-facing implementation toggle between `SeedFromSensor` and `SynthesizePhysical` in `EmulsionWorkspaceView`. Photographers select an emulsion stock or enable grain without being asked how the engine computes noise statistics.
-  - Implement a single, unified adaptive grain kernel in canonical WGSL (`firstproof-engine/shaders/detail.wgsl` & `darkroom.wgsl`) and Rust export pipeline (`firstproof-core/src/export/pipeline.rs`).
-- **Computational Sensor Fusion (Pixel & DNG Support)**:
-  - Automatically measure local high-frequency sensor noise ($\Delta_{\text{sensor}} = Y_{\text{center}} - Y_{\text{lowpass}}$).
-  - On high-ISO RAW frames (e.g. ISO 1600–6400), seamlessly absorb and coalesce the sensor's physical shot noise into the emulsion grain lattice, preventing synthetic noise from clashing with digital CMOS speckling.
-  - On clean or computational sensors (e.g. Google Pixel multi-frame fused DNGs, base ISO 100 captures), stochastically synthesize full-amplitude physical crystal/dye-cloud granularity without starvation.
-- **Format Magnification & Grain Sizing Tuning**:
-  - Ground grain cluster scaling in film format magnification ($35\text{mm} = 1.0\times$, $120 = 0.48\times$, $4\times 5 = 0.28\times$, $16\text{mm} = 3.4\times$) and published ANSI/ISO 10505 diffuse RMS granularity measurements at $D = 1.0$.
-  - Calibrate grain cluster footprints for 300 DPI print dot-gain retention (cluster diameter $\ge 170\,\mu\text{m}$).
-- **Backward Compatibility & Post-Public Invariant**:
-  - Retain `EmulsionGrainMode` serialized values in domain models and XMP sidecars (`firstproof-engine/src/xmp.rs`), aliasing legacy `SeedFromSensor` and `SynthesizePhysical` cleanly into the unified engine so existing sidecars never break.
 
 ### 3.23 Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification (P2)
 - **Real-World Photographic Subject Proof Batch (4×6" Format)**:

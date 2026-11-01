@@ -81,4 +81,33 @@ struct BridgeParityTests {
             #expect(points.last?.y == 1.0, "Channel \(channelName) must end at y=1.0")
         }
     }
+    
+    @Test("Unified optical emulsion grain toggle transitions lifecycle predictably")
+    @MainActor
+    func testUnifiedEmulsionGrainToggleLifecycle() {
+        let vm = AppViewModel()
+        #expect(vm.emulsionGrainMode == .off)
+        
+        vm.setEmulsionGrainEnabled(true)
+        #expect(vm.emulsionGrainMode != .off)
+        
+        vm.setEmulsionGrainEnabled(false)
+        #expect(vm.emulsionGrainMode == .off)
+        
+        // Selecting an emulsion archetype configures calibrated grain parameters while leaving grain toggle cleanly opt-in (Off)
+        vm.setEmulsionArchetype(.rochesterPortrait400)
+        #expect(vm.emulsionGrainMode == .off)
+        #expect(vm.grainSize == EmulsionArchetype.rochesterPortrait400.calibratedGrainDefaults.size)
+        #expect(vm.grainAmount == EmulsionArchetype.rochesterPortrait400.calibratedGrainDefaults.amount)
+        
+        // Explicitly enabling grain engages calibrated defaults
+        vm.setEmulsionGrainEnabled(true)
+        #expect(vm.emulsionGrainMode != .off)
+        #expect(vm.emulsionArchetype == .rochesterPortrait400)
+        
+        // Toggling off preserves archetype
+        vm.setEmulsionGrainEnabled(false)
+        #expect(vm.emulsionGrainMode == .off)
+        #expect(vm.emulsionArchetype == .rochesterPortrait400)
+    }
 }

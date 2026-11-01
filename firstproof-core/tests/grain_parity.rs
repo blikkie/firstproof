@@ -88,36 +88,29 @@ fn metal_shader_grain_sim(
     let s = cluster_size.max(0.25);
     let eval_proc_noise = |x: f32, y: f32| {
         if is_instant {
-            0.60 * clustered_noise_fn(x / s, y / s)
-                + 0.40 * clustered_noise_fn(x / (s * 1.8) + 17.3, y / (s * 1.8) + 31.7)
-        } else if s > 1.0 {
-            let t_cluster = ((s - 1.0) / 2.0).clamp(0.0, 1.0);
-            let cluster = clustered_noise_fn(x / s, y / s);
-            let micro = proc_noise_fn(x, y);
-            let clumped = micro * (0.60 + 0.40 * cluster) + 0.25 * cluster;
-            (1.0 - t_cluster) * micro + t_cluster * clumped
+            let s_inst = (s * 1.5).max(1.25);
+            let c1 = clustered_noise_fn(x / s_inst, y / s_inst);
+            let c2 = clustered_noise_fn(x / (s_inst * 1.8) + 17.3, y / (s_inst * 1.8) + 31.7);
+            ((0.60 * c1 + 0.40 * c2) * 1.35).clamp(-1.0, 1.0)
         } else {
-            proc_noise_fn(x, y)
+            let s_phys = (s * 1.65).max(1.25);
+            let c1 = clustered_noise_fn(x / s_phys, y / s_phys);
+            let c2 = clustered_noise_fn(x / (s_phys * 0.62) + 37.7, y / (s_phys * 0.62) + 53.3);
+            ((0.70 * c1 + 0.30 * c2) * 1.40).clamp(-1.0, 1.0)
         }
     };
 
     let eval_eta = |proc_val: f32| {
-        match grain_mode {
-            1 => {
-                if is_instant {
-                    (0.55 * proc_val + 0.20 * sensor_seed).clamp(-1.0, 1.0)
-                } else {
-                    (proc_val * (0.45 + 0.55 * sensor_seed.abs()) + 0.45 * sensor_seed).clamp(-1.0, 1.0)
-                }
-            }
-            2 => {
-                if is_instant {
-                    (0.85 * proc_val + 0.05 * sensor_seed).clamp(-1.0, 1.0)
-                } else {
-                    (0.90 * proc_val + 0.10 * sensor_seed).clamp(-1.0, 1.0)
-                }
-            }
-            _ => 0.0,
+        if grain_mode == 0 {
+            return 0.0;
+        }
+        let n_sensor = sensor_seed.abs();
+        if is_instant {
+            let w_proc = 1.0 - 0.25 * n_sensor;
+            (w_proc * proc_val + 0.25 * sensor_seed).clamp(-1.0, 1.0)
+        } else {
+            let w_proc = 1.0 - 0.35 * n_sensor;
+            (w_proc * proc_val + 0.45 * sensor_seed).clamp(-1.0, 1.0)
         }
     };
 
@@ -621,5 +614,77 @@ fn test_subtractive_dye_cloud_zero_amount_bypass() {
     assert_eq!(out_r, r, "Zero-bypass must preserve R bit-for-bit");
     assert_eq!(out_g, g, "Zero-bypass must preserve G bit-for-bit");
     assert_eq!(out_b, b, "Zero-bypass must preserve B bit-for-bit");
+}
+
+#[test]
+fn test_computational_sensor_fusion_zero_starvation() {
+    // Simulates a clean or multi-frame stacked computational DNG (e.g. Google Pixel HDR+)
+    // where sensor read and shot noise are virtually eliminated (delta_sensor == 0).
+    let (r, g, b) = (0.50, 0.50, 0.50);
+    let y_c = 0.50;
+    // Flat neighborhood: sensor noise is identically 0.0
+    let y_flat = 0.50;
+
+    let mut deltas = Vec::new();
+    for i in 0..100 {
+        let px = (i * 7) as f32;
+        let py = (i * 13) as f32;
+        let (out_r, _, _) = apply_stochastic_emulsion_grain(
+            r, g, b, y_c, y_flat, y_flat, y_flat, y_flat,
+            y_flat, y_flat, y_flat, y_flat, px, py,
+            EmulsionGrainMode::SeedFromSensor,
+            1.0,
+            1.0,
+            EmulsionArchetype::RochesterPortrait400,
+        );
+        deltas.push((out_r - r).abs());
+    }
+
+    // The maximum delta must be robust and non-trivial (full organic grain amplitude >= 0.03)
+    let max_delta = deltas.iter().copied().fold(0.0f32, f32::max);
+    assert!(
+        max_delta >= 0.035,
+        "Computational sensor fusion must not starve grain on clean/stacked sensors (max_delta: {})",
+        max_delta
+    );
+}
+
+#[test]
+fn test_unified_adaptive_grain_mode_equivalence() {
+    // Both legacy modes (SeedFromSensor and SynthesizePhysical) must produce identical output
+    // under the unified adaptive grain engine across various sensor noise levels.
+    let (r, g, b) = (0.35, 0.45, 0.55);
+    let y_c = 0.2627 * r + 0.6780 * g + 0.0593 * b;
+
+    for noise_mult in [0.90, 0.98, 1.0, 1.05, 1.15] {
+        let y_l = y_c * noise_mult;
+        for archetype in [
+            EmulsionArchetype::RochesterPortrait400,
+            EmulsionArchetype::AshigaraChrome50,
+            EmulsionArchetype::MobberleySilver400,
+            EmulsionArchetype::CambridgeDiffusion100,
+        ] {
+            let (seed_r, seed_g, seed_b) = apply_stochastic_emulsion_grain(
+                r, g, b, y_c, y_l, y_l, y_l, y_l,
+                y_l, y_l, y_l, y_l, 42.0, 84.0,
+                EmulsionGrainMode::SeedFromSensor,
+                1.0,
+                1.0,
+                archetype,
+            );
+            let (phys_r, phys_g, phys_b) = apply_stochastic_emulsion_grain(
+                r, g, b, y_c, y_l, y_l, y_l, y_l,
+                y_l, y_l, y_l, y_l, 42.0, 84.0,
+                EmulsionGrainMode::SynthesizePhysical,
+                1.0,
+                1.0,
+                archetype,
+            );
+
+            assert_eq!(seed_r, phys_r, "Mode parity R failed for archetype {:?}", archetype);
+            assert_eq!(seed_g, phys_g, "Mode parity G failed for archetype {:?}", archetype);
+            assert_eq!(seed_b, phys_b, "Mode parity B failed for archetype {:?}", archetype);
+        }
+    }
 }
 

@@ -186,23 +186,12 @@ public struct EmulsionWorkspaceView: View {
                     }
                 }
                 
-                // Physical Optical Grain & Stochastic Transmutation
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Optical Grain Resynthesis")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Picker("", selection: Binding<EmulsionGrainMode>(
-                        get: { viewModel.emulsionGrainMode },
-                        set: { viewModel.setEmulsionGrainMode($0) }
-                    )) {
-                        Text("Off (Sensor Passthrough)").tag(EmulsionGrainMode.off)
-                        Text("Optical Transmutation (Sensor Seeded)").tag(EmulsionGrainMode.seedFromSensor)
-                        Text("Synthetic Granularity (Procedural)").tag(EmulsionGrainMode.synthesizePhysical)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                }
+                // Physical Optical Grain Resynthesis (Adaptive Emulsion Engine)
+                Toggle("Optical Emulsion Grain", isOn: Binding<Bool>(
+                    get: { viewModel.emulsionGrainMode != .off },
+                    set: { viewModel.setEmulsionGrainEnabled($0) }
+                ))
+                .toggleStyle(.switch)
                 
                 if viewModel.emulsionGrainMode != .off {
                     SliderRow(

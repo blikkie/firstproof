@@ -422,6 +422,14 @@ export class InspectorSyncController {
     if (selectGrainMode && edits.emulsion_grain_mode) {
       selectGrainMode.value = edits.emulsion_grain_mode;
     }
+    const toggleGrain = document.getElementById(
+      'toggle-emulsion-grain',
+    ) as HTMLInputElement | null;
+    if (toggleGrain) {
+      toggleGrain.checked = Boolean(
+        edits.emulsion_grain_mode && edits.emulsion_grain_mode !== 'Off',
+      );
+    }
     const selectPrint = document.getElementById(
       'select-print-media',
     ) as HTMLSelectElement | null;
@@ -795,19 +803,8 @@ export class InspectorSyncController {
       edits.emulsion_archetype = archetype;
 
       if (archetype && archetype !== 'None') {
-        // When simulating a film stock, default to all of the film:
-        // Automatically engage SeedFromSensor grain if grain mode was Off or uninitialized.
-        if (!edits.emulsion_grain_mode || edits.emulsion_grain_mode === 'Off') {
-          edits.emulsion_grain_mode = 'SeedFromSensor';
-          const selectGrainMode = document.getElementById(
-            'select-emulsion-grain-mode',
-          ) as HTMLSelectElement | null;
-          if (selectGrainMode) {
-            selectGrainMode.value = 'SeedFromSensor';
-          }
-        }
-
-        // Auto-initialize grain_size and grain_amount from calibrated defaults
+        // Auto-initialize grain_size and grain_amount from calibrated defaults,
+        // while leaving grain toggle cleanly opt-in (never forcing grain ON by default)
         const defaults = CALIBRATED_GRAIN_DEFAULTS[archetype];
         if (defaults) {
           edits.grain_size = defaults.size;
@@ -828,15 +825,6 @@ export class InspectorSyncController {
             inputAmount.value = `${defaults.amount}`;
             valAmount.innerText = `${defaults.amount.toFixed(2)}x`;
           }
-        }
-      } else {
-        // Reverting to None: reset grain back to Off
-        edits.emulsion_grain_mode = 'Off';
-        const selectGrainMode = document.getElementById(
-          'select-emulsion-grain-mode',
-        ) as HTMLSelectElement | null;
-        if (selectGrainMode) {
-          selectGrainMode.value = 'Off';
         }
       }
 
@@ -876,6 +864,53 @@ export class InspectorSyncController {
       edits.emulsion_grain_mode = mode;
       if (
         mode !== 'Off' &&
+        edits.emulsion_archetype &&
+        edits.emulsion_archetype !== 'None'
+      ) {
+        const defaults = CALIBRATED_GRAIN_DEFAULTS[edits.emulsion_archetype];
+        if (
+          defaults &&
+          (edits.grain_size === 1.0 || edits.grain_size === undefined) &&
+          (edits.grain_amount === 1.0 || edits.grain_amount === undefined)
+        ) {
+          edits.grain_size = defaults.size;
+          edits.grain_amount = defaults.amount;
+          const inputSize = document.getElementById(
+            'slider-grain-size',
+          ) as HTMLInputElement | null;
+          const valSize = document.getElementById('val-grain-size');
+          if (inputSize && valSize) {
+            inputSize.value = `${defaults.size}`;
+            valSize.innerText = `${defaults.size.toFixed(2)}x`;
+          }
+          const inputAmount = document.getElementById(
+            'slider-grain-amount',
+          ) as HTMLInputElement | null;
+          const valAmount = document.getElementById('val-grain-amount');
+          if (inputAmount && valAmount) {
+            inputAmount.value = `${defaults.amount}`;
+            valAmount.innerText = `${defaults.amount.toFixed(2)}x`;
+          }
+        }
+      }
+      this.updateEmulsionWorkspaceVisibility();
+      this.delegate.renderCanvas();
+      this.delegate.autoSaveSidecar();
+    });
+
+    const toggleGrain = document.getElementById(
+      'toggle-emulsion-grain',
+    ) as HTMLInputElement | null;
+    toggleGrain?.addEventListener('change', (e) => {
+      const edits = this.delegate.getEdits();
+      const isChecked = (e.target as HTMLInputElement).checked;
+      const mode = isChecked ? 'SeedFromSensor' : 'Off';
+      edits.emulsion_grain_mode = mode;
+      if (selectGrainMode) {
+        selectGrainMode.value = mode;
+      }
+      if (
+        isChecked &&
         edits.emulsion_archetype &&
         edits.emulsion_archetype !== 'None'
       ) {

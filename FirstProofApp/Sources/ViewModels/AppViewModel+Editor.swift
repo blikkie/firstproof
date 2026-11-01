@@ -1155,14 +1155,9 @@ extension AppViewModel {
         let before = currentEdits
         self.emulsionArchetype = archetype
         if archetype != .none {
-            if self.emulsionGrainMode == .off {
-                self.emulsionGrainMode = .seedFromSensor
-            }
             let defaults = archetype.calibratedGrainDefaults
             self.grainSize = defaults.size
             self.grainAmount = defaults.amount
-        } else {
-            self.emulsionGrainMode = .off
         }
         if archetype == .cambridgeDiffusion100 && (self.emulsionFormat == .super8 || self.emulsionFormat == .format16mm) {
             self.emulsionFormat = .format35mm
@@ -1213,16 +1208,15 @@ extension AppViewModel {
         notifyThumbnailChanged()
     }
     
+    public func setEmulsionGrainEnabled(_ enabled: Bool) {
+        setEmulsionGrainMode(enabled ? .seedFromSensor : .off)
+    }
+    
     public func setEmulsionGrainMode(_ mode: EmulsionGrainMode) {
         guard self.emulsionGrainMode != mode else { return }
         let before = currentEdits
         self.emulsionGrainMode = mode
-        let title: String
-        switch mode {
-        case .off: title = "Grain: Off (Sensor Passthrough)"
-        case .seedFromSensor: title = "Grain: Optical Transmutation"
-        case .synthesizePhysical: title = "Grain: Synthetic Granularity"
-        }
+        let title = mode == .off ? "Emulsion Grain: Off" : "Emulsion Grain: Enabled"
         registerDiscreteEdit(title: title, before: before)
         notifyThumbnailChanged()
     }

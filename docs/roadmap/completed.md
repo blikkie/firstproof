@@ -633,3 +633,27 @@ This archive tracks completed stories and features moved from the active backlog
   - *Continuous Physical Radial Illumination Gain*: Implemented radial illumination gain $g(r) = 1 + k_1 r^2 + k_2 r^4 + k_3 r^6 + k_4 r^8$ based on Lensfun polynomial calibration and DNG Opcode 3 across Metal (`Shaders.metal`), WebGL 2 / WebGPU WGSL (`geometry.wgsl`), and Rust CPU export (`encoders.rs`).
   - *Sensitometric EV Zone Histogram Reactivity*: Toggling or adjusting Vignetting Correction immediately updates the Sensitometric EV Zone Histogram (`scheduleHistogramUpdate()`), applying radial gain across coordinates to lift the peripheral shadow floor and update clipping badges in real time.
   - *Web Darkroom Parity*: Exported lens telemetry and toggles to WebAssembly and TypeScript (`InspectorSyncController.ts`, `controllers.test.ts`).
+
+- **Story 3.28: Unified Adaptive Emulsion Grain Engine & Computational Sensor Fusion (`firstproof-engine::grain`, `detail.wgsl`, `Shaders.metal`, `EmulsionWorkspaceView.swift`, `InspectorSyncController.ts`)**:
+  - *Elimination of Leaky Mode Toggles (Unified Optical Model)*: Replaced the mechanical three-way picker (`Bypass`, `SeedFromSensor`, `SynthesizePhysical`) with a clean darkroom switch toggle: "Optical Emulsion Grain". Photographers choose an emulsion stock or enable grain without being asked how the computational noise engine operates under the hood. Retained serialized `EmulsionGrainMode` enum values in `firstproof-engine/src/xmp.rs` for lossless backward compatibility with existing XMP sidecars.
+  - *Adaptive Sensor Fusion Kernel*: Unified grain formulation into a single continuous physics model across Rust (`firstproof-engine/src/color/grain.rs`) and canonical WGSL (`firstproof-engine/shaders/detail.wgsl`):
+    - Measures high-frequency sensor noise magnitude $N_{\text{sensor}} = |\text{sensor\_seed}|$.
+    - Standard emulsions: $\eta = \text{clamp}((1.0 - 0.35 \cdot N_{\text{sensor}}) \cdot \text{proc} + 0.45 \cdot \text{sensor\_seed}, -1.0, 1.0)$.
+    - Instant diffusion (`CambridgeDiffusion100`): $\eta = \text{clamp}((1.0 - 0.25 \cdot N_{\text{sensor}}) \cdot \text{proc} + 0.25 \cdot \text{sensor\_seed}, -1.0, 1.0)$.
+    - Clean / computational sensors (e.g., Google Pixel multi-frame DNGs, base ISO 100): $N_{\text{sensor}} \approx 0 \implies \eta = 1.0 \cdot \text{proc}$ (full physical grain synthesis with zero starvation).
+    - High-ISO noisy captures: seamlessly absorbs and coalesces CMOS shot noise into the grain lattice, preventing synthetic noise clashing.
+  - *Continuous Two-Octave Grain Clumping Kernel (Anti-Dithering)*:
+    - Eliminated piecewise fallback to uncorrelated single-pixel procedural white noise (`proceduralGrainNoise(pos.x, pos.y)`) when $s \le 1.0$.
+    - Implemented band-limited, multi-scale Hermite continuous cluster superposition:
+      $$\eta_{\text{proc}} = \operatorname{clamp}\big((0.70 \cdot c_1(s_{\text{phys}}) + 0.30 \cdot c_2(s_{\text{phys}} \cdot 0.62)) \cdot 1.40,\ -1.0,\ 1.0\big)$$
+      where $s_{\text{phys}} = \max(s \cdot 1.65, 1.25)$.
+    - Enforces spatial Nyquist limit ($s_{\text{phys}} \ge 1.25$), raising lag-1 spatial autocorrelation on base-ISO 35mm film from $-0.012$ to $+0.507$ and reducing Laplacian high-frequency noise variance by >3× at $s=1.0$ and >22× at $s=2.0$.
+    - Guarantees that smooth out-of-focus background bokeh circles and flat skies render as organic, porous dye clouds and silver crystal clumps with zero single-pixel digital dithering or viewport aliasing.
+  - *Decoupled Opt-In Grain Architecture (Zero Plastic Skies)*:
+    - Decoupled film stock selection from grain activation in `AppViewModel+Editor.swift` and `InspectorSyncController.ts`. Selecting an emulsion stock (*Leverkusen Portrait 160*, *Rochester Portrait 400*, etc.) applies the authentic color science, DIR coupler response, and tone curves while populating calibrated grain defaults (`defaults.size`, `defaults.amount`) in the background, but leaves the "Optical Emulsion Grain" toggle cleanly **OFF by default**.
+    - Guarantees that daylight skies and even gradients on clean digital sensors remain 100% smooth, honest, and free of synthetic noise overlays by default, while allowing the photographer to intentionally opt into tactile physical grain when desired.
+  - *Transpiled WGSL/MSL/GLSL Bit-Exact Parity*: Transpiled canonical WGSL shaders via `firstproof-cli shaders`, updating `FirstProofApp/Sources/Shaders/Shaders.metal`, `web/src/shaders/GeneratedGLSL.ts`, and `web/src/shaders/CanonicalWGSL.ts`.
+  - *Cross-Platform UI & Parity Test Suite*:
+    - macOS native darkroom: `EmulsionWorkspaceView.swift` switch toggle wired to `AppViewModel+Editor.swift` (`setEmulsionGrainEnabled`). Lifecycle verified in `BridgeParityTests.swift`.
+    - Web darkroom: `web/index.html` switch checkbox wired to `InspectorSyncController.ts`. Verified in `web/src/__tests__/controllers.test.ts`.
+    - Engine math: `firstproof-core/tests/grain_parity.rs` updated simulator, adding `test_computational_sensor_fusion_zero_starvation` and `test_unified_adaptive_grain_mode_equivalence` (15/15 tests passing).
