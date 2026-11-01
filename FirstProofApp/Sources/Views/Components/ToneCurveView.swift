@@ -19,12 +19,78 @@ public enum ToneCurveChannel: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Thread-Safe Tone Curve Spline & Path Cache
+// Eliminates repetitive UniFFI spline evaluations and Path allocations
+// when unrelated develop workspace sliders (Exposure, Contrast, etc.) update.
+private struct CurveSplineKey: Hashable {
+    let points: [CurvePointRecord]
+    let width: Int
+    let height: Int
+    let closeToBottom: Bool
+}
+
+private final class CurvePathCache {
+    static let shared = CurvePathCache()
+    private var sampleCache: [[CurvePointRecord]: [Float]] = [:]
+    private var pathCache: [CurveSplineKey: Path] = [:]
+    
+    func path(for points: [CurvePointRecord], size: CGFloat, height: CGFloat, closeToBottom: Bool) -> Path {
+        let key = CurveSplineKey(
+            points: points,
+            width: Int((size * 10).rounded()),
+            height: Int((height * 10).rounded()),
+            closeToBottom: closeToBottom
+        )
+        if let cachedPath = pathCache[key] {
+            return cachedPath
+        }
+        
+        let samples: [Float]
+        if let cachedSamples = sampleCache[points] {
+            samples = cachedSamples
+        } else {
+            let evaluated = evaluateCurveLut(points: points)
+            if sampleCache.count > 32 {
+                sampleCache.removeAll(keepingCapacity: true)
+            }
+            sampleCache[points] = evaluated
+            samples = evaluated
+        }
+        
+        guard samples.count > 1 else { return Path() }
+        
+        var path = Path()
+        let step = size / CGFloat(samples.count - 1)
+        let firstY = (1.0 - CGFloat(samples[0])) * height
+        path.move(to: CGPoint(x: 0, y: firstY))
+        
+        for i in 1..<samples.count {
+            let x = CGFloat(i) * step
+            let y = (1.0 - CGFloat(samples[i])) * height
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+        
+        if closeToBottom {
+            path.addLine(to: CGPoint(x: size, y: height))
+            path.addLine(to: CGPoint(x: 0, y: height))
+            path.closeSubpath()
+        }
+        
+        if pathCache.count > 64 {
+            pathCache.removeAll(keepingCapacity: true)
+        }
+        pathCache[key] = path
+        return path
+    }
+}
+
 public struct ToneCurveView: View {
     @Environment(AppViewModel.self) private var viewModel
     @State private var selectedChannel: ToneCurveChannel = .master
     @State private var draggingPointIndex: Int? = nil
     @State private var hoveredPointIndex: Int? = nil
     @State private var activeCoordinates: (input: Int, output: Int)? = nil
+    @State private var lastClickTime: Date? = nil
     
     public init() {}
     
@@ -205,6 +271,15 @@ public struct ToneCurveView: View {
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
                                 if draggingPointIndex == nil {
+                                    let now = Date()
+                                    if let last = lastClickTime, now.timeIntervalSince(last) < NSEvent.doubleClickInterval {
+                                        lastClickTime = nil
+                                        if let idx = hoveredPointIndex {
+                                            deleteOrResetPoint(at: idx)
+                                        }
+                                        return
+                                    }
+                                    lastClickTime = now
                                     viewModel.beginSliderScrub()
                                 }
                                 handleDrag(at: value.location, in: CGSize(width: size, height: height))
@@ -215,12 +290,6 @@ public struct ToneCurveView: View {
                                 viewModel.endSliderScrub(actionName: "Tone Curve (\(selectedChannel.rawValue))")
                             }
                     )
-                    .onTapGesture(count: 2) {
-                        // Double-tap on graph deletes nearest midtone point or resets endpoint
-                        if let idx = hoveredPointIndex {
-                            deleteOrResetPoint(at: idx)
-                        }
-                    }
                 }
             }
             .clipped()
@@ -244,28 +313,7 @@ public struct ToneCurveView: View {
     
     // MARK: - Spline Path Evaluation
     private func renderCurvePath(points: [CurvePointRecord], size: CGFloat, height: CGFloat, closeToBottom: Bool = false) -> Path {
-        let samples = evaluateCurveLut(points: points)
-        guard samples.count > 1 else { return Path() }
-        
-        var path = Path()
-        let step = size / CGFloat(samples.count - 1)
-        
-        let firstY = (1.0 - CGFloat(samples[0])) * height
-        path.move(to: CGPoint(x: 0, y: firstY))
-        
-        for i in 1..<samples.count {
-            let x = CGFloat(i) * step
-            let y = (1.0 - CGFloat(samples[i])) * height
-            path.addLine(to: CGPoint(x: x, y: y))
-        }
-        
-        if closeToBottom {
-            path.addLine(to: CGPoint(x: size, y: height))
-            path.addLine(to: CGPoint(x: 0, y: height))
-            path.closeSubpath()
-        }
-        
-        return path
+        return CurvePathCache.shared.path(for: points, size: size, height: height, closeToBottom: closeToBottom)
     }
     
     // MARK: - Gesture Handling

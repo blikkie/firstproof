@@ -196,6 +196,7 @@ export class HistogramWidget {
     if (rolloff > 0.05) {
       this.agxBadge.classList.remove('hidden');
       this.agxText.textContent = `${rolloff.toFixed(1)}%`;
+      this.agxBadge.title = `AgX Film Shoulder: ${rolloff.toFixed(1)}% of pixels are in bright highlights (Zone VII+, ≥ +2.0 EV).\nPreserved by the AgX filmic tone curve without digital clipping or color blowout.`;
     } else {
       this.agxBadge.classList.add('hidden');
     }

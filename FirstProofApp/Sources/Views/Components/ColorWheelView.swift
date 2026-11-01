@@ -7,6 +7,8 @@ public struct ColorWheelView: View {
     @Binding public var saturation: Float   // 0 .. 100 percent
     public let onReset: () -> Void
     public var onEditingChanged: ((Bool) -> Void)? = nil
+    @State private var isDragging: Bool = false
+    @State private var lastClickTime: Date? = nil
     
     public init(
         title: String,
@@ -112,7 +114,18 @@ public struct ColorWheelView: View {
                             .gesture(
                                 DragGesture(minimumDistance: 0)
                                     .onChanged { value in
-                                        onEditingChanged?(true)
+                                        if !isDragging {
+                                            let now = Date()
+                                            if let last = lastClickTime, now.timeIntervalSince(last) < NSEvent.doubleClickInterval {
+                                                lastClickTime = nil
+                                                onReset()
+                                                return
+                                            }
+                                            lastClickTime = now
+                                            isDragging = true
+                                            onEditingChanged?(true)
+                                        }
+                                        
                                         let dx = value.location.x - center.x
                                         let dy = value.location.y - center.y
                                         let dist = sqrt(dx * dx + dy * dy)
@@ -127,12 +140,10 @@ public struct ColorWheelView: View {
                                         self.saturation = sat
                                     }
                                     .onEnded { _ in
+                                        isDragging = false
                                         onEditingChanged?(false)
                                     }
                             )
-                            .onTapGesture(count: 2) {
-                                onReset()
-                            }
                     }
                 }
             }

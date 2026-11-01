@@ -54,6 +54,7 @@ public struct MetalCanvasView: NSViewRepresentable {
         mtkView.coordinator = context.coordinator
         context.coordinator.nsView = mtkView
         context.coordinator.viewModel = viewModel
+        viewModel.updateScreenCapabilities(for: mtkView.window)
         
         if let metalLayer = mtkView.layer as? CAMetalLayer {
             metalLayer.wantsExtendedDynamicRangeContent = false
@@ -106,9 +107,6 @@ public struct MetalCanvasView: NSViewRepresentable {
     }
     
     public func updateNSView(_ nsView: CanvasMTKView, context: Context) {
-        // Synchronize display capabilities with current window/screen
-        viewModel.updateScreenCapabilities(for: nsView.window)
-        
         let wantsEdr = viewModel.isScreenHdrCapable && viewModel.isHdrEnabled && viewModel.edrHeadroom > 1.001
         if let metalLayer = nsView.layer as? CAMetalLayer {
             if metalLayer.wantsExtendedDynamicRangeContent != wantsEdr {
@@ -223,16 +221,8 @@ public struct MetalCanvasView: NSViewRepresentable {
             }
         }
         
-        // Request asynchronous display pass to coalesce redraws with AppKit vsync
-        nsView.needsDisplay = true
-        
-        // Real-time intermediate capture for subsequent burst scrubbing
-        if rawChanged, let path = viewModel.selectedPhoto?.filePath, viewModel.rawPreviewRecord != nil {
-            let currentEdits = viewModel.currentEdits
-            if let intermediate = renderer.renderThumbnailSnapshot(maxDimension: 2560) {
-                ThumbnailCache.shared.saveIntermediate(intermediate, for: path, edits: currentEdits)
-            }
-        }
+        // Immediately render frame to screen for instantaneous zero-latency slider interaction
+        nsView.draw()
     }
     
     @MainActor

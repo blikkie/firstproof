@@ -417,6 +417,12 @@ RustBuffer uniffi_firstproof_core_fn_func_check_connection(RustCallStatus *_Nonn
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CLEAR_ACTIVE_HISTOGRAM_RAW_BUFFER
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_CLEAR_ACTIVE_HISTOGRAM_RAW_BUFFER
+void uniffi_firstproof_core_fn_func_clear_active_histogram_raw_buffer(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_AUTO_ADJUSTMENTS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_AUTO_ADJUSTMENTS
 RustBuffer uniffi_firstproof_core_fn_func_compute_auto_adjustments(RustBuffer path, RustCallStatus *_Nonnull out_status
@@ -440,6 +446,11 @@ RustBuffer uniffi_firstproof_core_fn_func_compute_auto_white_balance_from_buffer
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM
 RustBuffer uniffi_firstproof_core_fn_func_compute_ev_histogram(uint32_t width, uint32_t height, RustBuffer data, float exposure, float contrast, float highlights, float shadows, float whites, float blacks, float crop_left, float crop_top, float crop_right, float crop_bottom, int8_t lens_correction_enabled, int8_t tca_correction_enabled, int8_t vignetting_correction_enabled, float vignetting_k1, float vignetting_k2, float vignetting_k3, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM_ACTIVE
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM_ACTIVE
+RustBuffer uniffi_firstproof_core_fn_func_compute_ev_histogram_active(float exposure, float contrast, float highlights, float shadows, float whites, float blacks, float crop_left, float crop_top, float crop_right, float crop_bottom, int8_t lens_correction_enabled, int8_t tca_correction_enabled, int8_t vignetting_correction_enabled, float vignetting_k1, float vignetting_k2, float vignetting_k3, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_COMPUTE_EV_HISTOGRAM_FROM_PATH
@@ -660,6 +671,11 @@ RustBuffer uniffi_firstproof_core_fn_func_resolve_cube_lut(RustBuffer name_or_pa
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_SCAN_DIRECTORY_FOR_TAKEOUT
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_SCAN_DIRECTORY_FOR_TAKEOUT
 RustBuffer uniffi_firstproof_core_fn_func_scan_directory_for_takeout(RustBuffer dir_path, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_SET_ACTIVE_HISTOGRAM_RAW_BUFFER
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_SET_ACTIVE_HISTOGRAM_RAW_BUFFER
+void uniffi_firstproof_core_fn_func_set_active_histogram_raw_buffer(uint32_t width, uint32_t height, RustBuffer data, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_FN_FUNC_WRITE_XMP
@@ -961,6 +977,12 @@ uint16_t uniffi_firstproof_core_checksum_func_check_connection(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CLEAR_ACTIVE_HISTOGRAM_RAW_BUFFER
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_CLEAR_ACTIVE_HISTOGRAM_RAW_BUFFER
+uint16_t uniffi_firstproof_core_checksum_func_clear_active_histogram_raw_buffer(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_AUTO_ADJUSTMENTS
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_AUTO_ADJUSTMENTS
 uint16_t uniffi_firstproof_core_checksum_func_compute_auto_adjustments(void
@@ -988,6 +1010,12 @@ uint16_t uniffi_firstproof_core_checksum_func_compute_auto_white_balance_from_bu
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_EV_HISTOGRAM
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_EV_HISTOGRAM
 uint16_t uniffi_firstproof_core_checksum_func_compute_ev_histogram(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_EV_HISTOGRAM_ACTIVE
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_COMPUTE_EV_HISTOGRAM_ACTIVE
+uint16_t uniffi_firstproof_core_checksum_func_compute_ev_histogram_active(void
     
 );
 #endif
@@ -1246,6 +1274,12 @@ uint16_t uniffi_firstproof_core_checksum_func_resolve_cube_lut(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_SCAN_DIRECTORY_FOR_TAKEOUT
 #define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_SCAN_DIRECTORY_FOR_TAKEOUT
 uint16_t uniffi_firstproof_core_checksum_func_scan_directory_for_takeout(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_SET_ACTIVE_HISTOGRAM_RAW_BUFFER
+#define UNIFFI_FFIDEF_UNIFFI_FIRSTPROOF_CORE_CHECKSUM_FUNC_SET_ACTIVE_HISTOGRAM_RAW_BUFFER
+uint16_t uniffi_firstproof_core_checksum_func_set_active_histogram_raw_buffer(void
     
 );
 #endif

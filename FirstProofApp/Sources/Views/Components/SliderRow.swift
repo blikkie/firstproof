@@ -13,6 +13,7 @@ public struct TactileSlider: View {
     @State private var dragStartValue: Float = 0
     @State private var dragStartLocationX: CGFloat = 0
     @State private var keyMonitor: Any? = nil
+    @State private var lastClickTime: Date? = nil
     
     public init(
         value: Binding<Float>,
@@ -128,6 +129,14 @@ public struct TactileSlider: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { gesture in
                         if !isDragging {
+                            let now = Date()
+                            if let last = lastClickTime, now.timeIntervalSince(last) < NSEvent.doubleClickInterval {
+                                lastClickTime = nil
+                                onReset?()
+                                return
+                            }
+                            lastClickTime = now
+                            
                             isDragging = true
                             dragStartValue = value
                             dragStartLocationX = gesture.startLocation.x
@@ -160,15 +169,15 @@ public struct TactileSlider: View {
                             value = self.valueForNormalized(newNorm)
                         }
                     }
-                    .onEnded { _ in
+                    .onEnded { gesture in
                         teardownMonitor()
                         isDragging = false
+                        if abs(gesture.translation.width) > 2 {
+                            lastClickTime = nil
+                        }
                         onEditingChanged?(false)
                     }
             )
-            .onTapGesture(count: 2) {
-                onReset?()
-            }
             .onDisappear {
                 teardownMonitor()
             }

@@ -4237,6 +4237,12 @@ public func checkConnection() -> String  {
     )
 })
 }
+public func clearActiveHistogramRawBuffer()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_clear_active_histogram_raw_buffer(uniffiCallStatus
+    )
+}
+}
 public func computeAutoAdjustments(path: String) -> AutoAdjustments?  {
     return try!  FfiConverterOptionTypeAutoAdjustments.lift(try! rustCall() {
         uniffiCallStatus in
@@ -4280,6 +4286,29 @@ public func computeEvHistogram(width: UInt32, height: UInt32, data: Data, exposu
         FfiConverterUInt32.lower(width),
         FfiConverterUInt32.lower(height),
         FfiConverterData.lower(data),
+        FfiConverterFloat.lower(exposure),
+        FfiConverterFloat.lower(contrast),
+        FfiConverterFloat.lower(highlights),
+        FfiConverterFloat.lower(shadows),
+        FfiConverterFloat.lower(whites),
+        FfiConverterFloat.lower(blacks),
+        FfiConverterFloat.lower(cropLeft),
+        FfiConverterFloat.lower(cropTop),
+        FfiConverterFloat.lower(cropRight),
+        FfiConverterFloat.lower(cropBottom),
+        FfiConverterBool.lower(lensCorrectionEnabled),
+        FfiConverterBool.lower(tcaCorrectionEnabled),
+        FfiConverterBool.lower(vignettingCorrectionEnabled),
+        FfiConverterFloat.lower(vignettingK1),
+        FfiConverterFloat.lower(vignettingK2),
+        FfiConverterFloat.lower(vignettingK3),uniffiCallStatus
+    )
+})
+}
+public func computeEvHistogramActive(exposure: Float, contrast: Float, highlights: Float, shadows: Float, whites: Float, blacks: Float, cropLeft: Float, cropTop: Float, cropRight: Float, cropBottom: Float, lensCorrectionEnabled: Bool, tcaCorrectionEnabled: Bool, vignettingCorrectionEnabled: Bool, vignettingK1: Float, vignettingK2: Float, vignettingK3: Float) -> EvHistogramRecord?  {
+    return try!  FfiConverterOptionTypeEvHistogramRecord.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_compute_ev_histogram_active(
         FfiConverterFloat.lower(exposure),
         FfiConverterFloat.lower(contrast),
         FfiConverterFloat.lower(highlights),
@@ -4693,6 +4722,15 @@ public func scanDirectoryForTakeout(dirPath: String) -> [TakeoutMatchRecord]  {
     )
 })
 }
+public func setActiveHistogramRawBuffer(width: UInt32, height: UInt32, data: Data)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_firstproof_core_fn_func_set_active_histogram_raw_buffer(
+        FfiConverterUInt32.lower(width),
+        FfiConverterUInt32.lower(height),
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+}
+}
 public func writeXmp(path: String, record: XmpDataRecord) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
@@ -4753,6 +4791,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_firstproof_core_checksum_func_check_connection() != 3182) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_firstproof_core_checksum_func_clear_active_histogram_raw_buffer() != 35673) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_firstproof_core_checksum_func_compute_auto_adjustments() != 32376) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4766,6 +4807,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_compute_ev_histogram() != 27206) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_compute_ev_histogram_active() != 22520) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_compute_ev_histogram_from_path() != 19873) {
@@ -4895,6 +4939,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_scan_directory_for_takeout() != 13542) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_firstproof_core_checksum_func_set_active_histogram_raw_buffer() != 23821) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_firstproof_core_checksum_func_write_xmp() != 9051) {

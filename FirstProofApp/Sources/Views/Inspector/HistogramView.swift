@@ -126,7 +126,8 @@ public struct HistogramView: View {
                     .padding(.vertical, 2.5)
                     .background(Color.orange.opacity(0.14))
                     .cornerRadius(4)
-                    .help("AgX Shoulder: \(String(format: "%.2f%%", rolloff)) in preserved highlight compression (Zone VII+).")
+                    .contentShape(Rectangle())
+                    .help("AgX Film Shoulder: \(String(format: "%.1f%%", rolloff)) of pixels are in bright highlights (Zone VII+, ≥ +2.0 EV).\nPreserved by the AgX filmic tone curve without digital clipping or color blowout.")
                 }
                 
                 // Hardware Photosite Saturation Badge

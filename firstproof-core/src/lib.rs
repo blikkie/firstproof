@@ -489,15 +489,76 @@ pub fn decode_raw_preview(path: String, max_dimension: Option<u32>) -> Option<Ra
     }
 }
 
+struct ActiveHistogramBuffer {
+    width: u32,
+    height: u32,
+    data: Vec<u8>,
+}
+
+static ACTIVE_HISTOGRAM_BUFFER: std::sync::RwLock<Option<ActiveHistogramBuffer>> = std::sync::RwLock::new(None);
+
+#[uniffi::export]
+pub fn set_active_histogram_raw_buffer(width: u32, height: u32, data: Vec<u8>) {
+    if let Ok(mut lock) = ACTIVE_HISTOGRAM_BUFFER.write() {
+        *lock = Some(ActiveHistogramBuffer { width, height, data });
+    }
+}
+
+#[uniffi::export]
+pub fn clear_active_histogram_raw_buffer() {
+    if let Ok(mut lock) = ACTIVE_HISTOGRAM_BUFFER.write() {
+        *lock = None;
+    }
+}
+
+#[uniffi::export]
+pub fn compute_ev_histogram_active(
+    exposure: f32,
+    contrast: f32,
+    highlights: f32,
+    shadows: f32,
+    whites: f32,
+    blacks: f32,
+    crop_left: f32,
+    crop_top: f32,
+    crop_right: f32,
+    crop_bottom: f32,
+    lens_correction_enabled: bool,
+    tca_correction_enabled: bool,
+    vignetting_correction_enabled: bool,
+    vignetting_k1: f32,
+    vignetting_k2: f32,
+    vignetting_k3: f32,
+) -> Option<EvHistogramRecord> {
+    let lock = ACTIVE_HISTOGRAM_BUFFER.read().ok()?;
+    let buf = lock.as_ref()?;
+    firstproof_engine::histogram::compute_ev_histogram_from_f16_buffer(
+        buf.width, buf.height, &buf.data,
+        exposure, contrast, highlights, shadows, whites, blacks,
+        crop_left, crop_top, crop_right, crop_bottom,
+        lens_correction_enabled, tca_correction_enabled,
+        vignetting_correction_enabled, vignetting_k1, vignetting_k2, vignetting_k3,
+    )
+}
+
 #[uniffi::export]
 pub fn decode_raw_preview_binned(path: String) -> Option<RawPreviewRecord> {
     match export::decode_raw_preview_binned_buffer(&path) {
-        Ok((width, height, data)) => Some(RawPreviewRecord {
-            width,
-            height,
-            data,
-            is_linear_float: true,
-        }),
+        Ok((width, height, data)) => {
+            if let Ok(mut lock) = ACTIVE_HISTOGRAM_BUFFER.write() {
+                *lock = Some(ActiveHistogramBuffer {
+                    width,
+                    height,
+                    data: data.clone(),
+                });
+            }
+            Some(RawPreviewRecord {
+                width,
+                height,
+                data,
+                is_linear_float: true,
+            })
+        }
         Err(e) => {
             eprintln!("Failed to decode binned RAW preview for {}: {}", path, e);
             None

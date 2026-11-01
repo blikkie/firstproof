@@ -211,6 +211,9 @@ extension AppViewModel {
             if self.hasActiveSliderScrub {
                 self.endSliderScrub(actionName: "Edit")
             }
+            if self.hasCustomEdits, let intermediate = self.captureIntermediateSnapshot?() {
+                ThumbnailCache.shared.saveIntermediate(intermediate, for: prevPath, edits: self.currentEdits)
+            }
         }
         self.currentlyLoadedPhotoPath = photo.filePath
         self.loadMetadataForSelectedPhoto()
@@ -245,6 +248,8 @@ extension AppViewModel {
         let preloadedRecord = self.selectedPhotoIsRaw ? PreviewRingBuffer.shared.getRawPreview(for: photo.filePath) : nil
         if let preloaded = preloadedRecord {
             self.rawPreviewRecord = preloaded
+            self.binnedRawRecord = preloaded
+            setActiveHistogramRawBuffer(width: preloaded.width, height: preloaded.height, data: preloaded.data)
             self.previewImage = nil
             self.isIntermediatePreviewActive = false
             self.isDemosaicing = false
@@ -252,13 +257,17 @@ extension AppViewModel {
                 self.scheduleHistogramUpdate()
             }
         } else if !self.selectedPhotoIsRaw, let cached = ThumbnailCache.shared.image(for: photo.filePath) {
+            clearActiveHistogramRawBuffer()
             self.previewImage = cached
             self.rawPreviewRecord = nil
+            self.binnedRawRecord = nil
             self.isIntermediatePreviewActive = false
             self.isDemosaicing = false
         } else {
+            clearActiveHistogramRawBuffer()
             self.previewImage = nil
             self.rawPreviewRecord = nil
+            self.binnedRawRecord = nil
             self.isIntermediatePreviewActive = false
             self.isDemosaicing = true
         }
@@ -360,6 +369,7 @@ extension AppViewModel {
                         PreviewRingBuffer.shared.storeRawPreview(binnedRecord, for: photo.filePath)
                         if self.selectedPhoto?.filePath == photo.filePath {
                             self.rawPreviewRecord = binnedRecord
+                            self.binnedRawRecord = binnedRecord
                             self.previewImage = nil
                             self.isIntermediatePreviewActive = false
                             self.isDemosaicing = false
@@ -421,6 +431,7 @@ extension AppViewModel {
                         ThumbnailCache.shared.setImage(finalImage, for: photo.filePath)
                     }
                     self.rawPreviewRecord = nil
+                    self.binnedRawRecord = nil
                     self.isIntermediatePreviewActive = false
                     self.isDemosaicing = false
                 }

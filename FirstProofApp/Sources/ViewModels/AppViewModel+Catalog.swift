@@ -151,6 +151,7 @@ extension AppViewModel {
         self.selectedPhoto = nil
         self.previewImage = nil
         self.rawPreviewRecord = nil
+        self.binnedRawRecord = nil
         self.isIntermediatePreviewActive = false
         
         let catalogPath = resolveCatalogPath(folderPath: folderPath, portable: self.isExternalVolume)

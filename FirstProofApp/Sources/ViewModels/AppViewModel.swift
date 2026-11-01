@@ -280,6 +280,7 @@ public final class AppViewModel {
     public var isBulkSelectionMode: Bool = false
     public var previewImage: NSImage? = nil
     public var rawPreviewRecord: RawPreviewRecord? = nil
+    public var binnedRawRecord: RawPreviewRecord? = nil
     public var isIntermediatePreviewActive: Bool = false
     public var currentGainMapRecord: GainMapRecord? = nil
     public var isDemosaicing: Bool = false
@@ -300,6 +301,7 @@ public final class AppViewModel {
     @ObservationIgnored var activeCatalogTask: Task<Void, Never>? = nil
     @ObservationIgnored public var captureThumbnailSnapshot: (() -> NSImage?)? = nil
     @ObservationIgnored public var captureIntermediateSnapshot: (() -> NSImage?)? = nil
+    @ObservationIgnored public var cachedHasCustomEdits: Bool? = nil
     public var isExportSheetPresented: Bool = false
     public var isExportPackageSheetPresented: Bool = false
     
@@ -710,6 +712,9 @@ public final class AppViewModel {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
+                if let path = self?.currentlyLoadedPhotoPath, let intermediate = self?.captureIntermediateSnapshot?() {
+                    ThumbnailCache.shared.saveIntermediate(intermediate, for: path, edits: self?.currentEdits)
+                }
                 self?.saveCurrentEdits()
                 self?.checkpointDatabase()
             }

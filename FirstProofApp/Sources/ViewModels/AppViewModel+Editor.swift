@@ -188,30 +188,33 @@ extension AppViewModel {
         self.lensCorrectionEnabled = edits.lensCorrectionEnabled
         self.tcaCorrectionEnabled = edits.tcaCorrectionEnabled
         self.vignettingCorrectionEnabled = edits.vignettingCorrectionEnabled
+        self.cachedHasCustomEdits = nil
     }
     
     public func saveCurrentEdits() {
         guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
         let editsSnapshot = currentEdits
         
-        // Real-time sub-millisecond GPU thumbnail & intermediate capture for active viewport
+        // Real-time sub-millisecond GPU thumbnail capture for active viewport
         if let snapshot = captureThumbnailSnapshot?() {
             ThumbnailCache.shared.saveEditedThumbnail(snapshot, for: path, edits: editsSnapshot)
-        }
-        if let intermediate = captureIntermediateSnapshot?() {
-            ThumbnailCache.shared.saveIntermediate(intermediate, for: path, edits: editsSnapshot)
         }
         
         syncXmp(for: path, rating: nil, status: nil, edits: editsSnapshot)
     }
     
     public var hasCustomEdits: Bool {
-        editsHasModifications(
+        if hasActiveSliderScrub, let cached = cachedHasCustomEdits {
+            return cached
+        }
+        let result = editsHasModifications(
             edits: currentEdits,
             asShotTemp: asShotTemperature,
             asShotTint: asShotTint,
             exifRotation: defaultExifRotation
         )
+        cachedHasCustomEdits = result
+        return result
     }
     
     // MARK: - Undo/Redo & Coalesced Scrubbing
@@ -225,22 +228,24 @@ extension AppViewModel {
     }
     
     public func cancelSliderScrub() {
-        guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath,
+        cachedHasCustomEdits = nil
+        guard (currentlyLoadedPhotoPath ?? selectedPhoto?.filePath) != nil,
               let startEdits = undoHistory.scrubStartEdits else {
             undoHistory.cancelScrub()
             return
         }
         undoHistory.cancelScrub()
         applyEdits(startEdits)
-        if let intermediate = captureIntermediateSnapshot?() {
-            ThumbnailCache.shared.saveIntermediate(intermediate, for: path, edits: currentEdits)
-        }
     }
     
     public func endSliderScrub(actionName: String) {
         guard let path = currentlyLoadedPhotoPath ?? selectedPhoto?.filePath else { return }
         undoHistory.endScrub(photoPath: path, currentEdits: currentEdits, title: actionName)
+        cachedHasCustomEdits = nil
         saveCurrentEdits()
+        if canvasMode == .detail && isHistogramVisible {
+            scheduleHistogramUpdate()
+        }
     }
     
     public func handleSliderEditing(_ isEditing: Bool, slider: EditSliderType) {
@@ -916,6 +921,7 @@ extension AppViewModel {
         lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
         tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
         vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
+        cachedHasCustomEdits = false
         registerDiscreteEdit(title: "Reset All Edits", before: before)
         notifyThumbnailChanged()
     }
