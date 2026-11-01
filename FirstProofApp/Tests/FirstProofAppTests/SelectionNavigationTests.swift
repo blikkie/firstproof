@@ -95,4 +95,58 @@ struct SelectionNavigationTests {
         #expect(!vm.selectedPhotoPaths.contains(p0.filePath))
         #expect(vm.selectedPhoto?.filePath == p3.filePath)
     }
+    
+    @Test("Stage 0 edit staging resets rotation, exposure, and Kelvin immediately when switching photos")
+    func testStage0EditStagingPreventsGhostEdits() {
+        let vm = AppViewModel()
+        let p0 = PhotoRecord.mock(id: 1, path: "/tmp/p0.cr2")
+        let p1 = PhotoRecord.mock(id: 2, path: "/tmp/p1.cr2")
+        vm.photos = [p0, p1]
+        
+        vm.selectPhoto(p0)
+        // Simulate aggressive edits on photo 0: +2.0 EV, 90 deg rotation, 3200K tungsten
+        vm.exposure = 2.0
+        vm.rotationDegrees = 90
+        vm.temperature = 3200.0
+        #expect(vm.currentEdits.exposure == 2.0)
+        #expect(vm.currentEdits.rotation == 90)
+        #expect(vm.currentEdits.temperature == 3200.0)
+        
+        // Navigate to unedited photo 1
+        vm.selectPhoto(p1)
+        
+        // Stage 0 must immediately reset currentEdits so the canvas never displays Photo 1 with Photo 0's rotation or exposure
+        #expect(vm.currentEdits.exposure == 0.0)
+        #expect(vm.currentEdits.rotation == 0)
+        #expect(vm.exposure == 0.0)
+        #expect(vm.rotationDegrees == 0)
+    }
+    
+    @Test("Preloaded RAW preview record orientation is preserved across photo selection")
+    func testPreloadedRecordOrientationPreserved() {
+        let vm = AppViewModel()
+        let p = PhotoRecord.mock(id: 1, path: "/tmp/portrait.cr2")
+        vm.photos = [p]
+        
+        // Orientation 6 = 90 deg clockwise
+        let record = RawPreviewRecord(
+            width: 800,
+            height: 600,
+            data: Data(repeating: 0, count: 800 * 600 * 4),
+            isLinearFloat: true,
+            asShotTemperature: 5200.0,
+            asShotTint: 5.0,
+            orientation: 6
+        )
+        PreviewRingBuffer.shared.storeRawPreview(record, for: p.filePath)
+        
+        vm.selectPhoto(p)
+        
+        // Stage 0 asserts: defaultExifRotation and currentEdits.rotation must immediately reflect orientation 6 (90°)
+        #expect(vm.defaultExifRotation == 90)
+        #expect(vm.currentEdits.rotation == 90)
+        #expect(vm.rotationDegrees == 90)
+        #expect(vm.asShotTemperature == 5200.0)
+        #expect(vm.asShotTint == 5.0)
+    }
 }

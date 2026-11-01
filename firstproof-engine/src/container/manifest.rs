@@ -52,6 +52,9 @@ pub struct RawContainerManifest {
     // Embedded Camera Profile Tone Curve (Tag 50940: pairs of (x, y))
     pub profile_tone_curve: Option<Vec<(f32, f32)>>,
 
+    // Baseline EXIF Orientation (Tag 274: 1..8)
+    pub orientation: Option<u32>,
+
     // DNG Opcode Lists (Stage 1, Stage 2, Stage 3)
     pub opcode_list_1: Option<Vec<u8>>,
     pub opcode_list_2: Option<Vec<u8>>,
@@ -292,6 +295,10 @@ impl RawContainerManifest {
             .find_entry(DNG_TAG_OPCODE_LIST_3)
             .and_then(|e| e.raw_bytes(buf, is_le));
 
+        let orientation = tiff
+            .find_entry(TAG_ORIENTATION)
+            .and_then(|e| e.as_u32(buf, is_le));
+
         Some(Self {
             is_dng,
             camera_make,
@@ -318,6 +325,7 @@ impl RawContainerManifest {
             noise_profile,
             preview_slice,
             profile_tone_curve,
+            orientation,
             opcode_list_1,
             opcode_list_2,
             opcode_list_3,

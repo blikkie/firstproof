@@ -73,6 +73,8 @@ pub struct RawLinearResultRecord {
     pub height: u32,
     pub is_linear: bool,
     pub metadata: ImageMetadataRecord,
+    pub as_shot_temperature: Option<f32>,
+    pub as_shot_tint: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug)]

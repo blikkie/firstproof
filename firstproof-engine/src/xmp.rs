@@ -22,6 +22,8 @@ pub struct XmpData {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub edits: EditSettings,
+    pub as_shot_temperature: Option<f32>,
+    pub as_shot_tint: Option<f32>,
 }
 
 impl Default for XmpData {
@@ -37,6 +39,8 @@ impl Default for XmpData {
             latitude: None,
             longitude: None,
             edits: EditSettings::default(),
+            as_shot_temperature: None,
+            as_shot_tint: None,
         }
     }
 }
@@ -207,6 +211,16 @@ pub fn generate_xmp_sidecar(data: &XmpData) -> String {
     writer
         .element("tint", pm_ns.clone())
         .value(format!("{:.4}", data.edits.tint).as_str());
+    if let Some(as_temp) = data.as_shot_temperature {
+        writer
+            .element("asShotTemperature", pm_ns.clone())
+            .value(format!("{:.2}", as_temp).as_str());
+    }
+    if let Some(as_tint) = data.as_shot_tint {
+        writer
+            .element("asShotTint", pm_ns.clone())
+            .value(format!("{:.2}", as_tint).as_str());
+    }
     writer
         .element("cropLeft", pm_ns.clone())
         .value(format!("{:.4}", data.edits.crop_left).as_str());
@@ -663,6 +677,16 @@ pub fn parse_xmp_sidecar(xml: &str) -> Result<XmpData, String> {
     if let Some(tint_str) = get(pm, "tint") {
         if let Ok(val) = tint_str.parse::<f32>() {
             data.edits.tint = val;
+        }
+    }
+    if let Some(as_temp_str) = get(pm, "asShotTemperature") {
+        if let Ok(val) = as_temp_str.parse::<f32>() {
+            data.as_shot_temperature = Some(val);
+        }
+    }
+    if let Some(as_tint_str) = get(pm, "asShotTint") {
+        if let Ok(val) = as_tint_str.parse::<f32>() {
+            data.as_shot_tint = Some(val);
         }
     }
     if let Some(cl_str) = get(pm, "cropLeft") {

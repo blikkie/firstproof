@@ -286,6 +286,8 @@ pub struct XmpDataRecord {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub edits: EditSettings,
+    pub as_shot_temperature: Option<f32>,
+    pub as_shot_tint: Option<f32>,
 }
 
 #[derive(uniffi::Record)]
@@ -347,6 +349,8 @@ pub fn read_xmp(path: String) -> Option<XmpDataRecord> {
             latitude: x.latitude,
             longitude: x.longitude,
             edits: x.edits,
+            as_shot_temperature: x.as_shot_temperature,
+            as_shot_tint: x.as_shot_tint,
         }),
         Err(_) => None,
     }
@@ -365,6 +369,8 @@ pub fn write_xmp(path: String, record: XmpDataRecord) -> bool {
         latitude: record.latitude,
         longitude: record.longitude,
         edits: record.edits,
+        as_shot_temperature: record.as_shot_temperature,
+        as_shot_tint: record.as_shot_tint,
     };
     xmp::write_xmp_file(&path, &data).is_ok()
 }
@@ -471,6 +477,9 @@ pub struct RawPreviewRecord {
     pub height: u32,
     pub data: Vec<u8>,
     pub is_linear_float: bool,
+    pub as_shot_temperature: Option<f32>,
+    pub as_shot_tint: Option<f32>,
+    pub orientation: Option<u32>,
 }
 
 #[uniffi::export]
@@ -481,6 +490,9 @@ pub fn decode_raw_preview(path: String, max_dimension: Option<u32>) -> Option<Ra
             height,
             data,
             is_linear_float: true,
+            as_shot_temperature: None,
+            as_shot_tint: None,
+            orientation: None,
         }),
         Err(e) => {
             eprintln!("Failed to decode RAW preview for {}: {}", path, e);
@@ -543,8 +555,8 @@ pub fn compute_ev_histogram_active(
 
 #[uniffi::export]
 pub fn decode_raw_preview_binned(path: String) -> Option<RawPreviewRecord> {
-    match export::decode_raw_preview_binned_buffer(&path) {
-        Ok((width, height, data)) => {
+    match export::decode_raw_preview_binned_with_details(&path) {
+        Ok((width, height, data, as_shot_temp, as_shot_tint, orientation)) => {
             if let Ok(mut lock) = ACTIVE_HISTOGRAM_BUFFER.write() {
                 *lock = Some(ActiveHistogramBuffer {
                     width,
@@ -557,6 +569,9 @@ pub fn decode_raw_preview_binned(path: String) -> Option<RawPreviewRecord> {
                 height,
                 data,
                 is_linear_float: true,
+                as_shot_temperature: as_shot_temp,
+                as_shot_tint,
+                orientation,
             })
         }
         Err(e) => {

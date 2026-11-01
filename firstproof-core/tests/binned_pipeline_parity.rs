@@ -41,6 +41,7 @@ fn test_binned_quad_patterns_math() {
             noise_profile: None,
             profile_tone_curve: None,
             warp_rectilinear: None,
+            orientation: None,
             sensor_data,
         };
 

@@ -244,8 +244,70 @@ extension AppViewModel {
         self.cropSessionSnapshot = nil
         self.currentGainMapRecord = nil
         
-        // Fast in-memory lookup on @MainActor (0ms instant transition for pre-warmed / cached items)
+        // Stage 0 Up-Front Edit Staging: Eliminate ghost edits, orientation flashing, and exposure jumping across photo transitions
+        let fastXmp = readXmp(path: photo.filePath)
         let preloadedRecord = self.selectedPhotoIsRaw ? PreviewRingBuffer.shared.getRawPreview(for: photo.filePath) : nil
+        
+        let initialAsShotTemp = fastXmp?.asShotTemperature ?? preloadedRecord?.asShotTemperature ?? 5500.0
+        let initialAsShotTint = fastXmp?.asShotTint ?? preloadedRecord?.asShotTint ?? 0.0
+        
+        let initialExifRot: Int
+        let initialFlipH: Bool
+        let initialFlipV: Bool
+        if let orient = preloadedRecord?.orientation {
+            let dec = decodeExifOrientation(orientation: orient)
+            initialExifRot = Int(dec.rotation)
+            initialFlipH = dec.flipHorizontal
+            initialFlipV = dec.flipVertical
+        } else {
+            initialExifRot = 0
+            initialFlipH = false
+            initialFlipV = false
+        }
+        
+        self.asShotTemperature = initialAsShotTemp
+        self.asShotTint = initialAsShotTint
+        self.defaultExifRotation = initialExifRot
+        self.defaultExifFlipH = initialFlipH
+        self.defaultExifFlipV = initialFlipV
+        
+        let initialEdits: EditSettings
+        if let xmp = fastXmp {
+            var edits = xmp.edits.migratingLegacyProfiles
+            if !editsHasModifications(edits: edits, asShotTemp: initialAsShotTemp, asShotTint: initialAsShotTint, exifRotation: initialExifRot) {
+                edits.temperature = initialAsShotTemp
+                edits.tint = initialAsShotTint
+                edits.flipHorizontal = initialFlipH
+                edits.flipVertical = initialFlipV
+                edits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
+                edits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+                edits.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
+                if let defaultLut = UserDefaults.standard.string(forKey: "defaultLookLutName"), !defaultLut.isEmpty {
+                    edits.lutName = defaultLut
+                    edits.lutIntensity = UserDefaults.standard.object(forKey: "defaultLookLutIntensity") as? Float ?? 1.0
+                }
+            }
+            initialEdits = edits
+        } else {
+            var defaultEdits = EditSettings.defaultIdentity
+            defaultEdits.rotation = Int32(initialExifRot)
+            defaultEdits.flipHorizontal = initialFlipH
+            defaultEdits.flipVertical = initialFlipV
+            defaultEdits.temperature = initialAsShotTemp
+            defaultEdits.tint = initialAsShotTint
+            defaultEdits.lensCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoDistortion") as? Bool ?? false
+            defaultEdits.tcaCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoTca") as? Bool ?? true
+            defaultEdits.vignettingCorrectionEnabled = UserDefaults.standard.object(forKey: "defaultAutoVignetting") as? Bool ?? false
+            if let defaultLut = UserDefaults.standard.string(forKey: "defaultLookLutName"), !defaultLut.isEmpty {
+                defaultEdits.lutName = defaultLut
+                defaultEdits.lutIntensity = UserDefaults.standard.object(forKey: "defaultLookLutIntensity") as? Float ?? 1.0
+            }
+            initialEdits = defaultEdits
+        }
+        
+        self.applyEdits(initialEdits)
+        
+        // Fast in-memory lookup on @MainActor (0ms instant transition for pre-warmed / cached items)
         if let preloaded = preloadedRecord {
             self.rawPreviewRecord = preloaded
             self.binnedRawRecord = preloaded
@@ -278,9 +340,16 @@ extension AppViewModel {
             
             // Background extraction: move synchronous disk/FFI calls off the main thread
             let (meta, asShotWb, xmp) = await Task.detached(priority: .userInitiated) {
-                let m = extractMetadata(path: photo.filePath)
-                let wb = getAsShotWhiteBalance(path: photo.filePath)
-                let x = readXmp(path: photo.filePath)
+                let x = fastXmp ?? readXmp(path: photo.filePath)
+                let wb: WhiteBalanceResult?
+                if let t = x?.asShotTemperature, let tint = x?.asShotTint {
+                    wb = WhiteBalanceResult(temperature: t, tint: tint)
+                } else if let t = preloadedRecord?.asShotTemperature, let tint = preloadedRecord?.asShotTint {
+                    wb = WhiteBalanceResult(temperature: t, tint: tint)
+                } else {
+                    wb = getAsShotWhiteBalance(path: photo.filePath)
+                }
+                let m = (preloadedRecord?.orientation != nil && resolvedCoeffs != nil) ? nil : extractMetadata(path: photo.filePath)
                 return (m, wb, x)
             }.value
             
@@ -290,7 +359,7 @@ extension AppViewModel {
             let exifRotation: Int
             let exifFlipH: Bool
             let exifFlipV: Bool
-            if let orient = meta?.orientation {
+            if let orient = meta?.orientation ?? preloadedRecord?.orientation {
                 let dec = decodeExifOrientation(orientation: orient)
                 exifRotation = Int(dec.rotation)
                 exifFlipH = dec.flipHorizontal
@@ -570,6 +639,9 @@ extension AppViewModel {
         let photoStatus = currentPhoto?.status
         let targetEdits = edits ?? ((filePath == self.currentlyLoadedPhotoPath) ? self.currentEdits : nil)
 
+        let activeAsShotTemp = (filePath == self.currentlyLoadedPhotoPath) ? self.asShotTemperature : nil
+        let activeAsShotTint = (filePath == self.currentlyLoadedPhotoPath) ? self.asShotTint : nil
+
         Task.detached(priority: .utility) {
             await XmpSyncCoordinator.shared.sync(
                 filePath: filePath,
@@ -585,7 +657,9 @@ extension AppViewModel {
                 fallbackDescription: photoDescription,
                 fallbackCreator: photoCreator,
                 fallbackCopyright: photoCopyright,
-                fallbackKeywords: photoKeywords
+                fallbackKeywords: photoKeywords,
+                asShotTemperature: activeAsShotTemp,
+                asShotTint: activeAsShotTint
             )
         }
     }

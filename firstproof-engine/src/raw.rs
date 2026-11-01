@@ -172,6 +172,7 @@ pub struct RawSensorFrame {
     pub noise_profile: Option<[f64; 2]>,
     pub profile_tone_curve: Option<Vec<(f32, f32)>>,
     pub warp_rectilinear: Option<([f64; 4], [f64; 2])>,
+    pub orientation: Option<u32>,
     pub sensor_data: Vec<u16>,
 }
 
@@ -415,6 +416,7 @@ impl RawSensorFrame {
             noise_profile,
             profile_tone_curve,
             warp_rectilinear,
+            orientation: manifest.as_ref().and_then(|m| m.orientation),
             sensor_data,
         };
 

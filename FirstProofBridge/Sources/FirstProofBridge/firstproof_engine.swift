@@ -1494,16 +1494,20 @@ public struct RawLinearResultRecord: Equatable, Hashable {
     public var height: UInt32
     public var isLinear: Bool
     public var metadata: ImageMetadataRecord
+    public var asShotTemperature: Float?
+    public var asShotTint: Float?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(linearOffset: UInt64, linearLen: UInt64, width: UInt32, height: UInt32, isLinear: Bool, metadata: ImageMetadataRecord) {
+    public init(linearOffset: UInt64, linearLen: UInt64, width: UInt32, height: UInt32, isLinear: Bool, metadata: ImageMetadataRecord, asShotTemperature: Float?, asShotTint: Float?) {
         self.linearOffset = linearOffset
         self.linearLen = linearLen
         self.width = width
         self.height = height
         self.isLinear = isLinear
         self.metadata = metadata
+        self.asShotTemperature = asShotTemperature
+        self.asShotTint = asShotTint
     }
 
     
@@ -1527,7 +1531,9 @@ public struct FfiConverterTypeRawLinearResultRecord: FfiConverterRustBuffer {
                 width: FfiConverterUInt32.read(from: &buf), 
                 height: FfiConverterUInt32.read(from: &buf), 
                 isLinear: FfiConverterBool.read(from: &buf), 
-                metadata: FfiConverterTypeImageMetadataRecord.read(from: &buf)
+                metadata: FfiConverterTypeImageMetadataRecord.read(from: &buf), 
+                asShotTemperature: FfiConverterOptionFloat.read(from: &buf), 
+                asShotTint: FfiConverterOptionFloat.read(from: &buf)
         )
     }
 
@@ -1538,6 +1544,8 @@ public struct FfiConverterTypeRawLinearResultRecord: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.height, into: &buf)
         FfiConverterBool.write(value.isLinear, into: &buf)
         FfiConverterTypeImageMetadataRecord.write(value.metadata, into: &buf)
+        FfiConverterOptionFloat.write(value.asShotTemperature, into: &buf)
+        FfiConverterOptionFloat.write(value.asShotTint, into: &buf)
     }
 }
 
@@ -1684,10 +1692,12 @@ public struct XmpData: Equatable, Hashable {
     public var latitude: Double?
     public var longitude: Double?
     public var edits: EditSettings
+    public var asShotTemperature: Float?
+    public var asShotTint: Float?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(rating: Int32?, status: String, title: String?, description: String?, creator: String?, copyright: String?, keywords: [String], latitude: Double?, longitude: Double?, edits: EditSettings) {
+    public init(rating: Int32?, status: String, title: String?, description: String?, creator: String?, copyright: String?, keywords: [String], latitude: Double?, longitude: Double?, edits: EditSettings, asShotTemperature: Float?, asShotTint: Float?) {
         self.rating = rating
         self.status = status
         self.title = title
@@ -1698,6 +1708,8 @@ public struct XmpData: Equatable, Hashable {
         self.latitude = latitude
         self.longitude = longitude
         self.edits = edits
+        self.asShotTemperature = asShotTemperature
+        self.asShotTint = asShotTint
     }
 
     
@@ -1725,7 +1737,9 @@ public struct FfiConverterTypeXmpData: FfiConverterRustBuffer {
                 keywords: FfiConverterSequenceString.read(from: &buf), 
                 latitude: FfiConverterOptionDouble.read(from: &buf), 
                 longitude: FfiConverterOptionDouble.read(from: &buf), 
-                edits: FfiConverterTypeEditSettings.read(from: &buf)
+                edits: FfiConverterTypeEditSettings.read(from: &buf), 
+                asShotTemperature: FfiConverterOptionFloat.read(from: &buf), 
+                asShotTint: FfiConverterOptionFloat.read(from: &buf)
         )
     }
 
@@ -1740,6 +1754,8 @@ public struct FfiConverterTypeXmpData: FfiConverterRustBuffer {
         FfiConverterOptionDouble.write(value.latitude, into: &buf)
         FfiConverterOptionDouble.write(value.longitude, into: &buf)
         FfiConverterTypeEditSettings.write(value.edits, into: &buf)
+        FfiConverterOptionFloat.write(value.asShotTemperature, into: &buf)
+        FfiConverterOptionFloat.write(value.asShotTint, into: &buf)
     }
 }
 

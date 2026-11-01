@@ -110,6 +110,8 @@ mod tests {
         xmp.edits.contrast = 20.0;
         xmp.edits.temperature = 5600.0;
         xmp.edits.emulsion_archetype = EmulsionArchetype::RochesterPortrait400;
+        xmp.as_shot_temperature = Some(5150.0);
+        xmp.as_shot_tint = Some(14.5);
 
         let xml = generate_xmp_sidecar(&xmp);
         let parsed = parse_xmp_sidecar(&xml).expect("Failed to parse XMP");
@@ -118,6 +120,8 @@ mod tests {
         assert_eq!(parsed.status, "Pick");
         assert_eq!(parsed.title, Some("Lake Louise".to_string()));
         assert!((parsed.edits.exposure - 0.5).abs() < 1e-3);
+        assert_eq!(parsed.as_shot_temperature, Some(5150.0));
+        assert_eq!(parsed.as_shot_tint, Some(14.5));
         assert_eq!(
             parsed.edits.emulsion_archetype,
             EmulsionArchetype::RochesterPortrait400
@@ -324,6 +328,7 @@ mod tests {
             noise_profile: None,
             profile_tone_curve: None,
             warp_rectilinear: None,
+            orientation: None,
             sensor_data: vec![2046; 100],
         };
 
@@ -357,6 +362,7 @@ mod tests {
             noise_profile: None,
             profile_tone_curve: None,
             warp_rectilinear: None,
+            orientation: None,
             sensor_data: vec![2046; 100],
         };
 
@@ -489,6 +495,7 @@ mod tests {
             noise_profile: None,
             profile_tone_curve: None,
             warp_rectilinear: None,
+            orientation: None,
             sensor_data,
         };
 

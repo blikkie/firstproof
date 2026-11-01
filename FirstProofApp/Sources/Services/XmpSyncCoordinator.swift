@@ -43,9 +43,13 @@ public actor XmpSyncCoordinator {
         fallbackDescription: String? = nil,
         fallbackCreator: String? = nil,
         fallbackCopyright: String? = nil,
-        fallbackKeywords: [String] = []
+        fallbackKeywords: [String] = [],
+        asShotTemperature: Float? = nil,
+        asShotTint: Float? = nil
     ) {
         let existingXmp = readXmp(path: filePath)
+        let finalAsShotTemp = asShotTemperature ?? existingXmp?.asShotTemperature
+        let finalAsShotTint = asShotTint ?? existingXmp?.asShotTint
         
         // 1. Edits resolution
         let finalEdits: EditSettings
@@ -55,7 +59,10 @@ public actor XmpSyncCoordinator {
             finalEdits = e
         } else {
             var baseline = EditSettings.defaultIdentity
-            if let asShot = getAsShotWhiteBalance(path: filePath) {
+            if let t = finalAsShotTemp, let tint = finalAsShotTint {
+                baseline.temperature = t
+                baseline.tint = tint
+            } else if let asShot = getAsShotWhiteBalance(path: filePath) {
                 baseline.temperature = asShot.temperature
                 baseline.tint = asShot.tint
             }
@@ -131,7 +138,9 @@ public actor XmpSyncCoordinator {
             keywords: finalKeywords,
             latitude: finalLat,
             longitude: finalLon,
-            edits: finalEdits
+            edits: finalEdits,
+            asShotTemperature: finalAsShotTemp,
+            asShotTint: finalAsShotTint
         )
         _ = writeXmp(path: filePath, record: record)
     }

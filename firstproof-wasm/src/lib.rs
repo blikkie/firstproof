@@ -112,11 +112,17 @@ pub fn decode_raw_linear_from_scratchpad(input_len: usize) -> Result<JsValue, Js
             firstproof_engine::extract_metadata_from_bytes(slice)
         };
 
-        let linear_res = {
+        let (linear_res, as_shot_temp, as_shot_tint) = {
             if let Some(slice) = buf.slice(0, input_len) {
-                decode_raw_binned_linear(slice)
+                if let Some(frame) = decode_raw_sensor_frame(slice) {
+                    let temp = frame.as_shot_temperature();
+                    let tint = frame.as_shot_tint();
+                    (Some(frame.to_binned_linear_f16()), Some(temp), Some(tint))
+                } else {
+                    (None, None, None)
+                }
             } else {
-                None
+                (None, None, None)
             }
         };
 
@@ -142,6 +148,8 @@ pub fn decode_raw_linear_from_scratchpad(input_len: usize) -> Result<JsValue, Js
                     height: bin_h,
                     is_linear: true,
                     metadata,
+                    as_shot_temperature: as_shot_temp,
+                    as_shot_tint,
                 };
                 web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
                     "⚡ [RAW Linear Rec.2020 Event] Decoded uncompressed 16-bit linear RAW frame: {}x{} pixels ({} MB)",
@@ -155,11 +163,6 @@ pub fn decode_raw_linear_from_scratchpad(input_len: usize) -> Result<JsValue, Js
     })
 }
 
-fn decode_raw_full_linear(slice: &[u8]) -> Option<(Vec<u16>, u32, u32)> {
-    let frame = decode_raw_sensor_frame(slice)?;
-    Some(frame.to_full_demosaiced_linear_f16())
-}
-
 #[wasm_bindgen]
 pub fn decode_raw_full_linear_from_scratchpad(input_len: usize) -> Result<JsValue, JsValue> {
     with_scratchpad(|buf| {
@@ -170,11 +173,17 @@ pub fn decode_raw_full_linear_from_scratchpad(input_len: usize) -> Result<JsValu
             firstproof_engine::extract_metadata_from_bytes(slice)
         };
 
-        let linear_res = {
+        let (linear_res, as_shot_temp, as_shot_tint) = {
             if let Some(slice) = buf.slice(0, input_len) {
-                decode_raw_full_linear(slice)
+                if let Some(frame) = decode_raw_sensor_frame(slice) {
+                    let temp = frame.as_shot_temperature();
+                    let tint = frame.as_shot_tint();
+                    (Some(frame.to_full_demosaiced_linear_f16()), Some(temp), Some(tint))
+                } else {
+                    (None, None, None)
+                }
             } else {
-                None
+                (None, None, None)
             }
         };
 
@@ -200,6 +209,8 @@ pub fn decode_raw_full_linear_from_scratchpad(input_len: usize) -> Result<JsValu
                     height: full_h,
                     is_linear: true,
                     metadata,
+                    as_shot_temperature: as_shot_temp,
+                    as_shot_tint,
                 };
                 web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
                     "⚡ [RAW Full Demosaic Rec.2020 Event] Decoded full-resolution 16-bit linear RAW frame: {}x{} pixels ({} MB)",

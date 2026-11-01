@@ -835,6 +835,7 @@ mod tests {
             noise_profile: None,
             profile_tone_curve: None,
             warp_rectilinear: None,
+            orientation: None,
             sensor_data: vec![1000u16; w * h],
         };
 

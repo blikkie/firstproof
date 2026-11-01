@@ -362,11 +362,10 @@ pub fn decode_raw_preview_buffer<P: AsRef<Path>>(path: P, max_dimension: Option<
     Ok((target_w as u32, target_h as u32, out_rgba_f16))
 }
 
-/// Viewport-Aware 2×2 Bayer Box Binning RAW preview decode.
-/// Decimates 2×2 Bayer quads directly to true RGB at half resolution without demosaic
-/// interpolation overhead (75% fewer pixels). Eliminates intermediate 600MB+ buffer churn
-/// and delivers a calibrated Linear Rec.2020 wide-gamut half-float preview in 10–15ms.
-pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32, u32, Vec<u8>), String> {
+/// Viewport-Aware 2×2 Bayer Box Binning RAW preview decode with as-shot White Balance and EXIF orientation details.
+pub fn decode_raw_preview_binned_with_details<P: AsRef<Path>>(
+    path: P,
+) -> Result<(u32, u32, Vec<u8>, Option<f32>, Option<f32>, Option<u32>), String> {
     let path = path.as_ref();
     let decoder = crate::raw_decoder::RawlerDecoder;
     if let Ok(frame) = crate::raw_decoder::RawDecoder::decode(&decoder, path) {
@@ -378,12 +377,25 @@ pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32,
                 out_rgba_f16[i * 2] = bytes[0];
                 out_rgba_f16[i * 2 + 1] = bytes[1];
             }
-            return Ok((bin_w, bin_h, out_rgba_f16));
+            let as_shot_temp = Some(frame.as_shot_temperature());
+            let as_shot_tint = Some(frame.as_shot_tint());
+            let orientation = frame.orientation;
+            return Ok((bin_w, bin_h, out_rgba_f16, as_shot_temp, as_shot_tint, orientation));
         }
     }
 
     // Fallback for non-RAW or non-Bayer formats
-    decode_raw_preview_buffer(path, Some(2048))
+    let (w, h, data) = decode_raw_preview_buffer(path, Some(2048))?;
+    Ok((w, h, data, None, None, None))
+}
+
+/// Viewport-Aware 2×2 Bayer Box Binning RAW preview decode.
+/// Decimates 2×2 Bayer quads directly to true RGB at half resolution without demosaic
+/// interpolation overhead (75% fewer pixels). Eliminates intermediate 600MB+ buffer churn
+/// and delivers a calibrated Linear Rec.2020 wide-gamut half-float preview in 10–15ms.
+pub fn decode_raw_preview_binned_buffer<P: AsRef<Path>>(path: P) -> Result<(u32, u32, Vec<u8>), String> {
+    let (w, h, data, _, _, _) = decode_raw_preview_binned_with_details(path)?;
+    Ok((w, h, data))
 }
 
 

@@ -952,6 +952,9 @@ public final class AppViewModel {
         let currentLat = photos.first(where: { $0.filePath == path })?.latitude
         let currentLon = photos.first(where: { $0.filePath == path })?.longitude
 
+        let activeAsShotTemp = (path == currentlyLoadedPhotoPath) ? asShotTemperature : nil
+        let activeAsShotTint = (path == currentlyLoadedPhotoPath) ? asShotTint : nil
+
         Task.detached(priority: .utility) {
             await XmpSyncCoordinator.shared.sync(
                 filePath: path,
@@ -962,7 +965,9 @@ public final class AppViewModel {
                 inMemoryRating: currentRating,
                 inMemoryStatus: currentStatus,
                 inMemoryLat: currentLat,
-                inMemoryLon: currentLon
+                inMemoryLon: currentLon,
+                asShotTemperature: activeAsShotTemp,
+                asShotTint: activeAsShotTint
             )
         }
     }
