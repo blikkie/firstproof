@@ -13,6 +13,7 @@ import {
   PhotoLoaderService,
   type PhotoRecord,
 } from './services/PhotoLoaderService';
+import { loadSampleShoot } from './services/SamplePhotosService';
 import { ToneCurveWidget } from './ToneCurveWidget';
 import { isDebugMode } from './utils/debug';
 import { getDefaultEdits, hasModifications } from './utils/edits';
@@ -51,6 +52,7 @@ class DarkroomApp {
   private edits: EditSettingsPayload = getDefaultEdits();
   private isOriginalPeek: boolean = false;
   private isCropActive: boolean = false;
+  private isLoadingSamples: boolean = false;
   private currentMetadata: Partial<ImageMetadata> = {};
   public currentLensCoefficients: LensCorrectionCoefficients | null = null;
   private currentRating: number = 0;
@@ -386,9 +388,12 @@ class DarkroomApp {
       'btn-export-proof',
       'btn-parity-audit',
       'btn-shortcuts',
+      'btn-sample-photos',
+      'btn-hero-sample-shoot',
       'empty-state',
       'btn-empty-open',
       'btn-empty-open-photos',
+      'btn-empty-sample-shoot',
       'developing-spinner',
       'filmstrip-count',
       'filmstrip-scroll',
@@ -566,6 +571,23 @@ class DarkroomApp {
       },
     );
 
+    const handleSamples = () => {
+      this.handleLoadSampleShoot();
+    };
+
+    this.elements['btn-hero-sample-shoot']?.addEventListener(
+      'click',
+      handleSamples,
+    );
+    this.elements['btn-sample-photos']?.addEventListener(
+      'click',
+      handleSamples,
+    );
+    this.elements['btn-empty-sample-shoot']?.addEventListener(
+      'click',
+      handleSamples,
+    );
+
     // Original Peek \
     const btnPeek = this.elements['btn-original-peek'];
     btnPeek.addEventListener('mousedown', () => {
@@ -668,6 +690,36 @@ class DarkroomApp {
       this.renderCanvas();
       this.autoSaveSidecar();
     });
+  }
+
+  private async handleLoadSampleShoot() {
+    if (this.isLoadingSamples) return;
+    this.isLoadingSamples = true;
+    this.pageNavController.setMode('darkroom');
+    const spinner = this.elements['developing-spinner'];
+    const spinnerText = spinner?.querySelector('.spinner-text');
+    spinner?.classList.remove('hidden');
+
+    try {
+      const entries = await loadSampleShoot((current, total, name, pct) => {
+        if (spinnerText) {
+          const pctStr = pct !== undefined ? ` (${pct}%)` : '';
+          spinnerText.textContent = `Downloading sample shoot [${current}/${total}]: ${name}${pctStr}...`;
+        }
+      });
+
+      if (spinnerText) {
+        spinnerText.textContent = 'Developing RAW frames...';
+      }
+
+      this.filmstripController.loadPhotos(entries);
+    } catch (err) {
+      console.error('[App] Failed to load sample shoot:', err);
+      spinner?.classList.add('hidden');
+      alert(`Failed to load sample shoot: ${(err as Error).message}`);
+    } finally {
+      this.isLoadingSamples = false;
+    }
   }
 
   private async selectPhoto(
