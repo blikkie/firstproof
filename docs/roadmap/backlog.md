@@ -7,39 +7,10 @@ This document strictly tracks pending and deferred features calibrated against o
 ---
 
 ## 🚀 Immediate Next Up
-1. **Story 3.23: Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification** (P2)
+1. **Physical Evaluation of Delivered Printique 4×6" Luster Proof Matrix** (Dmax, silver grain clumpiness, and print media substrates under D50/D65 gallery illumination).
+2. **Story 5.1: First Proof Local Peer-to-Peer Sync Bridge & Cloud Liberation** (Post-v1)
 
 ---
-
-## Phase 3: Fine-Art Darkroom Chemistry, Archival Formats & Web Playground (P1 / P2)
-
-
-> **Product Invariant: The Primary Engine vs. The Fine-Art "Treat"**  
-> First Proof's primary workhorse default is **pure optical RAW capture via AgX filmic tone mapping**. The core workspaces (**Light**, **Color**, **Detail**, **Optics**) are dedicated strictly to sensor reality: standard White Balance (Temperature & Tint), exposure, tone recovery, and sensor sharpness. Photos look 90% finished immediately without any analog styling.  
-> 
-> Film stock and print media emulation are **not** the main workflow and **not** a complex simulator. They are an exquisite, 100% opt-in **fine-art treat and differentiator** housed in a dedicated **Emulsion** workspace tab (`InspectorTab.emulsion`). Default state is always `None / Bypass`. When activated, the engine does all the heavy lifting under the hood so the photographer simply selects a curated stock or print medium without fiddling with chemical dials.
-
-### 3.23 Commercial Fine-Art Lab Print Run (Printique) & Real-Paper Dmax Verification (P2)
-- **Real-World Photographic Subject Proof Batch (4×6" Format)**:
-  - Eliminate abstract synthetic test wedges in favor of physical, real-world photographs printed at 300 DPI 4×6" ($1200 \times 1800$) at a commercial lab (Printique / WhiteWall) for cost-effective ($<\$35$) tactile evaluation.
-  - Run 5 distinct challenge scenes across all 15–16 emulsion and print media archetypes (~75–80 prints total):
-    1. *Natural Light Portrait*: Evaluates skin tones, cheek highlight roll-off, and subtle facial grain.
-    2. *High Dynamic Range (Landscape/Architecture)*: Evaluates deep shadow toe separation vs. sky shoulder compression.
-    3. *Saturated Primaries (Nature/Foliage)*: Evaluates pure greens, blues, and reds under AgX gamut mapping.
-    4. *Textured Documentary*: Evaluates fine micro-contrast, lens acutance, and grain clumpiness.
-    5. *Low-Key / Night Scene*: Evaluates paper $D_{\max}$ (deepest black ink saturation without digital pooling).
-- **Automated Proof Matrix Export Engine with Marginally Burned Slugs**:
-  - Build a dedicated **"Export Proof Matrix..."** tool in First Proof that renders all archetypes for a selected photo into a ready-to-upload folder.
-  - Burn a discrete, darkroom-authentic proofing slug on the bottom margin of each 4×6" print (`[Photo ID] • [Emulsion Stock] • [Print Media] • [Format] • First Proof v0.7.0`) ensuring physical prints are unmistakably identifiable when sorted on a viewing table.
-- **Physical Evaluation & Sensitometric Parameter Refinement**:
-  - Compare delivered physical prints against on-screen LittleCMS2 Soft Proofing (Story 3.4) under gallery lighting ($D_{50}$ / $D_{65}$).
-  - Benchmark shadow floor formulations across physical papers (Lustre vs Deep Matte / Cotton Rag): verify that carbon black ink ($D_{\max}$) remains deep and rich without milky digital floor lifts or premature shadow crushing.
-  - Tune paper grade and process depth default presets to guarantee 1:1 perceptual fidelity between darkroom viewport and physical framed gallery print.
----
-
-
-
-
 
 ## Phase 5: Post-v1 & Long-Term Vision
 

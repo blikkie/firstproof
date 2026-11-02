@@ -1,6 +1,6 @@
 use crate::color::{
-    Color3, REC2020_TO_LINEAR_SRGB, agx_tone_map_vivid, apply_print_media,
-    apply_recording_emulsion,
+    Color3, REC2020_TO_LINEAR_SRGB, agx_tone_map_vivid, apply_point_spread_halation,
+    apply_print_media, apply_recording_emulsion,
 };
 pub use crate::color::apply_split_toning;
 use crate::EditSettings;
@@ -222,56 +222,14 @@ pub fn apply_scene_referred_edits_with_tier(
             image.data[idx + 2] = be;
         }
 
-        if edits.emulsion_archetype == crate::EmulsionArchetype::RochesterCinema500
-            && edits.remjet_backing == crate::RemjetBackingMode::Stripped
-        {
-            let max_dim = w.max(h) as f32;
-            let r_hal = ((max_dim * 0.008).round() as usize).max(2);
-            let r_hal_diag = ((r_hal as f32 * 0.7071).round() as usize).max(1);
-            let hal_scale = edits.emulsion_format.magnification_factor().sqrt();
-            let pre_hal = image.data.clone();
-
-            for i in 0..total_pixels {
-                let x = i % w;
-                let y = i / w;
-
-                let x_l = x.saturating_sub(r_hal);
-                let x_r = (x + r_hal).min(w - 1);
-                let y_t = y.saturating_sub(r_hal);
-                let y_b = (y + r_hal).min(h - 1);
-
-                let x_dl = x.saturating_sub(r_hal_diag);
-                let x_dr = (x + r_hal_diag).min(w - 1);
-                let y_dt = y.saturating_sub(r_hal_diag);
-                let y_db = (y + r_hal_diag).min(h - 1);
-
-                let sample_excess = |px: usize, py: usize| -> f32 {
-                    let s_idx = (py * w + px) * 3;
-                    let sr = pre_hal[s_idx];
-                    let sg = pre_hal[s_idx + 1];
-                    let sb = pre_hal[s_idx + 2];
-                    let sy = 0.2627 * sr + 0.6780 * sg + 0.0593 * sb;
-                    (sy - 0.55).max(0.0)
-                };
-
-                let e_ortho = sample_excess(x_l, y)
-                    + sample_excess(x_r, y)
-                    + sample_excess(x, y_t)
-                    + sample_excess(x, y_b);
-                let e_diag = sample_excess(x_dl, y_dt)
-                    + sample_excess(x_dr, y_dt)
-                    + sample_excess(x_dl, y_db)
-                    + sample_excess(x_dr, y_db);
-                let bloom = (0.15 * e_ortho + 0.10 * e_diag) * hal_scale;
-
-                if bloom > 0.0 {
-                    let idx = i * 3;
-                    image.data[idx] += bloom * 0.85;
-                    image.data[idx + 1] += bloom * 0.18;
-                    image.data[idx + 2] += bloom * 0.02;
-                }
-            }
-        }
+        apply_point_spread_halation(
+            &mut image.data,
+            w,
+            h,
+            edits.emulsion_archetype,
+            edits.remjet_backing,
+            edits.emulsion_format,
+        );
     }
 
     // Pass 3: Unified per-pixel Wide-Gamut Tone Curves, Color Adjustments, and Split Toning in Linear Rec.2020

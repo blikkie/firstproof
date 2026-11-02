@@ -55,6 +55,37 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
     demosaic_quality: DemosaicQuality,
     render_tier: RenderTier,
 ) -> Result<(), String> {
+    export_photo_file_advanced_with_slug(
+        input_path,
+        output_path,
+        edits,
+        lens_coeffs,
+        quality,
+        max_dimension,
+        color_space,
+        rendering_intent,
+        ultra_hdr,
+        demosaic_quality,
+        render_tier,
+        None,
+    )
+}
+
+/// Exports an edited photo to JPEG or true 16-bit TIFF with optional discrete proof slug.
+pub fn export_photo_file_advanced_with_slug<P: AsRef<Path>, Q: AsRef<Path>>(
+    input_path: P,
+    output_path: Q,
+    edits: &EditSettings,
+    lens_coeffs: Option<&LensCorrectionCoefficientsRecord>,
+    quality: u8,
+    max_dimension: Option<u32>,
+    color_space: ExportColorSpace,
+    rendering_intent: ExportRenderingIntent,
+    ultra_hdr: bool,
+    demosaic_quality: DemosaicQuality,
+    render_tier: RenderTier,
+    proof_slug: Option<&str>,
+) -> Result<(), String> {
     let input_path = input_path.as_ref();
     let output_path = output_path.as_ref();
     
@@ -484,6 +515,10 @@ pub fn export_photo_file_advanced<P: AsRef<Path>, Q: AsRef<Path>>(
         if edits.flip_vertical {
             rgb_img = image::imageops::flip_vertical(&rgb_img);
         }
+    }
+
+    if let Some(slug_text) = proof_slug {
+        crate::export::burn_proof_slug(&mut rgb_img, slug_text);
     }
     
     let final_w = rgb_img.width();

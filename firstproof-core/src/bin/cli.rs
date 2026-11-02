@@ -9,13 +9,16 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use firstproof_core::export::export_photo_file_advanced;
+use firstproof_core::export::{
+    export_photo_file_advanced, export_photo_file_advanced_with_slug,
+};
 use firstproof_core::lensfun::LensfunDatabase;
 use firstproof_core::raw::extract_metadata;
 use firstproof_core::xmp::read_xmp_file;
 use firstproof_core::{
     DemosaicQuality, EditSettings, EmulsionArchetype, EmulsionFormat, EmulsionGrainMode,
-    EnlargerFilterMode, ExportColorSpace, ExportRenderingIntent, PrintMediaMode, RenderTier,
+    EnlargerFilterMode, ExportColorSpace, ExportRenderingIntent, PrintMediaMode, RemjetBackingMode,
+    RenderTier,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -29,16 +32,20 @@ USAGE:
     firstproof-cli <SUBCOMMAND> [OPTIONS]
 
 SUBCOMMANDS:
-    develop    Develop a RAW or image file to 16-bit TIFF or JPEG
-    inspect    Inspect camera EXIF, sensor CFA calibration, and XMP edits
-    dng        Convert proprietary RAW (.CR2, .NEF, .ARW) to archival DNG
-    command    Execute canonical DarkroomCommand JSON headlessly or via socket
-    shaders    Transpile canonical WGSL darkroom shaders to Metal and WebGL 2
-    help       Print this help message or the help of the given subcommand
+    develop         Develop a RAW or image file to 16-bit TIFF or JPEG
+    proof-matrix    Render commercial darkroom proof batches for physical lab verification
+    inspect         Inspect camera EXIF, sensor CFA calibration, and XMP edits
+    dng             Convert proprietary RAW (.CR2, .NEF, .ARW) to archival DNG
+    command         Execute canonical DarkroomCommand JSON headlessly or via socket
+    shaders         Transpile canonical WGSL darkroom shaders to Metal and WebGL 2
+    help            Print this help message or the help of the given subcommand
 
 EXAMPLES:
     # Develop a RAW with default AgX Vivid tone mapping to 16-bit TIFF
     firstproof-cli develop photo.cr2
+
+    # Render a 4x6" commercial proof matrix batch for physical lab verification
+    firstproof-cli proof-matrix photo1.cr2 photo2.dng --out-dir ./proofs
 
     # Develop with custom exposure and JPEG output
     firstproof-cli develop photo.cr2 --out preview.jpg --exposure +0.5
@@ -913,6 +920,400 @@ export const CANONICAL_DARKROOM_WGSL = `{}`;
     Ok(())
 }
 
+struct ProofVariation {
+    suffix: &'static str,
+    title: &'static str,
+    emulsion: EmulsionArchetype,
+    remjet_backing: RemjetBackingMode,
+    grain_mode: EmulsionGrainMode,
+    print_media: PrintMediaMode,
+}
+
+const PROOF_VARIATIONS: &[ProofVariation] = &[
+    // Battery 1: Film Stock Archetypes on Natural Luster (15 prints, Print Media = None, default Grain = Off)
+    ProofVariation {
+        suffix: "01_agx_clean",
+        title: "Clean Sensor AgX Baseline",
+        emulsion: EmulsionArchetype::None,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "02_rochester_portrait_400_nograin",
+        title: "Rochester Portrait 400 (Grain Off)",
+        emulsion: EmulsionArchetype::RochesterPortrait400,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "03_rochester_portrait_400_grain",
+        title: "Rochester Portrait 400 (Grain On)",
+        emulsion: EmulsionArchetype::RochesterPortrait400,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::SynthesizePhysical,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "04_leverkusen_portrait_160",
+        title: "Leverkusen Portrait 160",
+        emulsion: EmulsionArchetype::LeverkusenPortrait160,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "05_ashigara_portrait_400",
+        title: "Ashigara Portrait 400",
+        emulsion: EmulsionArchetype::AshigaraPortrait400,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "06_rochester_cinema_500_remjet",
+        title: "Rochester Cinema 500 (Remjet Intact)",
+        emulsion: EmulsionArchetype::RochesterCinema500,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "07_rochester_cinema_500_stripped",
+        title: "Rochester Cinema 500 (Stripped/Halation)",
+        emulsion: EmulsionArchetype::RochesterCinema500,
+        remjet_backing: RemjetBackingMode::Stripped,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "08_rochester_daylight_200",
+        title: "Rochester Daylight 200",
+        emulsion: EmulsionArchetype::RochesterDaylight200,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "09_ashigara_chrome_50",
+        title: "Ashigara Chrome 50",
+        emulsion: EmulsionArchetype::AshigaraChrome50,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "10_rochester_k14_chrome_64",
+        title: "Rochester K-14 Chrome 64",
+        emulsion: EmulsionArchetype::RochesterK14Chrome64,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "11_mobberley_silver_400_nograin",
+        title: "Mobberley Silver 400 (Grain Off)",
+        emulsion: EmulsionArchetype::MobberleySilver400,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "12_mobberley_silver_400_grain",
+        title: "Mobberley Silver 400 (Grain On)",
+        emulsion: EmulsionArchetype::MobberleySilver400,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::SynthesizePhysical,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "13_liguria_cinema_80",
+        title: "Liguria Cinema 80",
+        emulsion: EmulsionArchetype::LiguriaCinema80,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "14_baoding_silver_100",
+        title: "Baoding Silver 100",
+        emulsion: EmulsionArchetype::BaodingSilver100,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    ProofVariation {
+        suffix: "15_cambridge_diffusion_100",
+        title: "Cambridge Diffusion 100",
+        emulsion: EmulsionArchetype::CambridgeDiffusion100,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::None,
+    },
+    // Battery 2: Decoupled Print Media Substrates (6 prints, Emulsion = Clean Sensor AgX None, Grain = Off)
+    ProofVariation {
+        suffix: "16_print_silver_dye_bleach",
+        title: "Silver Dye Bleach (Cibachrome)",
+        emulsion: EmulsionArchetype::None,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::SilverDyeBleach,
+    },
+    ProofVariation {
+        suffix: "17_print_baryta",
+        title: "Baryta Silver Gelatin",
+        emulsion: EmulsionArchetype::None,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::BarytaSilverGelatin,
+    },
+    ProofVariation {
+        suffix: "18_print_warmtone",
+        title: "Warmtone Chlorobromide",
+        emulsion: EmulsionArchetype::None,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::WarmtoneChlorobromide,
+    },
+    ProofVariation {
+        suffix: "19_print_platinum",
+        title: "Platinum / Palladium",
+        emulsion: EmulsionArchetype::None,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::PlatinumPalladium,
+    },
+    ProofVariation {
+        suffix: "20_print_cyanotype",
+        title: "Cyanotype",
+        emulsion: EmulsionArchetype::None,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::Cyanotype,
+    },
+    ProofVariation {
+        suffix: "21_print_bamako",
+        title: "Bamako Silver Contact",
+        emulsion: EmulsionArchetype::None,
+        remjet_backing: RemjetBackingMode::Intact,
+        grain_mode: EmulsionGrainMode::Off,
+        print_media: PrintMediaMode::BamakoSilverContact,
+    },
+];
+
+fn print_proof_matrix_help() {
+    println!(
+        r#"firstproof-cli proof-matrix
+Render commercial darkroom proof batches for physical lab verification (e.g. 4x6" Luster).
+Preserves existing photo adjustments (colors, tone curves, exposure, crop) and systematically
+varies film stock emulsion archetypes, grain, and print media substrates.
+
+USAGE:
+    firstproof-cli proof-matrix [OPTIONS] <PHOTOS...>
+
+ARGS:
+    <PHOTOS...>                  Paths to camera RAWs (.CR2, .dng, etc.) or images
+
+OPTIONS:
+    -o, --out-dir <DIR>          Output directory (default: ./proof_matrix_run)
+        --size <4x6|full>        Target print size constraint (default: 4x6 -> 1800px at 300 DPI)
+        --quality <1-100>        JPEG export quality (default: 95)
+        --no-slug                Disable burning proof slug on print margin
+        --fast                   Use fast viewport demosaicing tier
+    -q, --quiet                  Suppress non-error output
+    -h, --help                   Print help information
+"#
+    );
+}
+
+fn cmd_proof_matrix(args: &[String]) -> Result<(), String> {
+    if args.is_empty() || args[0] == "-h" || args[0] == "--help" {
+        print_proof_matrix_help();
+        return Ok(());
+    }
+
+    let mut photo_paths: Vec<PathBuf> = Vec::new();
+    let mut out_dir = PathBuf::from("./proof_matrix_run");
+    let mut max_dim: Option<u32> = Some(1800); // 4x6 at 300 DPI (6" * 300 = 1800px)
+    let mut quality: u8 = 95;
+    let mut burn_slug = true;
+    let mut is_fast = false;
+    let mut is_quiet = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-o" | "--out-dir" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err("--out-dir requires a directory path".into());
+                }
+                out_dir = PathBuf::from(&args[i]);
+            }
+            "--size" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err("--size requires a value (4x6 or full)".into());
+                }
+                match args[i].to_lowercase().as_str() {
+                    "4x6" | "4x6in" | "proof" => max_dim = Some(1800),
+                    "full" | "orig" | "native" => max_dim = None,
+                    other => return Err(format!("Unknown size option: {}", other)),
+                }
+            }
+            "--quality" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err("--quality requires an argument (1-100)".into());
+                }
+                quality = args[i].parse::<u8>().map_err(|_| "Invalid quality")?.clamp(1, 100);
+            }
+            "--no-slug" => {
+                burn_slug = false;
+            }
+            "--fast" => {
+                is_fast = true;
+            }
+            "-q" | "--quiet" => {
+                is_quiet = true;
+            }
+            "-h" | "--help" => {
+                print_proof_matrix_help();
+                return Ok(());
+            }
+            arg if !arg.starts_with('-') => {
+                photo_paths.push(PathBuf::from(arg));
+            }
+            other => {
+                return Err(format!("Unknown option: {}", other));
+            }
+        }
+        i += 1;
+    }
+
+    if photo_paths.is_empty() {
+        return Err("No input photo paths provided. Use --help for usage.".into());
+    }
+
+    std::fs::create_dir_all(&out_dir).map_err(|e| format!("Failed to create output dir {}: {}", out_dir.display(), e))?;
+
+    let demosaic_quality = if is_fast {
+        DemosaicQuality::Standard
+    } else {
+        DemosaicQuality::Archival
+    };
+    let render_tier = if is_fast {
+        RenderTier::Viewport
+    } else {
+        RenderTier::ArchivalExport
+    };
+
+    let total_prints = photo_paths.len() * PROOF_VARIATIONS.len();
+    if !is_quiet {
+        println!("============================================================");
+        println!("🎞️  First Proof Commercial Proof Matrix Run");
+        println!("============================================================");
+        println!("📸 Photos: {} | Variations per photo: {} | Total prints: {}", photo_paths.len(), PROOF_VARIATIONS.len(), total_prints);
+        println!("📐 Target size: {} (300 DPI for physical 4x6\" Printique Luster)", max_dim.map(|d| format!("max {}px", d)).unwrap_or_else(|| "Full Resolution".into()));
+        println!("🏷️  Slug burning: {}", if burn_slug { "Enabled (safely inset within 35px lab bleed)" } else { "Disabled" });
+        println!("📂 Output Directory: {}", out_dir.display());
+        println!("============================================================");
+    }
+
+    let mut completed_count = 0;
+    let t_start = Instant::now();
+
+    for (p_idx, photo_path) in photo_paths.iter().enumerate() {
+        if !photo_path.exists() {
+            return Err(format!("Input photo not found: {}", photo_path.display()));
+        }
+
+        let stem = photo_path.file_stem().unwrap_or_default().to_string_lossy();
+
+        // 1. Load base edits from adjacent XMP sidecar if present
+        let mut base_edits = EditSettings::default();
+        let sidecar_candidates = [
+            photo_path.with_extension(format!(
+                "{}.xmp",
+                photo_path.extension().and_then(|e| e.to_str()).unwrap_or("")
+            )),
+            photo_path.with_extension("xmp"),
+        ];
+        let mut loaded_sidecar = false;
+        for sc in &sidecar_candidates {
+            if sc.exists() {
+                if let Ok(xmp) = read_xmp_file(sc) {
+                    base_edits = xmp.edits;
+                    loaded_sidecar = true;
+                    break;
+                }
+            }
+        }
+
+        if !is_quiet {
+            println!("\n[{}/{}] 📷 Photo: {} {}", p_idx + 1, photo_paths.len(), stem, if loaded_sidecar { "(XMP adjustments preserved)" } else { "(Default baseline)" });
+        }
+
+        for var in PROOF_VARIATIONS {
+            let mut var_edits = base_edits.clone();
+            var_edits.emulsion_archetype = var.emulsion;
+            var_edits.remjet_backing = var.remjet_backing;
+            var_edits.emulsion_grain_mode = var.grain_mode;
+            var_edits.print_media = var.print_media;
+
+            // When grain is active, ensure realistic grain settings
+            if var.grain_mode != EmulsionGrainMode::Off && var_edits.grain_scale <= 0.0 {
+                var_edits.grain_scale = 1.0;
+            }
+
+            let out_filename = format!("{}_{}.jpg", stem, var.suffix);
+            let out_file_path = out_dir.join(&out_filename);
+
+            let slug_text = if burn_slug {
+                Some(format!("{} • {} • 4x6 Luster", stem, var.title))
+            } else {
+                None
+            };
+
+            let t_var = Instant::now();
+            export_photo_file_advanced_with_slug(
+                photo_path,
+                &out_file_path,
+                &var_edits,
+                None,
+                quality,
+                max_dim,
+                ExportColorSpace::Srgb,
+                ExportRenderingIntent::RelativeColorimetric,
+                false,
+                demosaic_quality,
+                render_tier,
+                slug_text.as_deref(),
+            )?;
+
+            completed_count += 1;
+            if !is_quiet {
+                println!(
+                    "  [{:03}/{:03}] ➔ {} ({:.2}s)",
+                    completed_count, total_prints, out_filename, t_var.elapsed().as_secs_f32()
+                );
+            }
+        }
+    }
+
+    let elapsed = t_start.elapsed();
+    if !is_quiet {
+        println!("\n============================================================");
+        println!("✨ Proof matrix complete: {} prints rendered in {:.2}s ({:.2}s/print)", completed_count, elapsed.as_secs_f32(), elapsed.as_secs_f32() / (completed_count as f32).max(1.0));
+        println!("📦 Lab order ready at: {}", out_dir.display());
+        println!("💰 Printique order total (at $0.32/print): ${:.2}", (completed_count as f64) * 0.32);
+        println!("============================================================");
+    }
+
+    Ok(())
+}
+
 fn print_command_help() {
     println!(
         r#"firstproof-cli command
@@ -1063,6 +1464,7 @@ fn main() {
 
     let result = match subcommand {
         "develop" | "dev" => cmd_develop(rest),
+        "proof-matrix" | "matrix" | "proofs" => cmd_proof_matrix(rest),
         "inspect" | "info" => cmd_inspect(rest),
         "dng" | "convert" => cmd_dng(rest),
         "command" | "cmd" => cmd_command(rest),
@@ -1072,6 +1474,7 @@ fn main() {
             if !rest.is_empty() {
                 match rest[0].as_str() {
                     "develop" | "dev" => print_develop_help(),
+                    "proof-matrix" | "matrix" | "proofs" => print_proof_matrix_help(),
                     "dng" | "convert" => print_dng_help(),
                     "command" | "cmd" => print_command_help(),
                     "shaders" => print_shaders_help(),
