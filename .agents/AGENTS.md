@@ -67,3 +67,13 @@
 - **Targeted Searches**: Always scope `grep_search` with specific `Includes` and `SearchPath` rather than searching the workspace root.
 - **Backlog Focus**: When inspecting `docs/roadmap/backlog.md`, read only the top 25 lines (`StartLine: 1, EndLine: 25`). Archive completed tasks to `docs/roadmap/completed.md`.
 - **Educational Tours (No Quizzes)**: Present an educational tour of changes before requesting sign-off to commit. Focus on what was built, explain key concepts, and provide concrete manual testing instructions for perceptual changes.
+
+---
+
+## 7. Architecture Decision Records (ADRs) & Context Scoping
+- **Token Defense for ADRs**: Never read all files in `docs/adr/`. Inspect strictly `docs/adr/README.md` first (index table). Only read the specific, single ADR file relevant to the active subsystem being modified.
+- **Architectural Decision Trigger**: When a task involves an irreversible, cross-cutting, or significant technical decision (e.g., choosing a protocol, data format, serialization strategy, dependency, concurrency model, or rejecting an obvious alternative), the agent must:
+  1. Author a new record in `docs/adr/NNNN-<slug>.md` using `docs/adr/template.md`.
+  2. Register it in `docs/adr/README.md`.
+  3. Inform the user in the conversational response or educational commit tour.
+- **Anti-Re-Litigation Invariant**: Never propose or implement an approach explicitly rejected in an accepted ADR without first authoring a superceding ADR.

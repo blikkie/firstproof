@@ -83,6 +83,9 @@ Perform a deep, adversarial inspection of the diff looking for common failure mo
 4. **Anti-Magic Number Audit**:
    - Rigorously inspect every camera processing, color science, and develop adjustment for arbitrary magic numbers, localized scalar multipliers, or piecewise if/else heuristics.
    - Every parameter must trace directly to published optical, sensitometric, or sensor standards (e.g. CIE 1931, AgX, DNG specification, Lensfun optical polynomials).
+5. **ADR Alignment & Trigger Audit**:
+   - Verify the diff respects all accepted ADRs (e.g. Linear Rec.2020 working gamut, canonical WGSL via Naga, XMP sidecar primacy, dual-domain performance asymmetry).
+   - If the diff introduces a significant architectural decision (new protocol, storage format, concurrency model, external subsystem boundary) without an accompanying ADR in `docs/adr/`, flag as `ACTION REQUIRED` to create the ADR.
 
 ---
 
@@ -142,7 +145,7 @@ The review subagent must end its report with a clear, structured summary:
 | :--- | :--- | :--- | :--- |
 | **Mechanical Sensor Gate** | `./scripts/check.sh` | PASS / FAIL | XX.Xs |
 | **Anti-Slop Sensor** | `./scripts/anti_slop_sensor.py` | PASS / FAIL | X.Xs |
-| **Adversarial Diff Audit** | Concurrency, Memory, Logic | PASS / FAIL | - |
+| **Adversarial Diff Audit** | Concurrency, Memory, Logic, ADRs | PASS / FAIL | - |
 | **Cross-Platform Parity** | macOS / Web / Engine Sync | PASS / FAIL | - |
 | **Feedback Loop Health** | Check suite duration (<45s) | PASS / REGRESSION | XX.Xs |
 | **Tone & Copy Restraint** | Factual, quiet, zero hype | PASS / FAIL | - |
